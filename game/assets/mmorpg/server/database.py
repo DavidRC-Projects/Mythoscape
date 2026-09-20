@@ -9,8 +9,9 @@ import hashlib
 import os
 import time
 
-from content import STARTER_INVENTORY
+from content import STARTER_INVENTORY, XP_SKILLS
 from world_map import SPAWN_POINT
+import combat
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "world.db")
 
@@ -31,11 +32,13 @@ CREATE TABLE IF NOT EXISTS players (
     woodcutting_xp INTEGER NOT NULL DEFAULT 0,
     mining_xp INTEGER NOT NULL DEFAULT 0,
     fishing_xp INTEGER NOT NULL DEFAULT 0,
+    smithing_xp INTEGER NOT NULL DEFAULT 0,
     coins INTEGER NOT NULL DEFAULT 0,
     equip_weapon TEXT,
     equip_shield TEXT,
     equip_body TEXT,
     equip_legs TEXT,
+    equip_helmet TEXT,
     created_at TEXT NOT NULL,
     last_login TEXT
 );
@@ -72,7 +75,17 @@ class Database:
         self.conn = sqlite3.connect(path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        self._migrate()
         self.conn.commit()
+
+    def _migrate(self):
+        cols = {row[1] for row in self.conn.execute("PRAGMA table_info(players)")}
+        if "smithing_xp" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN smithing_xp INTEGER NOT NULL DEFAULT 0"
+            )
+        if "equip_helmet" not in cols:
+            self.conn.execute("ALTER TABLE players ADD COLUMN equip_helmet TEXT")
 
     # --- accounts ---------------------------------------------------------
     def get_player_by_username(self, username):
@@ -160,3 +173,27 @@ class Database:
             (player_id, quest_id, status, progress),
         )
         self.conn.commit()
+
+    def get_leaderboards(self, limit=5):
+        """Top players per skill by XP (char_name shown publicly)."""
+        cols = {row[1] for row in self.conn.execute("PRAGMA table_info(players)")}
+        boards = {}
+        for skill in XP_SKILLS:
+            col = f"{skill}_xp"
+            if col not in cols:
+                boards[skill] = []
+                continue
+            rows = self.conn.execute(
+                f"SELECT char_name, {col} AS xp FROM players "
+                f"ORDER BY {col} DESC, char_name ASC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            boards[skill] = [
+                {
+                    "name": row["char_name"],
+                    "xp": int(row["xp"] or 0),
+                    "level": combat.level_from_xp(int(row["xp"] or 0)),
+                }
+                for row in rows
+            ]
+        return boards

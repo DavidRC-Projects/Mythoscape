@@ -43,17 +43,23 @@ python client.py 192.168.1.5  # connect to a server on your LAN
 Anyone on the same network can point their client at your machine's IP to
 play together, as long as port 8765 is reachable.
 
+On the login screen, click **Hiscores** (or press **F3**) to open a modal of
+the top players for each skill.
+
 ## Controls
 - **Arrow keys** — walk (one tile per press, server validates)
 - **Space** — attack the nearest adjacent monster
+- **H** — controls help popup
+- **E** — equipment & stats modal (click a slot to unequip)
+- **F** — forge UI inside the smithy (furnace to smelt, anvil to smith)
 - **Click** a monster to attack, an NPC to talk, a resource node to gather,
-  or an adjacent player to request a trade
+  water to fish, the furnace/anvil in the smithy, or an adjacent player to trade
 - **G** — pick up an item on your tile
 - **I** — toggle inventory panel; click a slot to equip/eat, right-click to drop
 - **Tab** — toggle stats panel
 - **Q** — toggle quest log
 - **Enter** — open/send chat
-- In dialogue: **A** accept quest, **T** turn in quest, **B** browse shop, **Esc** close
+- In dialogue: **A** accept quest, **T** turn in quest, **B** browse shop, **S** open forge (Gareth), **Esc** close
 - In trading: click inventory slots to add to your offer, **Enter** confirm, **Esc** cancel
 
 ## Architecture

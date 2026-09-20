@@ -5,32 +5,35 @@ a village, a forest, a mine, and a dungeon, all on one tile grid.
 Tile ids:
     0 GRASS    walkable
     1 TREE     blocked, woodcutting resource (chop from an adjacent tile)
-    2 WATER    blocked, fishing resource (fish from an adjacent tile)
+    2 WATER    blocked, fishing resource (click the water from an adjacent tile)
     3 ORE      blocked, mining resource (mine from an adjacent tile)
     4 WALL     blocked, scenery / dungeon walls
     5 PATH     walkable, village paths
-    6 FLOOR    walkable, dungeon floor
+    6 FLOOR    walkable, dungeon / building floor
     7 OAK_TREE blocked, higher level woodcutting resource
+    8 IRON_ORE blocked, iron mining resource
+    9 FISH_SPOT walkable marker (unused on grid; fishing uses WATER)
+   10 COAL     blocked, coal mining resource (deep dungeon)
 """
 import random
 
-GRASS, TREE, WATER, ORE, WALL, PATH, FLOOR, OAK_TREE, IRON_ORE, FISH_SPOT = range(10)
+GRASS, TREE, WATER, ORE, WALL, PATH, FLOOR, OAK_TREE, IRON_ORE, FISH_SPOT, COAL = range(11)
 
 WALKABLE_TILES = {GRASS, PATH, FLOOR, FISH_SPOT}
 
-WIDTH = 40
-HEIGHT = 36
+# Larger world so big sprites / buildings have room to breathe.
+WIDTH = 64
+HEIGHT = 72
 
-# Zone bounding boxes (x0, y0, x1, y1) inclusive, used by the client for
-# labels/minimap and by the server for spawn placement sanity checks.
+# Zone bounding boxes (x0, y0, x1, y1) inclusive
 ZONES = {
-    "village": (1, 1, 16, 14),
-    "forest":  (17, 1, 38, 16),
-    "mine":    (1, 17, 17, 34),
-    "dungeon": (18, 17, 38, 34),
+    "village": (1, 1, 26, 22),
+    "forest":  (28, 1, 62, 24),
+    "mine":    (1, 26, 28, 54),
+    "dungeon": (30, 26, 62, 70),
 }
 
-SPAWN_POINT = (9, 7)  # village center, where new characters appear
+SPAWN_POINT = (14, 12)  # village crossroads
 
 
 def _rect(grid, x0, y0, x1, y1, tile):
@@ -54,73 +57,97 @@ def _border(grid, x0, y0, x1, y1, tile, skip=()):
 
 
 def generate_world():
-    rng = random.Random(1337)  # deterministic layout
+    rng = random.Random(1337)
     grid = [[GRASS for _ in range(WIDTH)] for _ in range(HEIGHT)]
 
-    # Outer world border (impassable edge of the map)
     _border(grid, 0, 0, WIDTH - 1, HEIGHT - 1, WALL)
 
-    # --- Village: simple paths + a couple of house-shaped wall blocks ---
+    # --- Village paths (crossroads) ---
     vx0, vy0, vx1, vy1 = ZONES["village"]
     for x in range(vx0, vx1 + 1):
-        grid[7][x] = PATH if grid[7][x] == GRASS else grid[7][x]
+        if grid[12][x] == GRASS:
+            grid[12][x] = PATH
     for y in range(vy0, vy1 + 1):
-        grid[y][9] = PATH if grid[y][9] == GRASS else grid[y][9]
-    # A couple of small "house" blocks (decorative walls, not enterable)
-    _rect(grid, 2, 2, 4, 3, WALL)
-    _rect(grid, 12, 2, 14, 3, WALL)
-    _rect(grid, 3, 12, 5, 13, WALL)
+        if grid[y][14] == GRASS:
+            grid[y][14] = PATH
 
-    # --- Forest: scattered trees + a small lake for fishing ---
+    # Decorative cottages (solid, not enterable)
+    _rect(grid, 3, 3, 6, 5, WALL)
+    _rect(grid, 8, 3, 11, 5, WALL)
+    _rect(grid, 3, 16, 6, 18, WALL)
+    _rect(grid, 8, 17, 10, 19, WALL)
+
+    # Large enterable smithy (furnace + anvil + blacksmith)
+    _rect(grid, 17, 5, 25, 13, WALL)
+    _rect(grid, 18, 6, 24, 12, FLOOR)
+    grid[13][21] = PATH  # south doorway onto the road
+    grid[13][20] = PATH
+    grid[13][22] = PATH
+    grid[12][21] = PATH
+    grid[12][20] = PATH
+    grid[12][22] = PATH
+
+    # --- Forest + lake ---
     fx0, fy0, fx1, fy1 = ZONES["forest"]
-    tree_spots = []
-    for _ in range(55):
+    for _ in range(110):
         x = rng.randint(fx0 + 1, fx1 - 1)
         y = rng.randint(fy0 + 1, fy1 - 1)
         if grid[y][x] == GRASS:
             grid[y][x] = OAK_TREE if rng.random() < 0.25 else TREE
-            tree_spots.append((x, y))
-    # small lake, bottom-right of the forest
-    _rect(grid, 32, 10, 36, 13, WATER)
-    for x in range(31, 38):
-        for y in range(9, 15):
-            if grid[y][x] == WATER:
-                pass
-    # a couple of fishable grass tiles right next to the lake stay GRASS
-    # (fishing is done by standing on grass adjacent to WATER)
+    _rect(grid, 50, 14, 58, 20, WATER)
 
-    # --- Mine: cave-like area with ore rocks ---
+    # --- Mine ---
     mx0, my0, mx1, my1 = ZONES["mine"]
     _rect(grid, mx0, my0, mx1, my1, FLOOR)
-    _border(grid, mx0, my0, mx1, my1, WALL, skip={(9, my0)})  # opening north to village path
-    ore_spots = []
-    for _ in range(22):
+    _border(grid, mx0, my0, mx1, my1, WALL, skip={(14, my0)})  # opening to village path
+    for _ in range(40):
         x = rng.randint(mx0 + 2, mx1 - 2)
         y = rng.randint(my0 + 2, my1 - 2)
         if grid[y][x] == FLOOR:
-            roll = rng.random()
-            grid[y][x] = IRON_ORE if roll < 0.25 else ORE
-            ore_spots.append((x, y))
+            grid[y][x] = IRON_ORE if rng.random() < 0.25 else ORE
 
-    # --- Dungeon: hand-laid rooms + corridors (guarantees connectivity) ---
+    # --- Dungeon rooms (upper) ---
     dx0, dy0, dx1, dy1 = ZONES["dungeon"]
     _rect(grid, dx0, dy0, dx1, dy1, WALL)
     rooms = [
-        (19, 18, 25, 22),
-        (29, 18, 37, 23),
-        (19, 26, 26, 33),
-        (28, 26, 37, 33),
+        (32, 28, 42, 34),
+        (46, 28, 58, 35),
+        (32, 38, 44, 48),
+        (46, 40, 58, 50),
     ]
     for (x0, y0, x1, y1) in rooms:
         _rect(grid, x0, y0, x1, y1, FLOOR)
-    # corridors connecting the rooms
-    _rect(grid, 25, 20, 29, 20, FLOOR)   # room1 <-> room2
-    _rect(grid, 22, 22, 22, 26, FLOOR)   # room1 <-> room3
-    _rect(grid, 33, 23, 33, 26, FLOOR)   # room2 <-> room4
-    _rect(grid, 26, 29, 28, 29, FLOOR)   # room3 <-> room4
-    # entrance corridor connecting dungeon to the mine (west side)
-    _rect(grid, dx0 - 2, 30, dx0, 30, FLOOR)
-    grid[30][mx1] = FLOOR
+    _rect(grid, 42, 31, 46, 31, FLOOR)
+    _rect(grid, 37, 34, 37, 38, FLOOR)
+    _rect(grid, 52, 35, 52, 40, FLOOR)
+    _rect(grid, 44, 44, 46, 44, FLOOR)
+    # mine <-> dungeon link
+    _rect(grid, mx1, 41, 33, 43, FLOOR)
+    grid[42][mx1] = FLOOR
+    grid[42][31] = FLOOR
+
+    # --- Deep dungeon: iron / coal veins + giant hall ---
+    iron_room = (34, 52, 48, 62)
+    giant_hall = (50, 54, 60, 68)
+    _rect(grid, *iron_room, FLOOR)
+    _rect(grid, *giant_hall, FLOOR)
+    # corridors from existing south rooms into the deep wing
+    _rect(grid, 40, 48, 40, 52, FLOOR)
+    _rect(grid, 48, 56, 50, 56, FLOOR)
+    _rect(grid, 52, 50, 52, 54, FLOOR)
+
+    # Scatter rich iron + coal in the iron cavern
+    for _ in range(28):
+        x = rng.randint(iron_room[0] + 1, iron_room[2] - 1)
+        y = rng.randint(iron_room[1] + 1, iron_room[3] - 1)
+        if grid[y][x] == FLOOR:
+            grid[y][x] = COAL if rng.random() < 0.4 else IRON_ORE
+
+    # A few iron rocks on the path into the deep wing
+    for pos in ((41, 50), (39, 53), (45, 54), (47, 58)):
+        x, y = pos
+        if grid[y][x] == FLOOR:
+            grid[y][x] = IRON_ORE
 
     return grid
 
@@ -141,12 +168,6 @@ def is_walkable(grid, x, y):
 def build_resource_nodes(grid):
     """Scan the generated grid and return a dict of resource nodes keyed by (x, y)."""
     nodes = {}
-    tile_to_type = {
-        TREE: "tree",
-        OAK_TREE: "oak_tree",
-        ORE: "copper_rock",  # copper/tin randomly assigned below
-        IRON_ORE: "iron_rock",
-    }
     rng = random.Random(2024)
     for y in range(HEIGHT):
         for x in range(WIDTH):
@@ -160,14 +181,14 @@ def build_resource_nodes(grid):
                 nodes[(x, y)] = {"type": rtype, "depleted": False, "respawn_at": 0}
             elif t == IRON_ORE:
                 nodes[(x, y)] = {"type": "iron_rock", "depleted": False, "respawn_at": 0}
+            elif t == COAL:
+                nodes[(x, y)] = {"type": "coal_rock", "depleted": False, "respawn_at": 0}
 
-    # Fishing spots: grass tiles adjacent to water
     for y in range(HEIGHT):
         for x in range(WIDTH):
             if grid[y][x] == WATER:
-                for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-                    nx, ny = x + dx, y + dy
-                    if 0 <= nx < WIDTH and 0 <= ny < HEIGHT and grid[ny][nx] == GRASS:
-                        ftype = "fishing_spot_sardine" if (nx + ny) % 2 == 0 else "fishing_spot_shrimp"
-                        nodes[(nx, ny)] = {"type": ftype, "depleted": False, "respawn_at": 0, "is_fish_spot": True}
+                ftype = "fishing_spot_sardine" if (x + y) % 2 == 0 else "fishing_spot_shrimp"
+                nodes[(x, y)] = {
+                    "type": ftype, "depleted": False, "respawn_at": 0, "is_fish_spot": True,
+                }
     return nodes
