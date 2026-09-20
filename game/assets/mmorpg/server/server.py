@@ -16,10 +16,13 @@ import websockets
 from database import Database, INVENTORY_SIZE
 from content import (
     ITEMS, MONSTERS, MONSTER_SPAWNS, NPCS, SHOPS, QUESTS, XP_SKILLS, RESOURCE_YIELDS,
-    CRAFT_RECIPES, INTERACTABLES,
+    CRAFT_RECIPES, INTERACTABLES, BUILDINGS, PETS,
+    MAX_PURSE_COINS, MAX_BANK_COINS, MAX_ORES, ORE_ITEM_IDS, BANK_SLOTS,
+    karma_total_bonus, FIRE_LOGS, cook_burn_chance,
 )
 from world_map import (
     generate_world, build_resource_nodes, is_walkable, WIDTH, HEIGHT, SPAWN_POINT, get_zone,
+    room_containing, in_room,
 )
 import combat
 
@@ -54,9 +57,14 @@ class PlayerSession:
             "attack": row["attack_xp"], "strength": row["strength_xp"], "defence": row["defence_xp"],
             "hitpoints": row["hitpoints_xp"], "woodcutting": row["woodcutting_xp"],
             "mining": row["mining_xp"], "fishing": row["fishing_xp"],
+            "cooking": row["cooking_xp"] if "cooking_xp" in row.keys() else 0,
+            "firemaking": row["firemaking_xp"] if "firemaking_xp" in row.keys() else 0,
             "smithing": row["smithing_xp"] if "smithing_xp" in row.keys() else 0,
+            "karma": row["karma_xp"] if "karma_xp" in row.keys() else 0,
         }
-        self.coins = row["coins"]
+        self.coins = min(int(row["coins"]), MAX_PURSE_COINS)
+        self.bank_coins = int(row["bank_coins"]) if "bank_coins" in row.keys() else 0
+        self.bank = {}  # slot -> {item_id, qty}
         self.equipment = {
             "weapon": row["equip_weapon"], "shield": row["equip_shield"],
             "body": row["equip_body"], "legs": row["equip_legs"],
@@ -71,6 +79,30 @@ class PlayerSession:
         self.trade_offer = {}        # slot -> qty
         self.trade_confirmed = False
         self.last_move_tick = 0
+        self.auto_pickup_items = bool(row["auto_pickup_items"]) if "auto_pickup_items" in row.keys() else False
+        # Missing column (pre-migration) => already allocated
+        if "stats_allocated" in row.keys():
+            self.stats_allocated = bool(row["stats_allocated"])
+        else:
+            self.stats_allocated = True
+        self.pet_id = None
+        if "active_pet" in row.keys() and row["active_pet"] in PETS:
+            self.pet_id = row["active_pet"]
+        self.owned_pets = []
+        raw_owned = row["owned_pets"] if "owned_pets" in row.keys() else "[]"
+        try:
+            parsed = json.loads(raw_owned or "[]")
+            if isinstance(parsed, list):
+                self.owned_pets = [p for p in parsed if p in PETS]
+        except (TypeError, json.JSONDecodeError):
+            self.owned_pets = []
+        # Migrate: active pet counts as owned (persisted on login)
+        if self.pet_id and self.pet_id not in self.owned_pets:
+            self.owned_pets.append(self.pet_id)
+        self.pet_x = self.x
+        self.pet_y = self.y
+        self.pet_hp = PETS[self.pet_id]["hp"] if self.pet_id else 0
+        self.pet_target_id = None  # monster instance id
 
     def level(self, skill):
         return combat.level_from_xp(self.xp[skill])
@@ -94,25 +126,110 @@ class PlayerSession:
             total["att_bonus"] += item.get("att_bonus", 0)
             total["str_bonus"] += item.get("str_bonus", 0)
             total["def_bonus"] += item.get("def_bonus", 0)
+        karma = self.level("karma") if "karma" in self.xp else 1
+        for k, v in karma_total_bonus(karma, self.equipment).items():
+            total[k] += v
         return total
 
     def public_state(self):
         return {
             "id": self.player_id, "name": self.char_name, "x": self.x, "y": self.y,
             "hp": self.hp, "max_hp": self.max_hp(),
+            "combat_level": self.combat_level(),
             "equipment": self.equipment,  # client uses this for sprite weapons/armor
         }
 
+    def total_level(self):
+        return sum(self.level(s) for s in XP_SKILLS)
+
+    def combat_level(self):
+        return combat.combat_level(
+            self.level("attack"), self.level("strength"),
+            self.level("defence"), self.level("hitpoints"),
+        )
+
     def full_state(self):
+        wb = self.weapon_bonuses()
+        karma_lvl = self.level("karma") if "karma" in self.xp else 1
+        levels = {s: self.level(s) for s in XP_SKILLS}
         return {
             "id": self.player_id, "name": self.char_name, "x": self.x, "y": self.y,
             "hp": self.hp, "max_hp": self.max_hp(), "coins": self.coins,
-            "levels": {s: self.level(s) for s in XP_SKILLS},
+            "bank_coins": self.bank_coins,
+            "levels": levels,
             "xp": self.xp,
+            "total_level": sum(levels.values()),
+            "combat_level": self.combat_level(),
             "equipment": self.equipment,
             "inventory": self.inventory,
             "combat_style": self.combat_style,
+            "auto_pickup_items": self.auto_pickup_items,
+            "stats_allocated": self.stats_allocated,
+            "max_purse_coins": MAX_PURSE_COINS,
+            "max_bank_coins": MAX_BANK_COINS,
+            "max_ores": MAX_ORES,
+            "gear_bonuses": wb,
+            "karma_bonuses": karma_total_bonus(karma_lvl, self.equipment),
+            "pet_id": self.pet_id,
+            "pet": self.pet_public() if self.pet_id else None,
+            "owned_pets": self.owned_pets_public(),
         }
+
+    def owned_pets_public(self):
+        out = []
+        for pid in self.owned_pets:
+            if pid not in PETS:
+                continue
+            pdef = PETS[pid]
+            out.append({
+                "pet_id": pid,
+                "name": pdef["name"],
+                "level": pdef["level"],
+                "sprite": pdef["sprite"],
+                "active": pid == self.pet_id,
+            })
+        # Stable order by pet level
+        out.sort(key=lambda e: (e["level"], e["name"]))
+        return out
+
+    def pet_public(self):
+        if not self.pet_id or self.pet_id not in PETS:
+            return None
+        pdef = PETS[self.pet_id]
+        return {
+            "owner_id": self.player_id,
+            "pet_id": self.pet_id,
+            "name": pdef["name"],
+            "level": pdef["level"],
+            "sprite": pdef["sprite"],
+            "x": self.pet_x,
+            "y": self.pet_y,
+            "hp": self.pet_hp,
+            "max_hp": pdef["hp"],
+        }
+
+    def grant_pet(self, pet_id):
+        """Add a pet to the collection if new. Returns True if newly owned."""
+        if pet_id not in PETS:
+            return False
+        if pet_id in self.owned_pets:
+            return False
+        self.owned_pets.append(pet_id)
+        WORLD.db.save_player_stats(self.player_id, owned_pets=json.dumps(self.owned_pets))
+        return True
+
+    def activate_pet(self, pet_id):
+        if pet_id not in PETS:
+            return False
+        if pet_id not in self.owned_pets:
+            self.owned_pets.append(pet_id)
+            WORLD.db.save_player_stats(self.player_id, owned_pets=json.dumps(self.owned_pets))
+        self.pet_id = pet_id
+        self.pet_hp = PETS[pet_id]["hp"]
+        self.pet_x, self.pet_y = self.x, self.y
+        self.pet_target_id = None
+        WORLD.db.save_player_stats(self.player_id, active_pet=pet_id)
+        return True
 
 
 class MonsterInstance:
@@ -130,10 +247,14 @@ class MonsterInstance:
         self.respawn_at_tick = 0
         self.target_player_id = None
         self.ticks_since_wander = 0
+        # Dungeon monsters are confined to the room they spawned in
+        self.home_room = room_containing(x, y)
 
     def public_state(self):
+        mdef = MONSTERS[self.type]
         return {
-            "id": self.id, "type": self.type, "name": MONSTERS[self.type]["name"],
+            "id": self.id, "type": self.type, "name": mdef["name"],
+            "level": mdef["level"],
             "x": self.x, "y": self.y, "hp": self.hp, "max_hp": self.max_hp, "alive": self.alive,
         }
 
@@ -152,7 +273,22 @@ class World:
             self.monsters[mid] = MonsterInstance(mid, mtype, x, y)
         self.sessions = {}     # player_id -> PlayerSession
         self.ground_items = {}  # (x, y) -> [{"item_id","qty"}]
+        self.fires = {}         # (x, y) -> expire_tick
         self.tick_count = 0
+
+    def near_fire(self, session):
+        for (fx, fy) in self.fires:
+            if adjacent_or_same(session.x, session.y, fx, fy):
+                return True
+        return False
+
+    def near_cook_spot(self, session):
+        for spot in INTERACTABLES:
+            if spot["kind"] in ("range", "fireplace") and adjacent_or_same(
+                session.x, session.y, spot["x"], spot["y"]
+            ):
+                return True
+        return self.near_fire(session)
 
     # -- helpers --------------------------------------------------------
     def find_session_by_ws(self, ws):
@@ -204,6 +340,39 @@ class World:
     def count_item(self, session, item_id):
         return sum(e["qty"] for e in session.inventory.values() if e["item_id"] == item_id)
 
+    def count_item_bank(self, session, item_id):
+        return sum(e["qty"] for e in session.bank.values() if e["item_id"] == item_id)
+
+    def ensure_tinderbox(self, session):
+        """Existing characters predating firemaking get a free tinderbox once."""
+        if self.count_item(session, "tinderbox") > 0 or self.count_item_bank(session, "tinderbox") > 0:
+            return False
+        return self.add_item_to_inventory(session, "tinderbox", 1)
+
+    def count_ores(self, session):
+        return sum(
+            e["qty"] for e in session.inventory.values() if e["item_id"] in ORE_ITEM_IDS
+        )
+
+    def add_coins(self, session, qty):
+        """Add to purse, clamped at MAX_PURSE_COINS. Returns (gained, leftover)."""
+        if qty <= 0:
+            return 0, 0
+        room = max(0, MAX_PURSE_COINS - session.coins)
+        take = min(qty, room)
+        session.coins += take
+        self.db.save_player_stats(session.player_id, coins=session.coins)
+        return take, qty - take
+
+    def near_bank(self, session):
+        for spot in INTERACTABLES:
+            if spot.get("kind") == "bank" and adjacent_or_same(session.x, session.y, spot["x"], spot["y"]):
+                return True
+        for n in NPCS:
+            if n.get("bank") and adjacent_or_same(session.x, session.y, n["x"], n["y"]):
+                return True
+        return False
+
     def grant_xp(self, session, skill, amount):
         before = session.level(skill)
         session.xp[skill] += amount
@@ -216,9 +385,13 @@ class World:
     def drop_loot(self, x, y, drops):
         dropped = []
         for item_id, chance, (lo, hi) in drops:
-            if random.random() <= chance:
-                qty = random.randint(lo, hi)
-                dropped.append({"item_id": item_id, "qty": qty})
+            if random.random() > chance:
+                continue
+            # Tuple/list = pick one random item from the pool (e.g. 1/10 gear table)
+            if isinstance(item_id, (list, tuple)):
+                item_id = random.choice(item_id)
+            qty = random.randint(lo, hi)
+            dropped.append({"item_id": item_id, "qty": qty})
         if dropped:
             self.ground_items.setdefault((x, y), []).extend(dropped)
         return dropped
@@ -302,21 +475,80 @@ async def handle_login(ws, msg, is_register):
         session.x, session.y = SPAWN_POINT
         WORLD.db.save_player_position(session.player_id, session.x, session.y)
     session.inventory = WORLD.db.get_inventory(row["id"])
+    session.bank = WORLD.db.get_bank(row["id"])
     session.quests = WORLD.db.get_quest_progress(row["id"])
     WORLD.sessions[session.player_id] = session
     enforce_bound_items(session)
+    # Persist owned-pets list (includes migrated active_pet)
+    WORLD.db.save_player_stats(session.player_id, owned_pets=json.dumps(session.owned_pets))
+    if WORLD.ensure_tinderbox(session):
+        log.info("%s received a starter tinderbox", session.char_name)
 
-    await send(ws, "LOGIN_OK", player=session.full_state())
+    needs_alloc = not session.stats_allocated
+    await send(ws, "LOGIN_OK", player=session.full_state(), needs_stat_alloc=needs_alloc)
+    if needs_alloc:
+        await send(
+            ws, "STAT_ALLOC_REQUIRED",
+            points=10,
+            skills=["attack", "strength", "defence", "hitpoints"],
+            base_levels={"attack": 5, "strength": 5, "defence": 5, "hitpoints": 10},
+        )
+        log.info("%s logged in as %s (id=%s) — awaiting stat allocation", username, session.char_name, session.player_id)
+        return
+
+    await send_world_join(session)
+    log.info("%s logged in as %s (id=%s)", username, session.char_name, session.player_id)
+
+
+async def send_world_join(session):
     await send(
-        ws, "WORLD_STATE",
+        session.ws, "WORLD_STATE",
         width=WIDTH, height=HEIGHT, tiles=WORLD.grid, npcs=NPCS,
         resources={f"{x},{y}": n["type"] for (x, y), n in WORLD.resource_nodes.items() if not n["depleted"]},
         interactables=INTERACTABLES,
         craft_recipes=CRAFT_RECIPES,
+        buildings=BUILDINGS,
     )
     quest_log = {qid: quest_status_for(session, qid) for qid in QUESTS}
-    await send(ws, "QUEST_LOG", quests=quest_log)
-    log.info("%s logged in as %s (id=%s)", username, session.char_name, session.player_id)
+    await send(session.ws, "QUEST_LOG", quests=quest_log)
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+
+
+async def handle_allocate_stats(session, msg):
+    if session.stats_allocated:
+        await send(session.ws, "ERROR", message="You already chose your starting stats.")
+        return
+    allowed = ("attack", "strength", "defence", "hitpoints")
+    raw = msg.get("stats") or {}
+    try:
+        alloc = {s: max(0, int(raw.get(s, 0))) for s in allowed}
+    except (TypeError, ValueError):
+        await send(session.ws, "ERROR", message="Invalid stat allocation.")
+        return
+    if sum(alloc.values()) != 10:
+        await send(session.ws, "ERROR", message="You must spend exactly 10 stat points.")
+        return
+    base = {"attack": 5, "strength": 5, "defence": 5, "hitpoints": 10}
+    xp_fields = {}
+    for skill, pts in alloc.items():
+        new_level = base[skill] + pts
+        if new_level > 40:
+            await send(session.ws, "ERROR", message="Stat level too high.")
+            return
+        xp = combat.xp_for_level(new_level)
+        session.xp[skill] = xp
+        xp_fields[f"{skill}_xp"] = xp
+    session.hp = session.max_hp()
+    xp_fields["hp"] = session.hp
+    xp_fields["stats_allocated"] = 1
+    WORLD.db.save_player_stats(session.player_id, **xp_fields)
+    session.stats_allocated = True
+    await send(session.ws, "CHAT_MSG", **{
+        "from": "World",
+        "text": "Your starting stats are set. Welcome to Mythoscape!",
+    })
+    await send_world_join(session)
+    log.info("%s allocated starting stats %s", session.username, alloc)
 
 
 def item_is_sellable(item_id):
@@ -344,10 +576,12 @@ def enforce_bound_items(session):
         mine = session.username.lower() == owner
         has = session_has_item(session, item_id)
         if mine and not has:
-            # Prefer weapon slot if empty, else inventory
-            if item.get("equip_slot") == "weapon" and not session.equipment.get("weapon"):
-                session.equipment["weapon"] = item_id
-                WORLD.db.set_equipment(session.player_id, "weapon", item_id)
+            # Prefer matching equip slot if empty, else inventory
+            eq_slot = item.get("equip_slot")
+            if eq_slot and not session.equipment.get(eq_slot):
+                session.equipment[eq_slot] = item_id
+                WORLD.db.set_equipment(session.player_id, eq_slot, item_id)
+                log.info("Granted bound item %s to %s (equipped %s)", item_id, session.username, eq_slot)
             elif not WORLD.add_item_to_inventory(session, item_id, 1):
                 log.warning("Could not grant bound item %s to %s (inventory full)", item_id, session.username)
             else:
@@ -367,7 +601,9 @@ def enforce_bound_items(session):
 async def handle_leaderboard(ws, msg):
     limit = max(1, min(10, int(msg.get("limit", 5))))
     boards = WORLD.db.get_leaderboards(limit=limit)
-    await send(ws, "LEADERBOARD", skills=XP_SKILLS, boards=boards)
+    # Total overall first, then individual skills
+    skills = ["total"] + [s for s in XP_SKILLS if s in boards]
+    await send(ws, "LEADERBOARD", skills=skills, boards=boards)
 
 
 async def handle_move(session, msg):
@@ -382,7 +618,110 @@ async def handle_move(session, msg):
     session.x, session.y = nx, ny
     session.gathering_node = None
     WORLD.db.save_player_position(session.player_id, nx, ny)
+    await vacuum_ground_loot(session)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+
+
+async def bury_bone_stack(session, item_id, qty, quiet=False):
+    """Bury karma bones one at a time. Returns total XP gained."""
+    item = ITEMS.get(item_id) or {}
+    xp_each = int(item.get("karma_xp") or 0)
+    qty = max(0, int(qty))
+    if xp_each <= 0 or qty <= 0:
+        return 0
+    before = session.level("karma")
+    total_xp = 0
+    leveled = False
+    final_level = before
+    for _ in range(qty):
+        b, a = WORLD.grant_xp(session, "karma", xp_each)
+        total_xp += xp_each
+        if a > b:
+            leveled = True
+        final_level = a
+    await send(
+        session.ws, "SKILL_XP",
+        player_id=session.player_id, skill="karma", gained=total_xp,
+        xp=session.xp["karma"], level=final_level, leveled_up=leveled,
+    )
+    if not quiet:
+        noun = item.get("name", "bones").lower()
+        if qty == 1:
+            text = f"You bury the {noun}. Karma +{total_xp} XP."
+        else:
+            text = f"You bury {qty} {noun}. Karma +{total_xp} XP."
+        await send(session.ws, "CHAT_MSG", **{"from": "World", "text": text})
+    return total_xp
+
+
+async def vacuum_ground_loot(session, quiet=False):
+    """Scoop coins underfoot and adjacent; scoop items on your tile if auto-pickup is on.
+    Bones are always auto-buried one at a time (never kept in inventory from the ground).
+    """
+    tiles = [(session.x, session.y)]
+    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)):
+        tiles.append((session.x + dx, session.y + dy))
+    collected_coins = 0
+    collected_names = []
+    bones_buried = 0
+    for key in tiles:
+        items_here = WORLD.ground_items.get(key)
+        if not items_here:
+            continue
+        remaining = []
+        on_me = key == (session.x, session.y)
+        for entry in items_here:
+            item_id, qty = entry["item_id"], entry["qty"]
+            if item_id == "coins":
+                gained, left = WORLD.add_coins(session, qty)
+                collected_coins += gained
+                if left:
+                    remaining.append({"item_id": "coins", "qty": left})
+                continue
+            # Always bury bones from vacuum range (never keep them from the ground)
+            if ITEMS.get(item_id, {}).get("karma_xp"):
+                await bury_bone_stack(session, item_id, qty, quiet=True)
+                bones_buried += qty
+                continue
+            if not (on_me and session.auto_pickup_items):
+                remaining.append(entry)
+                continue
+            if WORLD.add_item_to_inventory(session, item_id, qty):
+                collected_names.append(ITEMS.get(item_id, {}).get("name", item_id))
+            else:
+                remaining.append(entry)
+        if remaining:
+            WORLD.ground_items[key] = remaining
+        elif key in WORLD.ground_items:
+            del WORLD.ground_items[key]
+    if collected_coins:
+        if not quiet:
+            msg = f"You collect {collected_coins} coins."
+            if session.coins >= MAX_PURSE_COINS:
+                msg += " (purse full — bank the rest)"
+            await send(session.ws, "CHAT_MSG", **{"from": "World", "text": msg})
+    if bones_buried and not quiet:
+        await send(session.ws, "CHAT_MSG", **{
+            "from": "World",
+            "text": f"You bury {bones_buried} bone{'s' if bones_buried != 1 else ''}.",
+        })
+    if collected_names and not quiet:
+        shown = ", ".join(collected_names[:3])
+        extra = f" (+{len(collected_names) - 3} more)" if len(collected_names) > 3 else ""
+        await send(session.ws, "CHAT_MSG", **{
+            "from": "World", "text": f"You pick up {shown}{extra}.",
+        })
+
+
+async def handle_set_option(session, msg):
+    if "auto_pickup_items" in msg:
+        session.auto_pickup_items = bool(msg["auto_pickup_items"])
+        WORLD.db.save_player_stats(session.player_id, auto_pickup_items=1 if session.auto_pickup_items else 0)
+        state = "ON" if session.auto_pickup_items else "OFF"
+        await send(session.ws, "CHAT_MSG", **{
+            "from": "Options", "text": f"Auto-pickup items: {state} (coins always collect).",
+        })
+        await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
 
 
 async def handle_chat(session, msg):
@@ -447,19 +786,34 @@ async def handle_craft(session, msg):
     if not recipe:
         await send(session.ws, "ERROR", message="Unknown recipe.")
         return
-    # Smelt at the furnace; smith at the anvil (both inside the smithy).
-    needed = "furnace" if recipe.get("category") == "smelt" else "anvil"
+    category = recipe.get("category")
+    # Smelt at furnace, smith at anvil, cook at a hearth/range or campfire.
+    if category == "smelt":
+        needed_kinds = ("furnace",)
+        where = "the furnace"
+    elif category == "smith":
+        needed_kinds = ("anvil",)
+        where = "the anvil"
+    elif category == "cook":
+        needed_kinds = ("range", "fireplace")
+        where = "a cooking fire"
+    else:
+        await send(session.ws, "ERROR", message="You can't make that here.")
+        return
     near_station = False
-    for spot in INTERACTABLES:
-        if spot["kind"] == needed and adjacent_or_same(session.x, session.y, spot["x"], spot["y"]):
-            near_station = True
-            break
+    if category == "cook":
+        near_station = WORLD.near_cook_spot(session)
+    else:
+        for spot in INTERACTABLES:
+            if spot["kind"] in needed_kinds and adjacent_or_same(session.x, session.y, spot["x"], spot["y"]):
+                near_station = True
+                break
     if not near_station:
-        where = "the furnace" if needed == "furnace" else "the anvil"
-        await send(session.ws, "ERROR", message=f"Stand next to {where} inside the smithy.")
+        await send(session.ws, "ERROR", message=f"Stand next to {where}.")
         return
     skill = recipe["skill"]
-    if session.level(skill) < recipe["level_req"]:
+    cook_lvl = session.level(skill)
+    if cook_lvl < recipe["level_req"]:
         await send(
             session.ws, "ERROR",
             message=f"You need {skill} level {recipe['level_req']} for that.",
@@ -473,6 +827,12 @@ async def handle_craft(session, msg):
             )
             return
     out_id, out_qty = recipe["output"]
+    burnt = False
+    if category == "cook" and recipe.get("burnt"):
+        chance = cook_burn_chance(cook_lvl, recipe["level_req"])
+        if chance > 0 and random.random() < chance:
+            out_id, out_qty = recipe["burnt"]
+            burnt = True
     # Reserve output space: try add after remove; roll back on failure.
     for item_id, need in recipe["inputs"].items():
         WORLD.remove_item_qty(session, item_id, need)
@@ -481,6 +841,13 @@ async def handle_craft(session, msg):
             WORLD.add_item_to_inventory(session, item_id, need)
         await send(session.ws, "ERROR", message="Your inventory is full.")
         return
+    if category == "cook" and burnt:
+        await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        await send(
+            session.ws, "CHAT_MSG",
+            **{"from": "Kitchen", "text": f"You accidentally burn the food. You get {ITEMS[out_id]['name']}."},
+        )
+        return
     before, after = WORLD.grant_xp(session, skill, recipe["xp"])
     await send(
         session.ws, "SKILL_XP",
@@ -488,9 +855,52 @@ async def handle_craft(session, msg):
         xp=session.xp[skill], level=after, leveled_up=after > before,
     )
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    source = "Kitchen" if category == "cook" else "Forge"
+    verb = "cook" if category == "cook" else "make"
     await send(
         session.ws, "CHAT_MSG",
-        **{"from": "Forge", "text": f"You make {ITEMS[out_id]['name']}."},
+        **{"from": source, "text": f"You {verb} {ITEMS[out_id]['name']}."},
+    )
+
+
+async def light_fire(session, log_item_id):
+    """Light a campfire on the player's tile using a tinderbox + logs."""
+    info = FIRE_LOGS.get(log_item_id)
+    if not info:
+        await send(session.ws, "ERROR", message="You can't light that.")
+        return
+    if WORLD.count_item(session, "tinderbox") < 1:
+        await send(session.ws, "ERROR", message="You need a tinderbox to light a fire.")
+        return
+    if WORLD.count_item(session, log_item_id) < 1:
+        await send(session.ws, "ERROR", message=f"You need {ITEMS[log_item_id]['name']}.")
+        return
+    fm_lvl = session.level("firemaking")
+    if fm_lvl < info["level_req"]:
+        await send(
+            session.ws, "ERROR",
+            message=f"You need Firemaking level {info['level_req']} to light {ITEMS[log_item_id]['name']}.",
+        )
+        return
+    if not is_walkable(WORLD.grid, session.x, session.y):
+        await send(session.ws, "ERROR", message="You can't light a fire here.")
+        return
+    key = (session.x, session.y)
+    if key in WORLD.fires:
+        await send(session.ws, "ERROR", message="There's already a fire here.")
+        return
+    WORLD.remove_item_qty(session, log_item_id, 1)
+    WORLD.fires[key] = WORLD.tick_count + info["duration"]
+    before, after = WORLD.grant_xp(session, "firemaking", info["xp"])
+    await send(
+        session.ws, "SKILL_XP",
+        player_id=session.player_id, skill="firemaking", gained=info["xp"],
+        xp=session.xp["firemaking"], level=after, leveled_up=after > before,
+    )
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    await send(
+        session.ws, "CHAT_MSG",
+        **{"from": "You", "text": f"You light the {ITEMS[log_item_id]['name'].lower()} and a fire springs up."},
     )
 
 
@@ -521,9 +931,135 @@ async def handle_talk(session, msg):
     await send(
         session.ws, "DIALOGUE", npc_id=npc_id, npc_name=npc["name"], lines=npc["lines"],
         shop_id=npc.get("shop_id"), quest=quest_info, forge=bool(npc.get("forge")),
+        bank=bool(npc.get("bank")),
     )
     if npc.get("shop_id"):
         await send_shop_state(session, npc["shop_id"])
+
+
+async def send_bank_state(session):
+    await send(
+        session.ws, "BANK_STATE",
+        inventory=session.inventory,
+        bank=session.bank,
+        coins=session.coins,
+        bank_coins=session.bank_coins,
+        max_purse=MAX_PURSE_COINS,
+        max_bank_coins=MAX_BANK_COINS,
+        bank_slots=BANK_SLOTS,
+    )
+
+
+async def handle_bank_open(session, msg):
+    if not WORLD.near_bank(session):
+        await send(session.ws, "ERROR", message="You need to be at the bank booth.")
+        return
+    await send_bank_state(session)
+
+
+async def handle_bank_deposit(session, msg):
+    if not WORLD.near_bank(session):
+        await send(session.ws, "ERROR", message="You need to be at the bank.")
+        return
+    # Deposit coins
+    if msg.get("coins"):
+        qty = max(0, int(msg.get("coins", 0)))
+        qty = min(qty, session.coins)
+        room = max(0, MAX_BANK_COINS - session.bank_coins)
+        qty = min(qty, room)
+        if qty <= 0:
+            await send(session.ws, "ERROR", message="Can't deposit that many coins.")
+            return
+        session.coins -= qty
+        session.bank_coins += qty
+        WORLD.db.save_player_stats(session.player_id, coins=session.coins, bank_coins=session.bank_coins)
+        await send_bank_state(session)
+        await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        return
+    # Deposit inventory slot
+    slot = msg.get("slot_index")
+    if slot is None:
+        return
+    try:
+        slot = int(slot)
+    except (TypeError, ValueError):
+        return
+    entry = session.inventory.get(slot)
+    if not entry:
+        return
+    item_id, qty = entry["item_id"], entry["qty"]
+    if not item_is_tradeable(item_id):
+        await send(session.ws, "ERROR", message="You can't bank that.")
+        return
+    # stack into existing bank slot or free slot
+    placed = False
+    if ITEMS[item_id].get("stackable"):
+        for bslot, bent in session.bank.items():
+            if bent["item_id"] == item_id:
+                bent["qty"] += qty
+                WORLD.db.set_bank_slot(session.player_id, bslot, item_id, bent["qty"])
+                placed = True
+                break
+    if not placed:
+        for bslot in range(BANK_SLOTS):
+            if bslot not in session.bank:
+                session.bank[bslot] = {"item_id": item_id, "qty": qty}
+                WORLD.db.set_bank_slot(session.player_id, bslot, item_id, qty)
+                placed = True
+                break
+    if not placed:
+        await send(session.ws, "ERROR", message="Your bank is full.")
+        return
+    del session.inventory[slot]
+    WORLD.db.clear_slot(session.player_id, slot)
+    await send_bank_state(session)
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+
+
+async def handle_bank_withdraw(session, msg):
+    if not WORLD.near_bank(session):
+        await send(session.ws, "ERROR", message="You need to be at the bank.")
+        return
+    if msg.get("coins"):
+        qty = max(0, int(msg.get("coins", 0)))
+        qty = min(qty, session.bank_coins)
+        room = max(0, MAX_PURSE_COINS - session.coins)
+        qty = min(qty, room)
+        if qty <= 0:
+            await send(session.ws, "ERROR", message="Can't withdraw that many coins.")
+            return
+        session.bank_coins -= qty
+        session.coins += qty
+        WORLD.db.save_player_stats(session.player_id, coins=session.coins, bank_coins=session.bank_coins)
+        await send_bank_state(session)
+        await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        return
+    slot = msg.get("slot_index")
+    if slot is None:
+        return
+    try:
+        slot = int(slot)
+    except (TypeError, ValueError):
+        return
+    entry = session.bank.get(slot)
+    if not entry:
+        return
+    item_id, qty = entry["item_id"], entry["qty"]
+    want = min(qty, max(1, int(msg.get("qty", qty))))
+    if item_id in ORE_ITEM_IDS and WORLD.count_ores(session) + want > MAX_ORES:
+        await send(session.ws, "ERROR", message=f"You can't carry more than {MAX_ORES} ores.")
+        return
+    if not WORLD.add_item_to_inventory(session, item_id, want):
+        await send(session.ws, "ERROR", message="Your inventory is full.")
+        return
+    entry["qty"] -= want
+    if entry["qty"] <= 0:
+        del session.bank[slot]
+        WORLD.db.clear_bank_slot(session.player_id, slot)
+    else:
+        WORLD.db.set_bank_slot(session.player_id, slot, item_id, entry["qty"])
+    await send_bank_state(session)
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
 
 
 async def send_shop_state(session, shop_id):
@@ -536,12 +1072,62 @@ async def send_shop_state(session, shop_id):
     )
 
 
+async def handle_set_pet(session, msg):
+    """Switch the active companion among owned pets."""
+    pet_id = msg.get("pet_id")
+    if not pet_id:
+        await send(session.ws, "ERROR", message="Pick a pet to switch to.")
+        return
+    if pet_id not in PETS:
+        await send(session.ws, "ERROR", message="Unknown pet.")
+        return
+    if pet_id not in session.owned_pets:
+        await send(session.ws, "ERROR", message="You don't own that pet. Buy it at the Pet Emporium.")
+        return
+    if pet_id == session.pet_id:
+        await send(session.ws, "CHAT_MSG", **{
+            "from": "Pets", "text": f"{PETS[pet_id]['name']} is already with you.",
+        })
+        return
+    session.activate_pet(pet_id)
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    await send(session.ws, "CHAT_MSG", **{
+        "from": "Pets",
+        "text": f"You switch to your {PETS[pet_id]['name']}.",
+    })
+
+
 async def handle_shop_buy(session, msg):
     shop_id, item_id, qty = msg.get("shop_id"), msg.get("item_id"), max(1, int(msg.get("qty", 1)))
     shop = SHOPS.get(shop_id)
     if not shop or item_id not in shop["stock"]:
         return
     stock = shop["stock"][item_id]
+    item = ITEMS.get(item_id) or {}
+    # Pets: buy adds to collection and activates (re-buy of owned = free switch)
+    if item.get("type") == "pet":
+        qty = 1
+        pet_id = item.get("pet_id")
+        if pet_id not in PETS:
+            return
+        already = pet_id in session.owned_pets
+        cost = 0 if already else stock["price"]
+        if session.coins < cost:
+            await send(session.ws, "ERROR", message="You can't afford that.")
+            return
+        session.coins -= cost
+        if not already and stock["qty"] < 99:
+            stock["qty"] = max(0, stock["qty"] - 1)
+        session.activate_pet(pet_id)
+        WORLD.db.save_player_stats(session.player_id, coins=session.coins)
+        await send_shop_state(session, shop_id)
+        await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        if already:
+            msg_text = f"You call your {PETS[pet_id]['name']} to your side."
+        else:
+            msg_text = f"You adopt a {PETS[pet_id]['name']}! It will follow and fight for you."
+        await send(session.ws, "CHAT_MSG", **{"from": "Pet Emporium", "text": msg_text})
+        return
     qty = min(qty, stock["qty"])
     cost = stock["price"] * qty
     if qty <= 0 or session.coins < cost:
@@ -573,8 +1159,9 @@ async def handle_shop_sell(session, msg):
         return
     value = int(ITEMS[item_id]["value"] * 0.4) * qty
     WORLD.remove_item_qty(session, item_id, qty)
-    session.coins += value
-    WORLD.db.save_player_stats(session.player_id, coins=session.coins)
+    gained, left = WORLD.add_coins(session, value)
+    if left:
+        await send(session.ws, "ERROR", message=f"Purse full ({MAX_PURSE_COINS}). {left} coins lost — bank first next time.")
     await send_shop_state(session, shop_id)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
 
@@ -620,13 +1207,43 @@ async def handle_use_item(session, msg):
     entry = session.inventory.get(slot_index)
     if not entry:
         return
-    item = ITEMS[entry["item_id"]]
+    item_id = entry["item_id"]
+    item = ITEMS[item_id]
+    if item.get("karma_xp"):
+        # Right-click / use: bury exactly one bone from this stack
+        WORLD.remove_item_qty(session, item_id, 1)
+        await bury_bone_stack(session, item_id, 1, quiet=False)
+        await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        return
+    if item_id in FIRE_LOGS:
+        await light_fire(session, item_id)
+        return
+    if item_id == "tinderbox":
+        # Use tinderbox: light the first stack of logs found in inventory
+        for slot, inv in session.inventory.items():
+            if inv["item_id"] in FIRE_LOGS:
+                await light_fire(session, inv["item_id"])
+                return
+        await send(session.ws, "ERROR", message="You need logs to light a fire.")
+        return
     if item["type"] == "food":
         heal = item.get("heal", 0)
+        if heal <= 0:
+            WORLD.remove_item_qty(session, item_id, 1)
+            await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+            await send(
+                session.ws, "CHAT_MSG",
+                **{"from": "You", "text": f"You eat the {item['name']}. It tastes awful."},
+            )
+            return
         session.hp = min(session.max_hp(), session.hp + heal)
-        WORLD.remove_item_qty(session, entry["item_id"], 1)
+        WORLD.remove_item_qty(session, item_id, 1)
         WORLD.db.save_player_stats(session.player_id, hp=session.hp)
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        await send(
+            session.ws, "CHAT_MSG",
+            **{"from": "You", "text": f"You eat the {item['name']} and restore {heal} Hitpoints."},
+        )
     else:
         await send(session.ws, "ERROR", message="Nothing happens.")
 
@@ -647,24 +1264,38 @@ async def handle_drop(session, msg):
 
 
 async def handle_pickup(session, msg):
+    """Manual pickup: take the next non-coin stack (coins auto-vacuum on step)."""
+    await vacuum_ground_loot(session, quiet=True)
     items_here = WORLD.ground_items.get((session.x, session.y))
     if not items_here:
+        await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
         return
     entry = items_here.pop(0)
     item_id, qty = entry["item_id"], entry["qty"]
-    # Coins go straight into the purse, not inventory slots
     if item_id == "coins":
-        session.coins += qty
-        WORLD.db.save_player_stats(session.player_id, coins=session.coins)
+        gained, left = WORLD.add_coins(session, qty)
+        if left:
+            items_here.insert(0, {"item_id": "coins", "qty": left})
+        await send(session.ws, "CHAT_MSG", **{"from": "World", "text": f"You pick up {gained} coins."})
+    elif ITEMS.get(item_id, {}).get("karma_xp"):
+        await bury_bone_stack(session, item_id, qty, quiet=False)
+    elif item_id in ORE_ITEM_IDS and WORLD.count_ores(session) + qty > MAX_ORES:
+        items_here.insert(0, entry)
+        await send(session.ws, "ERROR", message=f"You can't carry more than {MAX_ORES} ores.")
+        await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        return
     elif not WORLD.add_item_to_inventory(session, item_id, qty):
         items_here.insert(0, entry)
         await send(session.ws, "ERROR", message="Your inventory is full.")
+        await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
         return
+    else:
+        await send(session.ws, "CHAT_MSG", **{
+            "from": "World", "text": f"You pick up {ITEMS[item_id]['name']}.",
+        })
     if not items_here:
         del WORLD.ground_items[(session.x, session.y)]
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
-    if item_id == "coins":
-        await send(session.ws, "CHAT_MSG", **{"from": "World", "text": f"You pick up {qty} coins."})
 
 
 async def handle_quest_accept(session, msg):
@@ -703,8 +1334,11 @@ async def handle_quest_turnin(session, msg):
 
     rewards = qdef["rewards"]
     if "coins" in rewards:
-        session.coins += rewards["coins"]
-        WORLD.db.save_player_stats(session.player_id, coins=session.coins)
+        gained, left = WORLD.add_coins(session, rewards["coins"])
+        if left:
+            await send(session.ws, "CHAT_MSG", **{
+                "from": "World", "text": f"Purse full — {left} reward coins couldn't fit.",
+            })
     if "xp" in rewards:
         for skill, amount in rewards["xp"].items():
             WORLD.grant_xp(session, skill, amount)
@@ -854,6 +1488,10 @@ async def handler(ws):
 
             if mtype == "LEADERBOARD":
                 await handle_leaderboard(ws, msg)
+            elif mtype == "ALLOCATE_STATS":
+                await handle_allocate_stats(session, msg)
+            elif not session.stats_allocated:
+                await send(session.ws, "ERROR", message="Choose your starting stats first.")
             elif mtype == "MOVE":
                 await handle_move(session, msg)
             elif mtype == "CHAT":
@@ -872,6 +1510,8 @@ async def handler(ws):
                 await handle_shop_buy(session, msg)
             elif mtype == "SHOP_SELL":
                 await handle_shop_sell(session, msg)
+            elif mtype == "SET_PET":
+                await handle_set_pet(session, msg)
             elif mtype == "EQUIP":
                 await handle_equip(session, msg)
             elif mtype == "UNEQUIP":
@@ -882,6 +1522,14 @@ async def handler(ws):
                 await handle_drop(session, msg)
             elif mtype == "PICKUP":
                 await handle_pickup(session, msg)
+            elif mtype == "SET_OPTION":
+                await handle_set_option(session, msg)
+            elif mtype == "BANK_OPEN":
+                await handle_bank_open(session, msg)
+            elif mtype == "BANK_DEPOSIT":
+                await handle_bank_deposit(session, msg)
+            elif mtype == "BANK_WITHDRAW":
+                await handle_bank_withdraw(session, msg)
             elif mtype == "QUEST_ACCEPT":
                 await handle_quest_accept(session, msg)
             elif mtype == "QUEST_TURNIN":
@@ -921,21 +1569,31 @@ async def game_loop():
         await process_gathering(events)
         process_monster_respawns()
         process_resource_respawns()
+        process_fires()
         process_monster_ai()
+        process_pets(events)
 
         state = {
             "players": [s.public_state() for s in WORLD.sessions.values()],
             "monsters": [m.public_state() for m in WORLD.monsters.values()],
+            "pets": [s.pet_public() for s in WORLD.sessions.values() if s.pet_id],
             "ground_items": {f"{x},{y}": items for (x, y), items in WORLD.ground_items.items()},
             "resources": {
                 f"{x},{y}": n["type"]
                 for (x, y), n in WORLD.resource_nodes.items()
                 if not n["depleted"]
             },
+            "fires": [f"{x},{y}" for (x, y) in WORLD.fires],
         }
         await broadcast("STATE_UPDATE", **state)
         for ev in events:
             await broadcast(ev["type"], **ev["data"])
+
+
+def process_fires():
+    expired = [k for k, until in WORLD.fires.items() if WORLD.tick_count >= until]
+    for k in expired:
+        del WORLD.fires[k]
 
 
 async def process_combat(events):
@@ -989,6 +1647,8 @@ async def process_combat(events):
                 events.append({"type": "DEATH", "data": {"entity_id": primary.id, "entity_kind": "monster"}})
                 if drops:
                     events.append({"type": "LOOT_DROPPED", "data": {"x": primary.x, "y": primary.y, "items": drops}})
+                    await vacuum_ground_loot(session)
+                    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
                 check_quest_progress_on_kill(session, primary.type)
                 attackers = [m for m in attackers if m is not primary]
 
@@ -1018,18 +1678,116 @@ async def process_combat(events):
                 break
 
         if died:
+            lost = session.coins
             session.hp = session.max_hp()
             session.x, session.y = SPAWN_POINT
-            session.coins = session.coins // 2
+            session.coins = 0
             session.in_combat_with = None
+            session.pet_target_id = None
+            if session.pet_id:
+                session.pet_x, session.pet_y = SPAWN_POINT
+                session.pet_hp = PETS[session.pet_id]["hp"]
             for mon in WORLD.monsters.values():
                 if mon.target_player_id == session.player_id:
                     mon.target_player_id = None
             WORLD.db.save_player_stats(session.player_id, coins=session.coins)
-            events.append({"type": "DEATH", "data": {"entity_id": session.player_id, "entity_kind": "player"}})
+            events.append({"type": "DEATH", "data": {
+                "entity_id": session.player_id, "entity_kind": "player",
+                "coins_lost": lost,
+            }})
+            await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
         elif not session.in_combat_with and not attackers:
             # Clear stale lock if nothing is fighting you
             pass
+
+
+def _pet_step_toward(session, tx, ty):
+    """Move pet one tile toward (tx, ty) if walkable."""
+    px, py = session.pet_x, session.pet_y
+    if (px, py) == (tx, ty):
+        return
+    options = []
+    dx = 0 if px == tx else (1 if tx > px else -1)
+    dy = 0 if py == ty else (1 if ty > py else -1)
+    for nx, ny in ((px + dx, py), (px, py + dy), (px + dx, py + dy)):
+        if is_walkable(WORLD.grid, nx, ny):
+            options.append((nx, ny))
+    if not options:
+        return
+    # Prefer tile closest to target
+    options.sort(key=lambda p: max(abs(p[0] - tx), abs(p[1] - ty)))
+    session.pet_x, session.pet_y = options[0]
+
+
+def process_pets(events):
+    """Pets follow their owner and attack monsters that aggro the player."""
+    for session in list(WORLD.sessions.values()):
+        if not session.pet_id or session.pet_id not in PETS:
+            continue
+        pdef = PETS[session.pet_id]
+        if session.pet_hp <= 0:
+            session.pet_hp = pdef["hp"]  # respawn with owner
+
+        # Too far from owner → snap back
+        if max(abs(session.pet_x - session.x), abs(session.pet_y - session.y)) > 10:
+            session.pet_x, session.pet_y = session.x, session.y
+
+        attackers = [
+            m for m in WORLD.monsters.values()
+            if m.alive and m.target_player_id == session.player_id
+        ]
+        target = None
+        if attackers:
+            target = min(
+                attackers,
+                key=lambda m: max(abs(m.x - session.pet_x), abs(m.y - session.pet_y)),
+            )
+            session.pet_target_id = target.id
+        elif session.pet_target_id:
+            m = WORLD.monsters.get(session.pet_target_id)
+            if m and m.alive:
+                target = m
+            else:
+                session.pet_target_id = None
+
+        if target is not None:
+            if adjacent_or_same(session.pet_x, session.pet_y, target.x, target.y):
+                mstats = MONSTERS[target.type]
+                dmg, hit = combat.resolve_hit(
+                    {"attack": pdef["attack"], "strength": pdef["strength"]},
+                    {"defence": mstats["defence"], "defence_bonus": mstats["def_bonus"]},
+                )
+                target.hp = max(0, target.hp - dmg)
+                events.append({"type": "COMBAT_EVENT", "data": {
+                    "attacker_id": f"pet:{session.player_id}",
+                    "defender_id": target.id,
+                    "damage": dmg, "hit": hit,
+                    "defender_hp": target.hp, "defender_max_hp": target.max_hp,
+                    "kind": "pet_hits_monster",
+                }})
+                if target.hp <= 0:
+                    target.alive = False
+                    target.respawn_at_tick = WORLD.tick_count + mstats["respawn_ticks"]
+                    target.target_player_id = None
+                    if session.in_combat_with == ("monster", target.id):
+                        session.in_combat_with = None
+                    session.pet_target_id = None
+                    drops = WORLD.drop_loot(target.x, target.y, mstats["drops"])
+                    events.append({"type": "DEATH", "data": {
+                        "entity_id": target.id, "entity_kind": "monster",
+                    }})
+                    if drops:
+                        events.append({"type": "LOOT_DROPPED", "data": {
+                            "x": target.x, "y": target.y, "items": drops,
+                        }})
+                    check_quest_progress_on_kill(session, target.type)
+            else:
+                _pet_step_toward(session, target.x, target.y)
+            continue
+
+        # Idle: follow owner
+        if max(abs(session.pet_x - session.x), abs(session.pet_y - session.y)) > 1:
+            _pet_step_toward(session, session.x, session.y)
 
 
 async def process_gathering(events):
@@ -1042,6 +1800,10 @@ async def process_gathering(events):
             continue
         ydef = RESOURCE_YIELDS[node["type"]]
         if session.level(ydef["skill"]) < ydef["level_req"]:
+            session.gathering_node = None
+            continue
+        if ydef["item"] in ORE_ITEM_IDS and WORLD.count_ores(session) >= MAX_ORES:
+            await send(session.ws, "ERROR", message=f"You can't carry more than {MAX_ORES} ores. Bank some first.")
             session.gathering_node = None
             continue
         if not WORLD.add_item_to_inventory(session, ydef["item"], 1):
@@ -1128,7 +1890,7 @@ def process_monster_ai():
                 session.in_combat_with = ("monster", m.id)
             elif session.in_combat_with[1] not in WORLD.monsters or not WORLD.monsters[session.in_combat_with[1]].alive:
                 session.in_combat_with = ("monster", m.id)
-            # Chase one step toward the player when not adjacent
+            # Chase one step toward the player when not adjacent (stay in home room)
             if dist > 1:
                 dx = 0 if session.x == m.x else (1 if session.x > m.x else -1)
                 dy = 0 if session.y == m.y else (1 if session.y > m.y else -1)
@@ -1141,7 +1903,9 @@ def process_monster_ai():
                     if sx == 0 and sy == 0:
                         continue
                     nx, ny = m.x + sx, m.y + sy
-                    if is_walkable(WORLD.grid, nx, ny) and not WORLD.occupied(nx, ny):
+                    if (is_walkable(WORLD.grid, nx, ny)
+                            and in_room(nx, ny, m.home_room)
+                            and not WORLD.occupied(nx, ny)):
                         m.x, m.y = nx, ny
                         break
             continue
@@ -1155,7 +1919,10 @@ def process_monster_ai():
             dx, dy = random.choice([(1, 0), (-1, 0), (0, 1), (0, -1), (0, 0)])
             nx, ny = m.x + dx, m.y + dy
             radius = mdef["wander_radius"]
-            if is_walkable(WORLD.grid, nx, ny) and abs(nx - m.spawn_x) <= radius and abs(ny - m.spawn_y) <= radius:
+            if (is_walkable(WORLD.grid, nx, ny)
+                    and abs(nx - m.spawn_x) <= radius
+                    and abs(ny - m.spawn_y) <= radius
+                    and in_room(nx, ny, m.home_room)):
                 if not WORLD.occupied(nx, ny):
                     m.x, m.y = nx, ny
 

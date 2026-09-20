@@ -25,25 +25,43 @@ CREATE TABLE IF NOT EXISTS players (
     x INTEGER NOT NULL,
     y INTEGER NOT NULL,
     hp INTEGER NOT NULL DEFAULT 10,
-    attack_xp INTEGER NOT NULL DEFAULT 0,
-    strength_xp INTEGER NOT NULL DEFAULT 0,
-    defence_xp INTEGER NOT NULL DEFAULT 0,
+    attack_xp INTEGER NOT NULL DEFAULT 388,   -- level 5
+    strength_xp INTEGER NOT NULL DEFAULT 388,
+    defence_xp INTEGER NOT NULL DEFAULT 388,
     hitpoints_xp INTEGER NOT NULL DEFAULT 1154,
     woodcutting_xp INTEGER NOT NULL DEFAULT 0,
     mining_xp INTEGER NOT NULL DEFAULT 0,
     fishing_xp INTEGER NOT NULL DEFAULT 0,
+    cooking_xp INTEGER NOT NULL DEFAULT 0,
+    firemaking_xp INTEGER NOT NULL DEFAULT 0,
     smithing_xp INTEGER NOT NULL DEFAULT 0,
+    karma_xp INTEGER NOT NULL DEFAULT 0,
     coins INTEGER NOT NULL DEFAULT 0,
     equip_weapon TEXT,
     equip_shield TEXT,
     equip_body TEXT,
     equip_legs TEXT,
     equip_helmet TEXT,
+    auto_pickup_items INTEGER NOT NULL DEFAULT 0,
+    stats_allocated INTEGER NOT NULL DEFAULT 0,
+    bank_coins INTEGER NOT NULL DEFAULT 0,
+    active_pet TEXT,
+    owned_pets TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL,
     last_login TEXT
 );
 
 CREATE TABLE IF NOT EXISTS inventory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id INTEGER NOT NULL,
+    slot_index INTEGER NOT NULL,
+    item_id TEXT NOT NULL,
+    quantity INTEGER NOT NULL,
+    UNIQUE(player_id, slot_index),
+    FOREIGN KEY(player_id) REFERENCES players(id)
+);
+
+CREATE TABLE IF NOT EXISTS bank (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     player_id INTEGER NOT NULL,
     slot_index INTEGER NOT NULL,
@@ -86,6 +104,47 @@ class Database:
             )
         if "equip_helmet" not in cols:
             self.conn.execute("ALTER TABLE players ADD COLUMN equip_helmet TEXT")
+        if "auto_pickup_items" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN auto_pickup_items INTEGER NOT NULL DEFAULT 0"
+            )
+        if "stats_allocated" not in cols:
+            # Existing characters already started — treat them as allocated.
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN stats_allocated INTEGER NOT NULL DEFAULT 1"
+            )
+        if "bank_coins" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN bank_coins INTEGER NOT NULL DEFAULT 0"
+            )
+        if "karma_xp" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN karma_xp INTEGER NOT NULL DEFAULT 0"
+            )
+        if "active_pet" not in cols:
+            self.conn.execute("ALTER TABLE players ADD COLUMN active_pet TEXT")
+        if "owned_pets" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN owned_pets TEXT NOT NULL DEFAULT '[]'"
+            )
+        if "cooking_xp" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN cooking_xp INTEGER NOT NULL DEFAULT 0"
+            )
+        if "firemaking_xp" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN firemaking_xp INTEGER NOT NULL DEFAULT 0"
+            )
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS bank ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "player_id INTEGER NOT NULL,"
+            "slot_index INTEGER NOT NULL,"
+            "item_id TEXT NOT NULL,"
+            "quantity INTEGER NOT NULL,"
+            "UNIQUE(player_id, slot_index),"
+            "FOREIGN KEY(player_id) REFERENCES players(id))"
+        )
 
     # --- accounts ---------------------------------------------------------
     def get_player_by_username(self, username):
@@ -97,10 +156,15 @@ class Database:
         pw_hash = _hash_password(password, salt)
         x, y = SPAWN_POINT
         now = time.strftime("%Y-%m-%d %H:%M:%S")
+        # New characters begin at Attack/Strength/Defence 5, Hitpoints 10
+        start_combat_xp = combat.xp_for_level(5)
         cur = self.conn.execute(
-            "INSERT INTO players (username, password_hash, salt, char_name, x, y, created_at, last_login) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (username, pw_hash, salt, char_name, x, y, now, now),
+            "INSERT INTO players (username, password_hash, salt, char_name, x, y, "
+            "attack_xp, strength_xp, defence_xp, "
+            "created_at, last_login, stats_allocated) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+            (username, pw_hash, salt, char_name, x, y,
+             start_combat_xp, start_combat_xp, start_combat_xp, now, now),
         )
         self.conn.commit()
         player_id = cur.lastrowid
@@ -161,6 +225,25 @@ class Database:
         self.conn.execute(f"UPDATE players SET {col} = ? WHERE id = ?", (item_id, player_id))
         self.conn.commit()
 
+    # --- bank -------------------------------------------------------------
+    def get_bank(self, player_id):
+        cur = self.conn.execute(
+            "SELECT slot_index, item_id, quantity FROM bank WHERE player_id = ? ORDER BY slot_index",
+            (player_id,),
+        )
+        return {row["slot_index"]: {"item_id": row["item_id"], "qty": row["quantity"]} for row in cur.fetchall()}
+
+    def set_bank_slot(self, player_id, slot, item_id, qty):
+        self.conn.execute(
+            "INSERT OR REPLACE INTO bank (player_id, slot_index, item_id, quantity) VALUES (?, ?, ?, ?)",
+            (player_id, slot, item_id, qty),
+        )
+        self.conn.commit()
+
+    def clear_bank_slot(self, player_id, slot):
+        self.conn.execute("DELETE FROM bank WHERE player_id = ? AND slot_index = ?", (player_id, slot))
+        self.conn.commit()
+
     # --- quests ---------------------------------------------------------
     def get_quest_progress(self, player_id):
         cur = self.conn.execute("SELECT quest_id, status, progress FROM quest_progress WHERE player_id = ?", (player_id,))
@@ -175,7 +258,7 @@ class Database:
         self.conn.commit()
 
     def get_leaderboards(self, limit=5):
-        """Top players per skill by XP (char_name shown publicly)."""
+        """Top players per skill by XP, plus overall total level."""
         cols = {row[1] for row in self.conn.execute("PRAGMA table_info(players)")}
         boards = {}
         for skill in XP_SKILLS:
@@ -196,4 +279,27 @@ class Database:
                 }
                 for row in rows
             ]
+
+        # Overall total level = sum of all skill levels; XP = sum of skill XP
+        xp_cols = [f"{s}_xp" for s in XP_SKILLS if f"{s}_xp" in cols]
+        if xp_cols:
+            select_cols = ", ".join(["char_name"] + xp_cols)
+            rows = self.conn.execute(f"SELECT {select_cols} FROM players").fetchall()
+            totals = []
+            for row in rows:
+                total_xp = 0
+                total_level = 0
+                for col in xp_cols:
+                    xp = int(row[col] or 0)
+                    total_xp += xp
+                    total_level += combat.level_from_xp(xp)
+                totals.append({
+                    "name": row["char_name"],
+                    "xp": total_xp,
+                    "level": total_level,
+                })
+            totals.sort(key=lambda e: (-e["level"], -e["xp"], e["name"]))
+            boards["total"] = totals[:limit]
+        else:
+            boards["total"] = []
         return boards

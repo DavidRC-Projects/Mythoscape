@@ -52,15 +52,33 @@ the top players for each skill.
 - **H** — controls help popup
 - **E** — equipment & stats modal (click a slot to unequip)
 - **F** — forge UI inside the smithy (furnace to smelt, anvil to smith)
-- **Click** a monster to attack, an NPC to talk, a resource node to gather,
-  water to fish, the furnace/anvil in the smithy, or an adjacent player to trade
+- **Tab** — Skills modal (levels, XP, combat level, total level)
+- **C** — cooking UI at a hearth or player campfire
+- **Click** a monster / NPC / resource / shoreline / furnace / anvil / hearth / campfire / player as usual
+- Click **logs** or a **tinderbox** in inventory to light a campfire (needs both; trains Firemaking)
+- Higher **Cooking** level reduces the chance of burning fish
+- Oak logs need **Firemaking 15**
 - **G** — pick up an item on your tile
+- **P** — toggle auto-pickup for non-coin items (or click the sidebar button)
+- **B** — open the Village Bank (stand at the booth / talk to Banker Iris)
 - **I** — toggle inventory panel; click a slot to equip/eat, right-click to drop
-- **Tab** — toggle stats panel
 - **Q** — toggle quest log
 - **Enter** — open/send chat
-- In dialogue: **A** accept quest, **T** turn in quest, **B** browse shop, **S** open forge (Gareth), **Esc** close
+- In dialogue: **A** accept quest, **T** turn in quest, **B** browse shop / open bank, **S** open forge (Gareth), **Esc** close
 - In trading: click inventory slots to add to your offer, **Enter** confirm, **Esc** cancel
+
+Economy caps: purse holds at most **65,000** coins; bank vault holds **10,000,000** coins
+plus 48 item slots; inventory may hold at most **100** ores (bank extras).
+
+**Pet Emporium** (south of the smithy): talk to Pet Keeper Luna and press **B**.
+Companions follow you and attack monsters that aggro you.
+- Cat (Lv 1) — 10c
+- White Husky (Lv 10) — 1,000c
+- Skeleton (Lv 25) — 10,000c
+- Dragon (Lv 50) — 65,000c
+
+Buildings have solid walls and a single door — roofs hide interiors (and NPCs)
+until you walk through the doorway.
 
 ## Architecture
 ```
@@ -92,7 +110,6 @@ broadcasts back on the next tick.
   pause and resume once the node respawns).
 - No password reset / account recovery; sha256+salt hashing is enough to stop
   casual snooping in a hobby prototype, not production-grade security.
-- No persistent bank/storage yet — only inventory and equipment.
 - Monster "AI" is a light random wander plus simple aggro-while-attacked;
   no pathfinding toward players.
 

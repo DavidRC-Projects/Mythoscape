@@ -52,8 +52,7 @@ def resolve_hit(attacker_stats, defender_stats):
 
 
 # --- Skill XP / leveling -----------------------------------------------------
-# Simplified RS-style XP curve: level N requires roughly N^3-ish growth,
-# here approximated with a clean table generator for levels 1-40.
+# Simplified RS-style XP curve: level N requires roughly N^3-ish growth.
 def xp_for_level(level):
     total = 0
     for lvl in range(1, level):
@@ -61,7 +60,7 @@ def xp_for_level(level):
     return math.floor(total / 4)
 
 
-LEVEL_XP_TABLE = [xp_for_level(l) for l in range(1, 41)]
+LEVEL_XP_TABLE = [xp_for_level(l) for l in range(1, 201)]
 
 
 def level_from_xp(xp):
@@ -72,3 +71,19 @@ def level_from_xp(xp):
         else:
             break
     return lvl
+
+
+def xp_to_next_level(xp):
+    """XP still needed to reach the next level (0 at max table level)."""
+    lvl = level_from_xp(xp)
+    if lvl >= len(LEVEL_XP_TABLE):
+        return 0
+    # LEVEL_XP_TABLE[lvl] == xp required to reach level (lvl + 1)
+    return max(0, LEVEL_XP_TABLE[lvl] - int(xp))
+
+
+def combat_level(attack, strength, defence, hitpoints):
+    """Classic RS melee combat level (no Prayer/Summoning)."""
+    base = 0.25 * (defence + hitpoints)
+    melee = 0.325 * (attack + strength)
+    return max(1, int(math.floor(base + melee)))

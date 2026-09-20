@@ -24,6 +24,22 @@ class NetworkClient:
     def start(self):
         self._thread.start()
 
+    def reconnect(self):
+        """Open a fresh websocket after logout / disconnect (old thread exits)."""
+        if self._thread.is_alive():
+            # Old connection is still winding down; start a replacement anyway.
+            pass
+        self.connected = False
+        self.connect_error = None
+        # Drain stale messages so a prior _DISCONNECTED doesn't clobber login.
+        try:
+            while True:
+                self.incoming.get_nowait()
+        except queue.Empty:
+            pass
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
     def send(self, msg_type, **fields):
         self.outgoing.put({"type": msg_type, **fields})
 
