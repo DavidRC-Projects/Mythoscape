@@ -128,8 +128,9 @@ def _recessed_entrance(
     jambs inside that hole. Wood path keeps a timber surround for cottages.
     """
     stone = stone or (not wood)
-    depth = max(8, min(18, dw // 4))
-    jamb = max(6, depth - 1)
+    # DEEP recess for visible 3D carved entrance (not shallow pasted overlay)
+    depth = max(20, min(35, dw // 3))  # Much deeper: 20-35px recess depth
+    jamb = max(12, depth - 2)          # Wider jamb surfaces show wall thickness
 
     if stone:
         # --- Carve a hole (no proud frame, no silver box) ---
@@ -137,9 +138,9 @@ def _recessed_entrance(
         if glow:
             throat = (max(4, glow[0] // 12), max(2, glow[1] // 14), max(10, glow[2] // 5), alpha)
 
-        # Narrower reveal — wall thickness, not a grey tunnel box
-        depth = max(6, min(12, dw // 6))
-        jamb = max(4, min(8, depth))
+        # Deep reveal for visible wall thickness
+        depth = max(18, min(28, dw // 4))  # Deep stone recess
+        jamb = max(12, min(20, depth))
 
         # Arch mask: opaque where opening exists
         hole = pygame.Surface((dw, dh), pygame.SRCALPHA)
@@ -242,10 +243,10 @@ def _recessed_entrance(
             surf.blit(g, (pdx + 4, pdy + 3))
         return
 
-    # unused depth/jamb from outer scope for wood — recompute
-    depth = max(8, min(18, dw // 4))
-    jamb = max(6, depth - 1)
-    frame = max(5, dw // 10)
+    # Wood entrance with deep recess and visible frame
+    depth = max(20, min(35, dw // 3))  # Match new deep recess
+    jamb = max(12, depth - 2)          # Wide jamb surfaces
+    frame = max(6, dw // 9)            # Prominent frame
     surround = (100, 78, 52)
     ox, oy = dx - frame - 2, dy - frame - 4
     ow, oh = dw + (frame + 2) * 2, dh + frame + 6
@@ -380,12 +381,14 @@ def draw_house_shell(
     if fw < 8 or fh < 8:
         return
 
-    # Side depth lives inside the footprint (right strip), rising UP for 3D
-    side_w = max(14, int(fw * 0.22))
+    # DEEP side depth for strong 3D read (35% of footprint width)
+    # This makes the extruded volume VISIBLE from gameplay camera
+    side_w = max(18, int(fw * 0.35))
     front_w = max(8, fw - side_w)
-    dy = max(12, int(fh * 0.22))
+    # Tall vertical rise for dramatic 3/4 view depth (32% of height)
+    dy = max(16, int(fh * 0.32))
 
-    wall_top = fy + int(fh * 0.18)
+    wall_top = fy + int(fh * 0.16)
     ground = fy + fh
     wall_h = ground - wall_top
 
@@ -453,15 +456,16 @@ def draw_house_shell(
                      (fx - 1, found_y), (fx + fw, found_y), 2)
     _ao_band(dest, fx, found_y - max(5, fh // 18), fw, max(7, fh // 12), strength=100, falloff="up")
 
-    # Roof — peak above footprint; depth ridge stays within footprint width
-    overhang = max(6, fw // 16)  # small eaves only
-    peak_h = max(22, int(fh * 0.42))
+    # Dramatic roof covering full extruded depth
+    overhang = max(10, fw // 12)  # Larger eaves for clear depth read
+    peak_h = max(28, int(fh * 0.48))  # Taller peak
     pf = (fx + front_w // 2, wall_top - peak_h)
-    pb = (min(fx + fw - 4, pf[0] + side_w), pf[1] - int(dy * 0.55))
+    # Back ridge extends to FULLY cover the side depth
+    pb = (fx + fw - 2, pf[1] - int(dy * 0.65))  # Extends to right edge
     left_eave = (fx - overhang, wall_top)
-    right_eave = (fx + front_w + max(4, overhang // 2), wall_top)
+    right_eave = (fx + front_w + max(6, overhang // 2), wall_top)
     right_back = (fx + fw, wall_top - dy)
-    soffit = max(8, int(fh * 0.10))
+    soffit = max(10, int(fh * 0.12))
 
     _fill_poly(dest, [pf, pb, right_back, right_eave], roof_tex, shade=-70,
                flat=_shade(flat_roof, -55), alpha=255, uv=(fx + fw, fy))
