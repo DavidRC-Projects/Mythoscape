@@ -33,6 +33,7 @@ import world_map as wm  # noqa: E402
 import combat  # noqa: E402
 import procedural_sprites_finished as sprites  # noqa: E402
 import building_textures as btex  # noqa: E402
+import dungeon_interior_3d  # noqa: E402 — 3D dungeon interior props
 
 # CC0 photoreal building textures (ambientCG) — walls, roofs, pier
 btex.set_texture_dir(os.path.join(_HERE, "textures"))
@@ -5116,6 +5117,26 @@ class GameClient(CameraYaw):
         for _, __, fn in draw_list:
             fn()
 
+        # 3D dungeon interior props (Void Sanctum pillars, braziers, walls)
+        zone = wm.get_zone(self.player["x"], self.player["y"]) if self.player else None
+        if zone == "shadow_crypt" and not self.dungeon:
+            # Void Sanctum rooms - add 3D interior props
+            # Get room bounds in screen space
+            for sy in range(vis_h + 1):
+                for sx in range(vis_w + 1):
+                    vx, vy = cam_x + sx, cam_y + sy
+                    if 0 <= vx < vw and 0 <= vy < vh:
+                        wx, wy = self.view_to_world(vx, vy)
+                        if wm.get_zone(wx, wy) == "shadow_crypt":
+                            # Check if this is a room corner/center for props
+                            # Draw props for the visible room area
+                            room_rect = pygame.Rect(sx * TILE, sy * TILE, TILE * 4, TILE * 4)
+                            if sx % 4 == 0 and sy % 4 == 0:  # Room anchor points
+                                dungeon_interior_3d.draw_dungeon_props(
+                                    self.screen, room_rect, TILE, zone="shadow_crypt", t=t
+                                )
+                                break
+
         # Combat quick-heal buttons above the local player's head
         if getattr(self, "_combat_quick_anchor", None):
             self.draw_combat_quick_prompt(*self._combat_quick_anchor)
@@ -5331,7 +5352,10 @@ class GameClient(CameraYaw):
             bid = b.get("id") or ""
             door_frac = self._door_frac_for_building(b)
             inside = self.player_inside_building(b)
-            # Inside: keep wall cutaway so the shell doesn't vanish (RS indoor feel)
+            # Dungeons/crypts: completely hide exterior when inside (classic overworld→interior)
+            if inside and b.get("kind") in ("crypt", "dungeon"):
+                continue  # Skip drawing entirely - player sees interior space
+            # Houses: keep wall cutaway so the shell doesn't vanish (RS indoor feel)
             if inside:
                 if bid and building_sprites.draw_building_cutaway(
                     self.screen, rect, bid, yaw=0, alpha=255,
