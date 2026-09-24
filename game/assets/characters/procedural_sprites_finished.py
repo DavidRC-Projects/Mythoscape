@@ -894,6 +894,694 @@ def draw_skeleton(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1):
         pygame.draw.line(surf, deep, (head[0] + i * 0.9 * s, head[1] + 2.4 * s), (head[0] + i * 0.9 * s, head[1] + 3.8 * s), 1)
 
 
+def draw_imp(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1, moving=False, variant="ash"):
+    """Small demonic imp — bat wings, horns, tail, hunched posture."""
+    facing = 1 if facing >= 0 else -1
+    s = _s(tile, 'monster') * 0.75  # Smaller than other monsters
+    bob = math.sin(t * 8) * 0.8
+    
+    # Color variants
+    if variant == "void":
+        skin = (90, 70, 120) if not hurt else (140, 40, 100)
+        wing = (50, 40, 70)
+    else:  # ash
+        skin = (120, 60, 50) if not hurt else (180, 40, 30)
+        wing = (80, 50, 45)
+    
+    hi, mid, sh, deep = rs.material(skin)
+    cy += bob
+    
+    lunge_w, crouch, strike = rs.attack_impulse(attacking)
+    lunge = lunge_w * 7 * s * facing
+    cy += crouch * 1.2 * s
+    
+    rs.draw_cast_shadow(surf, cx, cy + 11 * s, 8 * s, 2.8 * s, 100)
+    
+    # Bat wings (behind body)
+    wing_flap = math.sin(t * 10) * 0.3 + 0.3
+    for side in (-1, 1):
+        wing_pts = [
+            (cx + side * 2 * s * facing, cy - 2 * s),
+            (cx + side * (8 + wing_flap * 3) * s * facing, cy - 4 * s),
+            (cx + side * (9 + wing_flap * 4) * s * facing, cy + 2 * s),
+            (cx + side * 3 * s * facing, cy + 1 * s),
+        ]
+        rs.draw_poly(surf, wing, wing_pts, deep, 1)
+        # Wing membrane detail
+        pygame.draw.line(surf, deep, wing_pts[0], wing_pts[2], 1)
+    
+    # Hunched body
+    rs.draw_volume(surf, skin, [
+        (cx - 3.5 * s * facing, cy - 1 * s),
+        (cx + 3 * s * facing + lunge * 0.2, cy - 3 * s),
+        (cx + 4 * s * facing + lunge * 0.15, cy + 4 * s),
+        (cx - 3 * s * facing, cy + 5 * s),
+    ], deep, 1)
+    
+    # Thin legs
+    for ox, oy in ((-1.5, 3), (2, 3.5)):
+        leg_end = (cx + ox * s * facing, cy + 10 * s)
+        rs.draw_volume_limb(surf, cx + ox * s * facing, cy + oy * s, *leg_end, 0.9 * s, skin, deep)
+        # Clawed feet
+        pygame.draw.circle(surf, deep, (int(leg_end[0]), int(leg_end[1])), max(2, int(1.2 * s)))
+    
+    # Clawed arms
+    claw_pos = (cx + 5 * s * facing + lunge, cy - 1 * s - crouch * 2 * s)
+    rs.draw_volume_limb(surf, cx + 2.5 * s * facing, cy - 1 * s, *claw_pos, 0.9 * s, skin, deep)
+    # Claw
+    for i in range(3):
+        claw_tip = (claw_pos[0] + (i - 1) * 0.8 * s, claw_pos[1] + 2 * s + strike * 3 * s)
+        pygame.draw.line(surf, deep, claw_pos, claw_tip, max(1, int(0.6 * s)))
+    
+    # Head with horns
+    head = (cx + 1.5 * s * facing + lunge * 0.1, cy - 5 * s)
+    rs.draw_volume(surf, skin, [
+        (head[0] - 2.5 * s, head[1] + 1 * s),
+        (head[0] - 2 * s, head[1] - 2.5 * s),
+        (head[0] + 2.5 * s, head[1] - 2 * s),
+        (head[0] + 3 * s, head[1] + 1.5 * s),
+        (head[0], head[1] + 2 * s),
+    ], deep, 1)
+    
+    # Horns
+    for side in (-1, 1):
+        horn_pts = [
+            (head[0] + side * 1.8 * s, head[1] - 1.8 * s),
+            (head[0] + side * 2.5 * s, head[1] - 5 * s),
+            (head[0] + side * 1.2 * s, head[1] - 2.2 * s),
+        ]
+        rs.draw_poly(surf, deep, horn_pts, None, 0)
+        pygame.draw.line(surf, (20, 18, 22), horn_pts[0], horn_pts[1], max(1, int(1.2 * s)))
+    
+    # Glowing eyes
+    eye_color = (160, 100, 200) if variant == "void" else (255, 140, 60)
+    for ox in (-1, 1):
+        pygame.draw.circle(surf, eye_color, (int(head[0] + ox * s), int(head[1] - 0.5 * s)), max(2, int(0.8 * s)))
+        pygame.draw.circle(surf, (255, 255, 240), (int(head[0] + ox * s - 0.3 * s), int(head[1] - 0.8 * s)), max(1, int(0.4 * s)))
+    
+    # Tail
+    tail_pts = [
+        (cx - 2 * s * facing, cy + 3 * s),
+        (cx - 6 * s * facing, cy + 1 * s),
+        (cx - 9 * s * facing, cy - 2 * s),
+    ]
+    pygame.draw.lines(surf, sh, False, tail_pts, max(2, int(1.5 * s)))
+    # Tail spade
+    pygame.draw.polygon(surf, deep, [
+        (tail_pts[2][0], tail_pts[2][1]),
+        (tail_pts[2][0] - 1.5 * s * facing, tail_pts[2][1] - 2 * s),
+        (tail_pts[2][0] + 1.5 * s * facing, tail_pts[2][1] - 2 * s),
+    ])
+    
+    if strike > 0.6:
+        pygame.draw.circle(surf, (255, 200, 100, int(200 * strike)), (int(claw_pos[0]), int(claw_pos[1])), max(3, int(2.5 * s * strike)), 1)
+
+
+def draw_ash_imp(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1, moving=False):
+    """Ash imp - fiery variant."""
+    draw_imp(surf, cx, cy, tile, t, hurt, attacking, facing, moving, variant="ash")
+
+
+def draw_void_imp(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1, moving=False):
+    """Void imp - dark variant."""
+    draw_imp(surf, cx, cy, tile, t, hurt, attacking, facing, moving, variant="void")
+
+
+def draw_giant(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1, moving=False):
+    """Massive humanoid giant - 2x normal size, crude club, stooped posture."""
+    facing = 1 if facing >= 0 else -1
+    s = _s(tile, 'monster') * 1.6  # Much larger than other monsters
+    bob = math.sin(t * 3.5) * 1.2  # Slower, heavier movement
+    
+    skin = (160, 40, 40) if hurt else (145, 120, 95)
+    hi, mid, sh, deep = rs.material(skin)
+    cloth = (90, 70, 50)
+    
+    cy += bob
+    lunge_w, crouch, strike = rs.attack_impulse(attacking)
+    lunge = lunge_w * 10 * s * facing
+    cy += crouch * 2.5 * s
+    
+    rs.draw_cast_shadow(surf, cx, cy + 22 * s, 20 * s, 6 * s, 130)
+    
+    # Massive legs
+    for ox in (-4, 4):
+        leg_base = (cx + ox * s * facing, cy + 8 * s)
+        leg_end = (cx + ox * 1.2 * s * facing, cy + 22 * s)
+        rs.draw_volume_limb(surf, *leg_base, *leg_end, 3.5 * s, cloth, deep)
+        # Large feet
+        pygame.draw.ellipse(surf, sh, (leg_end[0] - 3 * s, leg_end[1] - s, 6 * s, 3 * s))
+    
+    # Huge barrel torso
+    rs.draw_volume(surf, skin, [
+        (cx - 10 * s * facing + lunge * 0.1, cy - 2 * s),
+        (cx + 9 * s * facing + lunge * 0.15, cy - 8 * s),
+        (cx + 11 * s * facing + lunge * 0.1, cy + 10 * s),
+        (cx - 11 * s * facing, cy + 11 * s),
+    ], deep, 2)
+    
+    # Muscular belly/chest definition
+    for i in range(3):
+        y_line = cy + (i - 1) * 4 * s
+        pygame.draw.line(surf, sh, (cx - 7 * s, y_line), (cx + 7 * s, y_line), max(1, int(s * 0.8)))
+    
+    # Thick arms
+    arm_base = (cx - 8 * s * facing, cy - 2 * s)
+    arm_end = (cx - 10 * s * facing, cy + 12 * s)
+    rs.draw_volume_limb(surf, *arm_base, *arm_end, 2.8 * s, skin, deep)
+    
+    # Weapon arm with huge club
+    club_base = (cx + 7 * s * facing, cy - 4 * s)
+    club_mid = (cx + 12 * s * facing + lunge * 0.4, cy + 2 * s - crouch * 4 * s)
+    club_tip = (cx + 18 * s * facing + lunge, cy - 10 * s + strike * 15 * s)
+    rs.draw_volume_limb(surf, *club_base, *club_mid, 2.8 * s, skin, deep)
+    
+    # Massive club
+    rs.draw_volume_limb(surf, *club_mid, club_tip, 4 * s, (85, 60, 35), deep)
+    pygame.draw.circle(surf, (70, 50, 30), (int(club_tip[0]), int(club_tip[1])), max(5, int(6 * s)))
+    pygame.draw.circle(surf, deep, (int(club_tip[0]), int(club_tip[1])), max(5, int(6 * s)), 2)
+    
+    # Impact flash
+    if strike > 0.7:
+        pygame.draw.circle(surf, (255, 240, 180, int(220 * strike)), (int(club_tip[0]), int(club_tip[1])), max(5, int(5 * s * strike)), 2)
+    
+    # Large brutish head
+    head = (cx + 3 * s * facing + lunge * 0.1, cy - 13 * s)
+    rs.draw_volume(surf, skin, [
+        (head[0] - 5.5 * s, head[1] + 3 * s),
+        (head[0] - 4.5 * s, head[1] - 4 * s),
+        (head[0] + 5 * s, head[1] - 3.5 * s),
+        (head[0] + 6 * s, head[1] + 3.5 * s),
+        (head[0], head[1] + 4.5 * s),
+    ], deep, 2)
+    
+    # Heavy brow
+    pygame.draw.rect(surf, sh, (head[0] - 4 * s, head[1] - 2.5 * s, 8 * s, 2.5 * s))
+    
+    # Small beady eyes
+    for ox in (-2, 2):
+        pygame.draw.circle(surf, (40, 35, 30), (int(head[0] + ox * s), int(head[1] - 1 * s)), max(2, int(1.2 * s)))
+        pygame.draw.circle(surf, (200, 180, 150), (int(head[0] + ox * s - 0.4 * s), int(head[1] - 1.3 * s)), max(1, int(0.5 * s)))
+    
+    # Large mouth/teeth
+    mouth_y = head[1] + 1.5 * s
+    pygame.draw.arc(surf, deep, (head[0] - 3 * s, mouth_y - s, 6 * s, 3 * s), 0, 3.14, max(2, int(s)))
+    for i in range(4):
+        tooth_x = head[0] - 2 * s + i * 1.3 * s
+        pygame.draw.line(surf, (230, 225, 215), (tooth_x, mouth_y), (tooth_x, mouth_y + 1.2 * s), max(2, int(0.8 * s)))
+
+
+def draw_obsidian_colossus(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1, moving=False):
+    """Massive stone colossus - angular, crystalline, slow but powerful."""
+    facing = 1 if facing >= 0 else -1
+    s = _s(tile, 'monster') * 1.8  # Huge scale
+    bob = math.sin(t * 2.5) * 1.5  # Very slow movement
+    
+    stone = (180, 40, 60) if hurt else (48, 42, 54)
+    hi, mid, sh, deep = rs.material(stone)
+    crystal = (90, 70, 110)
+    
+    cy += bob
+    lunge_w, crouch, strike = rs.attack_impulse(attacking)
+    lunge = lunge_w * 8 * s * facing
+    cy += crouch * 2 * s
+    
+    rs.draw_cast_shadow(surf, cx, cy + 26 * s, 24 * s, 7 * s, 140)
+    
+    # Massive stone legs (angular blocks)
+    for ox in (-5, 5):
+        # Upper leg block
+        rs.draw_volume(surf, stone, [
+            (cx + (ox - 2) * s * facing, cy + 6 * s),
+            (cx + (ox + 2) * s * facing, cy + 6 * s),
+            (cx + (ox + 2.5) * s * facing, cy + 15 * s),
+            (cx + (ox - 2.5) * s * facing, cy + 15 * s),
+        ], deep, 2)
+        # Lower leg block
+        rs.draw_volume(surf, mid, [
+            (cx + (ox - 2.5) * s * facing, cy + 15 * s),
+            (cx + (ox + 2.5) * s * facing, cy + 15 * s),
+            (cx + (ox + 3) * s * facing, cy + 26 * s),
+            (cx + (ox - 3) * s * facing, cy + 26 * s),
+        ], deep, 2)
+        # Crystal joints
+        pygame.draw.circle(surf, crystal, (int(cx + ox * s * facing), int(cy + 15 * s)), max(3, int(2 * s)))
+        pygame.draw.circle(surf, (140, 110, 170), (int(cx + ox * s * facing - 0.5 * s), int(cy + 14.5 * s)), max(2, int(1 * s)))
+    
+    # Massive torso block
+    rs.draw_volume(surf, stone, [
+        (cx - 12 * s * facing + lunge * 0.1, cy - 4 * s),
+        (cx + 10 * s * facing + lunge * 0.15, cy - 10 * s),
+        (cx + 12 * s * facing + lunge * 0.1, cy + 8 * s),
+        (cx - 13 * s * facing, cy + 9 * s),
+    ], deep, 2)
+    
+    # Crystal core (glowing)
+    core_pulse = abs(math.sin(t * 2)) * 0.4 + 0.6
+    pygame.draw.circle(surf, crystal, (int(cx + 2 * s * facing), int(cy + 2 * s)), max(4, int(4 * s * core_pulse)))
+    pygame.draw.circle(surf, (180, 140, 220), (int(cx + 2 * s * facing - s), int(cy + s)), max(2, int(2 * s)))
+    
+    # Stone plating details
+    for i in range(4):
+        y_plate = cy - 6 * s + i * 3.5 * s
+        pygame.draw.line(surf, deep, (cx - 10 * s, y_plate), (cx + 10 * s, y_plate), max(2, int(s)))
+    
+    # Left arm (block style)
+    arm1_pts = [
+        (cx - 10 * s * facing, cy - 2 * s),
+        (cx - 8 * s * facing, cy - 3 * s),
+        (cx - 14 * s * facing, cy + 8 * s),
+        (cx - 16 * s * facing, cy + 7 * s),
+    ]
+    rs.draw_poly(surf, mid, arm1_pts, deep, 2)
+    pygame.draw.polygon(surf, crystal, [
+        (cx - 15 * s * facing, cy + 7.5 * s),
+        (cx - 13 * s * facing, cy + 10 * s),
+        (cx - 17 * s * facing, cy + 10 * s),
+    ])
+    
+    # Right arm (attacking, raised)
+    arm2_base = (cx + 9 * s * facing, cy - 6 * s)
+    arm2_mid = (cx + 14 * s * facing + lunge * 0.3, cy - 8 * s - crouch * 3 * s)
+    fist = (cx + 20 * s * facing + lunge, cy - 18 * s + strike * 20 * s)
+    
+    rs.draw_volume(surf, stone, [
+        (arm2_base[0] - 2 * s, arm2_base[1]),
+        (arm2_base[0] + 2 * s, arm2_base[1]),
+        (arm2_mid[0] + 2 * s, arm2_mid[1]),
+        (arm2_mid[0] - 2 * s, arm2_mid[1]),
+    ], deep, 2)
+    
+    rs.draw_volume(surf, mid, [
+        (arm2_mid[0] - 2 * s, arm2_mid[1]),
+        (arm2_mid[0] + 2 * s, arm2_mid[1]),
+        (fist[0] + 3 * s, fist[1]),
+        (fist[0] - 3 * s, fist[1]),
+    ], deep, 2)
+    
+    # Stone fist with crystals
+    pygame.draw.circle(surf, deep, (int(fist[0]), int(fist[1])), max(5, int(5 * s)))
+    for i in range(3):
+        angle = i * 2.1 + t
+        crystal_x = fist[0] + math.cos(angle) * 3 * s
+        crystal_y = fist[1] + math.sin(angle) * 3 * s
+        pygame.draw.circle(surf, crystal, (int(crystal_x), int(crystal_y)), max(2, int(1.5 * s)))
+    
+    if strike > 0.65:
+        pygame.draw.circle(surf, (200, 150, 255, int(200 * strike)), (int(fist[0]), int(fist[1])), max(8, int(7 * s * strike)), 2)
+    
+    # Angular head block
+    head = (cx + 2 * s * facing + lunge * 0.08, cy - 18 * s)
+    rs.draw_volume(surf, stone, [
+        (head[0] - 5 * s, head[1] + 2 * s),
+        (head[0] - 4 * s, head[1] - 5 * s),
+        (head[0] + 5 * s, head[1] - 4.5 * s),
+        (head[0] + 6 * s, head[1] + 2.5 * s),
+    ], deep, 2)
+    
+    # Crystal eyes (glowing)
+    for ox in (-2.5, 2.5):
+        pygame.draw.circle(surf, crystal, (int(head[0] + ox * s), int(head[1] - 1 * s)), max(3, int(2 * s * core_pulse)))
+        pygame.draw.circle(surf, (220, 180, 255), (int(head[0] + ox * s - 0.6 * s), int(head[1] - 1.5 * s)), max(2, int(1 * s)))
+
+
+def draw_magma_slug(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1, moving=False):
+    """Molten slug creature - undulating body, magma trail, no legs."""
+    facing = 1 if facing >= 0 else -1
+    s = _s(tile, 'monster') * 1.1
+    
+    # Undulation wave
+    wave = math.sin(t * 5)
+    wave2 = math.sin(t * 5 + 1.5)
+    
+    body = (200, 40, 40) if hurt else (140, 60, 40)
+    hi, mid, sh, deep = rs.material(body)
+    magma = (255, 120, 40)
+    glow = (255, 200, 80)
+    
+    lunge_w, crouch, strike = rs.attack_impulse(attacking)
+    lunge = lunge_w * 6 * s * facing
+    
+    rs.draw_cast_shadow(surf, cx, cy + 10 * s, 16 * s, 5 * s, 100)
+    
+    # Magma trail (behind)
+    for i in range(5):
+        trail_x = cx - (i + 3) * 3 * s * facing
+        trail_y = cy + 8 * s + math.sin(t * 4 - i * 0.5) * 2 * s
+        trail_size = (5 - i) * s * 0.8
+        pygame.draw.circle(surf, (200, 80, 30, 150 - i * 30), (int(trail_x), int(trail_y)), max(2, int(trail_size)))
+    
+    # Undulating body segments
+    segments = []
+    for i in range(6):
+        seg_x = cx + (i - 3) * 2.5 * s * facing + lunge * (i / 6)
+        seg_y = cy + 4 * s + (wave if i % 2 == 0 else wave2) * 2 * s
+        seg_h = 6 * s + (1 - abs(i - 3) / 3) * 3 * s  # Thicker in middle
+        segments.append((seg_x, seg_y, seg_h))
+    
+    # Draw body from back to front
+    for i, (seg_x, seg_y, seg_h) in enumerate(segments):
+        seg_color = body if i % 2 == 0 else mid
+        # Body segment
+        rs.draw_volume(surf, seg_color, [
+            (seg_x - 4 * s, seg_y - seg_h / 2),
+            (seg_x + 4 * s, seg_y - seg_h / 2),
+            (seg_x + 4 * s, seg_y + seg_h / 2),
+            (seg_x - 4 * s, seg_y + seg_h / 2),
+        ], deep, 1)
+        
+        # Magma veins (glowing cracks)
+        if i % 2 == 1:
+            vein_pulse = abs(math.sin(t * 3 + i)) * 0.5 + 0.5
+            for vy in [-seg_h * 0.3, seg_h * 0.3]:
+                pygame.draw.line(surf, magma, 
+                    (seg_x - 3 * s, seg_y + vy),
+                    (seg_x + 3 * s, seg_y + vy), max(1, int(s * vein_pulse)))
+    
+    # Head (front segment with mouth)
+    head_x = cx + 7 * s * facing + lunge
+    head_y = cy + 3 * s + wave * 2 * s
+    rs.draw_volume(surf, body, [
+        (head_x - 5 * s * facing, head_y - 4 * s),
+        (head_x + 2 * s * facing, head_y - 5 * s),
+        (head_x + 4 * s * facing, head_y + 5 * s),
+        (head_x - 5 * s * facing, head_y + 4 * s),
+    ], deep, 1)
+    
+    # Glowing mouth (opens during attack)
+    mouth_open = strike * 3 * s
+    mouth_pts = [
+        (head_x + 2 * s * facing, head_y - mouth_open),
+        (head_x + 4 * s * facing, head_y),
+        (head_x + 2 * s * facing, head_y + mouth_open),
+    ]
+    pygame.draw.polygon(surf, (20, 18, 22), mouth_pts)
+    if strike > 0.3:
+        pygame.draw.polygon(surf, magma, mouth_pts)
+        pygame.draw.circle(surf, glow, (int(head_x + 3 * s * facing), int(head_y)), max(2, int(2 * s * strike)))
+    
+    # Eye stalks
+    for ey_offset in (-2.5, 2.5):
+        stalk_base = (head_x - 2 * s * facing, head_y + ey_offset * s)
+        stalk_tip = (head_x - 4 * s * facing, head_y + (ey_offset - 2) * s)
+        pygame.draw.line(surf, sh, stalk_base, stalk_tip, max(2, int(1.2 * s)))
+        pygame.draw.circle(surf, magma, (int(stalk_tip[0]), int(stalk_tip[1])), max(2, int(1.5 * s)))
+        pygame.draw.circle(surf, glow, (int(stalk_tip[0] - 0.5 * s), int(stalk_tip[1] - 0.5 * s)), max(1, int(0.8 * s)))
+
+
+def draw_crucible_beast(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1, moving=False):
+    """Fire beast - muscular quadruped wreathed in flames, burning mane."""
+    facing = 1 if facing >= 0 else -1
+    s = _s(tile, 'monster') * 1.15
+    bob = math.sin(t * 6) * 0.9
+    
+    body = (180, 40, 40) if hurt else (100, 50, 45)
+    hi, mid, sh, deep = rs.material(body)
+    flame = (255, 140, 40)
+    glow = (255, 220, 100)
+    
+    cy += bob
+    lunge_w, crouch, strike = rs.attack_impulse(attacking)
+    lunge = lunge_w * 9 * s * facing
+    cy += crouch * 2 * s
+    
+    rs.draw_cast_shadow(surf, cx, cy + 14 * s, 18 * s, 5 * s, 120)
+    
+    # Flame particles around body
+    flame_pulse = abs(math.sin(t * 4)) * 0.6 + 0.4
+    for i in range(8):
+        angle = t * 3 + i * 0.8
+        fx = cx + math.cos(angle) * 12 * s
+        fy = cy + math.sin(angle) * 6 * s - 3 * s
+        flame_size = (1 + abs(math.sin(t * 5 + i))) * s
+        pygame.draw.circle(surf, (flame[0], flame[1], flame[2], 120), (int(fx), int(fy)), max(2, int(flame_size)))
+    
+    # Powerful hind legs
+    for ox in (-5, -1):
+        leg_base = (cx + ox * s * facing, cy + 2 * s)
+        leg_mid = (cx + (ox - 1) * s * facing, cy + 9 * s)
+        leg_end = (cx + (ox - 2) * s * facing, cy + 14 * s)
+        rs.draw_volume_limb(surf, *leg_base, *leg_mid, 2.2 * s, body, deep)
+        rs.draw_volume_limb(surf, *leg_mid, leg_end, 1.8 * s, sh, deep)
+        # Clawed paw with flame
+        pygame.draw.circle(surf, deep, (int(leg_end[0]), int(leg_end[1])), max(3, int(2 * s)))
+        pygame.draw.circle(surf, (flame[0], flame[1], flame[2], 100), (int(leg_end[0]), int(leg_end[1] - s)), max(2, int(1.5 * s * flame_pulse)))
+    
+    # Muscular body
+    rs.draw_volume(surf, body, [
+        (cx - 8 * s * facing, cy - 2 * s),
+        (cx + 10 * s * facing + lunge * 0.3, cy - 5 * s),
+        (cx + 13 * s * facing + lunge, cy + 5 * s),
+        (cx - 6 * s * facing, cy + 6 * s),
+    ], deep, 2)
+    
+    # Spine ridge (flame)
+    for i in range(5):
+        spine_x = cx + (i - 2) * 3 * s * facing
+        spine_y = cy - 5 * s - abs(i - 2) * 0.5 * s
+        flame_h = (3 + abs(math.sin(t * 6 + i))) * s
+        pygame.draw.line(surf, flame, (spine_x, spine_y), (spine_x, spine_y - flame_h), max(2, int(1.5 * s)))
+        pygame.draw.circle(surf, glow, (int(spine_x), int(spine_y - flame_h)), max(2, int(s * flame_pulse)))
+    
+    # Front legs (one raised for strike)
+    # Back front leg
+    leg1_base = (cx + 5 * s * facing, cy + 3 * s)
+    leg1_end = (cx + 7 * s * facing, cy + 14 * s)
+    rs.draw_volume_limb(surf, *leg1_base, leg1_end, 2 * s, body, deep)
+    pygame.draw.circle(surf, deep, (int(leg1_end[0]), int(leg1_end[1])), max(3, int(2 * s)))
+    
+    # Front front leg (attacking)
+    leg2_base = (cx + 9 * s * facing, cy + 1 * s)
+    paw = (cx + 14 * s * facing + lunge, cy - 6 * s - crouch * 4 * s + strike * 8 * s)
+    rs.draw_volume_limb(surf, *leg2_base, paw, 2.2 * s, body, deep)
+    
+    # Flaming claws
+    for i in range(3):
+        claw_tip = (paw[0] + (i - 1) * s * facing, paw[1] + 3 * s)
+        pygame.draw.line(surf, flame, paw, claw_tip, max(2, int(1.2 * s)))
+        pygame.draw.circle(surf, glow, (int(claw_tip[0]), int(claw_tip[1])), max(2, int(s)))
+    
+    if strike > 0.6:
+        pygame.draw.circle(surf, (glow[0], glow[1], glow[2], int(200 * strike)), (int(paw[0]), int(paw[1])), max(5, int(4 * s * strike)), 2)
+    
+    # Head with burning mane
+    head = (cx + 12 * s * facing + lunge * 0.2, cy - 4 * s)
+    rs.draw_volume(surf, body, [
+        (head[0] - 4 * s * facing, head[1] + 2 * s),
+        (head[0] - 3 * s * facing, head[1] - 3 * s),
+        (head[0] + 5 * s * facing, head[1] - 2 * s),
+        (head[0] + 6 * s * facing, head[1] + 3 * s),
+        (head[0] + 2 * s * facing, head[1] + 4 * s),
+    ], deep, 2)
+    
+    # Burning mane
+    for i in range(6):
+        mane_x = head[0] + (i - 3) * 1.2 * s * facing
+        mane_y = head[1] - 3 * s
+        flame_h = (2 + abs(math.sin(t * 7 + i * 0.7))) * 2 * s
+        pygame.draw.line(surf, flame, (mane_x, mane_y), (mane_x - s * facing, mane_y - flame_h), max(2, int(1.8 * s)))
+        pygame.draw.circle(surf, glow, (int(mane_x - s * facing), int(mane_y - flame_h)), max(2, int(1.2 * s * flame_pulse)))
+    
+    # Glowing eyes
+    for ox in (0, 2.5):
+        eye_x = head[0] + ox * s * facing
+        pygame.draw.circle(surf, flame, (int(eye_x), int(head[1] - 0.5 * s)), max(3, int(1.5 * s)))
+        pygame.draw.circle(surf, glow, (int(eye_x - 0.5 * s), int(head[1] - 1 * s)), max(2, int(s)))
+    
+    # Snarling mouth
+    mouth_y = head[1] + 1.5 * s
+    mouth_open = strike * 2 * s
+    pygame.draw.arc(surf, deep, (head[0], mouth_y - s, 5 * s * facing, 3 * s), 0, 3.14, max(2, int(s)))
+    if strike > 0.4:
+        # Fire breath
+        breath_len = strike * 8 * s
+        pygame.draw.line(surf, flame, (head[0] + 5 * s * facing, mouth_y), 
+            (head[0] + (5 + breath_len) * s * facing, mouth_y), max(3, int(3 * s * strike)))
+        pygame.draw.circle(surf, glow, (int(head[0] + (5 + breath_len) * s * facing), int(mouth_y)), 
+            max(4, int(3 * s * strike)))
+
+
+# Themed variants for existing creatures
+def draw_ember_wolf(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1, moving=False):
+    """Fire-themed wolf variant with flame effects."""
+    # Draw base wolf with fire coloring
+    draw_wolf(surf, cx, cy, tile, t, hurt, attacking, facing, moving)
+    # Add flame particles
+    s = _s(tile, 'monster') * 0.95
+    flame_pulse = abs(math.sin(t * 4)) * 0.6 + 0.4
+    for i in range(4):
+        angle = t * 4 + i * 1.6
+        fx = cx + math.cos(angle) * 8 * s
+        fy = cy + math.sin(angle) * 4 * s - 2 * s
+        pygame.draw.circle(surf, (255, 140, 40, 100), (int(fx), int(fy)), max(2, int(s * flame_pulse)))
+
+
+def draw_big_skeleton(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1, moving=False):
+    """Larger skeleton variant - 1.3x scale."""
+    # Scale up the tile size for bigger skeleton
+    tile_scaled = tile * 1.3
+    draw_skeleton(surf, cx, cy, tile_scaled, t, hurt, attacking, facing)
+
+
+def draw_shadow_knight(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1, moving=False):
+    """Dark knight with shadow aura."""
+    draw_knight(surf, cx, cy, tile, t, hurt, attacking, facing, moving)
+    # Add shadow particles
+    s = _s(tile, 'monster')
+    shadow_pulse = abs(math.sin(t * 3)) * 0.5 + 0.5
+    for i in range(5):
+        angle = t * 2 + i * 1.25
+        sx = cx + math.cos(angle) * 10 * s
+        sy = cy + math.sin(angle) * 5 * s
+        pygame.draw.circle(surf, (50, 40, 70, int(80 * shadow_pulse)), (int(sx), int(sy)), max(2, int(1.2 * s)))
+
+
+def draw_magma_knight(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1, moving=False):
+    """Fire knight with magma/flame effects."""
+    draw_knight(surf, cx, cy, tile, t, hurt, attacking, facing, moving)
+    # Add flame effects on armor
+    s = _s(tile, 'monster')
+    flame_pulse = abs(math.sin(t * 5)) * 0.6 + 0.4
+    for i in range(6):
+        angle = t * 3.5 + i * 1.05
+        fx = cx + math.cos(angle) * 9 * s
+        fy = cy + math.sin(angle) * 6 * s - s
+        pygame.draw.circle(surf, (255, 120, 40, 120), (int(fx), int(fy)), max(2, int(1.5 * s * flame_pulse)))
+
+
+def draw_guard(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1, moving=False):
+    """City guard - knight with lighter armor, spear instead of sword."""
+    facing = 1 if facing >= 0 else -1
+    s = _s(tile, 'monster') * 0.95
+    bob = math.sin(t * 5) * 0.7
+    
+    armor = (160, 40, 40) if hurt else (140, 145, 155)  # Lighter steel color
+    hi, mid, sh, deep = rs.material(armor)
+    cloth = (80, 100, 140)  # Blue guard uniform
+    
+    cy += bob
+    lunge_w, crouch, strike = rs.attack_impulse(attacking)
+    lunge = lunge_w * 7 * s * facing
+    cy += crouch * 1.8 * s
+    
+    rs.draw_cast_shadow(surf, cx, cy + 14 * s, 11 * s, 3.5 * s, 115)
+    
+    # Legs with cloth
+    for ox in (-2, 2):
+        rs.draw_volume_limb(surf, cx + ox * s * facing, cy + 2 * s, 
+            cx + ox * 1.2 * s * facing, cy + 14 * s, 1.6 * s, cloth, deep)
+    
+    # Torso with light armor plates
+    rs.draw_volume(surf, armor, [
+        (cx - 5 * s * facing, cy - 1 * s),
+        (cx + 4.5 * s * facing + lunge * 0.15, cy - 4 * s),
+        (cx + 5.5 * s * facing + lunge * 0.1, cy + 4 * s),
+        (cx - 5.5 * s * facing, cy + 4.5 * s),
+    ], deep, 1)
+    
+    # Shield arm
+    shield_x = cx - 6 * s * facing
+    shield_y = cy - 1 * s
+    rs.draw_volume_limb(surf, cx - 4 * s * facing, cy - 2 * s, shield_x, shield_y, 1.4 * s, armor, deep)
+    # Small round shield
+    pygame.draw.circle(surf, cloth, (int(shield_x), int(shield_y)), max(4, int(3 * s)))
+    pygame.draw.circle(surf, hi, (int(shield_x), int(shield_y)), max(3, int(2 * s)))
+    pygame.draw.circle(surf, deep, (int(shield_x), int(shield_y)), max(4, int(3 * s)), 1)
+    
+    # Spear arm
+    spear_base = (cx + 4 * s * facing, cy - 3 * s)
+    spear_tip = (cx + 12 * s * facing + lunge, cy - 12 * s - crouch * 3 * s + strike * 6 * s)
+    rs.draw_volume_limb(surf, cx + 3 * s * facing, cy - 2 * s, spear_base, 1.4 * s, armor, deep)
+    # Spear shaft
+    pygame.draw.line(surf, (100, 70, 45), spear_base, spear_tip, max(2, int(1.2 * s)))
+    # Spear head
+    spear_blade = [
+        (spear_tip[0], spear_tip[1]),
+        (spear_tip[0] - 2 * s * facing, spear_tip[1] + 3 * s),
+        (spear_tip[0] + 2 * s * facing, spear_tip[1] + 3 * s),
+    ]
+    pygame.draw.polygon(surf, hi, spear_blade)
+    pygame.draw.polygon(surf, deep, spear_blade, 1)
+    
+    if strike > 0.65:
+        pygame.draw.circle(surf, (200, 200, 240, int(180 * strike)), (int(spear_tip[0]), int(spear_tip[1])), max(3, int(2.5 * s * strike)), 1)
+    
+    # Helm
+    head = (cx + 1.5 * s * facing + lunge * 0.08, cy - 7 * s)
+    rs.draw_volume(surf, armor, [
+        (head[0] - 3 * s, head[1] + 1.5 * s),
+        (head[0] - 2.5 * s, head[1] - 3 * s),
+        (head[0] + 3 * s, head[1] - 2.5 * s),
+        (head[0] + 3.5 * s, head[1] + 1.5 * s),
+    ], deep, 1)
+    # Visor slit
+    pygame.draw.rect(surf, (20, 18, 22), (head[0] - 1.5 * s, head[1] - 0.8 * s, 3 * s, 0.8 * s))
+
+
+def draw_crypt_ghoul(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1, moving=False):
+    """Skeleton with rotting flesh and decay."""
+    # Draw base skeleton
+    draw_skeleton(surf, cx, cy, tile, t, hurt, attacking, facing)
+    # Add flesh patches
+    s = _s(tile, 'monster') * 0.95
+    flesh = (110, 90, 85)
+    decay = (80, 70, 65)
+    # Torso flesh
+    pygame.draw.ellipse(surf, (flesh[0], flesh[1], flesh[2], 150), 
+        (cx - 4 * s, cy - 2 * s, 8 * s, 6 * s))
+    # Decay spots
+    for i in range(4):
+        dx = (i - 1.5) * 2 * s
+        dy = (i % 2) * 2 * s
+        pygame.draw.circle(surf, (decay[0], decay[1], decay[2], 100), 
+            (int(cx + dx), int(cy + dy)), max(2, int(1.2 * s)))
+
+
+def draw_void_horror(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1, moving=False):
+    """Shade with writhing tentacles."""
+    # Draw base shade
+    draw_shade(surf, cx, cy, tile, t, hurt, attacking, facing, moving)
+    # Add tentacles
+    s = _s(tile, 'monster') * 0.95
+    void = (70, 60, 100)
+    for i in range(4):
+        angle = t * 2 + i * 1.57
+        wave = math.sin(t * 5 + i)
+        base_x = cx + math.cos(angle) * 5 * s
+        base_y = cy + 3 * s
+        for j in range(3):
+            seg_angle = angle + wave * 0.5 + j * 0.3
+            seg_x = base_x + math.cos(seg_angle) * (j + 1) * 2 * s
+            seg_y = base_y + math.sin(seg_angle) * (j + 1) * 2 * s + j * s
+            if j == 0:
+                pygame.draw.line(surf, void, (base_x, base_y), (seg_x, seg_y), max(2, int(1.5 * s)))
+            else:
+                prev_j = j - 1
+                prev_angle = angle + wave * 0.5 + prev_j * 0.3
+                prev_x = base_x + math.cos(prev_angle) * (prev_j + 1) * 2 * s
+                prev_y = base_y + math.sin(prev_angle) * (prev_j + 1) * 2 * s + prev_j * s
+                width = 1.5 * s * (1 - j / 3)
+                pygame.draw.line(surf, void, (prev_x, prev_y), (seg_x, seg_y), max(1, int(width)))
+
+
+def draw_mythos_champion(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1, moving=False):
+    """Elite knight with ornate armor and glowing runes."""
+    draw_knight(surf, cx, cy, tile, t, hurt, attacking, facing, moving)
+    # Add glowing runes
+    s = _s(tile, 'monster')
+    glow_pulse = abs(math.sin(t * 4)) * 0.5 + 0.5
+    rune_color = (180, 140, 255)
+    # Chest rune
+    pygame.draw.circle(surf, rune_color, (int(cx), int(cy)), max(2, int(1.5 * s * glow_pulse)))
+    # Shoulder runes
+    for ox in (-4, 4):
+        pygame.draw.circle(surf, rune_color, (int(cx + ox * s), int(cy - 2 * s)), 
+            max(2, int(s * glow_pulse)))
+    # Helm glow
+    pygame.draw.circle(surf, (rune_color[0], rune_color[1], rune_color[2], 120), 
+        (int(cx), int(cy - 7 * s)), max(3, int(2 * s * glow_pulse)))
+
+
 def draw_goblin(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1):
     """Hunched long-armed goblin — angular head, distinct silhouette."""
     facing = 1 if facing >= 0 else -1
@@ -962,9 +1650,33 @@ def draw_goblin(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1):
 
 
 MONSTER_DRAWERS = {
+    # Core base implementations (8 original)
     "giant_rat": draw_giant_rat,
     "goblin": draw_goblin,
     "skeleton": draw_skeleton,
+    "spider": draw_spider,
+    "dragon": draw_dragon,
+    "wolf": draw_wolf,
+    "shade": draw_shade,
+    "knight": draw_knight,
+    
+    # New unique types (6 creatures)
+    "ash_imp": draw_ash_imp,
+    "void_imp": draw_void_imp,
+    "giant": draw_giant,
+    "obsidian_colossus": draw_obsidian_colossus,
+    "magma_slug": draw_magma_slug,
+    "crucible_beast": draw_crucible_beast,
+    
+    # Themed variants (8 creatures)
+    "ember_wolf": draw_ember_wolf,
+    "big_skeleton": draw_big_skeleton,
+    "shadow_knight": draw_shadow_knight,
+    "magma_knight": draw_magma_knight,
+    "guard": draw_guard,
+    "crypt_ghoul": draw_crypt_ghoul,
+    "void_horror": draw_void_horror,
+    "mythos_champion": draw_mythos_champion,
 }
 
 

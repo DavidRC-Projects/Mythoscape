@@ -22,7 +22,7 @@ def _shade(rgb, d):
     return tuple(_clamp(c + d, 0, 255) for c in rgb[:3])
 
 
-def _fill_poly(surf, pts, tex_name, shade=0, flat=None, alpha=255, uv=(0, 0)):
+def _fill_poly(surf, pts, tex_name, shade=0, flat=None, alpha=255, uv=(0, 0), outline=True):
     if not pts or len(pts) < 3:
         return
     flat = flat or (120, 90, 60)
@@ -54,7 +54,9 @@ def _fill_poly(surf, pts, tex_name, shade=0, flat=None, alpha=255, uv=(0, 0)):
     except Exception:
         pass
     surf.blit(piece, (minx, miny))
-    pygame.draw.polygon(surf, (18, 12, 10), pts, 1)
+    # Optional subtle outline (skip for internal walls to avoid gaps)
+    if outline:
+        pygame.draw.polygon(surf, (18, 12, 10), pts, 1)
 
 
 def _key_light(surf, rect, left=55, right=70, alpha=255):
@@ -126,8 +128,9 @@ def _recessed_entrance(
     jambs inside that hole. Wood path keeps a timber surround for cottages.
     """
     stone = stone or (not wood)
-    depth = max(8, min(18, dw // 4))
-    jamb = max(6, depth - 1)
+    # VERY DEEP recess with WIDE interior surfaces (to match target reference)
+    depth = max(28, min(45, int(dw * 0.4)))  # 28-45px recess (40% of door width)
+    jamb = max(16, min(28, depth - 4))       # 16-28px wide visible interior walls
 
     if stone:
         # --- Carve a hole (no proud frame, no silver box) ---
@@ -135,9 +138,9 @@ def _recessed_entrance(
         if glow:
             throat = (max(4, glow[0] // 12), max(2, glow[1] // 14), max(10, glow[2] // 5), alpha)
 
-        # Narrower reveal — wall thickness, not a grey tunnel box
-        depth = max(6, min(12, dw // 6))
-        jamb = max(4, min(8, depth))
+        # VERY deep reveal for prominent wall thickness
+        depth = max(24, min(40, int(dw * 0.35)))  # Deep stone recess
+        jamb = max(18, min(32, depth - 2))        # Wide interior surfaces
 
         # Arch mask: opaque where opening exists
         hole = pygame.Surface((dw, dh), pygame.SRCALPHA)
@@ -240,10 +243,10 @@ def _recessed_entrance(
             surf.blit(g, (pdx + 4, pdy + 3))
         return
 
-    # unused depth/jamb from outer scope for wood — recompute
-    depth = max(8, min(18, dw // 4))
-    jamb = max(6, depth - 1)
-    frame = max(5, dw // 10)
+    # Wood entrance with VERY DEEP recess and wide visible interior
+    depth = max(28, min(45, int(dw * 0.4)))  # Match deep recess (40% of door width)
+    jamb = max(16, min(28, depth - 4))       # Wide jamb interior surfaces
+    frame = max(7, int(dw * 0.12))           # Prominent outer frame
     surround = (100, 78, 52)
     ox, oy = dx - frame - 2, dy - frame - 4
     ow, oh = dw + (frame + 2) * 2, dh + frame + 6
@@ -321,7 +324,8 @@ def _fill_side_wall(surf, fr, sr_top, sr_bot, br, wood, alpha, flat, wall_tex=No
     base = tuple(flat[:3])
     tex = wall_tex or ("wood_planks" if wood else "brick")
     # Textured fill matching the front facade, then darkened for side plane
-    _fill_poly(surf, pts, tex, shade=-48, flat=_shade(base, -28), alpha=255, uv=(fr[0] * 3, fr[1]))
+    # Skip outline on shared front edge to avoid visible seam
+    _fill_poly(surf, pts, tex, shade=-48, flat=_shade(base, -28), alpha=255, uv=(fr[0] * 3, fr[1]), outline=False)
     # Soft vertical AO toward the far (right) edge
     n = max(5, (br[1] - fr[1]) // 12)
     for i in range(1, n):
@@ -340,10 +344,15 @@ def _fill_side_wall(surf, fr, sr_top, sr_bot, br, wood, alpha, flat, wall_tex=No
         x1 = br[0] + (sr_bot[0] - br[0]) * t
         y1 = br[1] + (sr_bot[1] - br[1]) * t
         pygame.draw.line(surf, (14, 10, 8) if wood else (18, 16, 22), (x0, y0), (x1, y1), 1)
-    pygame.draw.polygon(surf, (14, 10, 8), pts, 1)
-    # Lit top bevel + dark front/side crease
+    # External edge outline only (not the shared front edge)
+    pygame.draw.line(surf, (14, 10, 8), sr_top, sr_bot, 1)
+    pygame.draw.line(surf, (14, 10, 8), sr_bot, br, 1)
+    pygame.draw.line(surf, (14, 10, 8), sr_top, fr, 1)
+    # Lit top bevel on external edge
     pygame.draw.line(surf, (200, 185, 160) if wood else (165, 168, 175), fr, sr_top, 3)
-    pygame.draw.line(surf, (22, 14, 10), fr, br, 2)
+    # Dark crease on front/side join (subtle, not a black gap)
+    pygame.draw.line(surf, (40, 32, 24) if wood else (36, 38, 44), fr, br, 1)
+    # Depth edge shadow
     pygame.draw.line(
         surf, (50, 40, 32) if wood else (44, 46, 52),
         (sr_top[0] - 1, sr_top[1] + 2), (sr_bot[0] - 1, sr_bot[1] - 2), 2,
@@ -362,9 +371,11 @@ def draw_house_shell(
     door_frac: float = 0.5,
 ):
     """
-    Sealed ¾-view house locked INSIDE the footprint AABB.
-    Side depth is inset (not past footprint.right) so players cannot walk into it.
-    Walls are fully opaque.
+    Sealed ¾-view house with ADDITIVE side depth.
+    
+    Front wall uses ~75% of footprint width, then side depth ADDS beyond that.
+    Map can expand to accommodate the deeper geometry - prefer correct 3D over 
+    fitting old footprint constraints.
     """
     # Never allow ghost walls — shell must seal the footprint
     alpha = 255
@@ -372,23 +383,27 @@ def draw_house_shell(
     if fw < 8 or fh < 8:
         return
 
-    # Side depth lives inside the footprint (right strip), rising UP for 3D
-    side_w = max(14, int(fw * 0.22))
-    front_w = max(8, fw - side_w)
-    dy = max(12, int(fh * 0.22))
+    # ADDITIVE DEPTH MODEL (not inset) - front stays full, depth adds beyond
+    # Front wall: use 75% of footprint width for solid facade
+    front_w = max(8, int(fw * 0.75))
+    # Side depth: ADD 50% more depth for strong extrusion (extends beyond footprint)
+    side_w = max(24, int(fw * 0.50))
+    # TALL vertical rise for dramatic 3/4 view (40% of height)
+    dy = max(22, int(fh * 0.40))
 
-    wall_top = fy + int(fh * 0.18)
+    wall_top = fy + int(fh * 0.12)
     ground = fy + fh
     wall_h = ground - wall_top
 
-    # Front face (left portion)
+    # Front face - uses front_w
     fl = (fx, wall_top)
     fr = (fx + front_w, wall_top)
     br = (fx + front_w, ground)
     bl = (fx, ground)
-    # Side face ends at footprint right edge — no overhang into walkable tiles
-    sr_top = (fx + fw, wall_top - dy)
-    sr_bot = (fx + fw, ground)
+    # Side face - extends BEYOND footprint by side_w for OSRS-like depth
+    # David: map can expand, prioritize correct geometry over old footprint size
+    sr_top = (fx + front_w + side_w, wall_top - dy)
+    sr_bot = (fx + front_w + side_w, ground)
 
     if kind == "smithy":
         wood = False
@@ -398,10 +413,11 @@ def draw_house_shell(
     flat_roof = (150, 78, 48) if wood else (78, 82, 90)
     flat_side = _shade(flat_wall, -42)
 
-    # Ground contact under footprint only (no side spill into walk tiles)
+    # Ground contact covering full building depth (front + additive side)
+    total_w = front_w + side_w
     pygame.draw.ellipse(
         dest, (10, 8, 6, 90),
-        (fx + fw * 0.06, ground - 4, fw * 0.88, max(6, fh * 0.07)),
+        (fx + total_w * 0.06, ground - 4, total_w * 0.88, max(6, fh * 0.07)),
     )
     for grow, a in ((4, 28), (1, 48)):
         pygame.draw.polygon(dest, (14, 10, 8, a), [
@@ -414,21 +430,28 @@ def draw_house_shell(
     # Side first (behind front join) — same wood/stone texture as front
     _fill_side_wall(dest, fr, sr_top, sr_bot, br, wood, alpha, flat_side, wall_tex=wall_tex)
 
-    # Front wall — fully opaque textured
+    # Front wall — fully opaque textured, skip outline on shared edge
     front_pts = [fl, fr, br, bl]
-    _fill_poly(dest, front_pts, wall_tex, shade=8, flat=flat_wall, alpha=255, uv=(fx, fy))
+    _fill_poly(dest, front_pts, wall_tex, shade=8, flat=flat_wall, alpha=255, uv=(fx, fy), outline=False)
+    # External edges only
+    pygame.draw.line(dest, (18, 12, 8), fl, bl, 1)
+    pygame.draw.line(dest, (18, 12, 8), bl, br, 1)
+    pygame.draw.line(dest, (18, 12, 8), fl, fr, 1)
+    # Lighting and details
     _key_light(dest, pygame.Rect(fx, wall_top, front_w, wall_h), left=62, right=82, alpha=255)
     pygame.draw.line(dest, (240, 220, 180, 255) if wood else (205, 208, 214, 255),
                      (fx + 1, wall_top + 2), (fx + 1, ground - 3), max(3, fw // 45))
-    pygame.draw.line(dest, (18, 12, 8, 255),
-                     (fr[0] - 1, wall_top), (br[0] - 1, ground - 1), max(3, fw // 40))
+    # Subtle crease at front/side join
+    pygame.draw.line(dest, (34, 26, 20, 160) if wood else (32, 34, 40, 160),
+                     (fr[0] - 1, wall_top), (br[0] - 1, ground - 1), 1)
     _ao_band(dest, fr[0] - max(6, front_w // 14), wall_top, max(6, front_w // 12), wall_h, strength=110)
 
-    # Foundation across full footprint
+    # Foundation across full building width (front + side depth)
     found_h = max(7, int(fh * 0.09))
     found_y = ground - found_h
     found = (58, 46, 34) if wood else (46, 48, 54)
-    pygame.draw.rect(dest, (*found, 255), (fx - 2, found_y, fw + 2, found_h + 1))
+    total_w = front_w + side_w
+    pygame.draw.rect(dest, (*found, 255), (fx - 2, found_y, total_w + 2, found_h + 1))
     pygame.draw.polygon(dest, (*_shade(found, -16), 255), [
         (fr[0], found_y),
         (sr_top[0], found_y - dy),
@@ -436,21 +459,22 @@ def draw_house_shell(
         br,
     ])
     pygame.draw.line(dest, (135, 112, 85, 255) if wood else (115, 117, 122, 255),
-                     (fx - 1, found_y), (fx + fw, found_y), 2)
-    _ao_band(dest, fx, found_y - max(5, fh // 18), fw, max(7, fh // 12), strength=100, falloff="up")
+                     (fx - 1, found_y), (fx + front_w + side_w, found_y), 2)
+    _ao_band(dest, fx, found_y - max(5, fh // 18), front_w + side_w, max(7, fh // 12), strength=100, falloff="up")
 
-    # Roof — peak above footprint; depth ridge stays within footprint width
-    overhang = max(6, fw // 16)  # small eaves only
-    peak_h = max(22, int(fh * 0.42))
+    # Dramatic roof covering full extruded depth (including additive side depth)
+    overhang = max(10, int(front_w * 0.15))  # Larger eaves
+    peak_h = max(28, int(fh * 0.50))  # Very tall peak
     pf = (fx + front_w // 2, wall_top - peak_h)
-    pb = (min(fx + fw - 4, pf[0] + side_w), pf[1] - int(dy * 0.55))
+    # Back ridge extends to cover FULL depth (front_w + side_w)
+    pb = (fx + front_w + side_w - 2, pf[1] - int(dy * 0.70))
     left_eave = (fx - overhang, wall_top)
-    right_eave = (fx + front_w + max(4, overhang // 2), wall_top)
-    right_back = (fx + fw, wall_top - dy)
-    soffit = max(8, int(fh * 0.10))
+    right_eave = (fx + front_w + max(6, overhang // 2), wall_top)
+    right_back = (fx + front_w + side_w, wall_top - dy)
+    soffit = max(10, int(fh * 0.12))
 
     _fill_poly(dest, [pf, pb, right_back, right_eave], roof_tex, shade=-70,
-               flat=_shade(flat_roof, -55), alpha=255, uv=(fx + fw, fy))
+               flat=_shade(flat_roof, -55), alpha=255, uv=(fx + front_w + side_w, fy))
     pygame.draw.line(dest, (40, 28, 22, 200), pb, right_back, 2)
 
     _fill_poly(dest, [pf, left_eave, (left_eave[0] + 4, wall_top + soffit),
@@ -522,9 +546,9 @@ def draw_house_shell(
     if door:
         door_w = max(14, int(front_w * 0.16))
         door_h = max(22, int(fh * 0.36))
-        # Align with world door tile across the full footprint
+        # Position door within the front wall (not across full footprint including side depth)
         frac = max(0.12, min(0.88, float(door_frac)))
-        ddx = int(fx + fw * frac - door_w * 0.5)
+        ddx = int(fx + front_w * frac - door_w * 0.5)
         ddx = max(fx + 2, min(fx + front_w - door_w - 2, ddx))
         ddy = ground - door_h
         _door_cut(dest, ddx, ddy, door_w, door_h, wood=wood, alpha=255, arch=True)
@@ -535,21 +559,24 @@ def draw_crypt_shell(dest, footprint, alpha=255, door_frac: float = 0.5):
     """
     Void Sanctum / dungeon as ONE continuous extruded stone volume.
 
-    Same inset ¾-view layout as draw_house_shell (side depth inside footprint),
-    with a flat stone parapet roof and a door recessed INTO the front wall —
-    never a separate entrance box pasted in front of the facade.
+    ADDITIVE depth model: front wall uses ~75% of footprint, side depth ADDS
+    beyond that for real extrusion. Map can expand to accommodate geometry.
+    Recessed entrance carved INTO the front wall - never pasted in front.
     """
     alpha = 255
     fx, fy, fw, fh = footprint.x, footprint.y, footprint.w, footprint.h
     if fw < 8 or fh < 8:
         return
 
-    # Match house extrusion parameters so crypt sits in the same camera world
-    side_w = max(14, int(fw * 0.22))
-    front_w = max(8, fw - side_w)
-    dy = max(12, int(fh * 0.22))
+    # ADDITIVE DEPTH MODEL matching house shell
+    # Front wall: 75% of footprint for solid stone facade
+    front_w = max(8, int(fw * 0.75))
+    # Side depth: ADD 50% beyond front for deep extrusion
+    side_w = max(24, int(fw * 0.50))
+    # TALL vertical rise for dramatic 3/4 view (40% of height)
+    dy = max(22, int(fh * 0.40))
 
-    wall_top = fy + int(fh * 0.16)
+    wall_top = fy + int(fh * 0.12)
     ground = fy + fh
     wall_h = ground - wall_top
 
@@ -557,8 +584,9 @@ def draw_crypt_shell(dest, footprint, alpha=255, door_frac: float = 0.5):
     fr = (fx + front_w, wall_top)
     br = (fx + front_w, ground)
     bl = (fx, ground)
-    sr_top = (fx + fw, wall_top - dy)
-    sr_bot = (fx + fw, ground)
+    # Side extends BEYOND footprint for real depth
+    sr_top = (fx + front_w + side_w, wall_top - dy)
+    sr_bot = (fx + front_w + side_w, ground)
 
     wall_tex = "brick"
     flat_wall = (52, 48, 64)
@@ -566,10 +594,11 @@ def draw_crypt_shell(dest, footprint, alpha=255, door_frac: float = 0.5):
     flat_roof = (36, 32, 48)
     flat_found = (28, 26, 34)
 
-    # Ground contact under full footprint
+    # Ground contact covering full building depth (front + additive side)
+    total_w = front_w + side_w
     pygame.draw.ellipse(
         dest, (8, 6, 12, 100),
-        (fx + fw * 0.05, ground - 4, fw * 0.90, max(6, fh * 0.08)),
+        (fx + total_w * 0.05, ground - 4, total_w * 0.90, max(6, fh * 0.08)),
     )
     for grow, a in ((4, 32), (1, 55)):
         pygame.draw.polygon(dest, (10, 8, 14, a), [
@@ -581,17 +610,22 @@ def draw_crypt_shell(dest, footprint, alpha=255, door_frac: float = 0.5):
 
     # Side wall first — continuous stone with front (shared fr/br edge)
     _fill_side_wall(dest, fr, sr_top, sr_bot, br, False, alpha, flat_side, wall_tex=wall_tex)
-    # Soft crease (not a black gap) at the shared front/side edge
-    pygame.draw.line(dest, (40, 34, 52, 180), fr, br, 2)
-    pygame.draw.line(dest, (100, 80, 140, 160), fr, sr_top, 2)
+    # No heavy outline on shared edge - just a subtle crease
+    pygame.draw.line(dest, (32, 28, 40, 140), fr, br, 1)
+    pygame.draw.line(dest, (90, 75, 130, 120), fr, sr_top, 1)
 
-    # Front facade
+    # Front facade - skip outline to avoid gap with side wall
     front_pts = [fl, fr, br, bl]
-    _fill_poly(dest, front_pts, wall_tex, shade=-12, flat=flat_wall, alpha=255, uv=(fx, fy))
+    _fill_poly(dest, front_pts, wall_tex, shade=-12, flat=flat_wall, alpha=255, uv=(fx, fy), outline=False)
+    # External edges only (not shared edge with side)
+    pygame.draw.line(dest, (18, 14, 24), fl, bl, 1)
+    pygame.draw.line(dest, (18, 14, 24), bl, br, 1)
+    pygame.draw.line(dest, (18, 14, 24), fl, fr, 1)
+    # Lighting and details
     _key_light(dest, pygame.Rect(fx, wall_top, front_w, wall_h), left=40, right=95, alpha=255)
-    pygame.draw.line(dest, (140, 130, 160, 255), (fx + 1, wall_top + 2), (fx + 1, ground - 3), max(3, fw // 45))
-    # Soft join into side — avoid thick black seam
-    pygame.draw.line(dest, (32, 26, 42, 200), (fr[0] - 1, wall_top), (br[0] - 1, ground - 1), 2)
+    pygame.draw.line(dest, (140, 130, 160, 255), (fx + 1, wall_top + 2), (fx + 1, ground - 3), max(3, total_w // 45))
+    # Subtle join crease with side
+    pygame.draw.line(dest, (28, 24, 36, 180), (fr[0] - 1, wall_top), (br[0] - 1, ground - 1), 1)
     _ao_band(dest, fr[0] - max(5, front_w // 16), wall_top, max(5, front_w // 14), wall_h, strength=90)
 
     # Violet ribbing on front (Void identity, not fake depth)
@@ -601,10 +635,10 @@ def draw_crypt_shell(dest, footprint, alpha=255, door_frac: float = 0.5):
             continue
         pygame.draw.line(dest, (55, 42, 85, 180), (rx, wall_top + 6), (rx, ground - 10), 2)
 
-    # Foundation follows full footprint perimeter (front + side)
+    # Foundation follows full building width (front + side depth)
     found_h = max(8, int(fh * 0.10))
     found_y = ground - found_h
-    pygame.draw.rect(dest, (*flat_found, 255), (fx - 2, found_y, front_w + 4, found_h + 1))
+    pygame.draw.rect(dest, (*flat_found, 255), (fx - 2, found_y, total_w + 2, found_h + 1))
     # Side foundation parallelogram — continuous with front base around the corner
     side_found = [
         (fr[0] - 1, found_y),
@@ -615,16 +649,16 @@ def draw_crypt_shell(dest, footprint, alpha=255, door_frac: float = 0.5):
     pygame.draw.polygon(dest, (*_shade(flat_found, -18), 255), side_found)
     pygame.draw.line(dest, (95, 90, 110, 255), (fx - 1, found_y), (fr[0], found_y), 2)
     pygame.draw.line(dest, (70, 66, 82, 255), (fr[0], found_y), (sr_bot[0], found_y - max(2, dy // 8)), 2)
-    _ao_band(dest, fx, found_y - max(5, fh // 18), front_w, max(7, fh // 12), strength=110, falloff="up")
+    _ao_band(dest, fx, found_y - max(5, fh // 18), total_w, max(7, fh // 12), strength=110, falloff="up")
 
-    # Flat stone parapet roof spanning the extruded volume (not a front-only triangle)
+    # Flat stone parapet roof spanning the extruded volume (front + side depth)
     rim_h = max(7, int(fh * 0.06))
-    deck_y = wall_top - max(3, fh // 28)  # top surface sits on the volume
+    deck_y = wall_top - max(3, fh // 28)
     # Top deck: continuous plane over front + side depth
     deck = [
         (fx - 2, deck_y),
         (fx + front_w + 2, deck_y),
-        (fx + fw, deck_y - dy),
+        (fx + front_w + side_w, deck_y - dy),
         (fx + max(6, side_w // 4), deck_y - dy - max(3, dy // 5)),
     ]
     _fill_poly(dest, deck, "roof_slate", shade=-55, flat=flat_roof, alpha=255, uv=(fx, fy))
@@ -639,14 +673,14 @@ def draw_crypt_shell(dest, footprint, alpha=255, door_frac: float = 0.5):
     _fill_poly(dest, front_rim, "brick", shade=-8, flat=_shade(flat_wall, -8), alpha=255, uv=(fx, fy - 40))
     side_rim = [
         (fx + front_w + 2, deck_y - rim_h),
-        (fx + fw, deck_y - dy - rim_h),
-        (fx + fw, deck_y - dy),
+        (fx + front_w + side_w, deck_y - dy - rim_h),
+        (fx + front_w + side_w, deck_y - dy),
         (fx + front_w + 2, deck_y),
     ]
     _fill_poly(dest, side_rim, "brick", shade=-42, flat=_shade(flat_wall, -36), alpha=255, uv=(fx + front_w, fy))
     # Lit top edge of parapet
     pygame.draw.line(dest, (175, 168, 190, 230), (fx - 2, deck_y - rim_h), (fx + front_w + 2, deck_y - rim_h), 2)
-    pygame.draw.line(dest, (120, 100, 155, 200), (fx + front_w + 2, deck_y - rim_h), (fx + fw, deck_y - dy - rim_h), 2)
+    pygame.draw.line(dest, (120, 100, 155, 200), (fx + front_w + 2, deck_y - rim_h), (fx + front_w + side_w, deck_y - dy - rim_h), 2)
     # Underside cast onto facade
     _ao_band(dest, fx, wall_top, front_w, max(12, int(fh * 0.11)), strength=155)
     pygame.draw.line(dest, (6, 4, 10, 210), (fx, wall_top), (fx + front_w, wall_top), 2)
@@ -677,8 +711,9 @@ def draw_crypt_shell(dest, footprint, alpha=255, door_frac: float = 0.5):
     # Recessed entrance — carved into front wall of THIS volume
     door_w = max(18, int(front_w * 0.20))
     door_h = max(28, int(fh * 0.40))
+    # Position door within the front wall (not across full footprint including side depth)
     frac = max(0.12, min(0.88, float(door_frac)))
-    ddx = int(fx + fw * frac - door_w * 0.5)
+    ddx = int(fx + front_w * frac - door_w * 0.5)
     ddx = max(fx + 6, min(fx + front_w - door_w - 6, ddx))
     ddy = ground - door_h
     _recessed_entrance(
