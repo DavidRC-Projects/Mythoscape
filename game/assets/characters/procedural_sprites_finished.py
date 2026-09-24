@@ -1650,25 +1650,19 @@ def draw_goblin(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1):
 
 
 MONSTER_DRAWERS = {
-    # Core base implementations (8 original)
+    # Core bases defined above this dict (spider/dragon/wolf/shade/knight
+    # are registered later after their draw_* defs).
     "giant_rat": draw_giant_rat,
     "goblin": draw_goblin,
     "skeleton": draw_skeleton,
-    "spider": draw_spider,
-    "dragon": draw_dragon,
-    "wolf": draw_wolf,
-    "shade": draw_shade,
-    "knight": draw_knight,
-    
-    # New unique types (6 creatures)
+
+    # Stubs / early impls — later MONSTER_DRAWERS.update() overrides with finals.
     "ash_imp": draw_ash_imp,
     "void_imp": draw_void_imp,
     "giant": draw_giant,
     "obsidian_colossus": draw_obsidian_colossus,
     "magma_slug": draw_magma_slug,
     "crucible_beast": draw_crucible_beast,
-    
-    # Themed variants (8 creatures)
     "ember_wolf": draw_ember_wolf,
     "big_skeleton": draw_big_skeleton,
     "shadow_knight": draw_shadow_knight,
