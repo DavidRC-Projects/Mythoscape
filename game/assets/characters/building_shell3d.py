@@ -22,7 +22,7 @@ def _shade(rgb, d):
     return tuple(_clamp(c + d, 0, 255) for c in rgb[:3])
 
 
-def _fill_poly(surf, pts, tex_name, shade=0, flat=None, alpha=255, uv=(0, 0)):
+def _fill_poly(surf, pts, tex_name, shade=0, flat=None, alpha=255, uv=(0, 0), outline=True):
     if not pts or len(pts) < 3:
         return
     flat = flat or (120, 90, 60)
@@ -54,7 +54,9 @@ def _fill_poly(surf, pts, tex_name, shade=0, flat=None, alpha=255, uv=(0, 0)):
     except Exception:
         pass
     surf.blit(piece, (minx, miny))
-    pygame.draw.polygon(surf, (18, 12, 10), pts, 1)
+    # Optional subtle outline (skip for internal walls to avoid gaps)
+    if outline:
+        pygame.draw.polygon(surf, (18, 12, 10), pts, 1)
 
 
 def _key_light(surf, rect, left=55, right=70, alpha=255):
@@ -321,7 +323,8 @@ def _fill_side_wall(surf, fr, sr_top, sr_bot, br, wood, alpha, flat, wall_tex=No
     base = tuple(flat[:3])
     tex = wall_tex or ("wood_planks" if wood else "brick")
     # Textured fill matching the front facade, then darkened for side plane
-    _fill_poly(surf, pts, tex, shade=-48, flat=_shade(base, -28), alpha=255, uv=(fr[0] * 3, fr[1]))
+    # Skip outline on shared front edge to avoid visible seam
+    _fill_poly(surf, pts, tex, shade=-48, flat=_shade(base, -28), alpha=255, uv=(fr[0] * 3, fr[1]), outline=False)
     # Soft vertical AO toward the far (right) edge
     n = max(5, (br[1] - fr[1]) // 12)
     for i in range(1, n):
@@ -340,10 +343,15 @@ def _fill_side_wall(surf, fr, sr_top, sr_bot, br, wood, alpha, flat, wall_tex=No
         x1 = br[0] + (sr_bot[0] - br[0]) * t
         y1 = br[1] + (sr_bot[1] - br[1]) * t
         pygame.draw.line(surf, (14, 10, 8) if wood else (18, 16, 22), (x0, y0), (x1, y1), 1)
-    pygame.draw.polygon(surf, (14, 10, 8), pts, 1)
-    # Lit top bevel + dark front/side crease
+    # External edge outline only (not the shared front edge)
+    pygame.draw.line(surf, (14, 10, 8), sr_top, sr_bot, 1)
+    pygame.draw.line(surf, (14, 10, 8), sr_bot, br, 1)
+    pygame.draw.line(surf, (14, 10, 8), sr_top, fr, 1)
+    # Lit top bevel on external edge
     pygame.draw.line(surf, (200, 185, 160) if wood else (165, 168, 175), fr, sr_top, 3)
-    pygame.draw.line(surf, (22, 14, 10), fr, br, 2)
+    # Dark crease on front/side join (subtle, not a black gap)
+    pygame.draw.line(surf, (40, 32, 24) if wood else (36, 38, 44), fr, br, 1)
+    # Depth edge shadow
     pygame.draw.line(
         surf, (50, 40, 32) if wood else (44, 46, 52),
         (sr_top[0] - 1, sr_top[1] + 2), (sr_bot[0] - 1, sr_bot[1] - 2), 2,
@@ -414,14 +422,20 @@ def draw_house_shell(
     # Side first (behind front join) — same wood/stone texture as front
     _fill_side_wall(dest, fr, sr_top, sr_bot, br, wood, alpha, flat_side, wall_tex=wall_tex)
 
-    # Front wall — fully opaque textured
+    # Front wall — fully opaque textured, skip outline on shared edge
     front_pts = [fl, fr, br, bl]
-    _fill_poly(dest, front_pts, wall_tex, shade=8, flat=flat_wall, alpha=255, uv=(fx, fy))
+    _fill_poly(dest, front_pts, wall_tex, shade=8, flat=flat_wall, alpha=255, uv=(fx, fy), outline=False)
+    # External edges only
+    pygame.draw.line(dest, (18, 12, 8), fl, bl, 1)
+    pygame.draw.line(dest, (18, 12, 8), bl, br, 1)
+    pygame.draw.line(dest, (18, 12, 8), fl, fr, 1)
+    # Lighting and details
     _key_light(dest, pygame.Rect(fx, wall_top, front_w, wall_h), left=62, right=82, alpha=255)
     pygame.draw.line(dest, (240, 220, 180, 255) if wood else (205, 208, 214, 255),
                      (fx + 1, wall_top + 2), (fx + 1, ground - 3), max(3, fw // 45))
-    pygame.draw.line(dest, (18, 12, 8, 255),
-                     (fr[0] - 1, wall_top), (br[0] - 1, ground - 1), max(3, fw // 40))
+    # Subtle crease at front/side join
+    pygame.draw.line(dest, (34, 26, 20, 160) if wood else (32, 34, 40, 160),
+                     (fr[0] - 1, wall_top), (br[0] - 1, ground - 1), 1)
     _ao_band(dest, fr[0] - max(6, front_w // 14), wall_top, max(6, front_w // 12), wall_h, strength=110)
 
     # Foundation across full footprint
@@ -522,9 +536,9 @@ def draw_house_shell(
     if door:
         door_w = max(14, int(front_w * 0.16))
         door_h = max(22, int(fh * 0.36))
-        # Align with world door tile across the full footprint
+        # Position door within the front wall (not across full footprint including side depth)
         frac = max(0.12, min(0.88, float(door_frac)))
-        ddx = int(fx + fw * frac - door_w * 0.5)
+        ddx = int(fx + front_w * frac - door_w * 0.5)
         ddx = max(fx + 2, min(fx + front_w - door_w - 2, ddx))
         ddy = ground - door_h
         _door_cut(dest, ddx, ddy, door_w, door_h, wood=wood, alpha=255, arch=True)
@@ -581,17 +595,22 @@ def draw_crypt_shell(dest, footprint, alpha=255, door_frac: float = 0.5):
 
     # Side wall first — continuous stone with front (shared fr/br edge)
     _fill_side_wall(dest, fr, sr_top, sr_bot, br, False, alpha, flat_side, wall_tex=wall_tex)
-    # Soft crease (not a black gap) at the shared front/side edge
-    pygame.draw.line(dest, (40, 34, 52, 180), fr, br, 2)
-    pygame.draw.line(dest, (100, 80, 140, 160), fr, sr_top, 2)
+    # No heavy outline on shared edge - just a subtle crease
+    pygame.draw.line(dest, (32, 28, 40, 140), fr, br, 1)
+    pygame.draw.line(dest, (90, 75, 130, 120), fr, sr_top, 1)
 
-    # Front facade
+    # Front facade - skip outline to avoid gap with side wall
     front_pts = [fl, fr, br, bl]
-    _fill_poly(dest, front_pts, wall_tex, shade=-12, flat=flat_wall, alpha=255, uv=(fx, fy))
+    _fill_poly(dest, front_pts, wall_tex, shade=-12, flat=flat_wall, alpha=255, uv=(fx, fy), outline=False)
+    # External edges only (not shared edge with side)
+    pygame.draw.line(dest, (18, 14, 24), fl, bl, 1)
+    pygame.draw.line(dest, (18, 14, 24), bl, br, 1)
+    pygame.draw.line(dest, (18, 14, 24), fl, fr, 1)
+    # Lighting and details
     _key_light(dest, pygame.Rect(fx, wall_top, front_w, wall_h), left=40, right=95, alpha=255)
     pygame.draw.line(dest, (140, 130, 160, 255), (fx + 1, wall_top + 2), (fx + 1, ground - 3), max(3, fw // 45))
-    # Soft join into side — avoid thick black seam
-    pygame.draw.line(dest, (32, 26, 42, 200), (fr[0] - 1, wall_top), (br[0] - 1, ground - 1), 2)
+    # Subtle join crease with side
+    pygame.draw.line(dest, (28, 24, 36, 180), (fr[0] - 1, wall_top), (br[0] - 1, ground - 1), 1)
     _ao_band(dest, fr[0] - max(5, front_w // 16), wall_top, max(5, front_w // 14), wall_h, strength=90)
 
     # Violet ribbing on front (Void identity, not fake depth)
@@ -677,8 +696,9 @@ def draw_crypt_shell(dest, footprint, alpha=255, door_frac: float = 0.5):
     # Recessed entrance — carved into front wall of THIS volume
     door_w = max(18, int(front_w * 0.20))
     door_h = max(28, int(fh * 0.40))
+    # Position door within the front wall (not across full footprint including side depth)
     frac = max(0.12, min(0.88, float(door_frac)))
-    ddx = int(fx + fw * frac - door_w * 0.5)
+    ddx = int(fx + front_w * frac - door_w * 0.5)
     ddx = max(fx + 6, min(fx + front_w - door_w - 6, ddx))
     ddy = ground - door_h
     _recessed_entrance(
