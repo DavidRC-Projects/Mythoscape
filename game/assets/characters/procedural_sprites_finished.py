@@ -894,6 +894,119 @@ def draw_skeleton(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1):
         pygame.draw.line(surf, deep, (head[0] + i * 0.9 * s, head[1] + 2.4 * s), (head[0] + i * 0.9 * s, head[1] + 3.8 * s), 1)
 
 
+def draw_imp(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1, moving=False, variant="ash"):
+    """Small demonic imp — bat wings, horns, tail, hunched posture."""
+    facing = 1 if facing >= 0 else -1
+    s = _s(tile, 'monster') * 0.75  # Smaller than other monsters
+    bob = math.sin(t * 8) * 0.8
+    
+    # Color variants
+    if variant == "void":
+        skin = (90, 70, 120) if not hurt else (140, 40, 100)
+        wing = (50, 40, 70)
+    else:  # ash
+        skin = (120, 60, 50) if not hurt else (180, 40, 30)
+        wing = (80, 50, 45)
+    
+    hi, mid, sh, deep = rs.material(skin)
+    cy += bob
+    
+    lunge_w, crouch, strike = rs.attack_impulse(attacking)
+    lunge = lunge_w * 7 * s * facing
+    cy += crouch * 1.2 * s
+    
+    rs.draw_cast_shadow(surf, cx, cy + 11 * s, 8 * s, 2.8 * s, 100)
+    
+    # Bat wings (behind body)
+    wing_flap = math.sin(t * 10) * 0.3 + 0.3
+    for side in (-1, 1):
+        wing_pts = [
+            (cx + side * 2 * s * facing, cy - 2 * s),
+            (cx + side * (8 + wing_flap * 3) * s * facing, cy - 4 * s),
+            (cx + side * (9 + wing_flap * 4) * s * facing, cy + 2 * s),
+            (cx + side * 3 * s * facing, cy + 1 * s),
+        ]
+        rs.draw_poly(surf, wing, wing_pts, deep, 1)
+        # Wing membrane detail
+        pygame.draw.line(surf, deep, wing_pts[0], wing_pts[2], 1)
+    
+    # Hunched body
+    rs.draw_volume(surf, skin, [
+        (cx - 3.5 * s * facing, cy - 1 * s),
+        (cx + 3 * s * facing + lunge * 0.2, cy - 3 * s),
+        (cx + 4 * s * facing + lunge * 0.15, cy + 4 * s),
+        (cx - 3 * s * facing, cy + 5 * s),
+    ], deep, 1)
+    
+    # Thin legs
+    for ox, oy in ((-1.5, 3), (2, 3.5)):
+        leg_end = (cx + ox * s * facing, cy + 10 * s)
+        rs.draw_volume_limb(surf, cx + ox * s * facing, cy + oy * s, *leg_end, 0.9 * s, skin, deep)
+        # Clawed feet
+        pygame.draw.circle(surf, deep, (int(leg_end[0]), int(leg_end[1])), max(2, int(1.2 * s)))
+    
+    # Clawed arms
+    claw_pos = (cx + 5 * s * facing + lunge, cy - 1 * s - crouch * 2 * s)
+    rs.draw_volume_limb(surf, cx + 2.5 * s * facing, cy - 1 * s, *claw_pos, 0.9 * s, skin, deep)
+    # Claw
+    for i in range(3):
+        claw_tip = (claw_pos[0] + (i - 1) * 0.8 * s, claw_pos[1] + 2 * s + strike * 3 * s)
+        pygame.draw.line(surf, deep, claw_pos, claw_tip, max(1, int(0.6 * s)))
+    
+    # Head with horns
+    head = (cx + 1.5 * s * facing + lunge * 0.1, cy - 5 * s)
+    rs.draw_volume(surf, skin, [
+        (head[0] - 2.5 * s, head[1] + 1 * s),
+        (head[0] - 2 * s, head[1] - 2.5 * s),
+        (head[0] + 2.5 * s, head[1] - 2 * s),
+        (head[0] + 3 * s, head[1] + 1.5 * s),
+        (head[0], head[1] + 2 * s),
+    ], deep, 1)
+    
+    # Horns
+    for side in (-1, 1):
+        horn_pts = [
+            (head[0] + side * 1.8 * s, head[1] - 1.8 * s),
+            (head[0] + side * 2.5 * s, head[1] - 5 * s),
+            (head[0] + side * 1.2 * s, head[1] - 2.2 * s),
+        ]
+        rs.draw_poly(surf, deep, horn_pts, None, 0)
+        pygame.draw.line(surf, (20, 18, 22), horn_pts[0], horn_pts[1], max(1, int(1.2 * s)))
+    
+    # Glowing eyes
+    eye_color = (160, 100, 200) if variant == "void" else (255, 140, 60)
+    for ox in (-1, 1):
+        pygame.draw.circle(surf, eye_color, (int(head[0] + ox * s), int(head[1] - 0.5 * s)), max(2, int(0.8 * s)))
+        pygame.draw.circle(surf, (255, 255, 240), (int(head[0] + ox * s - 0.3 * s), int(head[1] - 0.8 * s)), max(1, int(0.4 * s)))
+    
+    # Tail
+    tail_pts = [
+        (cx - 2 * s * facing, cy + 3 * s),
+        (cx - 6 * s * facing, cy + 1 * s),
+        (cx - 9 * s * facing, cy - 2 * s),
+    ]
+    pygame.draw.lines(surf, sh, False, tail_pts, max(2, int(1.5 * s)))
+    # Tail spade
+    pygame.draw.polygon(surf, deep, [
+        (tail_pts[2][0], tail_pts[2][1]),
+        (tail_pts[2][0] - 1.5 * s * facing, tail_pts[2][1] - 2 * s),
+        (tail_pts[2][0] + 1.5 * s * facing, tail_pts[2][1] - 2 * s),
+    ])
+    
+    if strike > 0.6:
+        pygame.draw.circle(surf, (255, 200, 100, int(200 * strike)), (int(claw_pos[0]), int(claw_pos[1])), max(3, int(2.5 * s * strike)), 1)
+
+
+def draw_ash_imp(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1, moving=False):
+    """Ash imp - fiery variant."""
+    draw_imp(surf, cx, cy, tile, t, hurt, attacking, facing, moving, variant="ash")
+
+
+def draw_void_imp(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1, moving=False):
+    """Void imp - dark variant."""
+    draw_imp(surf, cx, cy, tile, t, hurt, attacking, facing, moving, variant="void")
+
+
 def draw_goblin(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1):
     """Hunched long-armed goblin — angular head, distinct silhouette."""
     facing = 1 if facing >= 0 else -1
@@ -962,9 +1075,35 @@ def draw_goblin(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1):
 
 
 MONSTER_DRAWERS = {
+    # Existing full implementations
     "giant_rat": draw_giant_rat,
     "goblin": draw_goblin,
     "skeleton": draw_skeleton,
+    "spider": draw_spider,
+    "dragon": draw_dragon,
+    "wolf": draw_wolf,
+    "shade": draw_shade,
+    "knight": draw_knight,
+    
+    # New imp types
+    "ash_imp": draw_ash_imp,
+    "void_imp": draw_void_imp,
+    
+    # Variants using existing base functions
+    "big_skeleton": draw_skeleton,  # TODO: scale up or add more detail
+    "ember_wolf": draw_wolf,  # TODO: add fire effects
+    "shadow_knight": draw_knight,  # TODO: darken and add shadow effects
+    "magma_knight": draw_knight,  # TODO: add fire/magma effects
+    "guard": draw_knight,  # TODO: lighter armor, guard theme
+    "crypt_ghoul": draw_skeleton,  # TODO: add flesh/decay
+    "void_horror": draw_shade,  # TODO: add tentacles/horror elements
+    "mythos_champion": draw_knight,  # TODO: elite armor, mythic effects
+    
+    # New types needed - using similar for now
+    "giant": draw_knight,  # PLACEHOLDER: need new giant type (scaled up knight)
+    "obsidian_colossus": draw_knight,  # PLACEHOLDER: need new colossus type
+    "magma_slug": draw_giant_rat,  # PLACEHOLDER: need new slug type
+    "crucible_beast": draw_wolf,  # PLACEHOLDER: need new beast type
 }
 
 
