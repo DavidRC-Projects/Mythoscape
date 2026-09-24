@@ -400,12 +400,10 @@ def draw_house_shell(
     fr = (fx + front_w, wall_top)
     br = (fx + front_w, ground)
     bl = (fx, ground)
-    # Side face - extends BEYOND footprint by side_w for real depth
+    # Side face - extends BEYOND footprint by side_w for OSRS-like depth
+    # David: map can expand, prioritize correct geometry over old footprint size
     sr_top = (fx + front_w + side_w, wall_top - dy)
     sr_bot = (fx + front_w + side_w, ground)
-    # Side face ends at footprint right edge — no overhang into walkable tiles
-    sr_top = (fx + fw, wall_top - dy)
-    sr_bot = (fx + fw, ground)
 
     if kind == "smithy":
         wood = False
