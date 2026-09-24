@@ -128,9 +128,9 @@ def _recessed_entrance(
     jambs inside that hole. Wood path keeps a timber surround for cottages.
     """
     stone = stone or (not wood)
-    # DEEP recess for visible 3D carved entrance (not shallow pasted overlay)
-    depth = max(20, min(35, dw // 3))  # Much deeper: 20-35px recess depth
-    jamb = max(12, depth - 2)          # Wider jamb surfaces show wall thickness
+    # VERY DEEP recess with WIDE interior surfaces (to match target reference)
+    depth = max(28, min(45, int(dw * 0.4)))  # 28-45px recess (40% of door width)
+    jamb = max(16, min(28, depth - 4))       # 16-28px wide visible interior walls
 
     if stone:
         # --- Carve a hole (no proud frame, no silver box) ---
@@ -138,9 +138,9 @@ def _recessed_entrance(
         if glow:
             throat = (max(4, glow[0] // 12), max(2, glow[1] // 14), max(10, glow[2] // 5), alpha)
 
-        # Deep reveal for visible wall thickness
-        depth = max(18, min(28, dw // 4))  # Deep stone recess
-        jamb = max(12, min(20, depth))
+        # VERY deep reveal for prominent wall thickness
+        depth = max(24, min(40, int(dw * 0.35)))  # Deep stone recess
+        jamb = max(18, min(32, depth - 2))        # Wide interior surfaces
 
         # Arch mask: opaque where opening exists
         hole = pygame.Surface((dw, dh), pygame.SRCALPHA)
@@ -243,10 +243,10 @@ def _recessed_entrance(
             surf.blit(g, (pdx + 4, pdy + 3))
         return
 
-    # Wood entrance with deep recess and visible frame
-    depth = max(20, min(35, dw // 3))  # Match new deep recess
-    jamb = max(12, depth - 2)          # Wide jamb surfaces
-    frame = max(6, dw // 9)            # Prominent frame
+    # Wood entrance with VERY DEEP recess and wide visible interior
+    depth = max(28, min(45, int(dw * 0.4)))  # Match deep recess (40% of door width)
+    jamb = max(16, min(28, depth - 4))       # Wide jamb interior surfaces
+    frame = max(7, int(dw * 0.12))           # Prominent outer frame
     surround = (100, 78, 52)
     ox, oy = dx - frame - 2, dy - frame - 4
     ow, oh = dw + (frame + 2) * 2, dh + frame + 6
@@ -381,14 +381,14 @@ def draw_house_shell(
     if fw < 8 or fh < 8:
         return
 
-    # DEEP side depth for strong 3D read (35% of footprint width)
-    # This makes the extruded volume VISIBLE from gameplay camera
-    side_w = max(18, int(fw * 0.35))
+    # VERY DEEP side depth to match target reference (45% of footprint width)
+    # Target Fishing Shop shows side wall is nearly HALF the building width
+    side_w = max(22, int(fw * 0.45))
     front_w = max(8, fw - side_w)
-    # Tall vertical rise for dramatic 3/4 view depth (32% of height)
-    dy = max(16, int(fh * 0.32))
+    # TALL vertical rise for strong 3/4 view (38% of height)
+    dy = max(20, int(fh * 0.38))
 
-    wall_top = fy + int(fh * 0.16)
+    wall_top = fy + int(fh * 0.14)
     ground = fy + fh
     wall_h = ground - wall_top
 
@@ -562,12 +562,14 @@ def draw_crypt_shell(dest, footprint, alpha=255, door_frac: float = 0.5):
     if fw < 8 or fh < 8:
         return
 
-    # Match house extrusion parameters so crypt sits in the same camera world
-    side_w = max(14, int(fw * 0.22))
+    # VERY DEEP side depth matching house shell (45% of footprint width)
+    # Makes dungeon read as ONE extruded stone volume, not flat facade
+    side_w = max(22, int(fw * 0.45))
     front_w = max(8, fw - side_w)
-    dy = max(12, int(fh * 0.22))
+    # TALL vertical rise for dramatic 3/4 view (38% of height)
+    dy = max(20, int(fh * 0.38))
 
-    wall_top = fy + int(fh * 0.16)
+    wall_top = fy + int(fh * 0.14)
     ground = fy + fh
     wall_h = ground - wall_top
 
