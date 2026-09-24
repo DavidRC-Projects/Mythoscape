@@ -54,7 +54,6 @@ def _fill_poly(surf, pts, tex_name, shade=0, flat=None, alpha=255, uv=(0, 0)):
     except Exception:
         pass
     surf.blit(piece, (minx, miny))
-    pygame.draw.polygon(surf, (18, 12, 10), pts, 1)
 
 
 def _key_light(surf, rect, left=55, right=70, alpha=255):
@@ -204,40 +203,23 @@ def _recessed_entrance(
                 0.08, math.pi - 0.08, 2,
             )
 
-        # Door leaf deep inside — leave visible throat margin
-        inset_x = max(4, jamb + 2)
-        inset_y = max(4, soff_n + 2)
-        pdx = dx + inset_x
-        pdy = dy + inset_y
-        pdw = max(5, dw - inset_x * 2)
-        pdh = max(6, dh - inset_y - 2)
-        panel = (48, 32, 24, alpha)
-        if arch:
-            door_hole = pygame.Surface((pdw, pdh), pygame.SRCALPHA)
-            bt = int(pdh * 0.32)
-            pygame.draw.rect(door_hole, panel, (0, bt, pdw, pdh - bt))
-            pygame.draw.ellipse(door_hole, panel, (0, 0, pdw, bt * 2))
-            clip = pygame.Surface((pdw, pdh), pygame.SRCALPHA)
-            clip.blit(hole, (-inset_x, -inset_y))
-            door_hole.blit(clip, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-            surf.blit(door_hole, (pdx, pdy))
-        else:
-            pygame.draw.rect(surf, panel, (pdx, pdy, pdw, pdh))
-
-        pygame.draw.line(surf, (28, 18, 14, alpha), (pdx + pdw // 2, pdy + 3), (pdx + pdw // 2, pdy + pdh - 3), 1)
-        pygame.draw.circle(
-            surf, (200, 170, 60, alpha),
-            (int(pdx + pdw * 0.78), int(pdy + pdh * 0.55)),
-            max(2, pdw // 12),
-        )
+        # Threshold step — subtle depth at the opening
         pygame.draw.rect(surf, (22, 18, 24, alpha), (dx + 3, dy + dh - 3, dw - 6, 3))
 
+        # Purple glow emanating from the void (no door panel/knob for dungeon)
         if glow:
-            gw, gh = max(1, pdw - 8), max(1, int(pdh * 0.32))
+            # Glow fills the archway throat
+            gw, gh = max(1, dw - jamb * 2), max(1, dh - soff_n - 4)
             g = pygame.Surface((gw, gh), pygame.SRCALPHA)
-            pulse = glow if len(glow) == 4 else (*glow[:3], 60)
+            pulse = glow if len(glow) == 4 else (*glow[:3], 80)
+            # Elliptical radial glow from center
             pygame.draw.ellipse(g, pulse, g.get_rect())
-            surf.blit(g, (pdx + 4, pdy + 3))
+            # Additional brighter center
+            center_w, center_h = max(1, gw // 2), max(1, gh // 2)
+            center_rect = pygame.Rect((gw - center_w) // 2, (gh - center_h) // 2, center_w, center_h)
+            brighter = glow if len(glow) == 4 else (*glow[:3], 120)
+            pygame.draw.ellipse(g, brighter, center_rect)
+            surf.blit(g, (dx + jamb, dy + soff_n + 2))
         return
 
     # unused depth/jamb from outer scope for wood — recompute
@@ -340,7 +322,6 @@ def _fill_side_wall(surf, fr, sr_top, sr_bot, br, wood, alpha, flat, wall_tex=No
         x1 = br[0] + (sr_bot[0] - br[0]) * t
         y1 = br[1] + (sr_bot[1] - br[1]) * t
         pygame.draw.line(surf, (14, 10, 8) if wood else (18, 16, 22), (x0, y0), (x1, y1), 1)
-    pygame.draw.polygon(surf, (14, 10, 8), pts, 1)
     # Lit top bevel + dark front/side crease
     pygame.draw.line(surf, (200, 185, 160) if wood else (165, 168, 175), fr, sr_top, 3)
     pygame.draw.line(surf, (22, 14, 10), fr, br, 2)
@@ -559,6 +540,9 @@ def draw_crypt_shell(dest, footprint, alpha=255, door_frac: float = 0.5):
     bl = (fx, ground)
     sr_top = (fx + fw, wall_top - dy)
     sr_bot = (fx + fw, ground)
+    # Left side coordinates for left wall visibility
+    sl_top = (fx - max(8, int(side_w * 0.35)), wall_top - int(dy * 0.65))
+    sl_bot = (fx - max(6, int(side_w * 0.25)), ground)
 
     wall_tex = "brick"
     flat_wall = (52, 48, 64)
@@ -566,20 +550,27 @@ def draw_crypt_shell(dest, footprint, alpha=255, door_frac: float = 0.5):
     flat_roof = (36, 32, 48)
     flat_found = (28, 26, 34)
 
-    # Ground contact under full footprint
+    # Ground contact under full footprint including left side
+    shadow_left = sl_bot[0]
     pygame.draw.ellipse(
         dest, (8, 6, 12, 100),
-        (fx + fw * 0.05, ground - 4, fw * 0.90, max(6, fh * 0.08)),
+        (shadow_left, ground - 4, sr_bot[0] - shadow_left + fw * 0.05, max(6, fh * 0.08)),
     )
     for grow, a in ((4, 32), (1, 55)):
         pygame.draw.polygon(dest, (10, 8, 14, a), [
-            (bl[0] - grow, ground),
+            (sl_bot[0] - grow, ground),
             (sr_bot[0] + grow, ground),
             (sr_bot[0] + grow, ground + max(3, fh // 18)),
-            (bl[0] - grow, ground + max(3, fh // 18)),
+            (sl_bot[0] - grow, ground + max(3, fh // 18)),
         ])
 
-    # Side wall first — continuous stone with front (shared fr/br edge)
+    # Left side wall first (behind front) — darker stone
+    left_pts = [fl, sl_top, sl_bot, bl]
+    _fill_poly(dest, left_pts, wall_tex, shade=-62, flat=_shade(flat_wall, -48), alpha=255, uv=(fx - 20, fy))
+    pygame.draw.line(dest, (75, 70, 95, 180), fl, sl_top, 2)
+    pygame.draw.line(dest, (32, 28, 42, 200), fl, bl, 2)
+
+    # Right side wall — same material, slightly different shade
     _fill_side_wall(dest, fr, sr_top, sr_bot, br, False, alpha, flat_side, wall_tex=wall_tex)
     # Soft crease (not a black gap) at the shared front/side edge
     pygame.draw.line(dest, (40, 34, 52, 180), fr, br, 2)
@@ -594,18 +585,21 @@ def draw_crypt_shell(dest, footprint, alpha=255, door_frac: float = 0.5):
     pygame.draw.line(dest, (32, 26, 42, 200), (fr[0] - 1, wall_top), (br[0] - 1, ground - 1), 2)
     _ao_band(dest, fr[0] - max(5, front_w // 16), wall_top, max(5, front_w // 14), wall_h, strength=90)
 
-    # Violet ribbing on front (Void identity, not fake depth)
-    for i in range(4):
-        rx = fx + int(front_w * (0.16 + i * 0.20))
-        if abs(rx - (fx + front_w * 0.5)) < front_w * 0.10:
-            continue
-        pygame.draw.line(dest, (55, 42, 85, 180), (rx, wall_top + 6), (rx, ground - 10), 2)
 
-    # Foundation follows full footprint perimeter (front + side)
+    # Foundation follows full building perimeter (front + both sides)
     found_h = max(8, int(fh * 0.10))
     found_y = ground - found_h
-    pygame.draw.rect(dest, (*flat_found, 255), (fx - 2, found_y, front_w + 4, found_h + 1))
-    # Side foundation parallelogram — continuous with front base around the corner
+    # Front foundation
+    pygame.draw.rect(dest, (*flat_found, 255), (sl_bot[0], found_y, front_w + fx - sl_bot[0] + 4, found_h + 1))
+    # Left side foundation parallelogram
+    left_found = [
+        (sl_bot[0], found_y),
+        (sl_top[0] + 4, found_y - int(dy * 0.65)),
+        (sl_top[0] + 4, found_y - int(dy * 0.65) + found_h),
+        (sl_bot[0], ground),
+    ]
+    pygame.draw.polygon(dest, (*_shade(flat_found, -22), 255), left_found)
+    # Right side foundation parallelogram
     side_found = [
         (fr[0] - 1, found_y),
         (sr_bot[0], found_y - max(2, dy // 8)),
@@ -613,30 +607,50 @@ def draw_crypt_shell(dest, footprint, alpha=255, door_frac: float = 0.5):
         (br[0], ground),
     ]
     pygame.draw.polygon(dest, (*_shade(flat_found, -18), 255), side_found)
-    pygame.draw.line(dest, (95, 90, 110, 255), (fx - 1, found_y), (fr[0], found_y), 2)
+    pygame.draw.line(dest, (95, 90, 110, 255), (sl_bot[0], found_y), (fr[0], found_y), 2)
     pygame.draw.line(dest, (70, 66, 82, 255), (fr[0], found_y), (sr_bot[0], found_y - max(2, dy // 8)), 2)
-    _ao_band(dest, fx, found_y - max(5, fh // 18), front_w, max(7, fh // 12), strength=110, falloff="up")
+    pygame.draw.line(dest, (60, 56, 72, 255), (sl_bot[0], found_y), (sl_top[0] + 4, found_y - int(dy * 0.65)), 2)
+    _ao_band(dest, sl_bot[0], found_y - max(5, fh // 18), front_w + fx - sl_bot[0], max(7, fh // 12), strength=110, falloff="up")
 
-    # Flat stone parapet roof spanning the extruded volume (not a front-only triangle)
-    rim_h = max(7, int(fh * 0.06))
-    deck_y = wall_top - max(3, fh // 28)  # top surface sits on the volume
-    # Top deck: continuous plane over front + side depth
+    # Flat stone parapet roof spanning the full extruded volume including left side
+    rim_h = max(9, int(fh * 0.08))
+    deck_y = wall_top - max(5, fh // 24)
+    # Top deck spans from left side to right side (pentagonal shape from above)
+    deck_back_left = (sl_top[0] + max(6, side_w // 4), deck_y - dy - max(5, dy // 4))
     deck = [
-        (fx - 2, deck_y),
-        (fx + front_w + 2, deck_y),
-        (fx + fw, deck_y - dy),
-        (fx + max(6, side_w // 4), deck_y - dy - max(3, dy // 5)),
+        (sl_bot[0] + 2, deck_y),  # front left (with left side)
+        (fx + front_w + 3, deck_y),  # front right
+        (fx + fw + 2, deck_y - dy),  # back right (elevated)
+        deck_back_left,  # back left (elevated)
     ]
-    _fill_poly(dest, deck, "roof_slate", shade=-55, flat=flat_roof, alpha=255, uv=(fx, fy))
+    # Draw roof top surface with prominent shading
+    _fill_poly(dest, deck, "roof_slate", shade=-35, flat=flat_roof, alpha=255, uv=(fx, fy))
+    # Tile pattern lines emphasizing the visible top surface
+    for i in range(1, 5):
+        t = i / 5.0
+        lx0 = sl_bot[0] + 2 + (deck_back_left[0] - (sl_bot[0] + 2)) * t
+        ly0 = deck_y + (deck_back_left[1] - deck_y) * t
+        rx0 = fx + front_w + 3 + ((fx + fw + 2) - (fx + front_w + 3)) * t
+        ry0 = deck_y + ((deck_y - dy) - deck_y) * t
+        pygame.draw.line(dest, (28, 24, 38, 180), (int(lx0), int(ly0)), (int(rx0), int(ry0)), 1)
 
-    # Raised parapet — rises ABOVE the deck (not a stripe painted down the facade)
+    # Raised parapet — front rim
     front_rim = [
-        (fx - 3, deck_y - rim_h),
+        (sl_bot[0], deck_y - rim_h),
         (fx + front_w + 3, deck_y - rim_h),
         (fx + front_w + 2, deck_y),
-        (fx - 2, deck_y),
+        (sl_bot[0] + 2, deck_y),
     ]
     _fill_poly(dest, front_rim, "brick", shade=-8, flat=_shade(flat_wall, -8), alpha=255, uv=(fx, fy - 40))
+    # Left side rim
+    left_rim = [
+        (sl_top[0] + 6, deck_y - dy - rim_h - 2),
+        (sl_bot[0], deck_y - rim_h),
+        (sl_bot[0] + 2, deck_y),
+        (sl_top[0] + 8, deck_y - dy - 2),
+    ]
+    _fill_poly(dest, left_rim, "brick", shade=-50, flat=_shade(flat_wall, -42), alpha=255, uv=(fx - 30, fy))
+    # Right side rim
     side_rim = [
         (fx + front_w + 2, deck_y - rim_h),
         (fx + fw, deck_y - dy - rim_h),
@@ -644,22 +658,22 @@ def draw_crypt_shell(dest, footprint, alpha=255, door_frac: float = 0.5):
         (fx + front_w + 2, deck_y),
     ]
     _fill_poly(dest, side_rim, "brick", shade=-42, flat=_shade(flat_wall, -36), alpha=255, uv=(fx + front_w, fy))
-    # Lit top edge of parapet
-    pygame.draw.line(dest, (175, 168, 190, 230), (fx - 2, deck_y - rim_h), (fx + front_w + 2, deck_y - rim_h), 2)
+    # Lit top edges of parapet
+    pygame.draw.line(dest, (175, 168, 190, 230), (sl_bot[0], deck_y - rim_h), (fx + front_w + 2, deck_y - rim_h), 2)
     pygame.draw.line(dest, (120, 100, 155, 200), (fx + front_w + 2, deck_y - rim_h), (fx + fw, deck_y - dy - rim_h), 2)
+    pygame.draw.line(dest, (95, 85, 125, 180), (sl_top[0] + 6, deck_y - dy - rim_h - 2), (sl_bot[0], deck_y - rim_h), 2)
     # Underside cast onto facade
     _ao_band(dest, fx, wall_top, front_w, max(12, int(fh * 0.11)), strength=155)
     pygame.draw.line(dest, (6, 4, 10, 210), (fx, wall_top), (fx + front_w, wall_top), 2)
 
-    # Gothic spike accents on parapet (style, not structure)
+    # Subtle gothic spike accents (toned down to avoid appearing as construction markers)
     for i in range(5):
         sx = fx + int(front_w * (0.12 + i * 0.19))
         base = deck_y - rim_h
-        tip = base - (10 if i % 2 == 0 else 5)
-        pygame.draw.polygon(dest, (150, 90, 230, 255), [
-            (sx - 4, base + 1), (sx, tip), (sx + 4, base + 1),
+        tip = base - (6 if i % 2 == 0 else 3)  # Shorter spikes
+        pygame.draw.polygon(dest, (95, 70, 150, 200), [  # Darker, more subtle purple
+            (sx - 3, base + 1), (sx, tip), (sx + 3, base + 1),
         ])
-        pygame.draw.line(dest, (220, 180, 255, 200), (sx, tip), (sx, tip + 3), 1)
 
     # Narrow violet windows (integrated into facade, clear of door)
     win_h = max(12, int(fh * 0.14))
