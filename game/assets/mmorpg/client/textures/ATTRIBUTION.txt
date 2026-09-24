@@ -1,0 +1,17 @@
+Textures from ambientCG (https://ambientcg.com), licensed CC0 1.0
+(public domain — free for any use, no attribution required).
+
+wood_planks.jpg     <- Planks033A
+wood_dark.jpg       <- Planks021
+brick.jpg           <- Bricks075A
+roof_slate.jpg      <- RoofingTiles002
+roof_terracotta.jpg <- RoofingTiles011A
+
+cloth.jpg           <- Fabric061
+fabric.jpg          <- Fabric045
+leather.jpg         <- Leather026
+skin.jpg            <- Leather038 (soft flesh/leather tone)
+metal_armor.jpg     <- Metal049A
+bark.jpg            <- Bark012
+rock_scale.jpg      <- Rock051
+fur.jpg             <- Carpet016 / fabric wool substitute

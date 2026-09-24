@@ -21,7 +21,7 @@ ART_SCALE = 1.0
 CHARACTER_SCALE = 2.5
 OBJECT_SCALE = 2.55
 MONSTER_SCALE = 2.5
-PET_SCALE = 1.65
+PET_SCALE = 2.05
 BUILDING_SCALE = 1.0
 TREE_SCALE = 1.72
 
@@ -161,16 +161,62 @@ def irregular_ring(cx, cy, rx, ry, n=8, seed=0, jitter=0.28, phase=0.0):
     return pts
 
 
-def draw_volume(surf, base, pts, outline=OUTLINE, width=1):
+def guess_surface_detail(base, hint=None):
+    """Pick a photo texture key for a fill color / material hint."""
+    if hint is False or hint == "flat" or hint == "none":
+        return None
+    if hint:
+        return hint
+    r, g, b = (int(c) for c in base[:3])
+    mx, mn = max(r, g, b), min(r, g, b)
+    sat = mx - mn
+    # Cool near-white (husky fur) vs warm bone
+    if sat < 35 and mx > 200:
+        return "fur" if b >= g - 2 else "rock_scale"
+    # Skin / flesh tones
+    if r > 150 and g > 100 and b > 70 and r >= g and g >= b - 20 and sat < 120:
+        return "skin"
+    # Cool / warm greys → metal
+    if sat < 28 and mx > 90:
+        return "metal_armor"
+    # Greens (orc/slime) → bark/mossy
+    if g > r + 15 and g > b + 10:
+        return "bark"
+    # Browns → leather / fur
+    if r > 70 and g > 40 and b < g and r >= g and sat > 20:
+        if mx < 140:
+            return "fur"
+        return "leather"
+    # Bright cloth colors
+    if sat > 40:
+        return "cloth"
+    return "fabric"
+
+
+def draw_volume(surf, base, pts, outline=OUTLINE, width=1, detail=None):
     """
     Filled polygon with directional volume:
     mid fill + lower-right shade + upper-left highlight facet.
+    Optional photo `detail` texture (or auto-guess from color).
     """
     if len(pts) < 3:
         return
     hi, mid, sh, deep = material(base)
     ip = [(int(p[0]), int(p[1])) for p in pts]
-    pygame.draw.polygon(surf, mid, ip)
+    tex_name = guess_surface_detail(base, detail)
+    textured = False
+    if tex_name:
+        try:
+            import building_textures as btex
+            ox = int(sum(p[0] for p in ip) / len(ip))
+            oy = int(sum(p[1] for p in ip) / len(ip))
+            textured = btex.fill_polygon_tinted(
+                surf, ip, tex_name, mid, uv_origin=(ox, oy), detail=0.62,
+            )
+        except Exception:
+            textured = False
+    if not textured:
+        pygame.draw.polygon(surf, mid, ip)
     cx = sum(p[0] for p in ip) / len(ip)
     cy = sum(p[1] for p in ip) / len(ip)
     # Shade wedge (lower-right of centroid)
@@ -181,7 +227,11 @@ def draw_volume(surf, base, pts, outline=OUTLINE, width=1):
         else:
             shade_pts.append((int(cx + (x - cx) * 0.32), int(cy + (y - cy) * 0.32)))
     if len(shade_pts) >= 3:
-        pygame.draw.polygon(surf, sh, shade_pts)
+        # Soft shade overlay so texture still shows through
+        if textured:
+            _blit_poly_alpha(surf, shade_pts, sh, 110)
+        else:
+            pygame.draw.polygon(surf, sh, shade_pts)
     # Deep underside hint
     deep_pts = []
     for x, y in ip:
@@ -190,7 +240,10 @@ def draw_volume(surf, base, pts, outline=OUTLINE, width=1):
         else:
             deep_pts.append((int(cx + (x - cx) * 0.2), int(cy + (y - cy) * 0.55)))
     if len(deep_pts) >= 3 and len({p for p in deep_pts}) >= 3:
-        pygame.draw.polygon(surf, deep, deep_pts)
+        if textured:
+            _blit_poly_alpha(surf, deep_pts, deep, 80)
+        else:
+            pygame.draw.polygon(surf, deep, deep_pts)
     # Highlight facet (upper-left)
     hi_pts = []
     for x, y in ip:
@@ -202,9 +255,27 @@ def draw_volume(surf, base, pts, outline=OUTLINE, width=1):
             for x, y in hi_pts
         ]
         if len(hi_pts) >= 3:
-            pygame.draw.polygon(surf, hi, hi_pts)
+            if textured:
+                _blit_poly_alpha(surf, hi_pts, hi, 90)
+            else:
+                pygame.draw.polygon(surf, hi, hi_pts)
     if outline and width:
         pygame.draw.polygon(surf, outline, ip, max(1, int(width)))
+
+
+def _blit_poly_alpha(surf, pts, color, alpha):
+    """Draw a translucent polygon without allocating a full-screen surface."""
+    if len(pts) < 3:
+        return
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    minx, maxx = int(min(xs)), int(max(xs)) + 1
+    miny, maxy = int(min(ys)), int(max(ys)) + 1
+    w, h = max(1, maxx - minx), max(1, maxy - miny)
+    overlay = pygame.Surface((w, h), pygame.SRCALPHA)
+    local = [(p[0] - minx, p[1] - miny) for p in pts]
+    pygame.draw.polygon(overlay, (*color[:3], alpha), local)
+    surf.blit(overlay, (minx, miny))
 
 
 def draw_organic_mass(surf, base, cx, cy, rx, ry, seed=0, n=9, outline=OUTLINE, lit=True):
@@ -217,10 +288,10 @@ def draw_organic_mass(surf, base, cx, cy, rx, ry, seed=0, n=9, outline=OUTLINE, 
     return pts
 
 
-def draw_volume_limb(surf, ax, ay, bx, by, half_w, base, outline=OUTLINE, taper=0.78, bulge=0.12):
+def draw_volume_limb(surf, ax, ay, bx, by, half_w, base, outline=OUTLINE, taper=0.78, bulge=0.12, detail=None):
     """
     Anatomical limb segment: thicker at A, taper at B, slight mid bulge,
-    lit/shade halves from LIGHT_DIR.
+    lit/shade halves from LIGHT_DIR. Optional photo detail texture.
     """
     dx, dy = bx - ax, by - ay
     length = math.hypot(dx, dy) or 1.0
@@ -241,37 +312,41 @@ def draw_volume_limb(surf, ax, ay, bx, by, half_w, base, outline=OUTLINE, taper=
     lx, ly = LIGHT_DIR
     lit_n = (nx * lx + ny * ly) >= 0
     hi, mid, sh, _ = material(base)
-    draw_poly(surf, mid, pts, outline, max(1, int(half_w * 0.22)))
+    # Textured body of the limb, then lit/shade facets on top
+    draw_volume(surf, base, pts, outline=None, width=0, detail=detail)
+    if outline:
+        ip = [(int(p[0]), int(p[1])) for p in pts]
+        pygame.draw.polygon(surf, outline, ip, max(1, int(half_w * 0.22)))
     if lit_n:
-        draw_poly(surf, hi, [
+        _blit_poly_alpha(surf, [
             (ax + nx * half_w * 0.12, ay + ny * half_w * 0.12),
             (ax + nx * half_w, ay + ny * half_w),
             (mx + nx * half_m, my + ny * half_m),
             (bx + nx * half_b, by + ny * half_b),
             (bx + nx * half_b * 0.12, by + ny * half_b * 0.12),
-        ], None, 0)
-        draw_poly(surf, sh, [
+        ], hi, 95)
+        _blit_poly_alpha(surf, [
             (ax - nx * half_w * 0.08, ay - ny * half_w * 0.08),
             (ax - nx * half_w, ay - ny * half_w),
             (mx - nx * half_m, my - ny * half_m),
             (bx - nx * half_b, by - ny * half_b),
             (bx - nx * half_b * 0.08, by - ny * half_b * 0.08),
-        ], None, 0)
+        ], sh, 100)
     else:
-        draw_poly(surf, hi, [
+        _blit_poly_alpha(surf, [
             (ax - nx * half_w * 0.12, ay - ny * half_w * 0.12),
             (ax - nx * half_w, ay - ny * half_w),
             (mx - nx * half_m, my - ny * half_m),
             (bx - nx * half_b, by - ny * half_b),
             (bx - nx * half_b * 0.12, by - ny * half_b * 0.12),
-        ], None, 0)
-        draw_poly(surf, sh, [
+        ], hi, 95)
+        _blit_poly_alpha(surf, [
             (ax + nx * half_w * 0.08, ay + ny * half_w * 0.08),
             (ax + nx * half_w, ay + ny * half_w),
             (mx + nx * half_m, my + ny * half_m),
             (bx + nx * half_b, by + ny * half_b),
             (bx + nx * half_b * 0.08, by + ny * half_b * 0.08),
-        ], None, 0)
+        ], sh, 100)
 
 
 def draw_cast_shadow(surf, cx, cy, rx, ry, alpha=110, irregular=False, seed=0):
@@ -379,101 +454,401 @@ def _lerp_pose(a, b, t):
 def pose_idle(t, facing=1):
     breath = math.sin(t * 2.0) * 0.028
     sway = math.sin(t * 1.1) * 0.02
+    # Arms hang by the sides (same rest as stand)
     return {
-        "root_bob": math.sin(t * 2.0) * 0.28,
+        "root_bob": math.sin(t * 2.0) * 0.22,
         "torso": DOWN + breath,
         "head": DOWN - 0.04 * facing + sway,
-        "arm_l": DOWN + 0.32 * facing + breath,
-        "arm_r": DOWN - 0.32 * facing - breath,
-        "leg_l": DOWN + 0.06,
-        "leg_r": DOWN - 0.06,
+        "arm_l": DOWN + 0.04 * facing + breath * 0.2,
+        "arm_r": DOWN - 0.04 * facing - breath * 0.2,
+        "leg_l": DOWN + 0.05,
+        "leg_r": DOWN - 0.05,
         "weapon": 0.0,
         "cape": math.sin(t * 1.4) * 0.08,
+        "knee_l": 0.08,
+        "knee_r": 0.08,
+        "foot_lift_l": 0.0,
+        "foot_lift_r": 0.0,
+        "hip_sway": sway * 0.5,
+        "stride": 0.0,
+    }
+
+
+def pose_stand(t, facing=1):
+    """Arms by the sides — equipment paperdoll / formal stand."""
+    breath = math.sin(t * 1.6) * 0.015
+    return {
+        "root_bob": breath * 0.4,
+        "torso": DOWN + breath * 0.3,
+        "head": DOWN - 0.02 * facing,
+        "arm_l": DOWN + 0.10 * facing,   # hang at side
+        "arm_r": DOWN - 0.10 * facing,
+        "leg_l": DOWN + 0.04,
+        "leg_r": DOWN - 0.04,
+        "weapon": 0.0,
+        "cape": 0.0,
+        "knee_l": 0.06,
+        "knee_r": 0.06,
+        "foot_lift_l": 0.0,
+        "foot_lift_r": 0.0,
+        "hip_sway": 0.0,
+        "stride": 0.0,
     }
 
 
 def pose_walk(t, facing=1):
     """
-    Four-phase gait: CONTACT → DOWN → PASS → UP
-    Amplified swings so weight reads at gameplay scale.
+    Side-view walk: modest stride; arms hang beside the body with a *small*
+    opposite front/back shift (never a bilateral out/in flare).
     """
-    phase = (t * 9.5) % TAU
-    u = phase / TAU
-    contact = {"leg_l": 0.72, "leg_r": -0.48, "arm_l": -0.55, "arm_r": 0.6, "bob": 0.25}
-    down = {"leg_l": 0.35, "leg_r": -0.22, "arm_l": -0.28, "arm_r": 0.35, "bob": 1.55}
-    pas = {"leg_l": -0.22, "leg_r": 0.62, "arm_l": 0.48, "arm_r": -0.42, "bob": 0.4}
-    up = {"leg_l": -0.55, "leg_r": 0.28, "arm_l": 0.65, "arm_r": -0.58, "bob": 1.05}
+    cadence = TAU * 1.15
+    ph = t * cadence
+    hip_amp = 0.20
 
-    if u < 0.25:
-        k0, k1, ft = contact, down, u / 0.25
-    elif u < 0.5:
-        k0, k1, ft = down, pas, (u - 0.25) / 0.25
-    elif u < 0.75:
-        k0, k1, ft = pas, up, (u - 0.5) / 0.25
-    else:
-        k0, k1, ft = up, contact, (u - 0.75) / 0.25
+    hip_l = math.sin(ph) * hip_amp
+    hip_r = math.sin(ph + math.pi) * hip_amp
 
-    def L(a, b):
-        return a + (b - a) * ft
+    swing_l = max(0.0, math.cos(ph)) ** 1.15
+    swing_r = max(0.0, math.cos(ph + math.pi)) ** 1.15
 
-    swing_l = L(k0["leg_l"], k1["leg_l"])
-    swing_r = L(k0["leg_r"], k1["leg_r"])
+    knee_l = 0.05 + swing_l * 0.28
+    knee_r = 0.05 + swing_r * 0.28
+    knee_l += max(0.0, -math.cos(ph)) * 0.05
+    knee_r += max(0.0, -math.cos(ph + math.pi)) * 0.05
+
+    foot_lift_l = swing_l * 0.55
+    foot_lift_r = swing_r * 0.55
+
+    root_bob = 0.22 + 0.40 * (1.0 - abs(math.cos(ph)))
+    hip_sway = math.sin(ph) * 0.03
+    lean = 0.04 + 0.02 * abs(math.sin(ph))
+
+    # Fixed hang beside the torso (no oscillating shoulder flare).
+    # hand_shift: +1 ⇒ left arm slightly back, right arm slightly forward
+    # (contralateral to legs: sin>0 left-leg-fwd ⇒ left-arm-back).
+    hand_shift = math.sin(ph)
+
+    fwd = -facing
+
     return {
-        "root_bob": L(k0["bob"], k1["bob"]),
-        "torso": DOWN + math.sin(phase) * 0.07,
-        "head": DOWN + math.sin(phase * 0.5) * 0.04,
-        "arm_l": DOWN + 0.18 * facing + L(k0["arm_l"], k1["arm_l"]) * facing,
-        "arm_r": DOWN - 0.18 * facing + L(k0["arm_r"], k1["arm_r"]) * facing,
-        "leg_l": DOWN + swing_l,
-        "leg_r": DOWN + swing_r,
-        "weapon": swing_r * 0.28,
-        "cape": math.sin(phase) * 0.3,
+        "root_bob": root_bob,
+        "torso": DOWN + lean * 0.55 * facing + hip_sway * 0.35 * facing,
+        "head": DOWN + lean * 0.25 * facing + math.sin(ph * 0.5) * 0.02,
+        # Steady hang — swing is applied as a hand offset in the humanoid drawer
+        "arm_l": DOWN + 0.08 * facing,
+        "arm_r": DOWN - 0.08 * facing,
+        "leg_l": DOWN + hip_l * fwd,
+        "leg_r": DOWN + hip_r * fwd,
+        "weapon": hand_shift * 0.04,
+        "cape": math.sin(ph) * 0.28,
+        "knee_l": knee_l,
+        "knee_r": knee_r,
+        "foot_lift_l": foot_lift_l,
+        "foot_lift_r": foot_lift_r,
+        "hip_sway": hip_sway,
+        "stride": abs(hip_l),
+        "hand_shift": hand_shift,
+    }
+
+
+def pose_ranged(progress, facing=1):
+    """
+    Archery draw → aim → release → recover.
+    Arms pull the string back, bow stays upright; release snaps the draw hand forward.
+    """
+    p = max(0.0, min(1.0, float(progress or 0)))
+    if p < 0.18:          # nock / raise bow
+        u = p / 0.18
+        draw = 0.15 * u
+        lean = 0.04 * u
+        aim = 0.2 * u
+    elif p < 0.48:        # draw string back
+        u = (p - 0.18) / 0.30
+        ease = u * u * (3 - 2 * u)
+        draw = 0.15 + 0.95 * ease
+        lean = 0.04 + 0.08 * ease
+        aim = 0.2 + 0.35 * ease
+    elif p < 0.58:        # hold at full draw
+        u = (p - 0.48) / 0.10
+        draw = 1.10
+        lean = 0.12
+        aim = 0.55
+    elif p < 0.72:        # release
+        u = (p - 0.58) / 0.14
+        ease = u * u * (3 - 2 * u)
+        draw = 1.10 - 1.25 * ease
+        lean = 0.12 - 0.18 * ease
+        aim = 0.55 - 0.15 * ease
+    else:                 # recover
+        u = (p - 0.72) / 0.28
+        ease = u * u * (3 - 2 * u)
+        draw = max(0.0, -0.15 * (1.0 - ease))
+        lean = -0.06 * (1.0 - ease)
+        aim = 0.4 * (1.0 - ease)
+
+    release = 1.0 if 0.56 <= p <= 0.70 else 0.0
+    return {
+        "root_bob": abs(math.sin(min(1.0, p * 1.1) * math.pi)) * 0.55,
+        "torso": DOWN + lean * facing,
+        "head": DOWN + aim * 0.35 * facing,
+        # Off-hand braces the bow stave forward
+        "arm_l": DOWN + (0.55 + aim * 0.45) * facing,
+        # Draw hand pulls back then snaps forward on release
+        "arm_r": DOWN - (0.15 + draw * 0.95) * facing,
+        "leg_l": DOWN + 0.12 * facing,
+        "leg_r": DOWN - 0.08 * facing,
+        "weapon": draw,   # bow draw amount 0..1.1 (used by bow renderer)
+        "cape": draw * 0.18 * facing,
+        "knee_l": 0.12,
+        "knee_r": 0.14 + lean * 0.2,
+        "foot_lift_l": 0.0,
+        "foot_lift_r": 0.0,
+        "hip_sway": -lean * 0.2,
+        "stride": 0.05,
+        "bow_draw": draw,
+        "bow_release": release,
     }
 
 
 def pose_attack(progress, facing=1):
-    """READY → WINDUP → STRIKE → FOLLOW-THROUGH → RECOVER."""
+    """
+    Melee: wind-up back → strike forward toward facing (the enemy).
+    Shield / off-hand stays planted; only the weapon arm swings.
+    """
     p = max(0.0, min(1.0, float(progress or 0)))
-    if p < 0.18:
-        u = p / 0.18
-        swing = -0.25 * u
-        lean = 0.04 * u
-    elif p < 0.38:
-        u = (p - 0.18) / 0.20
-        swing = -0.25 - 1.05 * u
-        lean = 0.04 + 0.1 * u
-    elif p < 0.52:
-        u = (p - 0.38) / 0.14
-        swing = -1.3 + 2.85 * u
-        lean = 0.14 - 0.22 * u
-    elif p < 0.72:
-        u = (p - 0.52) / 0.20
-        swing = 1.55 - 0.35 * u
-        lean = -0.08 + 0.05 * u
-    else:
-        u = (p - 0.72) / 0.28
-        swing = 1.2 * (1.0 - u)
-        lean = -0.03 * (1.0 - u)
+
+    # blade: negative = wind-up behind, positive = strike toward enemy
+    if p < 0.12:          # brace
+        u = p / 0.12
+        blade = -0.12 * u
+        lean = 0.05 * u
+        step = -0.06 * u
+        front_lift = 0.0
+    elif p < 0.34:        # wind-up (blade back)
+        u = (p - 0.12) / 0.22
+        ease = u * u * (3 - 2 * u)
+        blade = -0.12 - 0.95 * ease
+        lean = 0.05 + 0.10 * ease
+        step = -0.06 - 0.08 * ease
+        front_lift = 0.10 * ease
+    elif p < 0.48:        # commit — weapon drives toward enemy
+        u = (p - 0.34) / 0.14
+        ease = u * u * (3 - 2 * u)
+        blade = -1.07 + 2.25 * ease       # → ~+1.18 forward
+        lean = 0.15 - 0.32 * ease
+        step = -0.14 + 0.42 * ease
+        front_lift = 0.10 * (1 - ease)
+    elif p < 0.62:        # impact hold
+        u = (p - 0.48) / 0.14
+        blade = 1.18 - 0.10 * u
+        lean = -0.16 + 0.04 * u
+        step = 0.28 - 0.04 * u
+        front_lift = 0.0
+    elif p < 0.80:        # follow-through
+        u = (p - 0.62) / 0.18
+        blade = 1.08 - 0.40 * u
+        lean = -0.12 + 0.07 * u
+        step = 0.24 - 0.12 * u
+        front_lift = 0.0
+    else:                 # recover
+        u = (p - 0.80) / 0.20
+        ease = u * u * (3 - 2 * u)
+        blade = 0.68 * (1.0 - ease)
+        lean = -0.06 * (1.0 - ease)
+        step = 0.12 * (1.0 - ease)
+        front_lift = 0.0
+
+    impact = 0.0
+    if 0.46 <= p <= 0.58:
+        impact = math.sin((p - 0.46) / 0.12 * math.pi) * 0.55
+
+    fwd = -facing
     return {
-        "root_bob": abs(math.sin(p * math.pi)) * 0.75,
+        "root_bob": abs(math.sin(min(1.0, p * 1.15) * math.pi)) * 0.95 + impact * 0.35,
         "torso": DOWN + lean * facing,
-        "head": DOWN + lean * 0.4 * facing,
-        "arm_l": DOWN + 0.5 * facing,
-        "arm_r": DOWN - 0.1 * facing + swing * facing,
-        "leg_l": DOWN + 0.22,
-        "leg_r": DOWN - 0.18,
-        "weapon": swing,
-        "cape": -swing * 0.35,
+        "head": DOWN + lean * 0.45 * facing,
+        # Shield / off-hand stays put beside the body
+        "arm_l": DOWN + 0.28 * facing,
+        # Weapon hand: +blade pulls the grip toward the enemy (along facing)
+        "arm_r": DOWN - 0.06 * facing - blade * 0.85 * facing,
+        "leg_l": DOWN + (0.18 - step * 0.55) * fwd,
+        "leg_r": DOWN + (-0.12 + step) * fwd,
+        "weapon": blade,
+        "cape": -blade * 0.35,
+        "knee_l": 0.14 + max(0.0, -step) * 0.35,
+        "knee_r": 0.12 + max(0.0, step) * 0.45 + front_lift * 0.4,
+        "foot_lift_l": 0.0,
+        "foot_lift_r": front_lift * 1.6,
+        "hip_sway": -lean * 0.25,
+        "stride": abs(step),
     }
 
 
-def resolve_pose(moving, t, attacking=0.0, facing=1):
+def resolve_pose(moving, t, attacking=0.0, facing=1, action=None, weapon_kind=None):
     atk = float(attacking or 0.0)
     if atk > 0.02:
+        if weapon_kind == "bow" or action == "archery":
+            return pose_ranged(atk, facing)
         return pose_attack(atk, facing)
+    if action == "woodcutting":
+        return pose_chop(t, facing)
+    if action == "mining":
+        return pose_mine(t, facing)
+    if action == "fishing":
+        return pose_fish(t, facing)
+    if action == "stand":
+        return pose_stand(t, facing)
     if moving:
         return pose_walk(t, facing)
     return pose_idle(t, facing)
+
+
+def pose_chop(t, facing=1):
+    """Looping axe swing — wind up overhead then chop into the tree."""
+    # ~1.1 swings/sec aligned with gather ticks (~0.6s) so impact lands mid-tick
+    ph = (t * 1.1) % 1.0
+    if ph < 0.35:
+        u = ph / 0.35
+        ease = u * u * (3 - 2 * u)
+        swing = -0.2 - 1.55 * ease          # raise axe
+        lean = 0.08 * ease
+        crouch = 0.05 * ease
+    elif ph < 0.55:
+        u = (ph - 0.35) / 0.20
+        ease = u * u
+        swing = -1.75 + 3.4 * ease          # drive down
+        lean = 0.08 - 0.35 * ease
+        crouch = 0.05 + 0.12 * ease
+    else:
+        u = (ph - 0.55) / 0.45
+        ease = u * u * (3 - 2 * u)
+        swing = 1.65 * (1.0 - ease)
+        lean = -0.27 * (1.0 - ease)
+        crouch = 0.17 * (1.0 - ease)
+    impact = 1.0 if 0.48 <= ph <= 0.58 else 0.0
+    fwd = -facing
+    return {
+        "root_bob": crouch * 2.2 + impact * 0.35,
+        "torso": DOWN + lean * facing,
+        "head": DOWN + lean * 0.4 * facing,
+        "arm_l": DOWN + (0.45 + 0.2 * abs(lean)) * facing,
+        "arm_r": DOWN - 0.08 * facing + swing * facing,
+        "leg_l": DOWN + 0.12 * fwd,
+        "leg_r": DOWN - 0.08 * fwd + lean * 0.15 * fwd,
+        "weapon": swing,
+        "cape": -swing * 0.25,
+        "knee_l": 0.12,
+        "knee_r": 0.18 + crouch * 0.4,
+        "foot_lift_l": 0.0,
+        "foot_lift_r": 0.0,
+        "hip_sway": -lean * 0.15,
+        "stride": 0.15,
+        "action_impact": impact,
+    }
+
+
+def pose_mine(t, facing=1):
+    """Looping pickaxe — coil back then jab at the rock."""
+    ph = (t * 1.05) % 1.0
+    if ph < 0.38:
+        u = ph / 0.38
+        ease = u * u * (3 - 2 * u)
+        swing = -0.15 - 1.25 * ease
+        lean = 0.12 * ease
+        crouch = 0.18 * ease
+    elif ph < 0.58:
+        u = (ph - 0.38) / 0.20
+        ease = u * u * (3 - 2 * u)
+        swing = -1.4 + 2.9 * ease
+        lean = 0.12 - 0.38 * ease
+        crouch = 0.18 - 0.05 * ease
+    else:
+        u = (ph - 0.58) / 0.42
+        ease = u * u * (3 - 2 * u)
+        swing = 1.5 * (1.0 - ease)
+        lean = -0.26 * (1.0 - ease)
+        crouch = 0.13 * (1.0 - ease)
+    impact = 1.0 if 0.50 <= ph <= 0.60 else 0.0
+    fwd = -facing
+    return {
+        "root_bob": crouch * 2.6 + impact * 0.4,
+        "torso": DOWN + lean * facing,
+        "head": DOWN + lean * 0.5 * facing + 0.06,
+        "arm_l": DOWN + 0.55 * facing,
+        "arm_r": DOWN + swing * facing,
+        "leg_l": DOWN + 0.18 * fwd,
+        "leg_r": DOWN - 0.15 * fwd,
+        "weapon": swing * 0.95,
+        "cape": -swing * 0.2,
+        "knee_l": 0.22 + crouch * 0.35,
+        "knee_r": 0.28 + crouch * 0.5,
+        "foot_lift_l": 0.0,
+        "foot_lift_r": 0.0,
+        "hip_sway": 0.0,
+        "stride": 0.1,
+        "action_impact": impact,
+    }
+
+
+def pose_fish(t, facing=1):
+    """Cast / bob loop — plant feet on shore, rod reaches out over the water."""
+    ph = t * TAU * 0.55
+    bob = math.sin(ph) * 0.18
+    tug = max(0.0, math.sin(ph * 0.5 + 0.8)) ** 2
+    yank = max(0.0, math.sin(ph * 0.35 - 0.4)) ** 4
+    # Strong forward lean and extended casting arm (reads as fishing, not idle)
+    lean = 0.22 + bob * 0.1 + yank * 0.12
+    arm_swing = 0.95 + bob * 0.25 + tug * 0.35 + yank * 0.4
+    fwd = -facing
+    return {
+        "root_bob": 0.2 + abs(bob) * 0.25 + yank * 0.35,
+        "torso": DOWN + lean * facing,
+        "head": DOWN + (lean * 0.45 + 0.1) * facing,
+        # Off-hand near reel; rod arm fully extended toward water
+        "arm_l": DOWN + (0.35 + tug * 0.12) * facing,
+        "arm_r": DOWN + arm_swing * facing,
+        # Planted stance — no walk bob, slight brace
+        "leg_l": DOWN + 0.06 * fwd,
+        "leg_r": DOWN - 0.16 * fwd,
+        "weapon": 0.55 + bob * 0.2 + yank * 0.35,
+        "cape": bob * 0.25,
+        "knee_l": 0.12,
+        "knee_r": 0.22,
+        "foot_lift_l": 0.0,
+        "foot_lift_r": 0.0,
+        "hip_sway": bob * 0.03,
+        "stride": 0.0,
+        "action_impact": yank,
+    }
+
+
+def attack_impulse(progress):
+    """
+    Shared melee envelope for monsters/pets (0..1).
+
+    Returns (lunge, crouch, strike) where:
+      lunge  — forward body translation weight (−back … +forward)
+      crouch — vertical squash / coil
+      strike — 0..1 peak at impact (for flashes / teeth / weapon tip)
+    """
+    p = max(0.0, min(1.0, float(progress or 0)))
+    if p < 0.18:          # coil / wind-up
+        u = p / 0.18
+        ease = u * u * (3 - 2 * u)
+        return (-0.35 * ease, 0.55 * ease, 0.0)
+    if p < 0.48:          # commit
+        u = (p - 0.18) / 0.30
+        ease = u * u * (3 - 2 * u)
+        return (-0.35 + 1.55 * ease, 0.55 * (1.0 - ease * 0.7), ease * 0.85)
+    if p < 0.62:          # impact hold
+        u = (p - 0.48) / 0.14
+        return (1.15 - 0.15 * u, 0.12, 1.0 - 0.35 * u)
+    if p < 0.82:          # follow
+        u = (p - 0.62) / 0.20
+        return (1.0 - 0.75 * u, 0.08 * (1.0 - u), 0.55 * (1.0 - u))
+    u = (p - 0.82) / 0.18
+    ease = u * u * (3 - 2 * u)
+    return (0.25 * (1.0 - ease), 0.0, 0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -483,7 +858,11 @@ def metal_palette(item_id):
     if not item_id:
         return METAL_PALETTE
     if "mythos" in item_id:
-        return ((210, 170, 255), (130, 90, 180), (240, 220, 255), (50, 30, 70))
+        # Crimson dragon-plate with gold-leaning highlight
+        return ((178, 28, 38), (88, 10, 16), (245, 95, 88), (42, 6, 10))
+    if "eclipse" in item_id:
+        # Black steel with cool highlight (gold accents drawn separately)
+        return ((48, 48, 55), (16, 16, 20), (110, 110, 122), (8, 8, 10))
     if "adamant" in item_id:
         return ((70, 180, 110), (40, 110, 70), (140, 230, 160), (20, 50, 30))
     if "mithril" in item_id:

@@ -1,0 +1,19 @@
+{
+  "id": "bank",
+  "name": "Village Bank",
+  "source": "bake_building_sprite.py + building_shell3d",
+  "pad_x": 0.08,
+  "pad_x_right": 0.1,
+  "pad_y_top": 0.55,
+  "pad_y_bot": 0.08,
+  "depth": 0.22,
+  "ppt": 64,
+  "pixels": [
+    679,
+    729
+  ],
+  "footprint_tiles": [
+    9,
+    7
+  ]
+}

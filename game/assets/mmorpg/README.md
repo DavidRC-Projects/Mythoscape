@@ -1,121 +1,82 @@
-# Tiny MMORPG — v0.1
+# Mythoscape MMORPG
 
-A minimal, server-authoritative, persistent-world MMORPG prototype in Python.
-One village, one forest, one mine, one dungeon. Multiplayer, SQLite-backed,
-RuneScape-2001-style combat math.
+A RuneScape-classic-style multiplayer sandbox: skills, quests, combat, crafting, and a shared overworld.
 
-## What's in v0.1
-- One persistent world (all players share the same map/server/database)
-- Account creation + login/logout, characters persist between sessions
-- Walking around a 40x36 tile map (village / forest / mine / dungeon)
-- 15 NPCs (shopkeepers, quest givers, flavor characters)
-- Public chat
-- Inventory (24 slots), equipment (weapon/shield/body/legs)
-- 27 items (weapons, armor, tools, food, resources, quest items)
-- Gathering: Woodcutting, Mining, Fishing (3 skills, with XP + levels)
-- Combat: Attack, Strength, Defence, Hitpoints — classic RS2001 hit-chance
-  and max-hit formulas (see `server/combat.py`)
-- 3 monsters (Giant Rat, Goblin, Skeleton) with respawns and loot tables
-- 2 shops (buy + sell)
-- Player-to-player trading (request → offer → confirm, server-validated)
-- 5 quests (kill, collect, collect-multiple, find-NPC types)
-- Server-authoritative game state: the server validates every move, attack,
-  gather, trade and quest completion. The client only renders and sends intent.
+## Building art (3D→2D shells)
 
-## Requirements
+Village buildings can use **pre-rendered PNG shells** instead of procedural roofs.
+
 ```
-pip install -r requirements.txt
+cd tools
+./render_buildings.sh cottage_nw     # Blender if installed, else pygame bake
+./render_buildings.sh --all
 ```
-(Needs Python 3.9+.)
 
-## Running it
-Start the server first (creates `server/world.db` on first run):
+Sprites land in `client/assets/buildings/{id}.png`. Drop a Blender ortho render on
+the same filename to upgrade quality — no client code change needed.
+
+Install Blender (optional): `brew install --cask blender`
+
 ```
 cd server
 python server.py
 ```
-Then start one or more clients (each is a separate player):
 ```
 cd client
-python client.py            # connects to localhost
-python client.py 192.168.1.5  # connect to a server on your LAN
+python client.py            # localhost
+python client.py 192.168.1.5  # LAN server
 ```
-Anyone on the same network can point their client at your machine's IP to
-play together, as long as port 8765 is reachable.
+Port **8765** must be reachable for LAN play.
 
-On the login screen, click **Hiscores** (or press **F3**) to open a modal of
-the top players for each skill.
+On the login screen, click **Hiscores** (or press **F3**) for top players per skill.
+
+## New player tips
+1. Press **H** for the full controls list.
+2. **Elder Miriam** (NW cottage) — starter quest.
+3. **Fletcher Elena** (east of the village) — free bow kit (includes an **Arrow Quiver** and **Arrowtip Box**) on first talk; **B** opens her shop (scroll buy/sell lists). Click arrows to load the quiver or drop; click tips to pack the tip box. Fletching draws tips from the box automatically. Quiver holds **1000** of each arrow type.
+4. **Lira the Jeweler** (east of Joe) — common jewelry shop; buys all gems/jewelry; sells a **Gem Bag**; quest **Lira's Lost Locket** (near the wishing well).
+5. **Gareth** (smithy) — furnace **F** to smelt, anvil to smith weapons, armour, and jewelry.
+6. **Mira** in Stonehaven — food, potions, steel scraps; sells a **Food Bag** and **Potion Pouch**.
+7. **Harbourreach** — tackle shop sells a **Raw Food Bag**; Nell's Catch sells cooked fish and food bags. Cooking draws raw fish from the bag; food bag eats highest-heal first.
+8. **Storage bags** (Bags tab): Mining / Log / Gem bags, Fletching & Potion pouches, tip box, quiver. Click a bag to **Pack** or **Unpack**. Crafting draws from bags first.
+9. Inventory has **4 tabs × 24 slots** (Gen / Gather / Craft / **Bags**). Shops: click to sell 1, **Shift+click** to sell the whole stack.
+10. **Tidehollow Cave** at Harbourreach — bring food; loot drops into your pack each kill.
 
 ## Controls
-- **Arrow keys** — walk (one tile per press, server validates)
-- **Space** — attack the nearest adjacent monster
-- **H** — controls help popup
-- **E** — equipment & stats modal (click a slot to unequip)
-- **F** — forge UI inside the smithy (furnace to smelt, anvil to smith)
-- **Tab** — Skills modal (levels, XP, combat level, total level)
-- **C** — cooking UI at a hearth or player campfire
-- **Click** a monster / NPC / resource / shoreline / furnace / anvil / hearth / campfire / player as usual
-- Click **logs** or a **tinderbox** in inventory to light a campfire (needs both; trains Firemaking)
-- Higher **Cooking** level reduces the chance of burning fish
-- Oak logs need **Firemaking 15**
-- **G** — pick up an item on your tile
-- **P** — toggle auto-pickup for non-coin items (or click the sidebar button)
-- **B** — open the Village Bank (stand at the booth / talk to Banker Iris)
-- **I** — toggle inventory panel; click a slot to equip/eat, right-click to drop
-- **Q** — toggle quest log
-- **Enter** — open/send chat
-- In dialogue: **A** accept quest, **T** turn in quest, **B** browse shop / open bank, **S** open forge (Gareth), **Esc** close
-- In trading: click inventory slots to add to your offer, **Enter** confirm, **Esc** cancel
+- **Click** the map to walk / attack / talk / gather / use interactables
+- **Arrow keys** — walk one tile
+- **Space** — attack nearest monster in reach
+- **R** — eat best food (or health potion); while under attack, click the buttons above your head to eat / drink potions from inventory or bags
+- **1–5** — combat styles (Att/Str/Def/HP/Arch); with a bow only Archery is available
+- **H** — help · **E** — equipment · **Tab** — skills · **M** — travel / world map
+- **F** — forge (furnace/anvil) · **C** — cook · **N** — fletch (needs a knife)
+- **B** — bank or shop (when beside booth / in dialogue)
+- **G** — pickup · **P** — toggle auto-pickup · **Q** — quest log · **Enter** — chat
+- Dialogue: **A** accept quest · **T** turn in · **B** shop/bank · **S** forge · **Esc** close
+- Tidehollow: confirm at the cave mouth; **Esc** abandons the run when no modal is open
+- Equipment slots: weapon / shield / body / legs / helmet / amulet / ring / ammo
 
-Economy caps: purse holds at most **65,000** coins; bank vault holds **10,000,000** coins
-plus 48 item slots; inventory may hold at most **100** ores (bank extras).
-
-**Pet Emporium** (south of the smithy): talk to Pet Keeper Luna and press **B**.
-Companions follow you and attack monsters that aggro you.
-- Cat (Lv 1) — 10c
-- White Husky (Lv 10) — 1,000c
-- Skeleton (Lv 25) — 10,000c
-- Dragon (Lv 50) — 65,000c
-
-Buildings have solid walls and a single door — roofs hide interiors (and NPCs)
-until you walk through the doorway.
+Economy: purse max **65,000** coins; bank vault **10,000,000** + 96 slots; inventory **96** slots (4×24 tabs).
 
 ## Architecture
 ```
 server/
-  server.py      websocket server, tick loop (0.6s, RS-style), all message handlers
-  database.py    SQLite persistence (accounts, inventory, equipment, quests)
-  content.py     all static data: items, monsters, NPCs, shops, quests
-  combat.py      RS2001-style hit-chance / max-hit formulas + XP curve
-  world_map.py   40x36 tile grid generation for the 4 zones
+  server.py      websocket server, 0.6s tick, handlers
+  database.py    SQLite persistence
+  content.py     items, monsters, NPCs, shops, quests, recipes
+  combat.py      RS2001 hit / max-hit + XP curve
+  world_map.py   procedural overworld
+  dungeon.py     Tidehollow floors + kill loot
 client/
-  network.py     background-thread websocket bridge (queues in/out)
-  client.py      pygame rendering + input + UI (login, map, inventory, shop, trade)
+  network.py     websocket bridge
+  client.py      pygame UI + rendering
 shared/
-  protocol.py    documents every message type both sides send
+  protocol.py    message type reference
 ```
 
-The server is authoritative: it owns positions, HP, inventory, combat rolls,
-gathering, shop transactions and trades. The client never decides outcomes —
-it sends an intent (e.g. `ATTACK target_id`) and renders whatever the server
-broadcasts back on the next tick.
-
-## Known v0.1 simplifications (fair game for a v0.2!)
-- Movement is per-tile keypress, not click-to-pathfind.
-- Area-of-interest isn't implemented — all players see all state updates,
-  which is fine for the 10-20 concurrent players targeted here but wouldn't
-  scale much further.
-- Resource-node depletion is tracked server-side, but the client's node
-  markers don't visually grey out while depleted (gathering will just quietly
-  pause and resume once the node respawns).
-- No password reset / account recovery; sha256+salt hashing is enough to stop
-  casual snooping in a hobby prototype, not production-grade security.
-- Monster "AI" is a light random wander plus simple aggro-while-attacked;
-  no pathfinding toward players.
-
 ## Extending it
-- New item: add an entry to `ITEMS` in `content.py`.
-- New monster: add to `MONSTERS` + a few `MONSTER_SPAWNS` entries.
-- New quest: add to `QUESTS`; supports `kill`, `collect`, `collect_multi`,
-  and `find_npc` types out of the box.
-- New zone/map area: extend `world_map.py`'s `generate_world()`.
+- New item → `ITEMS` in `content.py`
+- New monster → `MONSTERS` + `MONSTER_SPAWNS`
+- New quest → `QUESTS` (`kill`, `collect`, `collect_multi`, `find_npc`, `gift`)
+- New shop → `SHOPS` + NPC `shop_id`
+- New map area → `world_map.py` `generate_world()`

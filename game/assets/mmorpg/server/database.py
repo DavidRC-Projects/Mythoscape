@@ -9,7 +9,7 @@ import hashlib
 import os
 import time
 
-from content import STARTER_INVENTORY, XP_SKILLS
+from content import STARTER_INVENTORY, XP_SKILLS, INVENTORY_SIZE
 from world_map import SPAWN_POINT
 import combat
 
@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS players (
     cooking_xp INTEGER NOT NULL DEFAULT 0,
     firemaking_xp INTEGER NOT NULL DEFAULT 0,
     smithing_xp INTEGER NOT NULL DEFAULT 0,
+    fletching_xp INTEGER NOT NULL DEFAULT 0,
+    archery_xp INTEGER NOT NULL DEFAULT 0,
     karma_xp INTEGER NOT NULL DEFAULT 0,
     coins INTEGER NOT NULL DEFAULT 0,
     equip_weapon TEXT,
@@ -42,11 +44,16 @@ CREATE TABLE IF NOT EXISTS players (
     equip_body TEXT,
     equip_legs TEXT,
     equip_helmet TEXT,
-    auto_pickup_items INTEGER NOT NULL DEFAULT 0,
+    equip_amulet TEXT,
+    equip_ring TEXT,
+    equip_ammo TEXT,
+    auto_pickup_items INTEGER NOT NULL DEFAULT 1,
     stats_allocated INTEGER NOT NULL DEFAULT 0,
     bank_coins INTEGER NOT NULL DEFAULT 0,
     active_pet TEXT,
     owned_pets TEXT NOT NULL DEFAULT '[]',
+    gender TEXT NOT NULL DEFAULT 'male',
+    last_wish_date TEXT,
     created_at TEXT NOT NULL,
     last_login TEXT
 );
@@ -81,8 +88,6 @@ CREATE TABLE IF NOT EXISTS quest_progress (
 );
 """
 
-INVENTORY_SIZE = 24
-
 
 def _hash_password(password, salt):
     return hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
@@ -104,9 +109,13 @@ class Database:
             )
         if "equip_helmet" not in cols:
             self.conn.execute("ALTER TABLE players ADD COLUMN equip_helmet TEXT")
+        if "equip_amulet" not in cols:
+            self.conn.execute("ALTER TABLE players ADD COLUMN equip_amulet TEXT")
+        if "equip_ring" not in cols:
+            self.conn.execute("ALTER TABLE players ADD COLUMN equip_ring TEXT")
         if "auto_pickup_items" not in cols:
             self.conn.execute(
-                "ALTER TABLE players ADD COLUMN auto_pickup_items INTEGER NOT NULL DEFAULT 0"
+                "ALTER TABLE players ADD COLUMN auto_pickup_items INTEGER NOT NULL DEFAULT 1"
             )
         if "stats_allocated" not in cols:
             # Existing characters already started — treat them as allocated.
@@ -135,6 +144,58 @@ class Database:
             self.conn.execute(
                 "ALTER TABLE players ADD COLUMN firemaking_xp INTEGER NOT NULL DEFAULT 0"
             )
+        if "gender" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN gender TEXT NOT NULL DEFAULT 'male'"
+            )
+        if "last_wish_date" not in cols:
+            self.conn.execute("ALTER TABLE players ADD COLUMN last_wish_date TEXT")
+        if "fletching_xp" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN fletching_xp INTEGER NOT NULL DEFAULT 0"
+            )
+        if "archery_xp" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN archery_xp INTEGER NOT NULL DEFAULT 0"
+            )
+        if "equip_ammo" not in cols:
+            self.conn.execute("ALTER TABLE players ADD COLUMN equip_ammo TEXT")
+        if "quiver_contents" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN quiver_contents TEXT NOT NULL DEFAULT '{}'"
+            )
+        if "tip_box_contents" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN tip_box_contents TEXT NOT NULL DEFAULT '{}'"
+            )
+        if "food_bag_contents" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN food_bag_contents TEXT NOT NULL DEFAULT '{}'"
+            )
+        if "raw_bag_contents" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN raw_bag_contents TEXT NOT NULL DEFAULT '{}'"
+            )
+        if "mining_bag_contents" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN mining_bag_contents TEXT NOT NULL DEFAULT '{}'"
+            )
+        if "log_bag_contents" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN log_bag_contents TEXT NOT NULL DEFAULT '{}'"
+            )
+        if "fletch_pouch_contents" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN fletch_pouch_contents TEXT NOT NULL DEFAULT '{}'"
+            )
+        if "potion_pouch_contents" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN potion_pouch_contents TEXT NOT NULL DEFAULT '{}'"
+            )
+        if "gem_bag_contents" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN gem_bag_contents TEXT NOT NULL DEFAULT '{}'"
+            )
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS bank ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -151,20 +212,21 @@ class Database:
         cur = self.conn.execute("SELECT * FROM players WHERE username = ?", (username,))
         return cur.fetchone()
 
-    def create_account(self, username, password, char_name):
+    def create_account(self, username, password, char_name, gender="male"):
         salt = os.urandom(8).hex()
         pw_hash = _hash_password(password, salt)
         x, y = SPAWN_POINT
         now = time.strftime("%Y-%m-%d %H:%M:%S")
+        gender = "female" if str(gender).lower() == "female" else "male"
         # New characters begin at Attack/Strength/Defence 5, Hitpoints 10
         start_combat_xp = combat.xp_for_level(5)
         cur = self.conn.execute(
             "INSERT INTO players (username, password_hash, salt, char_name, x, y, "
             "attack_xp, strength_xp, defence_xp, "
-            "created_at, last_login, stats_allocated) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+            "created_at, last_login, stats_allocated, auto_pickup_items, gender) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?)",
             (username, pw_hash, salt, char_name, x, y,
-             start_combat_xp, start_combat_xp, start_combat_xp, now, now),
+             start_combat_xp, start_combat_xp, start_combat_xp, now, now, gender),
         )
         self.conn.commit()
         player_id = cur.lastrowid
