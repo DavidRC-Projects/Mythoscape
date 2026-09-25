@@ -38,10 +38,10 @@ from content import BUILDINGS, INTERACTABLES  # noqa: E402
 PPT = 64
 # Padding: roof peak above footprint; side depth is inset so little right pad
 PAD_X = 0.08
-PAD_RIGHT = 0.10
+PAD_RIGHT = 0.35  # room for additive side depth (50% beyond front)
 PAD_TOP = 0.55
 PAD_BOT = 0.08
-DEPTH = 0.22
+DEPTH = 0.50  # matches additive side_w fraction
 
 
 def _door_frac(b: dict) -> float:
