@@ -1,0 +1,60 @@
+{
+  "key": "hearth",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "hearth_2x.png": {
+      "file": "hearth_2x.png",
+      "w": 132,
+      "h": 192,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        70.0,
+        154.0
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            9.8,
+            147.7
+          ],
+          [
+            102.4,
+            180.1
+          ],
+          [
+            133.2,
+            158.1
+          ],
+          [
+            40.7,
+            125.7
+          ]
+        ]
+      ],
+      "interact_px": [
+        [
+          -26.8,
+          180.9
+        ],
+        [
+          52.5,
+          208.7
+        ],
+        [
+          83.4,
+          186.6
+        ],
+        [
+          4.1,
+          158.9
+        ]
+      ]
+    }
+  }
+}

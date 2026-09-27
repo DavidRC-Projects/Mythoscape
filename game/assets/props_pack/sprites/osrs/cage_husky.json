@@ -1,0 +1,60 @@
+{
+  "key": "cage_husky",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "cage_husky_2x.png": {
+      "file": "cage_husky_2x.png",
+      "w": 103,
+      "h": 110,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        51.5,
+        87.6
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            5.9,
+            89.7
+          ],
+          [
+            63.2,
+            109.8
+          ],
+          [
+            97.1,
+            85.5
+          ],
+          [
+            39.8,
+            65.5
+          ]
+        ]
+      ],
+      "interact_px": [
+        [
+          -25.8,
+          112.3
+        ],
+        [
+          31.5,
+          132.4
+        ],
+        [
+          62.4,
+          110.3
+        ],
+        [
+          5.1,
+          90.3
+        ]
+      ]
+    }
+  }
+}

@@ -1,0 +1,131 @@
+{
+  "key": "spider_egg_sacs",
+  "title": "Spider Egg Sacs",
+  "triangles": 350,
+  "bounds_min": [
+    -0.995,
+    -1.099,
+    -0.006
+  ],
+  "bounds_max": [
+    1.088,
+    1.125,
+    0.63
+  ],
+  "front": "-Y",
+  "up": "+Z",
+  "units": "metres",
+  "colliders": [
+    {
+      "name": "COL_sacs",
+      "center": [
+        0,
+        0,
+        0.35
+      ],
+      "size": [
+        1.6,
+        1.4,
+        0.7
+      ]
+    }
+  ],
+  "interact": null,
+  "concept_ground": "#4e463c",
+  "game_px_per_m": 26.9,
+  "game_tile_m": 1.487,
+  "palette": {
+    "wood": "#7a5434",
+    "wood_d": "#553a24",
+    "plank": "#94703f",
+    "wood_red": "#6a3a28",
+    "iron": "#4f535a",
+    "steel": "#8a9098",
+    "gold": "#c8a03c",
+    "coin": "#d9b54a",
+    "stone": "#8c8a80",
+    "stone_d": "#65635c",
+    "stone_l": "#a8a598",
+    "brick": "#8a5440",
+    "marble": "#bdb7a8",
+    "soot": "#2e2926",
+    "black": "#1b1917",
+    "red": "#8f2a2c",
+    "red_d": "#5e1c1f",
+    "blue": "#3e5a86",
+    "green": "#4f6b3a",
+    "purple": "#5a3a72",
+    "cream": "#d8ccaa",
+    "straw": "#b89a4e",
+    "rope": "#9c8458",
+    "leather": "#6e4a30",
+    "bone": "#d8cfb4",
+    "cloth": "#b9ab8a",
+    "slate": "#4a4f58",
+    "water_still": "#3f6f8c",
+    "moss": "#5d6e3a",
+    "dirt": "#6a5238",
+    "gem_r": "#b8323a",
+    "gem_b": "#3b6cc0",
+    "gem_g": "#3f9a52",
+    "fur_ginger": "#c07a3a",
+    "fur_white": "#e2e0da",
+    "fur_grey": "#8e8f94",
+    "fur_dark": "#3a3533",
+    "scale_g": "#4f8a3a",
+    "scale_gl": "#9cc05a",
+    "eye": "#141210",
+    "nose": "#2a2220",
+    "pink": "#c98a86",
+    "web": "#d9d6cc",
+    "chitin": "#2f2a30",
+    "egg": "#cfc6a2",
+    "void_stone": "#34303f",
+    "void_dark": "#1c1924",
+    "goblin_cloth": "#6b6a3a",
+    "hide": "#8a6a48",
+    "wax": "#e8dcb8",
+    "straw_d": "#8f7438",
+    "fire": "#ff9a2a",
+    "fire_core": "#ffe08a",
+    "ember": "#d8502a",
+    "candle": "#ffd27a",
+    "water": "#4a88b8",
+    "water_hi": "#8cc4e4",
+    "void": "#8e3fd6",
+    "void_core": "#d09cff",
+    "egg_glow": "#e0c060",
+    "interior": "#2a231e",
+    "interior_deep": "#15110f",
+    "void_black": "#070606"
+  },
+  "emissive": {
+    "egg_glow": 2.5
+  },
+  "group": "dungeons",
+  "game": {
+    "kind": "dungeon_prop (NEW)",
+    "theme": "spider_nest",
+    "ids": [],
+    "drawer": "none yet - dungeon_interior_3d.draw_dungeon_props only has 'shadow_crypt'",
+    "current_px_at_tile40": null,
+    "footprint_tiles": [
+      2,
+      2
+    ],
+    "note": ""
+  },
+  "concept_camera": {
+    "type": "ortho",
+    "ortho_scale": 3.304,
+    "target": [
+      0.454,
+      0.013,
+      0.9
+    ],
+    "distance": 40.0,
+    "azimuth_deg": 0.0,
+    "elevation_deg": 32.0,
+    "note": "camera = target + dist*(sin az*cos el, -cos az*cos el, sin el); game view = ortho az 0 el 32 like tools/blender_render_building.py"
+  }
+}

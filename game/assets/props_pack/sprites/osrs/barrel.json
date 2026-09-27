@@ -1,0 +1,42 @@
+{
+  "key": "barrel",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "barrel_2x.png": {
+      "file": "barrel_2x.png",
+      "w": 45,
+      "h": 69,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        22.5,
+        53.6
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            -8.7,
+            58.3
+          ],
+          [
+            28.8,
+            71.4
+          ],
+          [
+            55.0,
+            52.7
+          ],
+          [
+            17.5,
+            39.6
+          ]
+        ]
+      ]
+    }
+  }
+}

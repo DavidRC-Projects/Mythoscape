@@ -1,0 +1,123 @@
+{
+  "key": "wolf_den",
+  "title": "Wolf Den",
+  "triangles": 1585,
+  "bounds_min": [
+    -6.466,
+    -3.319,
+    -0.05
+  ],
+  "bounds_max": [
+    6.455,
+    8.867,
+    8.396
+  ],
+  "front": "-Y",
+  "up": "+Z",
+  "units": "metres",
+  "colliders": [
+    {
+      "name": "COL_bank_left",
+      "center": [
+        -2.4,
+        1.4,
+        1.6
+      ],
+      "size": [
+        2.4,
+        3.0,
+        3.2
+      ]
+    },
+    {
+      "name": "COL_bank_right",
+      "center": [
+        2.4,
+        1.4,
+        1.6
+      ],
+      "size": [
+        2.4,
+        3.0,
+        3.2
+      ]
+    },
+    {
+      "name": "COL_hill",
+      "center": [
+        0,
+        4.8,
+        2.2
+      ],
+      "size": [
+        10.0,
+        5.0,
+        4.4
+      ]
+    },
+    {
+      "name": "COL_scratched_rock",
+      "center": [
+        -2.7,
+        -0.9,
+        0.6
+      ],
+      "size": [
+        1.4,
+        1.2,
+        1.2
+      ]
+    }
+  ],
+  "trigger": {
+    "name": "TRIGGER_door",
+    "center": [
+      0,
+      1.0,
+      1.0
+    ],
+    "size": [
+      1.9,
+      1.2,
+      2.0
+    ]
+  },
+  "palette": {
+    "earth": "#6b5440",
+    "grass": "#5f6d3a",
+    "grass_dk": "#4d5a30",
+    "root": "#5a4632",
+    "bark": "#4f3d2c",
+    "leaf": "#4f5f33",
+    "rock": "#7c776e",
+    "bone": "#c1b8a5",
+    "scratch": "#231f1c",
+    "fur": "#57524b",
+    "socket": "#221e19",
+    "interior": "#2a221c",
+    "interior_deep": "#140f0c",
+    "void_black": "#070606"
+  },
+  "emissive": {},
+  "openings": [
+    {
+      "width": 2.4,
+      "height": 2.2699134946181885,
+      "depth": 2.6,
+      "y0": 0.0,
+      "z0": 0.0
+    }
+  ],
+  "concept_camera": {
+    "target": [
+      -0.005,
+      2.774,
+      4.173
+    ],
+    "distance": 32.039,
+    "azimuth_deg": 35,
+    "elevation_deg": 30,
+    "fov_deg": 30,
+    "note": "camera sits front-right: target + dist*(sin az*cos el, -cos az*cos el, sin el)"
+  }
+}

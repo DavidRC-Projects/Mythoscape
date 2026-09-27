@@ -1,0 +1,42 @@
+{
+  "key": "castle_chair",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "castle_chair_2x.png": {
+      "file": "castle_chair_2x.png",
+      "w": 49,
+      "h": 97,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        24.3,
+        84.1
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            1.9,
+            86.1
+          ],
+          [
+            28.3,
+            95.4
+          ],
+          [
+            46.8,
+            82.2
+          ],
+          [
+            20.4,
+            72.9
+          ]
+        ]
+      ]
+    }
+  }
+}

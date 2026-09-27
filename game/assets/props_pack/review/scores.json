@@ -1,0 +1,223 @@
+{
+  "_rubric": "OSRS look out of 10: low poly + flat shading + per-face muted colours (3), chunky readable silhouette from the GAME camera and at 1x size (3), solid 3D volumes - no cardboard planes or pasted-on boxes (2), correct scale vs the 1.8 m figure + glow where needed (2). <8 = redo.",
+  "_order": {
+    "town": [
+      "bank_booth",
+      "vault_chest",
+      "vault_door",
+      "furnace",
+      "anvil",
+      "workbench",
+      "weapon_rack",
+      "quench_bucket",
+      "wishing_well",
+      "fountain",
+      "market_stall",
+      "shop_counter",
+      "hearth",
+      "barrel"
+    ],
+    "castle": [
+      "throne",
+      "banner_stand",
+      "banquet_table",
+      "castle_chair",
+      "suit_of_armour",
+      "chandelier",
+      "brazier"
+    ],
+    "pets": [
+      "cage_cat",
+      "cage_husky",
+      "cage_skeleton",
+      "cage_dragon",
+      "pet_bed"
+    ],
+    "dungeons": [
+      "dragon_hoard",
+      "dragon_egg_nest",
+      "goblin_campfire",
+      "goblin_loot",
+      "crypt_sarcophagus",
+      "crypt_candelabra",
+      "spider_cocoons",
+      "spider_egg_sacs",
+      "void_altar",
+      "void_crystals",
+      "giant_table",
+      "giant_throne",
+      "wolf_bone_pile",
+      "wolf_den_bed"
+    ]
+  },
+  "bank_booth": {
+    "score": 9,
+    "notes": "desk + barred teller window + sign; gold arch replaced by a plain window rail (pass 2)"
+  },
+  "vault_chest": {
+    "score": 8,
+    "notes": "iron-banded chest on stone plinth; lightened wood in pass 3 (read too black)",
+    "first_pass_score": 7
+  },
+  "vault_door": {
+    "score": 9,
+    "notes": "round steel door with wheel + bolts in a stone wall section; optional decor"
+  },
+  "furnace": {
+    "score": 9,
+    "notes": "brick furnace + chimney; pass 1 had the fire mouth buried inside the body -> projecting firebox",
+    "first_pass_score": 6
+  },
+  "anvil": {
+    "score": 9,
+    "notes": "anvil on a rooted stump, hot bar glows, hammer + tongs"
+  },
+  "workbench": {
+    "score": 8,
+    "notes": "bench with vice, saw, tool board"
+  },
+  "weapon_rack": {
+    "score": 8,
+    "notes": "swords, spear, axe, leaning shield"
+  },
+  "quench_bucket": {
+    "score": 8,
+    "notes": "pass 1 lid cap hid the water -> open tub with cooling blade",
+    "first_pass_score": 6
+  },
+  "wishing_well": {
+    "score": 8,
+    "notes": "stone ring, glowing water, windlass + bucket, shingled roof (roof reads flatter from the game camera)"
+  },
+  "fountain": {
+    "score": 9,
+    "notes": "octagonal basin, tiered bowl, glowing water sheets and ripples"
+  },
+  "market_stall": {
+    "score": 9,
+    "notes": "striped canopy, produce crates, bread"
+  },
+  "shop_counter": {
+    "score": 8,
+    "notes": "panelled counter, balance scales, cloth rolls, coin bowl"
+  },
+  "hearth": {
+    "score": 8,
+    "notes": "pass 1 chimney breast was a plain grey block -> masonry courses, bigger fire",
+    "first_pass_score": 7
+  },
+  "barrel": {
+    "score": 8,
+    "notes": "hooped barrel + sack"
+  },
+  "throne": {
+    "score": 9,
+    "notes": "dais + carpet runner, crimson/gold throne with crest"
+  },
+  "banner_stand": {
+    "score": 9,
+    "notes": "waved cloth strips with thickness, crown emblem, recolourable 'banner' material"
+  },
+  "banquet_table": {
+    "score": 9,
+    "notes": "trestle table, runner, candelabra (glows), plates, goblets, roast"
+  },
+  "castle_chair": {
+    "score": 8,
+    "notes": "high-back chair; yaw sprites for 'facing'"
+  },
+  "suit_of_armour": {
+    "score": 9,
+    "notes": "plate armour with plume + halberd on a stand"
+  },
+  "chandelier": {
+    "score": 8,
+    "notes": "iron ring, 6 glowing candles, hangs 2.1-3.6 m (overhead layer)"
+  },
+  "brazier": {
+    "score": 8,
+    "notes": "tripod brazier with glowing coals + flame"
+  },
+  "cage_cat": {
+    "score": 9,
+    "notes": "pass 1: flat roof panel + 6 bars hid a tiny cat -> gable roof, 5 bars, pet x1.3",
+    "first_pass_score": 7
+  },
+  "cage_husky": {
+    "score": 8,
+    "notes": "lying white husky with blue eyes (same cage fix)",
+    "first_pass_score": 7
+  },
+  "cage_skeleton": {
+    "score": 9,
+    "notes": "sitting skeleton pet, slate roof, iron bars (same cage fix)",
+    "first_pass_score": 7
+  },
+  "cage_dragon": {
+    "score": 9,
+    "notes": "green hatchling with wings, horns, egg shell (same cage fix)",
+    "first_pass_score": 7
+  },
+  "pet_bed": {
+    "score": 8,
+    "notes": "round cushion bed with ball + chew bone"
+  },
+  "dragon_hoard": {
+    "score": 9,
+    "notes": "coin mounds, gold-banded chest, sword, shield, crown, gems"
+  },
+  "dragon_egg_nest": {
+    "score": 9,
+    "notes": "charred stone ring, glowing embers, 3 speckled eggs, skull"
+  },
+  "goblin_campfire": {
+    "score": 9,
+    "notes": "stone ring fire (glows), spit roast, log stools, pot"
+  },
+  "goblin_loot": {
+    "score": 8,
+    "notes": "hide lean-to, sacks, broken crate, crude shield, spear"
+  },
+  "crypt_sarcophagus": {
+    "score": 8,
+    "notes": "pass 1 faced end-on so the effigy was hidden -> turned 90 deg, bolder effigy, glowing candles",
+    "first_pass_score": 7
+  },
+  "crypt_candelabra": {
+    "score": 8,
+    "notes": "iron candelabra on a skull tripod (glows), two urns"
+  },
+  "spider_cocoons": {
+    "score": 8,
+    "notes": "wrapped victims, strung cocoon, corner web, leg remains"
+  },
+  "spider_egg_sacs": {
+    "score": 8,
+    "notes": "egg sac cluster with faint glow, web strands"
+  },
+  "void_altar": {
+    "score": 9,
+    "notes": "runed altar (glows), floating crystal, forbidden tomes, obelisks; pass 2 removed a full-bright disc"
+  },
+  "void_crystals": {
+    "score": 9,
+    "notes": "emissive crystal cluster on dark rock"
+  },
+  "giant_table": {
+    "score": 9,
+    "notes": "1.7 m high table, giant mug, drumstick, knife"
+  },
+  "giant_throne": {
+    "score": 8,
+    "notes": "pass 1: flat grey pelt read as a wooden door -> bear pelt with head/claws, masonry seams, fur cushion",
+    "first_pass_score": 6
+  },
+  "wolf_bone_pile": {
+    "score": 8,
+    "notes": "bones, ribcage, antlered skull, blood stain"
+  },
+  "wolf_den_bed": {
+    "score": 8,
+    "notes": "straw ring nest with sleeping pup"
+  }
+}

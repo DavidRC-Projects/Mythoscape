@@ -1,0 +1,637 @@
+{
+ "id": "stonehaven_castle",
+ "version": 2,
+ "flag": "USE_NEW_CASTLE",
+ "title": "Stonehaven Castle Keep v2 (moat, drawbridge, portcullis)",
+ "footprint": {
+  "x0": 100,
+  "y0": 31,
+  "x1": 123,
+  "y1": 54,
+  "w": 24,
+  "h": 24,
+  "note": "includes the moat ring; old footprint was x100-118 y42-54 (19x13 = 247 tiles) -> 24x24 = 576 tiles (2.33x)"
+ },
+ "building_entry": {
+  "id": "stonehaven_castle",
+  "name": "Castle Keep",
+  "kind": "castle",
+  "style": 1,
+  "material": "brick",
+  "x0": 100,
+  "y0": 31,
+  "x1": 123,
+  "y1": 54,
+  "floor_x0": 104,
+  "floor_y0": 35,
+  "floor_x1": 119,
+  "floor_y1": 51
+ },
+ "tile_px": 40,
+ "sprite_1x": {
+  "size": [
+   1040,
+   1400
+  ],
+  "origin_px": [
+   40,
+   400
+  ]
+ },
+ "sprite_2x": {
+  "size": [
+   2080,
+   2800
+  ],
+  "origin_px": [
+   80,
+   800
+  ]
+ },
+ "anchor_note": "origin_px = pixel of the NW corner of world tile (x0,y0) inside every full-size layer. Blit layer at (tile_screen_x(x0) - origin_px.x*TILE/40, tile_screen_y(y0) - origin_px.y*TILE/40), scaled by TILE/40. Ground rows are exactly TILE px apart (tile-locked 3/4 projection), so tile (x,y) of the footprint sits at origin + ((x-x0)*TILE, (y-y0)*TILE).",
+ "sprite_tiles": {
+  "left": -1,
+  "right": 25,
+  "top": 10,
+  "bottom": -25
+ },
+ "layers": [
+  {
+   "name": "ground",
+   "file": "castle_ground.png",
+   "order": "after floor tiles, before any entity",
+   "contains": "moat water (soft glow), banks, reeds, rocks, lilies, bridge abutment, apron lip"
+  },
+  {
+   "name": "back",
+   "file": "castle_back.png",
+   "order": "in the entity pass: after entities with y < y0 (north of the castle), before entities with y >= y0",
+   "contains": "walls, 8 towers, keep, gatehouse, bailey"
+  },
+  {
+   "name": "gate",
+   "file": "gate/gate_NN.png",
+   "order": "immediately after back",
+   "crop_1x": [
+    466,
+    1027,
+    574,
+    1377
+   ],
+   "crop_2x": [
+    932,
+    2054,
+    1148,
+    2754
+   ],
+   "note": "gate frames are cropped: blit at origin-relative offset crop[0..1] of the full layer"
+  },
+  {
+   "name": "posts",
+   "file": "castle_posts.png",
+   "order": "y-sorted like an entity standing on world row 54 (after entities with y <= 54, before y >= 55)",
+   "contains": "bridge abutment pillars + braziers"
+  },
+  {
+   "name": "front",
+   "file": "castle_front.png",
+   "order": "after all entities",
+   "contains": "south curtain parapets (wall-walk NPCs stand behind them)"
+  },
+  {
+   "name": "cutaway",
+   "file": "castle_cutaway.png",
+   "order": "replaces back+front while the player is inside (floor rect or door tile); ground+gate+posts still drawn",
+   "contains": "walls/towers/keep cut at 1.6 m so the interior tiles + interior spots show"
+  }
+ ],
+ "gate": {
+  "frames": [
+   {
+    "file": "gate/gate_00.png",
+    "ms": 220,
+    "bridge_deg": -88,
+    "portcullis_up_m": 0
+   },
+   {
+    "file": "gate/gate_01.png",
+    "ms": 80,
+    "bridge_deg": -84,
+    "portcullis_up_m": 0
+   },
+   {
+    "file": "gate/gate_02.png",
+    "ms": 80,
+    "bridge_deg": -74,
+    "portcullis_up_m": 0
+   },
+   {
+    "file": "gate/gate_03.png",
+    "ms": 80,
+    "bridge_deg": -58,
+    "portcullis_up_m": 0
+   },
+   {
+    "file": "gate/gate_04.png",
+    "ms": 80,
+    "bridge_deg": -38,
+    "portcullis_up_m": 0
+   },
+   {
+    "file": "gate/gate_05.png",
+    "ms": 80,
+    "bridge_deg": -16,
+    "portcullis_up_m": 0
+   },
+   {
+    "file": "gate/gate_06.png",
+    "ms": 140,
+    "bridge_deg": 0,
+    "portcullis_up_m": 0
+   },
+   {
+    "file": "gate/gate_07.png",
+    "ms": 90,
+    "bridge_deg": 0,
+    "portcullis_up_m": 0.4
+   },
+   {
+    "file": "gate/gate_08.png",
+    "ms": 90,
+    "bridge_deg": 0,
+    "portcullis_up_m": 0.95
+   },
+   {
+    "file": "gate/gate_09.png",
+    "ms": 90,
+    "bridge_deg": 0,
+    "portcullis_up_m": 1.5
+   },
+   {
+    "file": "gate/gate_10.png",
+    "ms": 90,
+    "bridge_deg": 0,
+    "portcullis_up_m": 1.95
+   },
+   {
+    "file": "gate/gate_11.png",
+    "ms": 200,
+    "bridge_deg": 0,
+    "portcullis_up_m": 2.25
+   }
+  ],
+  "sequence_open": "frames 0 -> 11 (0 = closed: bridge up, portcullis down; 1-6 bridge lowers; 7-11 portcullis rises)",
+  "sequence_close": "frames 11 -> 0 (portcullis drops first, then the bridge rises), same per-frame ms",
+  "parts_separable": "bridge (frames 0-6) and portcullis (frames 6-11) never move at the same time, so a split two-stage version is just two index ranges",
+  "close_delay_ms": 1500,
+  "open_ms_total": 1320
+ },
+ "walkability": {
+  "origin": [
+   100,
+   31
+  ],
+  "rows": [
+   "MMMMMMMMMMMMMMMMMMMMMMMM",
+   "MMMMMMMMMMMMMMMMMMMMMMMM",
+   "MMWWWWWWWWWWWWWWWWWWWWMM",
+   "MMWWWWWWWWWWWWWWWWWWWWMM",
+   "MMWWFFFKKKKKKKKKKFFFWWMM",
+   "MMWWFFFKKKKKKKKKKFFFWWMM",
+   "MMWWFFFKKKKKKKKKKFFFWWMM",
+   "MMWWFFFKKKKKKKKKKFFFWWMM",
+   "MMWWFFFKKKKKKKKKKFFFWWMM",
+   "MMWWFFFKKKKKKKKKKFFFWWMM",
+   "MMWWFFFFFFFFFFFFFFFFWWMM",
+   "MMWWFFFFFFFFFFFFFFFFWWMM",
+   "MMWWFFFFFFFFFFFFFFFFWWMM",
+   "MMWWFFFFFFFFFFFFFFFFWWMM",
+   "MMWWFFFFFFFFFFFFFFFFWWMM",
+   "MMWWFFFFFFFFFFFFFFFFWWMM",
+   "MMWWFFFFFFFFFFFFFFFFWWMM",
+   "MMWWFFFFFFFFFFFFFFFFWWMM",
+   "MMWWFFFFFFFFFFFFFFFFWWMM",
+   "MMWWFFFFFFFFFFFFFFFFWWMM",
+   "MMWWWAAAWWWPPWWWAAAWWWMM",
+   "MMWWWWWWWWWGGWWWWWWWWWMM",
+   "MMMMMMMMMMMBBMMMMMMMMMMM",
+   "MMMMMMMMMMMBBMMMMMMMMMMM"
+  ],
+  "legend": {
+   "M": {
+    "what": "moat water",
+    "walk": "never",
+    "server_tile": "WATER"
+   },
+   "B": {
+    "what": "drawbridge deck",
+    "walk": "when gate open (visual); server keeps it walkable",
+    "server_tile": "PATH"
+   },
+   "G": {
+    "what": "portcullis tile (door tile of castle_gate / castle_gate_e)",
+    "walk": "blocked until open (client pathing); server keeps it walkable",
+    "server_tile": "PATH"
+   },
+   "P": {
+    "what": "gate passage (under the gatehouse)",
+    "walk": "always",
+    "server_tile": "FLOOR"
+   },
+   "A": {
+    "what": "south wall-walk (NPCs drawn lifted onto the wall top)",
+    "walk": "always",
+    "server_tile": "FLOOR"
+   },
+   "W": {
+    "what": "curtain wall / tower",
+    "walk": "never",
+    "server_tile": "WALL"
+   },
+   "K": {
+    "what": "central keep block",
+    "walk": "never",
+    "server_tile": "WALL"
+   },
+   "F": {
+    "what": "inner bailey / keep floor (the old interior, shifted +3,-2)",
+    "walk": "always",
+    "server_tile": "FLOOR"
+   }
+  },
+  "server_rule": "server grid: M->WATER, W/K->WALL, F/A/P->FLOOR, B/G->PATH (always walkable server-side, the server has no door logic)",
+  "client_rule": "optional: while the gate is not fully open, client pathing treats B and G as blocked (the trigger opens it long before the player arrives)"
+ },
+ "trigger_tiles": {
+  "outer": [
+   [
+    110,
+    55
+   ],
+   [
+    111,
+    55
+   ],
+   [
+    112,
+    55
+   ],
+   [
+    113,
+    55
+   ]
+  ],
+  "hold": [
+   [
+    111,
+    51
+   ],
+   [
+    112,
+    51
+   ],
+   [
+    111,
+    52
+   ],
+   [
+    112,
+    52
+   ],
+   [
+    111,
+    53
+   ],
+   [
+    112,
+    53
+   ],
+   [
+    111,
+    54
+   ],
+   [
+    112,
+    54
+   ]
+  ],
+  "inner": [
+   [
+    111,
+    49
+   ],
+   [
+    112,
+    49
+   ],
+   [
+    111,
+    50
+   ],
+   [
+    112,
+    50
+   ]
+  ],
+  "rule": "gate opens while the LOCAL player stands on any outer/inner/hold tile; closes close_delay_ms after they are on none of them"
+ },
+ "doors": {
+  "castle_gate": {
+   "x": 111,
+   "y": 52,
+   "enter": [
+    111,
+    50
+   ],
+   "exit": [
+    111,
+    55
+   ],
+   "old": {
+    "x": 108,
+    "y": 54,
+    "enter": [
+     108,
+     52
+    ],
+    "exit": [
+     108,
+     56
+    ]
+   }
+  },
+  "castle_gate_e": {
+   "x": 112,
+   "y": 52,
+   "enter": [
+    112,
+    50
+   ],
+   "exit": [
+    112,
+    55
+   ],
+   "old": {
+    "x": 109,
+    "y": 54,
+    "enter": [
+     109,
+     52
+    ],
+    "exit": [
+     109,
+     56
+    ]
+   }
+  }
+ },
+ "interior_shift": {
+  "dx": 3,
+  "dy": -2,
+  "applies_to": "every castle interior spot, knights, champion (keeps the old interior layout intact)",
+  "spots_new": {
+   "castle_throne": [
+    113,
+    43
+   ],
+   "castle_rug": [
+    113,
+    46
+   ],
+   "castle_table": [
+    109,
+    46
+   ],
+   "castle_chair_a": [
+    108,
+    46
+   ],
+   "castle_chair_b": [
+    110,
+    46
+   ],
+   "castle_banner_w": [
+    107,
+    43
+   ],
+   "castle_banner_e": [
+    119,
+    43
+   ],
+   "castle_rack": [
+    106,
+    48
+   ],
+   "castle_chest": [
+    118,
+    48
+   ],
+   "castle_brazier_w": [
+    106,
+    44
+   ],
+   "castle_brazier_e": [
+    118,
+    44
+   ],
+   "castle_candle": [
+    111,
+    44
+   ]
+  }
+ },
+ "npc_spots": [
+  {
+   "id": "herald_rowan",
+   "kind": "npc",
+   "old": [
+    110,
+    47
+   ],
+   "new": [
+    107,
+    51
+   ],
+   "where": "south wall-walk, west of the gatehouse (drawn lifted)",
+   "lift_px": 118
+  },
+  {
+   "id": "quest_herald_rowan",
+   "kind": "place label",
+   "old": [
+    110,
+    47
+   ],
+   "new": [
+    107,
+    51
+   ],
+   "where": "follows Herald Rowan"
+  },
+  {
+   "id": "mythos_champion",
+   "kind": "monster spawn + place",
+   "old": [
+    110,
+    48
+   ],
+   "new": [
+    113,
+    46
+   ],
+   "where": "inner bailey in front of the keep (quest text says courtyard)",
+   "alt": [
+    117,
+    51
+   ]
+  },
+  {
+   "id": "knight#1",
+   "kind": "monster spawn",
+   "old": [
+    108,
+    50
+   ],
+   "new": [
+    111,
+    48
+   ],
+   "where": "bailey, inside the gate"
+  },
+  {
+   "id": "knight#2",
+   "kind": "monster spawn",
+   "old": [
+    112,
+    48
+   ],
+   "new": [
+    115,
+    46
+   ],
+   "where": "bailey"
+  },
+  {
+   "id": "knight#3",
+   "kind": "monster spawn",
+   "old": [
+    106,
+    46
+   ],
+   "new": [
+    109,
+    44
+   ],
+   "where": "bailey"
+  },
+  {
+   "id": "knight#4",
+   "kind": "monster spawn",
+   "old": [
+    110,
+    52
+   ],
+   "new": [
+    109,
+    55
+   ],
+   "where": "gate guard, west of the bridge on the apron (outside)"
+  },
+  {
+   "id": "knight#5",
+   "kind": "monster spawn",
+   "old": [
+    114,
+    50
+   ],
+   "new": [
+    114,
+    55
+   ],
+   "where": "gate guard, east of the bridge on the apron (outside)"
+  },
+  {
+   "id": "knights (place)",
+   "kind": "place label",
+   "old": [
+    108,
+    50
+   ],
+   "new": [
+    111,
+    48
+   ]
+  },
+  {
+   "id": "stonehaven_castle (place)",
+   "kind": "place label",
+   "old": [
+    108,
+    50
+   ],
+   "new": [
+    111,
+    45
+   ]
+  },
+  {
+   "id": "wall_walk_extra_w",
+   "kind": "optional ambient spot",
+   "new": [
+    105,
+    51
+   ],
+   "lift_px": 118
+  },
+  {
+   "id": "wall_walk_extra_e",
+   "kind": "optional ambient spot",
+   "new": [
+    117,
+    51
+   ],
+   "lift_px": 118
+  }
+ ],
+ "walkway_draw_lift_px": 118,
+ "camera": {
+  "type": "orthographic",
+  "azimuth_deg": 0,
+  "elevation_deg": 32,
+  "sun_rotation_deg": [
+   40,
+   15,
+   -30
+  ],
+  "tile_locked": "scene Y pre-scaled by 1/sin(32) for the sprite renders so ground rows land exactly on the 40 px grid; heights project by cos(32)",
+  "px_per_m_1x": 26.9,
+  "tile_m": 1.487
+ },
+ "triangles": {
+  "per_part": {
+   "body": 11695,
+   "water": 100,
+   "ground": 2923,
+   "court": 1396,
+   "front": 144,
+   "posts": 236,
+   "bridge": 376,
+   "portcullis": 228,
+   "chain_l": 432,
+   "chain_r": 432
+  },
+  "total": 17962
+ },
+ "models": {
+  "blend": "models/stonehaven_castle_v2.blend",
+  "glb": "models/stonehaven_castle_v2.glb",
+  "bam": "models/stonehaven_castle_v2.bam",
+  "gate_nodes": [
+   "castle_bridge",
+   "castle_portcullis",
+   "castle_chain_l",
+   "castle_chain_r"
+  ],
+  "animation": "glb/blend action 'gate_open_*' frames 1-12 @10 fps; bam: static + separable nodes, drive them from gate.frames[*] (json/render_info.json has the per-frame matrices)"
+ }
+}

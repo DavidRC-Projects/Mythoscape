@@ -1,0 +1,42 @@
+{
+  "key": "wolf_bone_pile",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "wolf_bone_pile_2x.png": {
+      "file": "wolf_bone_pile_2x.png",
+      "w": 95,
+      "h": 52,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        49.5,
+        31.1
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            -13.3,
+            33.8
+          ],
+          [
+            66.0,
+            61.6
+          ],
+          [
+            112.3,
+            28.5
+          ],
+          [
+            33.0,
+            0.7
+          ]
+        ]
+      ]
+    }
+  }
+}

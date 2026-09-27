@@ -1,0 +1,42 @@
+{
+  "key": "banquet_table",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "banquet_table_2x.png": {
+      "file": "banquet_table_2x.png",
+      "w": 183,
+      "h": 117,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        91.5,
+        81.1
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            3.2,
+            69.1
+          ],
+          [
+            144.3,
+            118.5
+          ],
+          [
+            179.8,
+            93.2
+          ],
+          [
+            38.7,
+            43.8
+          ]
+        ]
+      ]
+    }
+  }
+}

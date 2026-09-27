@@ -1,0 +1,42 @@
+{
+  "key": "giant_table",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "giant_table_2x.png": {
+      "file": "giant_table_2x.png",
+      "w": 221,
+      "h": 180,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        110.4,
+        135.2
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            3.2,
+            127.3
+          ],
+          [
+            161.9,
+            182.8
+          ],
+          [
+            217.5,
+            143.1
+          ],
+          [
+            58.8,
+            87.6
+          ]
+        ]
+      ]
+    }
+  }
+}

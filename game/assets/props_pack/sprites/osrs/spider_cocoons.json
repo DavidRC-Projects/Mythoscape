@@ -1,0 +1,42 @@
+{
+  "key": "spider_cocoons",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "spider_cocoons_2x.png": {
+      "file": "spider_cocoons_2x.png",
+      "w": 145,
+      "h": 117,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        71.5,
+        91.9
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            8.0,
+            92.7
+          ],
+          [
+            91.8,
+            122.0
+          ],
+          [
+            141.1,
+            86.8
+          ],
+          [
+            57.4,
+            57.4
+          ]
+        ]
+      ]
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "key": "suit_of_armour",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "suit_of_armour_2x.png": {
+      "file": "suit_of_armour_2x.png",
+      "w": 58,
+      "h": 134,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        29.0,
+        118.5
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            1.4,
+            119.5
+          ],
+          [
+            36.6,
+            131.9
+          ],
+          [
+            56.7,
+            117.5
+          ],
+          [
+            21.4,
+            105.2
+          ]
+        ]
+      ]
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+ "key": "stonehaven_castle_v2",
+ "title": "Stonehaven Castle Keep v2 (moat, drawbridge, portcullis)",
+ "triangles": 17962,
+ "emissive": {
+  "water": 0.45,
+  "water_hi": 0.6,
+  "fire": 6.0,
+  "fire_core": 8.0,
+  "ember": 3.0,
+  "window": 2.2,
+  "candle": 6.0
+ },
+ "front": "-Y",
+ "up": "+Z",
+ "units": "metres",
+ "colliders": [],
+ "interact": null,
+ "note": "COL_*/TRIGGER_* boxes live in the COLLISION collection of the .blend -> CollisionNodes in the .bam"
+}

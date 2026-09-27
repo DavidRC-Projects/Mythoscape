@@ -283,10 +283,10 @@ def draw_stone_floor(surf, rect, seed_x, seed_y):
 
 
 def draw_wall(surf, rect, zone, seed_x, seed_y, material=None):
-    if zone == "village":
-        draw_building_wall(surf, rect, seed_x, seed_y, material=material or "wood")
-    elif zone == "city":
-        draw_building_wall(surf, rect, seed_x, seed_y, material=material or "brick")
+    # Village/city/harbour building shells are drawn as cottage volumes in the
+    # client — never paint old 2D wood/brick wall tiles for those zones.
+    if zone in ("village", "fishing_village", "city"):
+        draw_mountain_rock(surf, rect, seed_x, seed_y)
     elif zone == "mine":
         draw_cave_wall(surf, rect)
     elif zone == "dungeon":
@@ -297,8 +297,6 @@ def draw_wall(surf, rect, zone, seed_x, seed_y, material=None):
         draw_volcano_wall(surf, rect, seed_x, seed_y)
     elif zone == "mountains":
         draw_mountain_rock(surf, rect, seed_x, seed_y)
-    elif zone == "fishing_village":
-        draw_building_wall(surf, rect, seed_x, seed_y, material=material or "wood")
     else:
         pygame.draw.rect(surf, (35, 33, 38), rect)
         pygame.draw.rect(surf, (22, 20, 24), rect, 1)
@@ -5479,15 +5477,16 @@ def _draw_volcano_mountain(surf, rect, alpha=245, t=0.0):
     surf.blit(keep, (x - ox, y - oy))
 
 
-def _draw_void_sanctum(surf, rect, alpha=245):
-    """Fallback crypt facade — delegates to shell3d inset volume when available."""
+def _draw_void_sanctum(surf, rect, alpha=245, yaw=0):
+    """Crypt facade — iso cottage volume in dark_stone."""
     try:
-        import building_shell3d as shell3d
-        shell3d.draw_crypt_shell(surf, rect, alpha=alpha)
+        import building_volume as bvol
+        bvol.draw_world_volume(
+            surf, rect, kind="crypt", yaw=yaw, material="dark_stone", door_frac=0.5,
+        )
         return
     except Exception:
         pass
-    # Minimal last-resort flat (should rarely run)
     x, y, w, h = rect.x, rect.y, rect.w, rect.h
     pygame.draw.rect(surf, (28, 24, 40, alpha), (x, y + int(h * 0.12), w, int(h * 0.82)))
     pygame.draw.rect(surf, (18, 14, 28, alpha), (x, y + int(h * 0.12), w, int(h * 0.82)), 2)
@@ -5496,74 +5495,36 @@ def _draw_void_sanctum(surf, rect, alpha=245):
 def draw_building_roof(surf, rect, kind="house", style=0, alpha=245, material=None, yaw=0,
                        door_frac: float = 0.5):
     """
-    Opaque building shell locked to footprint rect.
-    Always camera-facing (door at bottom of rect). Never rotate the surface.
+    Deprecated path — live client uses building_volume cottage shells only.
+    Kept for bake tools; volcano still has a special drawer.
     """
-    if kind == "castle":
-        _draw_castle_keep(surf, rect, alpha=alpha)
-        return
     if kind == "volcano" or material == "basalt":
         _draw_volcano_mountain(surf, rect, alpha=alpha)
         return
     try:
-        import building_shell3d as shell3d
-        if shell3d.draw_building_shell(
-            surf, rect, kind=kind, material=material, style=style, alpha=alpha,
-            door_frac=door_frac,
-        ):
-            return
+        import building_volume as bvol
+        bvol.draw_world_volume(
+            surf, rect, kind=kind, yaw=yaw, door_frac=door_frac,
+            material=material, cutaway=False,
+        )
     except Exception:
         pass
-    if kind == "crypt" or material == "dark_stone":
-        _draw_void_sanctum(surf, rect, alpha=alpha)
 
 
 
 def draw_building_cutaway(surf, rect, kind="house", style=0, material=None, yaw=0, alpha=255,
                           door_frac: float = 0.5):
-    """
-    Interior cutaway — opaque perimeter walls; south wall opens at the door.
-    """
-    x, y, w, h = rect.x, rect.y, rect.w, rect.h
-    if kind in ("volcano", "castle"):
+    """Interior cutaway — cottage volume without roof."""
+    if kind in ("volcano",):
         return
-    wood = (material or ("brick" if style % 2 else "wood")) != "brick"
-    wall = (118, 90, 60) if wood else (96, 98, 104)
-    shade = (78, 58, 40) if wood else (62, 64, 70)
-    thick = max(10, w // 9)
-    back_h = max(14, int(h * 0.16))
-    # Opaque back strip (north)
-    pygame.draw.rect(surf, wall, (x + 2, y + int(h * 0.04), w - 4, back_h))
-    pygame.draw.rect(surf, (40, 28, 20), (x + 2, y + int(h * 0.04) + back_h - 3, w - 4, 3))
-    # Opaque left / right walls
-    side_h = int(h * 0.78)
-    pygame.draw.rect(surf, shade, (x + 1, y + int(h * 0.04), thick, side_h))
-    pygame.draw.rect(surf, shade, (x + w - thick - 1, y + int(h * 0.04), thick, side_h))
-    pygame.draw.line(surf, (175, 140, 100) if wood else (150, 152, 158),
-                     (x + thick, y + int(h * 0.06)), (x + thick, y + int(h * 0.04) + side_h - 4), 2)
-    pygame.draw.line(surf, (30, 22, 16),
-                     (x + w - thick - 1, y + int(h * 0.06)),
-                     (x + w - thick - 1, y + int(h * 0.04) + side_h - 4), 2)
-    # South wall with door gap aligned to world door
-    south_y = y + int(h * 0.82)
-    south_h = max(8, int(h * 0.14))
-    frac = max(0.12, min(0.88, float(door_frac)))
-    door_w = max(16, int(w * 0.18))
-    door_cx = int(x + w * frac)
-    gap0 = max(x + thick, door_cx - door_w // 2)
-    gap1 = min(x + w - thick, door_cx + door_w // 2)
-    # Left south segment
-    if gap0 > x + thick:
-        pygame.draw.rect(surf, wall, (x + thick, south_y, gap0 - (x + thick), south_h))
-    # Right south segment
-    if gap1 < x + w - thick:
-        pygame.draw.rect(surf, wall, (gap1, south_y, (x + w - thick) - gap1, south_h))
-    # Door jambs
-    pygame.draw.rect(surf, (55, 40, 28) if wood else (48, 50, 56), (gap0 - 3, south_y - 4, 4, south_h + 6))
-    pygame.draw.rect(surf, (30, 20, 14), (gap1 - 1, south_y - 4, 4, south_h + 6))
-    # Eave lip
-    pygame.draw.rect(surf, (48, 34, 24), (x, y + int(h * 0.03), w, max(5, h // 18)))
-    rs.draw_contact_shadow(surf, x + w * 0.5, y + h - 2, w * 0.4, max(3, h * 0.05), 90)
+    try:
+        import building_volume as bvol
+        bvol.draw_world_volume(
+            surf, rect, kind=kind, yaw=yaw, door_frac=door_frac,
+            material=material, cutaway=True,
+        )
+    except Exception:
+        pass
 
 
 def draw_dungeon_entrance(surf, cx, cy, tile, t=0.0, yaw=0):

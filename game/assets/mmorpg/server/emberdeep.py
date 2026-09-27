@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import random
 
-from world_map import WALL, FLOOR, WATER, is_walkable as _world_walkable
+from world_map import WALL, FLOOR, WATER, widen_single_file_passages, is_walkable as _world_walkable
 
 EMBERDEEP_FLOORS = [
     {"floor": 1, "level": 22, "count": 10, "label": "Ash Approach"},
@@ -23,7 +23,7 @@ EMBERDEEP_FLOORS = [
 DUNGEON_W, DUNGEON_H = 20, 16
 DUNGEON_SPAWN = (10, 13)
 # South of the volcano mouth (overworld)
-CAVE_RETURN = (136, 58)
+CAVE_RETURN = (164, 86)
 
 _FLOOR_VISUAL = {
     1: "magma_slug", 2: "magma_slug",
@@ -172,6 +172,7 @@ def generate_floor_tiles(floor: int, rng=None):
     tiles[h - 1][sx] = FLOOR
     # Connectivity: every FLOOR must reach spawn (carve tunnels or seal pockets)
     _ensure_floor_connected(tiles, sx, sy, rng)
+    widen_single_file_passages(tiles)
     return tiles
 
 
@@ -231,17 +232,21 @@ def _ensure_floor_connected(tiles, sx, sy, rng):
             continue
         bx, by = best
         x, y = ox, oy
-        # Dig L-shaped corridor
+        # Dig a 3-tile-wide L so the tunnel stays walkable beside a monster
         while x != bx:
             x += 1 if bx > x else -1
-            if 0 < x < w - 1 and 0 < y < h - 1:
-                tiles[y][x] = FLOOR
+            for ox in (-1, 0, 1):
+                xx = x + ox
+                if 0 < xx < w - 1 and 0 < y < h - 1:
+                    tiles[y][xx] = FLOOR
         while y != by:
             y += 1 if by > y else -1
-            if 0 < x < w - 1 and 0 <= y < h - 1:
-                if y == h - 1 and x != sx:
-                    break
-                tiles[y][x] = FLOOR
+            for oy in (-1, 0, 1):
+                yy = y + oy
+                if 0 < x < w - 1 and 0 < yy < h - 1:
+                    if yy == h - 1 and x != sx:
+                        continue
+                    tiles[yy][x] = FLOOR
     # Seal any remaining orphans
     reached = reachable()
     for y in range(h):

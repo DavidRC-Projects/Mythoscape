@@ -1,0 +1,4 @@
+# Dev / asset-pipeline helpers (not needed to run the game).
+# blend2bam requires Blender on PATH.
+-r requirements.txt
+panda3d-blend2bam==0.26.0

@@ -1,0 +1,394 @@
+{
+  "key": "pet_bed",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 0.0,
+    "elevation_deg": 32.0
+  },
+  "images": {
+    "pet_bed_1x.png": {
+      "file": "pet_bed_1x.png",
+      "w": 32,
+      "h": 19,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        16.1,
+        12.1
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            3.4,
+            17.8
+          ],
+          [
+            28.9,
+            17.8
+          ],
+          [
+            28.9,
+            6.4
+          ],
+          [
+            3.4,
+            6.4
+          ]
+        ]
+      ]
+    },
+    "pet_bed_2x.png": {
+      "file": "pet_bed_2x.png",
+      "w": 64,
+      "h": 37,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        32.3,
+        24.2
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            6.7,
+            35.6
+          ],
+          [
+            57.9,
+            35.6
+          ],
+          [
+            57.9,
+            12.8
+          ],
+          [
+            6.7,
+            12.8
+          ]
+        ]
+      ]
+    },
+    "pet_bed_3x.png": {
+      "file": "pet_bed_3x.png",
+      "w": 96,
+      "h": 56,
+      "px_per_m": 80.721,
+      "metres_per_px": 0.0124,
+      "origin_px": [
+        48.4,
+        36.2
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            10.1,
+            53.3
+          ],
+          [
+            86.8,
+            53.3
+          ],
+          [
+            86.8,
+            19.1
+          ],
+          [
+            10.1,
+            19.1
+          ]
+        ]
+      ]
+    },
+    "pet_bed_match.png": {
+      "file": "pet_bed_match.png",
+      "w": 34,
+      "h": 20,
+      "px_per_m": 28.539,
+      "metres_per_px": 0.035,
+      "origin_px": [
+        17.1,
+        12.8
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            3.6,
+            18.9
+          ],
+          [
+            30.7,
+            18.9
+          ],
+          [
+            30.7,
+            6.8
+          ],
+          [
+            3.6,
+            6.8
+          ]
+        ]
+      ]
+    },
+    "pet_bed_s_1x.png": {
+      "file": "pet_bed_s_1x.png",
+      "w": 32,
+      "h": 19,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        16.1,
+        12.1
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            3.4,
+            17.8
+          ],
+          [
+            28.9,
+            17.8
+          ],
+          [
+            28.9,
+            6.4
+          ],
+          [
+            3.4,
+            6.4
+          ]
+        ]
+      ]
+    },
+    "pet_bed_s_2x.png": {
+      "file": "pet_bed_s_2x.png",
+      "w": 64,
+      "h": 37,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        32.3,
+        24.2
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            6.7,
+            35.6
+          ],
+          [
+            57.9,
+            35.6
+          ],
+          [
+            57.9,
+            12.8
+          ],
+          [
+            6.7,
+            12.8
+          ]
+        ]
+      ]
+    },
+    "pet_bed_w_1x.png": {
+      "file": "pet_bed_w_1x.png",
+      "w": 27,
+      "h": 21,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        13.4,
+        13.4
+      ],
+      "heading_deg": 90,
+      "collider_px": [
+        [
+          [
+            24.2,
+            20.2
+          ],
+          [
+            24.2,
+            6.7
+          ],
+          [
+            2.7,
+            6.7
+          ],
+          [
+            2.7,
+            20.2
+          ]
+        ]
+      ]
+    },
+    "pet_bed_w_2x.png": {
+      "file": "pet_bed_w_2x.png",
+      "w": 54,
+      "h": 43,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        26.9,
+        26.9
+      ],
+      "heading_deg": 90,
+      "collider_px": [
+        [
+          [
+            48.4,
+            40.4
+          ],
+          [
+            48.4,
+            13.3
+          ],
+          [
+            5.3,
+            13.3
+          ],
+          [
+            5.3,
+            40.4
+          ]
+        ]
+      ]
+    },
+    "pet_bed_n_1x.png": {
+      "file": "pet_bed_n_1x.png",
+      "w": 32,
+      "h": 19,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        15.9,
+        12.1
+      ],
+      "heading_deg": 180,
+      "collider_px": [
+        [
+          [
+            28.7,
+            6.4
+          ],
+          [
+            3.1,
+            6.4
+          ],
+          [
+            3.1,
+            17.8
+          ],
+          [
+            28.7,
+            17.8
+          ]
+        ]
+      ]
+    },
+    "pet_bed_n_2x.png": {
+      "file": "pet_bed_n_2x.png",
+      "w": 64,
+      "h": 37,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        31.8,
+        24.2
+      ],
+      "heading_deg": 180,
+      "collider_px": [
+        [
+          [
+            57.4,
+            12.8
+          ],
+          [
+            6.3,
+            12.8
+          ],
+          [
+            6.3,
+            35.6
+          ],
+          [
+            57.4,
+            35.6
+          ]
+        ]
+      ]
+    },
+    "pet_bed_e_1x.png": {
+      "file": "pet_bed_e_1x.png",
+      "w": 27,
+      "h": 21,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        13.4,
+        13.5
+      ],
+      "heading_deg": -90,
+      "collider_px": [
+        [
+          [
+            2.7,
+            6.7
+          ],
+          [
+            2.7,
+            20.2
+          ],
+          [
+            24.2,
+            20.2
+          ],
+          [
+            24.2,
+            6.7
+          ]
+        ]
+      ]
+    },
+    "pet_bed_e_2x.png": {
+      "file": "pet_bed_e_2x.png",
+      "w": 54,
+      "h": 43,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        26.9,
+        26.9
+      ],
+      "heading_deg": -90,
+      "collider_px": [
+        [
+          [
+            5.3,
+            13.4
+          ],
+          [
+            5.3,
+            40.5
+          ],
+          [
+            48.4,
+            40.5
+          ],
+          [
+            48.4,
+            13.4
+          ]
+        ]
+      ]
+    }
+  }
+}

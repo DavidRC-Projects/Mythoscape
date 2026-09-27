@@ -1,0 +1,50 @@
+---
+description: Buildings are world-space objects — no billboarding, mirroring, or camera-facing hacks
+alwaysApply: true
+---
+
+# Building Rendering Architecture
+
+Buildings are WORLD-SPACE objects.
+
+The camera rotates around buildings; buildings must not rotate, mirror,
+billboard, or flip to face the camera.
+
+Every building must conceptually support distinct:
+
+- FRONT
+- BACK
+- LEFT
+- RIGHT
+- TOP
+
+Do not represent a building solely as a camera-facing/front-facing image.
+
+Do not solve camera rotation by:
+
+- mirroring sprites
+- flipping textures
+- rotating front-facing artwork
+- billboarding
+- creating duplicate facades
+- rotating the building toward the camera
+
+Building depth must come from the building's own world-space representation.
+
+Entrances must be integrated into the building structure.
+
+Never create a separate 3D box/object and place it in front of a building
+to simulate a recessed entrance.
+
+Before implementing visual artwork for a new building, verify the underlying
+world-space geometry using a temporary debug representation where each
+building face is visually distinguishable.
+
+Do not proceed to art/polish if the debug building fails the following test:
+
+FRONT → RIGHT → BACK → LEFT
+
+when the camera is rotated around the stationary building.
+
+When modifying the building system, preserve existing gameplay,
+collision, interaction, and camera behavior unless explicitly requested.

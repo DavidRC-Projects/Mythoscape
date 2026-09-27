@@ -554,7 +554,6 @@ STARTER_INVENTORY = [
     ("tinderbox", 1),
     ("knife", 1),
     ("bread", 3),
-    ("coins", 25),
 ]
 
 # Logs that can be lit with a tinderbox → temporary campfire.
@@ -629,6 +628,12 @@ MONSTERS = {
             (("opal_ring", "jade_ring", "jade_amulet"), 0.03, (1, 1)),
         ],
         "wander_radius": 4, "aggro_range": 3,
+    
+        "force_retaliate": True,
+        "attack_range": 2,
+        "side_by_side": True,
+        "side_gap": 2,
+        "attack_cooldown": 1.0,
     },
     "skeleton": {
         "name": "Skeleton", "level": 15, "hp": 26, "attack": 10, "strength": 10, "defence": 8,
@@ -651,6 +656,12 @@ MONSTERS = {
             (("topaz_ring", "topaz_amulet", "opal_amulet"), 0.035, (1, 1)),
         ],
         "wander_radius": 3, "aggro_range": 6,
+    
+        "force_retaliate": True,
+        "attack_range": 2,
+        "side_by_side": True,
+        "side_gap": 2,
+        "attack_cooldown": 1.0,
     },
     "giant": {
         "name": "Giant", "level": 28, "hp": 55, "attack": 18, "strength": 20, "defence": 14,
@@ -669,6 +680,12 @@ MONSTERS = {
             ("emerald_amulet", 0.025, (1, 1)),
         ],
         "wander_radius": 4, "aggro_range": 0,  # peaceful unless you attack
+    
+        "force_retaliate": True,
+        "attack_range": 3,
+        "side_by_side": True,
+        "side_gap": 3,
+        "attack_cooldown": 1.0,
     },
     # Double normal skeleton stats — mithril cavern
     "big_skeleton": {
@@ -688,6 +705,12 @@ MONSTERS = {
             ("emerald_amulet", 0.03, (1, 1)),
         ],
         "wander_radius": 4, "aggro_range": 7,
+    
+        "force_retaliate": True,
+        "attack_range": 2,
+        "side_by_side": True,
+        "side_gap": 2,
+        "attack_cooldown": 1.0,
     },
     # Spider nest — tougher than big skeletons, weaker than the dragon
     "spider": {
@@ -709,6 +732,12 @@ MONSTERS = {
             ("ruby_amulet", 0.03, (1, 1)),
         ],
         "wander_radius": 4, "aggro_range": 7,
+    
+        "force_retaliate": True,
+        "attack_range": 2,
+        "side_by_side": True,
+        "side_gap": 2,
+        "attack_cooldown": 1.0,
     },
     # Adamantite lair boss — tough for ~level 50 combat
     "dragon": {
@@ -732,7 +761,17 @@ MONSTERS = {
             ("diamond_amulet", 0.05, (1, 1)),
             ("onyx", 0.04, (1, 1)),
         ],
-        "wander_radius": 3, "aggro_range": 8,
+        "wander_radius": 5, "aggro_range": 12, "confine_room": True,
+        # Hit the player and lock them into fighting back — STOP_ATTACK / flee clears it.
+        "force_retaliate": True,
+        # Dragonfire reaches 4 tiles so a clear gap shows the fire bolt.
+        "attack_range": 4,
+        # Fight east/west on the same row — never settle above/below the player.
+        "side_by_side": True,
+        # Prefer a 4-tile gap so dragonfire reads between you.
+        "side_gap": 4,
+        # 1s gap after each swing so you can click away and run.
+        "attack_cooldown": 1.0,
     },
     # Mountain pass — packs of wolves guarding the route to the harbour
     "wolf": {
@@ -748,6 +787,12 @@ MONSTERS = {
             ("emerald_ring", 0.025, (1, 1)),
         ],
         "wander_radius": 4, "aggro_range": 6,
+    
+        "force_retaliate": True,
+        "attack_range": 2,
+        "side_by_side": True,
+        "side_gap": 2,
+        "attack_cooldown": 1.0,
     },
     # Stonehaven City — peaceful until attacked
     "guard": {
@@ -830,6 +875,12 @@ MONSTERS = {
             ("emerald_amulet", 0.03, (1, 1)),
         ],
         "wander_radius": 3, "aggro_range": 7,
+    
+        "force_retaliate": True,
+        "attack_range": 2,
+        "side_by_side": True,
+        "side_gap": 2,
+        "attack_cooldown": 1.0,
     },
     "crypt_ghoul": {
         "name": "Crypt Ghoul", "level": 62, "hp": 135, "attack": 55, "strength": 58, "defence": 48,
@@ -845,6 +896,12 @@ MONSTERS = {
             ("ruby_amulet", 0.04, (1, 1)),
         ],
         "wander_radius": 3, "aggro_range": 7,
+    
+        "force_retaliate": True,
+        "attack_range": 2,
+        "side_by_side": True,
+        "side_gap": 2,
+        "attack_cooldown": 1.0,
     },
     "void_imp": {
         "name": "Void Imp", "level": 70, "hp": 150, "attack": 65, "strength": 68, "defence": 52,
@@ -860,6 +917,12 @@ MONSTERS = {
             ("onyx_ring", 0.025, (1, 1)),
         ],
         "wander_radius": 4, "aggro_range": 8,
+    
+        "force_retaliate": True,
+        "attack_range": 2,
+        "side_by_side": True,
+        "side_gap": 2,
+        "attack_cooldown": 1.0,
     },
     "obsidian_colossus": {
         "name": "Obsidian Colossus", "level": 78, "hp": 190, "attack": 72, "strength": 78, "defence": 85,
@@ -876,6 +939,12 @@ MONSTERS = {
             ("onyx_ring", 0.03, (1, 1)),
         ],
         "wander_radius": 2, "aggro_range": 6,
+    
+        "force_retaliate": True,
+        "attack_range": 3,
+        "side_by_side": True,
+        "side_gap": 3,
+        "attack_cooldown": 1.0,
     },
     "shadow_knight": {
         "name": "Shadow Knight", "level": 88, "hp": 230, "attack": 95, "strength": 100, "defence": 90,
@@ -919,6 +988,12 @@ MONSTERS = {
             ("onyx_amulet", 0.08, (1, 1)),
         ],
         "wander_radius": 3, "aggro_range": 9,
+    
+        "force_retaliate": True,
+        "attack_range": 3,
+        "side_by_side": True,
+        "side_gap": 3,
+        "attack_cooldown": 1.0,
     },
     # Emberdeep instance visuals (spawned only inside the private dungeon)
     "magma_slug": {
@@ -933,11 +1008,36 @@ MONSTERS = {
         "drops": [("coins", 0.95, (40, 100)), ("sapphire", 0.10, (1, 1)), ("health_potion", 0.2, (1, 1))],
         "wander_radius": 3, "aggro_range": 6,
     },
+    "wolf": {
+        "name": "Wolf", "level": 40, "hp": 72, "attack": 34, "strength": 36, "defence": 28,
+        "def_bonus": 12, "xp": 180, "respawn_ticks": 40,
+        "drops": [
+            ("bones", 1.0, (1, 1)),
+            ("coins", 0.95, (40, 120)),
+            ("feather", 0.35, (1, 3)),
+            ("cooked_shrimp", 0.30, (1, 2)),
+            ("sapphire", 0.08, (1, 1)),
+            ("health_potion", 0.15, (1, 1)),
+        ],
+        "wander_radius": 4, "aggro_range": 6,
+    
+        "force_retaliate": True,
+        "attack_range": 2,
+        "side_by_side": True,
+        "side_gap": 2,
+        "attack_cooldown": 1.0,
+    },
     "ember_wolf": {
         "name": "Ember Wolf", "level": 58, "hp": 110, "attack": 48, "strength": 50, "defence": 40,
         "def_bonus": 18, "xp": 280, "respawn_ticks": 50,
         "drops": [("bones", 1.0, (1, 1)), ("coins", 0.95, (80, 180)), ("ruby", 0.10, (1, 1))],
         "wander_radius": 3, "aggro_range": 7,
+    
+        "force_retaliate": True,
+        "attack_range": 2,
+        "side_by_side": True,
+        "side_gap": 2,
+        "attack_cooldown": 1.0,
     },
     "magma_knight": {
         "name": "Magma Knight", "level": 78, "hp": 180, "attack": 72, "strength": 75, "defence": 70,
@@ -962,49 +1062,49 @@ MONSTERS = {
 
 # Fixed monster spawn points: (monster_type, x, y)
 MONSTER_SPAWNS = [
-    ("giant_rat", 10, 42), ("giant_rat", 18, 46), ("giant_rat", 8, 50),
-    ("giant_rat", 24, 42), ("giant_rat", 6, 44), ("giant_rat", 16, 54),
+    ("giant_rat", 10, 60), ("giant_rat", 18, 64), ("giant_rat", 8, 68),
+    ("giant_rat", 24, 60), ("giant_rat", 12, 62), ("giant_rat", 16, 72),
     # Upper dungeon — goblins (more packed)
-    ("goblin", 44, 42), ("goblin", 48, 40), ("goblin", 42, 44),
-    ("goblin", 62, 40), ("goblin", 66, 42), ("goblin", 58, 44),
-    ("goblin", 42, 54), ("goblin", 46, 56), ("goblin", 50, 52),
-    ("goblin", 58, 54), ("goblin", 64, 54), ("goblin", 68, 58),
-    ("goblin", 48, 58), ("goblin", 60, 48),
+    ("goblin", 52, 60), ("goblin", 56, 58), ("goblin", 50, 62),
+    ("goblin", 70, 58), ("goblin", 74, 60), ("goblin", 66, 62),
+    ("goblin", 50, 72), ("goblin", 54, 74), ("goblin", 58, 70),
+    ("goblin", 66, 72), ("goblin", 72, 72), ("goblin", 76, 76),
+    ("goblin", 56, 76), ("goblin", 68, 66),
     # Upper dungeon — skeletons
-    ("skeleton", 64, 40), ("skeleton", 68, 44), ("skeleton", 60, 54),
-    ("skeleton", 44, 56), ("skeleton", 50, 58), ("skeleton", 66, 58),
-    ("skeleton", 50, 42), ("skeleton", 46, 40), ("skeleton", 54, 54),
-    ("skeleton", 62, 56), ("skeleton", 42, 52), ("skeleton", 70, 52),
+    ("skeleton", 72, 58), ("skeleton", 76, 62), ("skeleton", 68, 72),
+    ("skeleton", 52, 74), ("skeleton", 58, 76), ("skeleton", 74, 76),
+    ("skeleton", 58, 60), ("skeleton", 54, 58), ("skeleton", 62, 72),
+    ("skeleton", 70, 74), ("skeleton", 50, 70), ("skeleton", 78, 70),
     # Deep dungeon — giants
-    ("giant", 60, 70), ("giant", 64, 72), ("giant", 62, 76),
-    ("giant", 66, 78), ("giant", 61, 74),
+    ("giant", 68, 88), ("giant", 72, 90), ("giant", 70, 94),
+    ("giant", 74, 96), ("giant", 69, 92),
     # Mithril cavern — big skeletons
-    ("big_skeleton", 44, 88), ("big_skeleton", 48, 90), ("big_skeleton", 42, 94),
-    ("big_skeleton", 50, 92), ("big_skeleton", 46, 96),
+    ("big_skeleton", 54, 108), ("big_skeleton", 56, 108), ("big_skeleton", 50, 112),
+    ("big_skeleton", 58, 110), ("big_skeleton", 54, 114),
     # Spider nest — mid-late dungeon
-    ("spider", 60, 82), ("spider", 64, 83), ("spider", 68, 82),
-    ("spider", 62, 84), ("spider", 66, 84), ("spider", 60, 84),
-    ("spider", 68, 83),
+    ("spider", 68, 100), ("spider", 72, 101), ("spider", 76, 100),
+    ("spider", 70, 102), ("spider", 74, 102), ("spider", 68, 102),
+    ("spider", 76, 101),
     # Adamantite lair — dragon
-    ("dragon", 62, 94),
+    ("dragon", 70, 112),
     # Mountain pass — wolves (patrol clearings along the pass)
-    ("wolf", 108, 16), ("wolf", 112, 13), ("wolf", 114, 16),
-    ("wolf", 118, 16), ("wolf", 120, 18), ("wolf", 116, 15),
-    ("wolf", 110, 17), ("wolf", 122, 16),
+    ("wolf", 143, 16), ("wolf", 147, 13), ("wolf", 149, 16),
+    ("wolf", 153, 16), ("wolf", 155, 18), ("wolf", 151, 15),
+    ("wolf", 145, 17), ("wolf", 157, 16),
     # Stonehaven City — guards on the streets, knights by the castle
-    ("guard", 90, 56), ("guard", 96, 60), ("guard", 102, 56),
-    ("guard", 86, 50), ("guard", 94, 64), ("guard", 112, 62),
-    ("guard", 100, 68), ("guard", 88, 62),
-    ("knight", 108, 50), ("knight", 112, 48), ("knight", 106, 46),
-    ("knight", 110, 52), ("knight", 114, 50),
-    ("mythos_champion", 110, 48),  # Castle elite — full Mythos set
+    ("guard", 110, 72), ("guard", 116, 76), ("guard", 122, 72),
+    ("guard", 106, 66), ("guard", 114, 80), ("guard", 132, 78),
+    ("guard", 120, 84), ("guard", 108, 78),
+    ("knight", 128, 66), ("knight", 132, 64), ("knight", 126, 62),
+    ("knight", 130, 68), ("knight", 134, 66),
+    ("mythos_champion", 130, 64),  # Castle elite — full Mythos set
     # Void Sanctum — SE mystical dungeon (6 rooms, high level)
-    ("shade", 126, 85), ("shade", 129, 87), ("shade", 131, 84),
-    ("crypt_ghoul", 138, 85), ("crypt_ghoul", 142, 87), ("crypt_ghoul", 144, 84),
-    ("void_imp", 126, 92), ("void_imp", 129, 94), ("void_imp", 131, 91), ("void_imp", 128, 95),
-    ("obsidian_colossus", 138, 92), ("obsidian_colossus", 142, 94), ("obsidian_colossus", 144, 91),
-    ("shadow_knight", 126, 100), ("shadow_knight", 129, 102), ("shadow_knight", 131, 99),
-    ("void_horror", 140, 100), ("void_horror", 143, 102),
+    ("shade", 158, 109), ("shade", 161, 111), ("shade", 163, 108),
+    ("crypt_ghoul", 170, 109), ("crypt_ghoul", 174, 111), ("crypt_ghoul", 176, 108),
+    ("void_imp", 158, 116), ("void_imp", 161, 118), ("void_imp", 163, 115), ("void_imp", 160, 119),
+    ("obsidian_colossus", 170, 116), ("obsidian_colossus", 174, 118), ("obsidian_colossus", 176, 115),
+    ("shadow_knight", 158, 124), ("shadow_knight", 161, 126), ("shadow_knight", 163, 123),
+    ("void_horror", 172, 124), ("void_horror", 175, 126),
 ]
 
 # ---------------------------------------------------------------------------
@@ -1066,10 +1166,10 @@ RESOURCE_YIELDS = {
 # ---------------------------------------------------------------------------
 NPCS = [
     # Village
-    {"id": "shopkeeper_joe", "name": "Shopkeeper Joe", "x": 27, "y": 6,
+    {"id": "shopkeeper_joe", "name": "Shopkeeper Joe", "x": 45, "y": 7,
      "lines": ["Welcome to my general store!", "Take a look at my stock."], "shop_id": "general_store"},
 
-    {"id": "jeweler_lira", "name": "Lira the Jeweler", "x": 33, "y": 8,
+    {"id": "jeweler_lira", "name": "Lira the Jeweler", "x": 48, "y": 20,
      "lines": [
          "Rings, amulets, and unset gems — press B to browse.",
          "I stock everyday pieces. Rubies, diamonds, onyx and void jewelry you'll have to find yourself.",
@@ -1078,7 +1178,7 @@ NPCS = [
      ],
      "shop_id": "jewelry_shop", "quest_id": "liras_lost_locket"},
 
-    {"id": "fletcher_elena", "name": "Fletcher Elena", "x": 64, "y": 18,
+    {"id": "fletcher_elena", "name": "Fletcher Elena", "x": 72, "y": 24,
      "lines": [
          "Welcome to my bow shop! Press B to browse bows, arrows, and supplies.",
          "Fletching: chop logs → use a knife (N) to carve shafts or an unstrung bow.",
@@ -1089,7 +1189,7 @@ NPCS = [
      "quest_id": "elena_archery_lesson",
      "starter_kit": True},
 
-    {"id": "blacksmith_gareth", "name": "Blacksmith Gareth", "x": 56, "y": 8,
+    {"id": "blacksmith_gareth", "name": "Blacksmith Gareth", "x": 86, "y": 8,
      "lines": [
          "Welcome to my smithy! Furnace for smelting, anvil for smithing.",
          "Mine iron and coal in the deep dungeon, smelt steel bars, then smith steel gear here.",
@@ -1097,7 +1197,7 @@ NPCS = [
      ],
      "shop_id": "blacksmith_shop", "quest_id": "ore_for_the_forge", "forge": True},
 
-    {"id": "banker_iris", "name": "Banker Iris", "x": 38, "y": 16,
+    {"id": "banker_iris", "name": "Banker Iris", "x": 64, "y": 22,
      "lines": [
          "Welcome to the Village Bank.",
          "Store coins and items here. Purse max 65,000 — vault holds 10 million coins.",
@@ -1105,18 +1205,18 @@ NPCS = [
      ],
      "bank": True},
 
-    {"id": "elder_miriam", "name": "Elder Miriam", "x": 7, "y": 5,
+    {"id": "elder_miriam", "name": "Elder Miriam", "x": 9, "y": 7,
      "lines": [
          "The rats in the mine have gotten out of hand. Could you thin their numbers?",
          "Those giant rats leave tails behind — bring me a handful and I'll pay extra.",
      ],
      "quest_ids": ["rat_problem", "rat_tails"]},
 
-    {"id": "farmer_tom", "name": "Farmer Tom", "x": 27, "y": 27,
+    {"id": "farmer_tom", "name": "Farmer Tom", "x": 45, "y": 40,
      "lines": ["My daughter Mia wandered off into the forest and hasn't come back!"],
      "quest_id": "lost_child"},
 
-    {"id": "innkeeper_sarah", "name": "Innkeeper Sarah", "x": 7, "y": 27,
+    {"id": "innkeeper_sarah", "name": "Innkeeper Sarah", "x": 9, "y": 40,
      "lines": [
          "Rooms are full up, but stay a while and rest your feet.",
          "Cook your catch on the hearth — raw fish won't restore your health.",
@@ -1124,7 +1224,7 @@ NPCS = [
      ],
      "quest_id": "inn_special"},
 
-    {"id": "guard_marcus", "name": "Guard Marcus", "x": 30, "y": 4,
+    {"id": "guard_marcus", "name": "Guard Marcus", "x": 28, "y": 6,
      "lines": [
          "Halt! ...just kidding, welcome to the village.",
          "Stay safe out in the wilds.",
@@ -1132,42 +1232,42 @@ NPCS = [
      ],
      "quest_id": "goblin_watch"},
 
-    {"id": "guard_aldric", "name": "Guard Aldric", "x": 22, "y": 35,
+    {"id": "guard_aldric", "name": "Guard Aldric", "x": 28, "y": 50,
      "lines": ["Keep an eye out — the mine mouth is just south of here."]},
 
     {"id": "village_kid_timmy", "name": "Timmy", "x": 28, "y": 22,
      "lines": ["Wanna race? ...no? Okay."]},
 
-    {"id": "village_idiot_bob", "name": "Bob", "x": 5, "y": 17,
+    {"id": "village_idiot_bob", "name": "Bob", "x": 18, "y": 24,
      "lines": ["I once punched a goblin. It hurt. A lot. Don't recommend it."]},
 
-    {"id": "priest_cedric", "name": "Priest Cedric", "x": 5, "y": 6,
+    {"id": "priest_cedric", "name": "Priest Cedric", "x": 6, "y": 8,
      "lines": [
          "May your travels be safe. If you're ever low on health, a meal will do you good.",
          "The fallen leave bones. Bring me a stack and I'll bless your karma.",
      ],
      "quest_id": "blessed_bones"},
 
-    {"id": "monk_healer", "name": "Monk Alaric", "x": 36, "y": 24,
+    {"id": "monk_healer", "name": "Monk Alaric", "x": 50, "y": 26,
      "lines": ["Peace be with you, traveler."]},
 
     # Forest / lake
-    {"id": "old_fisherman_pete", "name": "Old Fisherman Pete", "x": 78, "y": 16,
+    {"id": "old_fisherman_pete", "name": "Old Fisherman Pete", "x": 106, "y": 16,
      "lines": ["Bring me some fresh shrimp and I'll teach you a thing or two about fishing."],
      "quest_id": "fishermans_request"},
 
-    {"id": "mia", "name": "Mia", "x": 74, "y": 8,
+    {"id": "mia", "name": "Mia", "x": 102, "y": 8,
      "lines": ["I'm lost! I want to go home to my dad in the village."],
      "quest_target_for": "lost_child"},
 
-    {"id": "mysterious_traveler", "name": "Mysterious Traveler", "x": 64, "y": 8,
+    {"id": "mysterious_traveler", "name": "Mysterious Traveler", "x": 96, "y": 10,
      "lines": ["The goblins in the dungeon wear strange mail. Bring me a piece and I'll make it worth your while."],
      "quest_id": "the_mysterious_traveler"},
 
-    {"id": "merchant_wanderer", "name": "Wandering Merchant", "x": 68, "y": 22,
+    {"id": "merchant_wanderer", "name": "Wandering Merchant", "x": 96, "y": 24,
      "lines": ["Bah, I've got nothing to sell you today. Come back later."]},
 
-    {"id": "pet_keeper_luna", "name": "Pet Keeper Luna", "x": 55, "y": 27,
+    {"id": "pet_keeper_luna", "name": "Pet Keeper Luna", "x": 85, "y": 40,
      "lines": [
          "Welcome to the Pet Emporium!",
          "Companions follow you and fight when monsters attack.",
@@ -1178,14 +1278,14 @@ NPCS = [
      "shop_id": "pet_shop"},
 
     # Mine / dungeon fringe
-    {"id": "mine_scout", "name": "Scout Elena", "x": 22, "y": 39,
+    {"id": "mine_scout", "name": "Scout Elena", "x": 22, "y": 54,
      "lines": [
          "Rats down there. Lots of rats. And ore, if you're brave.",
          "Deeper still — a spider nest. Bring me their silk and I'll pay well.",
      ],
      "quest_id": "silk_harvest"},
 
-    {"id": "dungeon_hermit", "name": "Hermit Cole", "x": 40, "y": 52,
+    {"id": "dungeon_hermit", "name": "Hermit Cole", "x": 48, "y": 70,
      "lines": [
          "Skeletons hunt by sight — only two will pile on you at once.",
          "Clear a dozen of those rattling fools and I'll tip you for it.",
@@ -1195,7 +1295,7 @@ NPCS = [
      ],
      "quest_ids": ["bone_and_blade", "giants_tithe", "adamant_proof"]},
 
-    {"id": "mad_scientist", "name": "Mad Scientist", "x": 70, "y": 22,
+    {"id": "mad_scientist", "name": "Mad Scientist", "x": 98, "y": 22,
      "lines": [
          "Behold! Potions of pure combat potential!",
          "Regular doses raise Attack, Strength or Defence by 10 for one minute.",
@@ -1207,14 +1307,14 @@ NPCS = [
      "quest_ids": ["void_samples", "void_crypt", "void_imps", "sanctum_apex"]},
 
     # Mountain pass / fishing village
-    {"id": "pass_scout", "name": "Scout Bren", "x": 104, "y": 16,
+    {"id": "pass_scout", "name": "Scout Bren", "x": 145, "y": 16,
      "lines": [
          "The mountain pass leads east to Harbourreach.",
          "Wolves hunt those rocks — combat around forty. Pack food.",
          "Thin the packs for me and I'll make it worth your while.",
      ],
      "quest_id": "wolves_on_the_pass"},
-    {"id": "tackle_merchant", "name": "Marina the Angler", "x": 138, "y": 9,
+    {"id": "tackle_merchant", "name": "Marina the Angler", "x": 177, "y": 9,
      "lines": [
          "Welcome to Harbourreach Tackle!",
          "Nets for shrimp, rods for trout, fly rods for salmon,",
@@ -1222,14 +1322,14 @@ NPCS = [
          "Higher fish need higher Fishing — and the right gear.",
      ],
      "shop_id": "harbour_tackle"},
-    {"id": "fishmonger_kai", "name": "Fishmonger Kai", "x": 138, "y": 23,
+    {"id": "fishmonger_kai", "name": "Fishmonger Kai", "x": 177, "y": 23,
      "lines": [
          "Catch it raw, cook it here on the hearth.",
          "Trout, salmon, lobster, tuna, swordfish — the pier has them all.",
          "I buy spare catch if your pack is full.",
      ],
      "shop_id": "harbour_fishmonger"},
-    {"id": "harbour_cook", "name": "Cook Nell", "x": 136, "y": 23,
+    {"id": "harbour_cook", "name": "Cook Nell", "x": 174, "y": 23,
      "lines": [
          "Use the harbour hearth to cook your catch.",
          "Burnt fish is still fish — just worse.",
@@ -1238,7 +1338,7 @@ NPCS = [
      "quest_id": "harbour_feast"},
 
     # Stonehaven City
-    {"id": "herald_rowan", "name": "Herald Rowan", "x": 110, "y": 47,
+    {"id": "herald_rowan", "name": "Herald Rowan", "x": 130, "y": 63,
      "lines": [
          "Welcome to Stonehaven Keep.",
          "The City Guard keeps the plazas safe — leave them be and they'll leave you be.",
@@ -1247,7 +1347,7 @@ NPCS = [
          "Still — if you can best six guards, then the knights, then our champion… the Keep will notice.",
      ],
      "quest_ids": ["city_watch", "knights_of_the_keep", "champions_challenge"]},
-    {"id": "city_vendor_mira", "name": "Mira the Vendor", "x": 96, "y": 58,
+    {"id": "city_vendor_mira", "name": "Mira the Vendor", "x": 116, "y": 74,
      "lines": [
          "Fresh bread and travel kits from the market square! Press B to browse.",
          "I stock food, potions, and a few steel scraps for travellers heading to the keep.",
@@ -1987,390 +2087,414 @@ def inventory_tab_for_item(item_id):
 TRAVEL_DESTINATIONS = [
     # Places
     {"id": "crossroads", "kind": "place", "label": "Village Crossroads",
-     "x": 22, "y": 18, "blurb": "Spawn & hub"},
+     "x": 28, "y": 24, "blurb": "Spawn & hub"},
     {"id": "bank", "kind": "place", "label": "Village Bank",
-     "x": 38, "y": 17, "blurb": "Store coins & items", "action": {"type": "BANK"}},
+     "x": 64, "y": 23, "blurb": "Store coins & items", "action": {"type": "BANK"}},
     {"id": "general_store", "kind": "place", "label": "General Store",
-     "x": 27, "y": 7, "blurb": "Shopkeeper Joe"},
+     "x": 45, "y": 8, "blurb": "Shopkeeper Joe"},
     {"id": "jewelry_shop", "kind": "place", "label": "Lira's Jewelry",
-     "x": 33, "y": 8, "blurb": "Common rings & amulets — buys gems · Gem Bag · quest"},
+     "x": 48, "y": 20, "blurb": "Common rings & amulets — buys gems · Gem Bag · quest"},
     {"id": "bow_shop", "kind": "place", "label": "Elena's Bow Shop",
-     "x": 64, "y": 18, "blurb": "Bows, arrows & fletching — free starter kit"},
+     "x": 72, "y": 24, "blurb": "Bows, arrows & fletching — free starter kit"},
     {"id": "smithy", "kind": "place", "label": "Smithy Furnace",
-     "x": 52, "y": 7, "blurb": "Smelt ores"},
+     "x": 80, "y": 7, "blurb": "Smelt ores"},
     {"id": "anvil", "kind": "place", "label": "Smithy Anvil",
-     "x": 59, "y": 7, "blurb": "Smith gear & jewelry"},
+     "x": 87, "y": 7, "blurb": "Smith gear & jewelry"},
     {"id": "pet_shop", "kind": "place", "label": "Pet Emporium",
-     "x": 55, "y": 30, "blurb": "Luna's companions"},
+     "x": 85, "y": 44, "blurb": "Luna's companions"},
     {"id": "inn_hearth", "kind": "place", "label": "Inn Hearth",
-     "x": 5, "y": 29, "blurb": "Cook food", "action": {"type": "COOK"}},
+     "x": 5, "y": 41, "blurb": "Cook food", "action": {"type": "COOK"}},
     {"id": "wishing_well", "kind": "place", "label": "Wishing Well",
-     "x": 30, "y": 21, "blurb": "Coin tosses & rare gifts · Lost Locket nearby"},
+     "x": 32, "y": 22, "blurb": "Coin tosses & rare gifts · Lost Locket nearby"},
     {"id": "lake", "kind": "place", "label": "Fishing Lake",
-     "x": 78, "y": 17, "blurb": "Shore fishing"},
+     "x": 106, "y": 17, "blurb": "Shore fishing"},
     {"id": "mad_scientist", "kind": "place", "label": "Mad Scientist",
-     "x": 70, "y": 22, "blurb": "Combat potions (+10 / +20)"},
+     "x": 98, "y": 22, "blurb": "Combat potions (+10 / +20)"},
     {"id": "mountain_pass", "kind": "place", "label": "Mountain Pass",
-     "x": 112, "y": 16, "blurb": "Wolves (lvl 40) — path east"},
+     "x": 145, "y": 16, "blurb": "Wolves (lvl 40) — path east"},
     {"id": "harbourreach", "kind": "place", "label": "Harbourreach",
-     "x": 138, "y": 18, "blurb": "Fishing village & harbour"},
+     "x": 176, "y": 18, "blurb": "Fishing village & harbour"},
     {"id": "harbour_tackle", "kind": "place", "label": "Tackle Shop",
-     "x": 138, "y": 10, "blurb": "Rods, pots, harpoons"},
+     "x": 177, "y": 10, "blurb": "Rods, pots, harpoons"},
     {"id": "tidehollow", "kind": "place", "label": "Tidehollow Cave",
-     "x": 138, "y": 3, "blurb": "Private 10-floor instance",
+     "x": 184, "y": 38, "blurb": "Private 10-floor instance",
      "action": {"type": "ENTER_DUNGEON", "dungeon_id": "tidehollow"}},
     {"id": "harbour_pier", "kind": "place", "label": "Harbour Pier",
-     "x": 143, "y": 18, "blurb": "Shore fishing — trout → swordfish"},
+     "x": 183, "y": 18, "blurb": "Shore fishing — trout → swordfish"},
     {"id": "stonehaven", "kind": "place", "label": "Stonehaven City",
-     "x": 98, "y": 58, "blurb": "Stone plazas & castle"},
+     "x": 118, "y": 74, "blurb": "Stone plazas & castle"},
     {"id": "emberdeep", "kind": "place", "label": "Emberdeep Volcano",
-     "x": 136, "y": 58, "blurb": "⚠ Lava dungeon — 8 floors · east of the city",
+     "x": 164, "y": 86, "blurb": "⚠ Lava dungeon — 8 floors · east of the city",
      "action": {"type": "ENTER_DUNGEON", "dungeon_id": "emberdeep"}},
     {"id": "mira_market", "kind": "place", "label": "Mira's Market",
-     "x": 96, "y": 58, "blurb": "Food, potions & steel scraps"},
+     "x": 116, "y": 74, "blurb": "Food, potions & steel scraps"},
     {"id": "stonehaven_castle", "kind": "place", "label": "Castle Keep",
-     "x": 108, "y": 50, "blurb": "Knights on patrol"},
+     "x": 128, "y": 66, "blurb": "Knights on patrol"},
     {"id": "dungeon_gate", "kind": "place", "label": "Dungeon Entrance",
-     "x": 30, "y": 53, "blurb": "Enter the depths"},
+     "x": 38, "y": 71, "blurb": "Enter the depths"},
     {"id": "dungeon_bank", "kind": "place", "label": "Dungeon Bank",
-     "x": 36, "y": 50, "blurb": "Chest near the gate", "action": {"type": "BANK"}},
+     "x": 44, "y": 68, "blurb": "Chest near the gate", "action": {"type": "BANK"}},
     {"id": "void_sanctum", "kind": "place", "label": "Void Sanctum",
-     "x": 137, "y": 79, "blurb": "⚠ High-level mystical dungeon (SE)"},
+     "x": 171, "y": 107, "blurb": "⚠ High-level mystical dungeon (SE)"},
     # Quest givers
     {"id": "quest_scout_bren", "kind": "place", "label": "Scout Bren",
-     "x": 104, "y": 16, "blurb": "Quest: Wolves on the Pass"},
+     "x": 145, "y": 16, "blurb": "Quest: Wolves on the Pass"},
     {"id": "quest_hermit_cole", "kind": "place", "label": "Hermit Cole",
-     "x": 40, "y": 52, "blurb": "Dungeon quests — bones & dragon"},
+     "x": 48, "y": 70, "blurb": "Dungeon quests — bones & dragon"},
     {"id": "quest_cook_nell", "kind": "place", "label": "Cook Nell",
-     "x": 136, "y": 23, "blurb": "Quest: Harbour Feast"},
+     "x": 174, "y": 23, "blurb": "Quest: Harbour Feast"},
     {"id": "quest_herald_rowan", "kind": "place", "label": "Herald Rowan",
-     "x": 110, "y": 47, "blurb": "Stonehaven quest chain"},
+     "x": 130, "y": 63, "blurb": "Stonehaven quest chain"},
     {"id": "quest_scout_elena", "kind": "place", "label": "Scout Elena",
-     "x": 22, "y": 39, "blurb": "Quest: Silk Harvest"},
+     "x": 22, "y": 54, "blurb": "Quest: Silk Harvest"},
     # Monsters (camp centres)
     {"id": "rats", "kind": "monster", "label": "Giant Rats",
-     "x": 14, "y": 46, "monster": "giant_rat", "blurb": "Starter mine"},
+     "x": 14, "y": 64, "monster": "giant_rat", "blurb": "Starter mine"},
     {"id": "goblins", "kind": "monster", "label": "Goblins",
-     "x": 50, "y": 52, "monster": "goblin", "blurb": "Upper dungeon"},
+     "x": 54, "y": 60, "monster": "goblin", "blurb": "Upper dungeon"},
     {"id": "skeletons", "kind": "monster", "label": "Skeletons",
-     "x": 62, "y": 56, "monster": "skeleton", "blurb": "Upper dungeon"},
+     "x": 70, "y": 62, "monster": "skeleton", "blurb": "Upper dungeon"},
     {"id": "giants", "kind": "monster", "label": "Giants",
-     "x": 63, "y": 74, "monster": "giant", "blurb": "Peaceful until hit"},
+     "x": 71, "y": 90, "monster": "giant", "blurb": "Peaceful until hit"},
     {"id": "guards", "kind": "monster", "label": "City Guards",
-     "x": 98, "y": 58, "monster": "guard", "blurb": "Stonehaven — peaceful until hit"},
+     "x": 118, "y": 74, "monster": "guard", "blurb": "Stonehaven — peaceful until hit"},
     {"id": "knights", "kind": "monster", "label": "Castle Knights",
-     "x": 108, "y": 50, "monster": "knight", "blurb": "Castle keep — peaceful until hit"},
+     "x": 128, "y": 66, "monster": "knight", "blurb": "Castle keep — peaceful until hit"},
     {"id": "mythos_champion", "kind": "monster", "label": "Mythos Champion",
-     "x": 110, "y": 48, "monster": "mythos_champion", "blurb": "⚠ Lv 90 — full Mythos plate (peaceful until hit)"},
+     "x": 130, "y": 64, "monster": "mythos_champion", "blurb": "⚠ Lv 90 — full Mythos plate (peaceful until hit)"},
     {"id": "big_skeletons", "kind": "monster", "label": "Big Skeletons",
-     "x": 46, "y": 92, "monster": "big_skeleton", "blurb": "Mithril cavern"},
+     "x": 54, "y": 110, "monster": "big_skeleton", "blurb": "Mithril cavern"},
     {"id": "spiders", "kind": "monster", "label": "Giant Spiders",
-     "x": 64, "y": 83, "monster": "spider", "blurb": "Spider nest"},
+     "x": 72, "y": 101, "monster": "spider", "blurb": "Spider nest"},
     {"id": "dragon", "kind": "monster", "label": "Adamant Dragon",
-     "x": 62, "y": 94, "monster": "dragon", "blurb": "Adamantite lair"},
+     "x": 70, "y": 112, "monster": "dragon", "blurb": "Adamantite lair"},
     {"id": "wolves", "kind": "monster", "label": "Mountain Wolves",
-     "x": 114, "y": 16, "monster": "wolf", "blurb": "Mountain pass (lvl 40)"},
+     "x": 147, "y": 16, "monster": "wolf", "blurb": "Mountain pass (lvl 40)"},
     {"id": "shades", "kind": "monster", "label": "Shades",
-     "x": 128, "y": 85, "monster": "shade", "blurb": "Void Sanctum room 1"},
+     "x": 160, "y": 110, "monster": "shade", "blurb": "Void Sanctum room 1"},
     {"id": "crypt_ghouls", "kind": "monster", "label": "Crypt Ghouls",
-     "x": 141, "y": 85, "monster": "crypt_ghoul", "blurb": "Void Sanctum room 2"},
+     "x": 173, "y": 110, "monster": "crypt_ghoul", "blurb": "Void Sanctum room 2"},
     {"id": "void_imps", "kind": "monster", "label": "Void Imps",
-     "x": 128, "y": 93, "monster": "void_imp", "blurb": "Void Sanctum room 3"},
+     "x": 160, "y": 117, "monster": "void_imp", "blurb": "Void Sanctum room 3"},
     {"id": "obsidian_colossi", "kind": "monster", "label": "Obsidian Colossi",
-     "x": 141, "y": 93, "monster": "obsidian_colossus", "blurb": "Void Sanctum room 4"},
+     "x": 173, "y": 117, "monster": "obsidian_colossus", "blurb": "Void Sanctum room 4"},
     {"id": "shadow_knights", "kind": "monster", "label": "Shadow Knights",
-     "x": 128, "y": 100, "monster": "shadow_knight", "blurb": "Void Sanctum room 5"},
+     "x": 160, "y": 125, "monster": "shadow_knight", "blurb": "Void Sanctum room 5"},
     {"id": "void_horror", "kind": "monster", "label": "Void Horror",
-     "x": 141, "y": 101, "monster": "void_horror", "blurb": "Sanctum boss (lvl 95)"},
+     "x": 173, "y": 125, "monster": "void_horror", "blurb": "Sanctum boss (lvl 95)"},
 ]
+
+
+
+def entrance_mouth_tiles(x, y):
+    """Tiles that count as standing in a dungeon mouth (the door and one step in)."""
+    tiles = set()
+    ax, ay = int(x), int(y)
+    for dx in (-1, 0, 1):
+        for dy in (0, -1):
+            tiles.add((ax + dx, ay + dy))
+    return tiles
 
 
 INTERACTABLES = [
-    {"id": "smithy_furnace", "kind": "furnace", "name": "Furnace", "x": 52, "y": 6},
-    {"id": "smithy_anvil", "kind": "anvil", "name": "Anvil", "x": 59, "y": 6},
-    {"id": "smithy_door", "kind": "door", "name": "Smithy Door", "x": 56, "y": 14,
-     "enter_x": 56, "enter_y": 12, "exit_x": 56, "exit_y": 15, "building": "smithy"},
-    {"id": "cottage_nw_door", "kind": "door", "name": "Door", "x": 7, "y": 11,
-     "enter_x": 7, "enter_y": 9, "exit_x": 7, "exit_y": 12, "building": "cottage_nw"},
-    {"id": "cottage_ne_door", "kind": "door", "name": "Door", "x": 27, "y": 11,
-     "enter_x": 27, "enter_y": 9, "exit_x": 27, "exit_y": 12, "building": "cottage_ne"},
-    {"id": "cottage_sw_door", "kind": "door", "name": "Door", "x": 7, "y": 32,
-     "enter_x": 7, "enter_y": 30, "exit_x": 7, "exit_y": 33, "building": "cottage_sw"},
-    {"id": "cottage_se_door", "kind": "door", "name": "Door", "x": 27, "y": 32,
-     "enter_x": 27, "enter_y": 30, "exit_x": 27, "exit_y": 33, "building": "cottage_se"},
-    {"id": "bank_door", "kind": "door", "name": "Bank Door", "x": 38, "y": 20,
-     "enter_x": 38, "enter_y": 18, "exit_x": 38, "exit_y": 21, "building": "bank"},
-    {"id": "pet_door", "kind": "door", "name": "Pet Emporium Door", "x": 55, "y": 32,
-     "enter_x": 55, "enter_y": 30, "exit_x": 55, "exit_y": 33, "building": "pet_emporium"},
-    {"id": "bank_booth", "kind": "bank", "name": "Bank Booth", "x": 38, "y": 16},
-    {"id": "dungeon_bank", "kind": "bank", "name": "Dungeon Bank Chest", "x": 36, "y": 50,
+    {"id": "smithy_furnace", "kind": "furnace", "name": "Furnace", "x": 80, "y": 6},
+    {"id": "smithy_anvil", "kind": "anvil", "name": "Anvil", "x": 87, "y": 6},
+    {"id": "smithy_door", "kind": "door", "name": "Smithy Door", "x": 86, "y": 18,
+     "enter_x": 86, "enter_y": 16, "exit_x": 86, "exit_y": 19, "building": "smithy"},
+    {"id": "cottage_nw_door", "kind": "door", "name": "Door", "x": 9, "y": 15,
+     "enter_x": 9, "enter_y": 13, "exit_x": 9, "exit_y": 16, "building": "cottage_nw"},
+    {"id": "cottage_ne_door", "kind": "door", "name": "Door", "x": 45, "y": 15,
+     "enter_x": 45, "enter_y": 13, "exit_x": 45, "exit_y": 16, "building": "cottage_ne"},
+    {"id": "cottage_sw_door", "kind": "door", "name": "Door", "x": 9, "y": 47,
+     "enter_x": 9, "enter_y": 45, "exit_x": 9, "exit_y": 48, "building": "cottage_sw"},
+    {"id": "cottage_se_door", "kind": "door", "name": "Door", "x": 45, "y": 47,
+     "enter_x": 45, "enter_y": 45, "exit_x": 45, "exit_y": 48, "building": "cottage_se"},
+    {"id": "bank_door", "kind": "door", "name": "Bank Door", "x": 64, "y": 28,
+     "enter_x": 64, "enter_y": 26, "exit_x": 64, "exit_y": 29, "building": "bank"},
+    {"id": "pet_door", "kind": "door", "name": "Pet Emporium Door", "x": 85, "y": 48,
+     "enter_x": 85, "enter_y": 46, "exit_x": 85, "exit_y": 49, "building": "pet_emporium"},
+    {"id": "bank_booth", "kind": "bank", "name": "Bank Booth", "x": 64, "y": 22},
+    {"id": "dungeon_bank", "kind": "bank", "name": "Dungeon Bank Chest", "x": 44, "y": 68,
      "variant": "chest"},
     {"id": "dungeon_entrance", "kind": "dungeon_entrance", "name": "Dungeon Entrance",
-     "x": 38, "y": 53, "enter_x": 40, "enter_y": 53, "exit_x": 30, "exit_y": 53},
+     "x": 46, "y": 71, "enter_x": 48, "enter_y": 71, "exit_x": 38, "exit_y": 71,
+     "dungeon_id": "depths", "pack": "skeleton_crypt"},
     {"id": "tidehollow_cave", "kind": "cave_entrance", "name": "Tidehollow Cave",
-     "x": 138, "y": 2, "blurb": "10 floors · clear each level · medal on completion",
-     "dungeon_id": "tidehollow"},
+     "x": 184, "y": 36, "blurb": "10 floors · clear each level · medal on completion",
+     "dungeon_id": "tidehollow", "pack": "goblin_cave"},
     {"id": "emberdeep_mouth", "kind": "volcano_entrance", "name": "Emberdeep Crater",
-     "x": 136, "y": 58, "blurb": "8 lava floors · new beasts · Emberdeep Medal",
-     "dungeon_id": "emberdeep"},
+     "x": 164, "y": 84, "blurb": "8 lava floors · new beasts · Emberdeep Medal",
+     "dungeon_id": "emberdeep", "pack": "dragon_lair"},
 
-    # --- Elder's Hall (cottage_nw) floor 4–10, 4–10 ---
-    {"id": "elder_fireplace", "kind": "range", "name": "Hearth", "x": 5, "y": 4},
-    {"id": "elder_bookshelf", "kind": "bookshelf", "name": "Bookshelf", "x": 9, "y": 4},
-    {"id": "elder_table", "kind": "table", "name": "Council Table", "x": 5, "y": 8},
-    {"id": "elder_chair_a", "kind": "chair", "name": "Chair", "x": 4, "y": 8, "facing": 1},
-    {"id": "elder_chair_b", "kind": "chair", "name": "Chair", "x": 6, "y": 8, "facing": -1},
-    {"id": "elder_rug", "kind": "rug", "name": "Rug", "x": 7, "y": 7, "color": [90, 50, 110]},
-    {"id": "elder_candle", "kind": "candle", "name": "Candle", "x": 9, "y": 8},
-    {"id": "elder_chest", "kind": "chest", "name": "Chest", "x": 9, "y": 9},
+    # --- Elder's Hall (cottage_nw) floor 5–14, 5–14 ---
+    {"id": "elder_fireplace", "kind": "range", "name": "Hearth", "x": 6, "y": 5},
+    {"id": "elder_bookshelf", "kind": "bookshelf", "name": "Bookshelf", "x": 13, "y": 5},
+    {"id": "elder_table", "kind": "table", "name": "Council Table", "x": 6, "y": 10},
+    {"id": "elder_chair_a", "kind": "chair", "name": "Chair", "x": 5, "y": 10, "facing": 1},
+    {"id": "elder_chair_b", "kind": "chair", "name": "Chair", "x": 7, "y": 10, "facing": -1},
+    {"id": "elder_rug", "kind": "rug", "name": "Rug", "x": 9, "y": 9, "color": [90, 50, 110]},
+    {"id": "elder_candle", "kind": "candle", "name": "Candle", "x": 13, "y": 10},
+    {"id": "elder_chest", "kind": "chest", "name": "Chest", "x": 13, "y": 12},
 
-    # --- General Store (cottage_ne) floor 16–22, 4–10 ---
-    {"id": "shop_counter", "kind": "counter", "name": "Shop Counter", "x": 27, "y": 5},
-    {"id": "shop_shelf_a", "kind": "shelf", "name": "Shelves", "x": 24, "y": 4},
-    {"id": "shop_shelf_b", "kind": "shelf", "name": "Shelves", "x": 30, "y": 4},
-    {"id": "shop_crate_a", "kind": "crate", "name": "Crate", "x": 24, "y": 8},
-    {"id": "shop_crate_b", "kind": "crate", "name": "Crate", "x": 25, "y": 9},
-    {"id": "shop_barrel", "kind": "barrel", "name": "Barrel", "x": 30, "y": 8},
-    {"id": "shop_barrel_b", "kind": "barrel", "name": "Barrel", "x": 29, "y": 9},
-    {"id": "shop_rug", "kind": "rug", "name": "Rug", "x": 27, "y": 8, "color": [70, 90, 130]},
+    # --- General Store (cottage_ne) floor 41–50, 5–14 ---
+    {"id": "shop_counter", "kind": "counter", "name": "Shop Counter", "x": 45, "y": 6},
+    {"id": "shop_shelf_a", "kind": "shelf", "name": "Shelves", "x": 41, "y": 5},
+    {"id": "shop_shelf_b", "kind": "shelf", "name": "Shelves", "x": 50, "y": 5},
+    {"id": "shop_crate_a", "kind": "crate", "name": "Crate", "x": 41, "y": 10},
+    {"id": "shop_crate_b", "kind": "crate", "name": "Crate", "x": 42, "y": 11},
+    {"id": "shop_barrel", "kind": "barrel", "name": "Barrel", "x": 50, "y": 10},
+    {"id": "shop_barrel_b", "kind": "barrel", "name": "Barrel", "x": 49, "y": 11},
+    {"id": "shop_rug", "kind": "rug", "name": "Rug", "x": 45, "y": 10, "color": [70, 90, 130]},
 
-    # --- The Resting Ox inn (cottage_sw) floor 4–10, 21–27 ---
-    {"id": "inn_fireplace", "kind": "range", "name": "Cooking Hearth", "x": 4, "y": 29},
-    {"id": "inn_table", "kind": "table", "name": "Table", "x": 9, "y": 27},
-    {"id": "inn_chair_a", "kind": "chair", "name": "Chair", "x": 8, "y": 27, "facing": 1},
-    {"id": "inn_chair_b", "kind": "chair", "name": "Chair", "x": 10, "y": 27, "facing": -1},
-    {"id": "inn_bed_a", "kind": "bed", "name": "Bed", "x": 4, "y": 29},
-    {"id": "inn_bed_b", "kind": "bed", "name": "Bed", "x": 4, "y": 30},
-    {"id": "inn_barrel", "kind": "barrel", "name": "Ale Barrel", "x": 9, "y": 29},
-    {"id": "inn_barrel_b", "kind": "barrel", "name": "Ale Barrel", "x": 10, "y": 25},
-    {"id": "inn_rug", "kind": "rug", "name": "Rug", "x": 7, "y": 28, "color": [130, 70, 40]},
-    {"id": "inn_candle", "kind": "candle", "name": "Candle", "x": 9, "y": 29},
+    # --- The Resting Ox inn (cottage_sw) floor 5–14, 37–46 ---
+    {"id": "inn_fireplace", "kind": "range", "name": "Cooking Hearth", "x": 5, "y": 41},
+    {"id": "inn_table", "kind": "table", "name": "Table", "x": 12, "y": 39},
+    {"id": "inn_chair_a", "kind": "chair", "name": "Chair", "x": 11, "y": 39, "facing": 1},
+    {"id": "inn_chair_b", "kind": "chair", "name": "Chair", "x": 13, "y": 39, "facing": -1},
+    {"id": "inn_bed_a", "kind": "bed", "name": "Bed", "x": 5, "y": 41},
+    {"id": "inn_bed_b", "kind": "bed", "name": "Bed", "x": 5, "y": 42},
+    {"id": "inn_barrel", "kind": "barrel", "name": "Ale Barrel", "x": 12, "y": 41},
+    {"id": "inn_barrel_b", "kind": "barrel", "name": "Ale Barrel", "x": 13, "y": 37},
+    {"id": "inn_rug", "kind": "rug", "name": "Rug", "x": 9, "y": 40, "color": [130, 70, 40]},
+    {"id": "inn_candle", "kind": "candle", "name": "Candle", "x": 12, "y": 41},
 
-    # --- Farmhouse (cottage_se) floor 16–22, 21–27 ---
-    {"id": "farm_bed", "kind": "bed", "name": "Bed", "x": 24, "y": 25},
-    {"id": "farm_table", "kind": "table", "name": "Table", "x": 29, "y": 27},
-    {"id": "farm_chair", "kind": "chair", "name": "Chair", "x": 28, "y": 27, "facing": 1},
-    {"id": "farm_crate", "kind": "crate", "name": "Crate", "x": 30, "y": 25},
-    {"id": "farm_barrel", "kind": "barrel", "name": "Barrel", "x": 24, "y": 29},
-    {"id": "farm_chest", "kind": "chest", "name": "Chest", "x": 30, "y": 30},
-    {"id": "farm_rug", "kind": "rug", "name": "Rug", "x": 27, "y": 28, "color": [100, 80, 50]},
-    {"id": "farm_candle", "kind": "candle", "name": "Candle", "x": 29, "y": 25},
+    # --- Farmhouse (cottage_se) floor 41–50, 37–46 ---
+    {"id": "farm_bed", "kind": "bed", "name": "Bed", "x": 41, "y": 37},
+    {"id": "farm_table", "kind": "table", "name": "Table", "x": 48, "y": 39},
+    {"id": "farm_chair", "kind": "chair", "name": "Chair", "x": 47, "y": 39, "facing": 1},
+    {"id": "farm_crate", "kind": "crate", "name": "Crate", "x": 50, "y": 37},
+    {"id": "farm_barrel", "kind": "barrel", "name": "Barrel", "x": 41, "y": 41},
+    {"id": "farm_chest", "kind": "chest", "name": "Chest", "x": 50, "y": 42},
+    {"id": "farm_rug", "kind": "rug", "name": "Rug", "x": 45, "y": 40, "color": [100, 80, 50]},
+    {"id": "farm_candle", "kind": "candle", "name": "Candle", "x": 48, "y": 37},
 
-    # --- Village Bank floor 27–33, 13–17 ---
-    {"id": "bank_booth_w", "kind": "bank", "name": "Bank Booth", "x": 36, "y": 16},
-    {"id": "bank_booth_e", "kind": "bank", "name": "Bank Booth", "x": 40, "y": 16},
-    {"id": "bank_chest_a", "kind": "chest", "name": "Vault Chest", "x": 35, "y": 15},
-    {"id": "bank_chest_b", "kind": "chest", "name": "Vault Chest", "x": 41, "y": 15},
-    {"id": "bank_stool_a", "kind": "stool", "name": "Stool", "x": 36, "y": 18},
-    {"id": "bank_stool_b", "kind": "stool", "name": "Stool", "x": 40, "y": 18},
-    {"id": "bank_rug", "kind": "rug", "name": "Rug", "x": 38, "y": 17, "color": [50, 70, 110]},
+    # --- Village Bank floor 59–69, 19–27 ---
+    {"id": "bank_booth_w", "kind": "bank", "name": "Bank Booth", "x": 61, "y": 22},
+    {"id": "bank_booth_e", "kind": "bank", "name": "Bank Booth", "x": 67, "y": 22},
+    {"id": "bank_chest_a", "kind": "chest", "name": "Vault Chest", "x": 59, "y": 19},
+    {"id": "bank_chest_b", "kind": "chest", "name": "Vault Chest", "x": 69, "y": 19},
+    {"id": "bank_stool_a", "kind": "stool", "name": "Stool", "x": 61, "y": 24},
+    {"id": "bank_stool_b", "kind": "stool", "name": "Stool", "x": 67, "y": 24},
+    {"id": "bank_rug", "kind": "rug", "name": "Rug", "x": 64, "y": 23, "color": [50, 70, 110]},
 
-    # --- Gareth's Smithy floor 37–47, 5–13 ---
-    {"id": "smith_workbench", "kind": "workbench", "name": "Workbench", "x": 54, "y": 6},
-    {"id": "smith_weapon_rack", "kind": "weapon_rack", "name": "Weapon Rack", "x": 61, "y": 5},
-    {"id": "smith_barrel_a", "kind": "barrel", "name": "Ore Barrel", "x": 51, "y": 9},
-    {"id": "smith_barrel_b", "kind": "barrel", "name": "Ore Barrel", "x": 51, "y": 10},
-    {"id": "smith_crate", "kind": "crate", "name": "Crate", "x": 61, "y": 10},
-    {"id": "smith_quench", "kind": "quench_bucket", "name": "Quench Bucket", "x": 64, "y": 8},
-    {"id": "smith_chest", "kind": "chest", "name": "Tool Chest", "x": 61, "y": 12},
+    # --- Gareth's Smithy floor 79–93, 5–17 ---
+    {"id": "smith_workbench", "kind": "workbench", "name": "Workbench", "x": 82, "y": 6},
+    {"id": "smith_weapon_rack", "kind": "weapon_rack", "name": "Weapon Rack", "x": 92, "y": 5},
+    {"id": "smith_barrel_a", "kind": "barrel", "name": "Ore Barrel", "x": 79, "y": 9},
+    {"id": "smith_barrel_b", "kind": "barrel", "name": "Ore Barrel", "x": 79, "y": 10},
+    {"id": "smith_crate", "kind": "crate", "name": "Crate", "x": 92, "y": 10},
+    {"id": "smith_quench", "kind": "quench_bucket", "name": "Quench Bucket", "x": 90, "y": 8},
+    {"id": "smith_chest", "kind": "chest", "name": "Tool Chest", "x": 92, "y": 14},
 
-    # --- Pet Emporium floor 37–45, 21–27 ---
-    {"id": "pet_counter", "kind": "counter", "name": "Counter", "x": 55, "y": 26},
-    {"id": "pet_cage_a", "kind": "pet_cage", "name": "Cage", "x": 51, "y": 25},
-    {"id": "pet_cage_b", "kind": "pet_cage", "name": "Cage", "x": 52, "y": 25},
-    {"id": "pet_bed_a", "kind": "pet_bed", "name": "Pet Bed", "x": 58, "y": 25},
-    {"id": "pet_bed_b", "kind": "pet_bed", "name": "Pet Bed", "x": 59, "y": 26},
-    {"id": "pet_shelf", "kind": "shelf", "name": "Supplies", "x": 51, "y": 28},
-    {"id": "pet_barrel", "kind": "barrel", "name": "Feed Barrel", "x": 59, "y": 29},
-    {"id": "pet_rug", "kind": "rug", "name": "Rug", "x": 55, "y": 28, "color": [80, 120, 70]},
-    {"id": "pet_candle", "kind": "candle", "name": "Candle", "x": 53, "y": 30},
+    # --- Pet Emporium floor 79–91, 37–47 ---
+    {"id": "pet_counter", "kind": "counter", "name": "Counter", "x": 85, "y": 40},
+    {"id": "pet_cage_a", "kind": "pet_cage", "name": "Cage", "x": 79, "y": 37},
+    {"id": "pet_cage_b", "kind": "pet_cage", "name": "Cage", "x": 80, "y": 37},
+    {"id": "pet_bed_a", "kind": "pet_bed", "name": "Pet Bed", "x": 88, "y": 37},
+    {"id": "pet_bed_b", "kind": "pet_bed", "name": "Pet Bed", "x": 89, "y": 38},
+    {"id": "pet_shelf", "kind": "shelf", "name": "Supplies", "x": 79, "y": 42},
+    {"id": "pet_barrel", "kind": "barrel", "name": "Feed Barrel", "x": 89, "y": 43},
+    {"id": "pet_rug", "kind": "rug", "name": "Rug", "x": 85, "y": 42, "color": [80, 120, 70]},
+    {"id": "pet_candle", "kind": "candle", "name": "Candle", "x": 81, "y": 44},
 
-    # --- Harbourreach Tackle (98–106, 4–12) ---
-    {"id": "tackle_door", "kind": "door", "name": "Tackle Shop Door", "x": 138, "y": 14,
-     "enter_x": 138, "enter_y": 12, "exit_x": 138, "exit_y": 15, "building": "harbour_tackle"},
-    {"id": "tackle_counter", "kind": "counter", "name": "Counter", "x": 138, "y": 8},
-    {"id": "tackle_shelf_a", "kind": "shelf", "name": "Rod Racks", "x": 135, "y": 7},
-    {"id": "tackle_shelf_b", "kind": "shelf", "name": "Net Baskets", "x": 141, "y": 7},
-    {"id": "tackle_barrel", "kind": "barrel", "name": "Bait Barrel", "x": 135, "y": 11},
-    {"id": "tackle_crate", "kind": "crate", "name": "Crate", "x": 141, "y": 11},
+    # --- Harbourreach Tackle ---
+    {"id": "tackle_door", "kind": "door", "name": "Tackle Shop Door", "x": 177, "y": 14,
+     "enter_x": 177, "enter_y": 12, "exit_x": 177, "exit_y": 15, "building": "harbour_tackle"},
+    {"id": "tackle_counter", "kind": "counter", "name": "Counter", "x": 177, "y": 8},
+    {"id": "tackle_shelf_a", "kind": "shelf", "name": "Rod Racks", "x": 173, "y": 7},
+    {"id": "tackle_shelf_b", "kind": "shelf", "name": "Net Baskets", "x": 181, "y": 7},
+    {"id": "tackle_barrel", "kind": "barrel", "name": "Bait Barrel", "x": 173, "y": 11},
+    {"id": "tackle_crate", "kind": "crate", "name": "Crate", "x": 181, "y": 11},
 
-    # --- Kai's Catch / harbour cookhouse (98–106, 18–26) ---
-    {"id": "fishmonger_door", "kind": "door", "name": "Fishmonger Door", "x": 138, "y": 28,
-     "enter_x": 138, "enter_y": 26, "exit_x": 138, "exit_y": 29, "building": "harbour_fishmonger"},
-    {"id": "harbour_hearth", "kind": "range", "name": "Harbour Hearth", "x": 135, "y": 21},
-    {"id": "fish_counter", "kind": "counter", "name": "Fish Counter", "x": 138, "y": 22},
-    {"id": "fish_barrel_a", "kind": "barrel", "name": "Ice Barrel", "x": 141, "y": 21},
-    {"id": "fish_barrel_b", "kind": "barrel", "name": "Salt Barrel", "x": 141, "y": 25},
-    {"id": "fish_table", "kind": "table", "name": "Gutting Table", "x": 136, "y": 25},
-    {"id": "fish_rug", "kind": "rug", "name": "Rug", "x": 138, "y": 24, "color": [50, 90, 120]},
+    # --- Kai's Catch / harbour cookhouse ---
+    {"id": "fishmonger_door", "kind": "door", "name": "Fishmonger Door", "x": 177, "y": 28,
+     "enter_x": 177, "enter_y": 26, "exit_x": 177, "exit_y": 29, "building": "harbour_fishmonger"},
+    {"id": "harbour_hearth", "kind": "range", "name": "Harbour Hearth", "x": 173, "y": 21},
+    {"id": "fish_counter", "kind": "counter", "name": "Fish Counter", "x": 177, "y": 22},
+    {"id": "fish_barrel_a", "kind": "barrel", "name": "Ice Barrel", "x": 181, "y": 21},
+    {"id": "fish_barrel_b", "kind": "barrel", "name": "Salt Barrel", "x": 181, "y": 25},
+    {"id": "fish_table", "kind": "table", "name": "Gutting Table", "x": 174, "y": 25},
+    {"id": "fish_rug", "kind": "rug", "name": "Rug", "x": 177, "y": 24, "color": [50, 90, 120]},
 
     # Village wishing well (east of crossroads, south of the road)
-    {"id": "wishing_well", "kind": "wishing_well", "name": "Wishing Well", "x": 30, "y": 21},
+    {"id": "wishing_well", "kind": "wishing_well", "name": "Wishing Well", "x": 32, "y": 22},
 
     # Stonehaven City doors
-    {"id": "city_house_nw_door", "kind": "door", "name": "Door", "x": 86, "y": 52,
-     "enter_x": 86, "enter_y": 50, "exit_x": 86, "exit_y": 53, "building": "city_house_nw"},
-    {"id": "city_house_sw_door", "kind": "door", "name": "Door", "x": 86, "y": 66,
-     "enter_x": 86, "enter_y": 64, "exit_x": 86, "exit_y": 67, "building": "city_house_sw"},
-    {"id": "city_barracks_door", "kind": "door", "name": "Barracks Door", "x": 114, "y": 68,
-     "enter_x": 114, "enter_y": 66, "exit_x": 114, "exit_y": 69, "building": "city_barracks"},
-    {"id": "castle_gate", "kind": "door", "name": "Castle Gate", "x": 108, "y": 54,
-     "enter_x": 108, "enter_y": 52, "exit_x": 108, "exit_y": 56, "building": "stonehaven_castle"},
-    {"id": "castle_gate_e", "kind": "door", "name": "Castle Gate", "x": 109, "y": 54,
-     "enter_x": 109, "enter_y": 52, "exit_x": 109, "exit_y": 56, "building": "stonehaven_castle"},
+    {"id": "city_house_nw_door", "kind": "door", "name": "Door", "x": 106, "y": 68,
+     "enter_x": 106, "enter_y": 66, "exit_x": 106, "exit_y": 69, "building": "city_house_nw"},
+    {"id": "city_house_sw_door", "kind": "door", "name": "Door", "x": 106, "y": 82,
+     "enter_x": 106, "enter_y": 80, "exit_x": 106, "exit_y": 83, "building": "city_house_sw"},
+    {"id": "city_barracks_door", "kind": "door", "name": "Barracks Door", "x": 134, "y": 84,
+     "enter_x": 134, "enter_y": 82, "exit_x": 134, "exit_y": 85, "building": "city_barracks"},
+    {"id": "castle_gate", "kind": "door", "name": "Castle Gate", "x": 128, "y": 70,
+     "enter_x": 128, "enter_y": 67, "exit_x": 128, "exit_y": 72, "building": "stonehaven_castle"},
+    {"id": "castle_gate_w", "kind": "door", "name": "Castle Gate", "x": 126, "y": 70,
+     "enter_x": 126, "enter_y": 67, "exit_x": 126, "exit_y": 72, "building": "stonehaven_castle"},
+    {"id": "castle_gate_w2", "kind": "door", "name": "Castle Gate", "x": 127, "y": 70,
+     "enter_x": 127, "enter_y": 67, "exit_x": 127, "exit_y": 72, "building": "stonehaven_castle"},
+    {"id": "castle_gate_e", "kind": "door", "name": "Castle Gate", "x": 129, "y": 70,
+     "enter_x": 129, "enter_y": 67, "exit_x": 129, "exit_y": 72, "building": "stonehaven_castle"},
+    {"id": "castle_gate_e2", "kind": "door", "name": "Castle Gate", "x": 130, "y": 70,
+     "enter_x": 130, "enter_y": 67, "exit_x": 130, "exit_y": 72, "building": "stonehaven_castle"},
 
     # --- Castle Keep interior ---
-    {"id": "castle_throne", "kind": "throne", "name": "Throne", "x": 110, "y": 45},
-    {"id": "castle_rug", "kind": "rug", "name": "Royal Rug", "x": 110, "y": 48, "color": [120, 36, 48]},
-    {"id": "castle_table", "kind": "table", "name": "Council Table", "x": 106, "y": 48},
-    {"id": "castle_chair_a", "kind": "chair", "name": "Chair", "x": 105, "y": 48, "facing": 1},
-    {"id": "castle_chair_b", "kind": "chair", "name": "Chair", "x": 107, "y": 48, "facing": -1},
-    {"id": "castle_banner_w", "kind": "banner", "name": "Banner", "x": 104, "y": 45, "color": [160, 40, 48]},
-    {"id": "castle_banner_e", "kind": "banner", "name": "Banner", "x": 116, "y": 45, "color": [160, 40, 48]},
-    {"id": "castle_rack", "kind": "weapon_rack", "name": "Armoury Rack", "x": 103, "y": 50},
-    {"id": "castle_chest", "kind": "chest", "name": "Keep Chest", "x": 115, "y": 50},
-    {"id": "castle_brazier_w", "kind": "brazier", "name": "Brazier", "x": 103, "y": 46},
-    {"id": "castle_brazier_e", "kind": "brazier", "name": "Brazier", "x": 115, "y": 46},
-    {"id": "castle_candle", "kind": "candle", "name": "Candle", "x": 108, "y": 46},
+    {"id": "castle_throne", "kind": "throne", "name": "Throne", "x": 130, "y": 61},
+    {"id": "castle_rug", "kind": "rug", "name": "Royal Rug", "x": 130, "y": 64, "color": [120, 36, 48]},
+    {"id": "castle_table", "kind": "table", "name": "Council Table", "x": 126, "y": 64},
+    {"id": "castle_chair_a", "kind": "chair", "name": "Chair", "x": 125, "y": 64, "facing": 1},
+    {"id": "castle_chair_b", "kind": "chair", "name": "Chair", "x": 127, "y": 64, "facing": -1},
+    {"id": "castle_banner_w", "kind": "banner", "name": "Banner", "x": 124, "y": 61, "color": [160, 40, 48]},
+    {"id": "castle_banner_e", "kind": "banner", "name": "Banner", "x": 134, "y": 61, "color": [160, 40, 48]},
+    {"id": "castle_rack", "kind": "weapon_rack", "name": "Armoury Rack", "x": 123, "y": 66},
+    {"id": "castle_chest", "kind": "chest", "name": "Keep Chest", "x": 133, "y": 66},
+    {"id": "castle_brazier_w", "kind": "brazier", "name": "Brazier", "x": 123, "y": 62},
+    {"id": "castle_brazier_e", "kind": "brazier", "name": "Brazier", "x": 133, "y": 62},
+    {"id": "castle_candle", "kind": "candle", "name": "Candle", "x": 128, "y": 62},
 
     # --- City plaza atmosphere ---
-    {"id": "city_fountain", "kind": "fountain", "name": "Plaza Fountain", "x": 98, "y": 58},
-    {"id": "city_stall_a", "kind": "market_stall", "name": "Market Stall", "x": 94, "y": 56},
-    {"id": "city_stall_b", "kind": "market_stall", "name": "Market Stall", "x": 102, "y": 56},
-    {"id": "city_stall_c", "kind": "market_stall", "name": "Market Stall", "x": 94, "y": 61},
-    {"id": "city_crate_a", "kind": "crate", "name": "Crate", "x": 101, "y": 60},
-    {"id": "city_barrel_a", "kind": "barrel", "name": "Barrel", "x": 96, "y": 60},
+    {"id": "city_fountain", "kind": "fountain", "name": "Plaza Fountain", "x": 118, "y": 74},
+    {"id": "city_stall_a", "kind": "market_stall", "name": "Market Stall", "x": 114, "y": 72},
+    {"id": "city_stall_b", "kind": "market_stall", "name": "Market Stall", "x": 122, "y": 72},
+    {"id": "city_stall_c", "kind": "market_stall", "name": "Market Stall", "x": 114, "y": 77},
+    {"id": "city_crate_a", "kind": "crate", "name": "Crate", "x": 121, "y": 76},
+    {"id": "city_barrel_a", "kind": "barrel", "name": "Barrel", "x": 116, "y": 76},
 
     # --- City house NW furniture ---
-    {"id": "city_nw_bed", "kind": "bed", "name": "Bed", "x": 84, "y": 46},
-    {"id": "city_nw_table", "kind": "table", "name": "Table", "x": 87, "y": 48},
-    {"id": "city_nw_chair", "kind": "chair", "name": "Chair", "x": 86, "y": 48, "facing": 1},
-    {"id": "city_nw_rug", "kind": "rug", "name": "Rug", "x": 86, "y": 49, "color": [80, 70, 100]},
-    {"id": "city_nw_chest", "kind": "chest", "name": "Chest", "x": 88, "y": 46},
+    {"id": "city_nw_bed", "kind": "bed", "name": "Bed", "x": 104, "y": 62},
+    {"id": "city_nw_table", "kind": "table", "name": "Table", "x": 107, "y": 64},
+    {"id": "city_nw_chair", "kind": "chair", "name": "Chair", "x": 106, "y": 64, "facing": 1},
+    {"id": "city_nw_rug", "kind": "rug", "name": "Rug", "x": 106, "y": 65, "color": [80, 70, 100]},
+    {"id": "city_nw_chest", "kind": "chest", "name": "Chest", "x": 108, "y": 62},
 
     # --- City house SW furniture ---
-    {"id": "city_sw_bed", "kind": "bed", "name": "Bed", "x": 84, "y": 60},
-    {"id": "city_sw_table", "kind": "table", "name": "Table", "x": 87, "y": 62},
-    {"id": "city_sw_barrel", "kind": "barrel", "name": "Barrel", "x": 88, "y": 64},
-    {"id": "city_sw_rug", "kind": "rug", "name": "Rug", "x": 86, "y": 63, "color": [100, 70, 50]},
+    {"id": "city_sw_bed", "kind": "bed", "name": "Bed", "x": 104, "y": 76},
+    {"id": "city_sw_table", "kind": "table", "name": "Table", "x": 107, "y": 78},
+    {"id": "city_sw_barrel", "kind": "barrel", "name": "Barrel", "x": 108, "y": 80},
+    {"id": "city_sw_rug", "kind": "rug", "name": "Rug", "x": 106, "y": 79, "color": [100, 70, 50]},
 
     # --- Barracks furniture ---
-    {"id": "barracks_rack_a", "kind": "weapon_rack", "name": "Weapon Rack", "x": 112, "y": 60},
-    {"id": "barracks_rack_b", "kind": "weapon_rack", "name": "Weapon Rack", "x": 116, "y": 60},
-    {"id": "barracks_bed_a", "kind": "bed", "name": "Cot", "x": 112, "y": 64},
-    {"id": "barracks_bed_b", "kind": "bed", "name": "Cot", "x": 115, "y": 64},
-    {"id": "barracks_table", "kind": "table", "name": "Table", "x": 114, "y": 62},
-    {"id": "barracks_chest", "kind": "chest", "name": "Footlocker", "x": 116, "y": 66},
-    {"id": "barracks_barrel", "kind": "barrel", "name": "Barrel", "x": 112, "y": 66},
+    {"id": "barracks_rack_a", "kind": "weapon_rack", "name": "Weapon Rack", "x": 132, "y": 76},
+    {"id": "barracks_rack_b", "kind": "weapon_rack", "name": "Weapon Rack", "x": 136, "y": 76},
+    {"id": "barracks_bed_a", "kind": "bed", "name": "Cot", "x": 132, "y": 80},
+    {"id": "barracks_bed_b", "kind": "bed", "name": "Cot", "x": 135, "y": 80},
+    {"id": "barracks_table", "kind": "table", "name": "Table", "x": 134, "y": 78},
+    {"id": "barracks_chest", "kind": "chest", "name": "Footlocker", "x": 136, "y": 82},
+    {"id": "barracks_barrel", "kind": "barrel", "name": "Barrel", "x": 132, "y": 82},
 
     # Void Sanctum — dark mystical entrance (SE of Stonehaven)
     {"id": "void_sanctum_door", "kind": "door", "name": "Void Sanctum Gate",
-     "x": 137, "y": 80,
-     "enter_x": 137, "enter_y": 78, "exit_x": 137, "exit_y": 81, "building": "void_sanctum"},
+     "x": 171, "y": 108,
+     "enter_x": 171, "enter_y": 106, "exit_x": 171, "exit_y": 109, "building": "void_sanctum",
+     "dungeon_id": "sanctum"},
     {"id": "void_sanctum_portal", "kind": "dungeon_entrance", "name": "Descent into the Void",
-     "x": 137, "y": 79,
-     "enter_x": 137, "enter_y": 84, "exit_x": 137, "exit_y": 77, "warning": True},
+     "x": 171, "y": 108,
+     "enter_x": 171, "enter_y": 112, "exit_x": 171, "exit_y": 105, "warning": True,
+     "dungeon_id": "sanctum", "pack": "void_rift"},
     {"id": "void_warning", "kind": "warning_sign", "name": "⚠ DANGER — High Level Monsters",
-     "x": 135, "y": 81},
+     "x": 169, "y": 109},
     {"id": "void_warning_e", "kind": "warning_sign", "name": "⚠ DANGER — High Level Monsters",
-     "x": 139, "y": 81},
-    {"id": "void_candle_a", "kind": "candle", "name": "Void Candle", "x": 134, "y": 76},
-    {"id": "void_candle_b", "kind": "candle", "name": "Void Candle", "x": 140, "y": 76},
-    {"id": "void_altar", "kind": "bookshelf", "name": "Forbidden Tomes", "x": 133, "y": 75},
+     "x": 173, "y": 109},
+    {"id": "void_candle_a", "kind": "candle", "name": "Void Candle", "x": 168, "y": 104},
+    {"id": "void_candle_b", "kind": "candle", "name": "Void Candle", "x": 174, "y": 104},
+    {"id": "void_altar", "kind": "bookshelf", "name": "Forbidden Tomes", "x": 167, "y": 103},
 ]
 
 # Enterable buildings — roofs hide when the local player stands on the floor.
-# material: "wood" (timber/plank) or "brick" (grey masonry)
+# material:
+#   "wood"       — wooden walls + timber (village cottages)
+#   "red_brick"  — red brick (inn, bank, smithy)
+#   "stone"      — grey stone brick (Stonehaven / castle) — iso cottage look
+#   "dark_stone" — crypt / void
 BUILDINGS = [
     {
         "id": "cottage_nw", "name": "Elder's Hall", "kind": "house", "style": 0,
         "material": "wood",
-        "x0": 3, "y0": 3, "x1": 11, "y1": 11,
-        "floor_x0": 4, "floor_y0": 4, "floor_x1": 10, "floor_y1": 10,
+        "x0": 4, "y0": 4, "x1": 15, "y1": 15,
+        "floor_x0": 5, "floor_y0": 5, "floor_x1": 14, "floor_y1": 14,
     },
     {
         "id": "cottage_ne", "name": "General Store", "kind": "house", "style": 0,
         "material": "wood",
-        "x0": 23, "y0": 3, "x1": 31, "y1": 11,
-        "floor_x0": 24, "floor_y0": 4, "floor_x1": 30, "floor_y1": 10,
+        "x0": 40, "y0": 4, "x1": 51, "y1": 15,
+        "floor_x0": 41, "floor_y0": 5, "floor_x1": 50, "floor_y1": 14,
     },
     {
         "id": "cottage_sw", "name": "The Resting Ox", "kind": "house", "style": 1,
-        "material": "brick",
-        "x0": 3, "y0": 24, "x1": 11, "y1": 32,
-        "floor_x0": 4, "floor_y0": 25, "floor_x1": 10, "floor_y1": 31,
+        "material": "red_brick",
+        "x0": 4, "y0": 36, "x1": 15, "y1": 47,
+        "floor_x0": 5, "floor_y0": 37, "floor_x1": 14, "floor_y1": 46,
     },
     {
         "id": "cottage_se", "name": "Farmhouse", "kind": "house", "style": 1,
         "material": "wood",
-        "x0": 23, "y0": 24, "x1": 31, "y1": 32,
-        "floor_x0": 24, "floor_y0": 25, "floor_x1": 30, "floor_y1": 31,
+        "x0": 40, "y0": 36, "x1": 51, "y1": 47,
+        "floor_x0": 41, "floor_y0": 37, "floor_x1": 50, "floor_y1": 46,
     },
     {
         "id": "bank", "name": "Village Bank", "kind": "house", "style": 1,
-        "material": "brick",
-        "x0": 34, "y0": 14, "x1": 42, "y1": 20,
-        "floor_x0": 35, "floor_y0": 15, "floor_x1": 41, "floor_y1": 19,
+        "material": "red_brick",
+        "x0": 58, "y0": 18, "x1": 70, "y1": 28,
+        "floor_x0": 59, "floor_y0": 19, "floor_x1": 69, "floor_y1": 27,
     },
     {
         "id": "smithy", "name": "Gareth's Smithy", "kind": "smithy", "style": 1,
-        "material": "brick",
-        "x0": 50, "y0": 4, "x1": 62, "y1": 14,
-        "floor_x0": 51, "floor_y0": 5, "floor_x1": 61, "floor_y1": 13,
+        "material": "red_brick",
+        "x0": 78, "y0": 4, "x1": 94, "y1": 18,
+        "floor_x0": 79, "floor_y0": 5, "floor_x1": 93, "floor_y1": 17,
     },
     {
         "id": "pet_emporium", "name": "Pet Emporium", "kind": "house", "style": 0,
         "material": "wood",
-        "x0": 50, "y0": 24, "x1": 60, "y1": 32,
-        "floor_x0": 51, "floor_y0": 25, "floor_x1": 59, "floor_y1": 31,
+        "x0": 78, "y0": 36, "x1": 92, "y1": 48,
+        "floor_x0": 79, "floor_y0": 37, "floor_x1": 91, "floor_y1": 47,
     },
     {
         "id": "harbour_tackle", "name": "Harbourreach Tackle", "kind": "house", "style": 0,
         "material": "wood",
-        "x0": 134, "y0": 6, "x1": 142, "y1": 14,
-        "floor_x0": 135, "floor_y0": 7, "floor_x1": 141, "floor_y1": 13,
+        "x0": 172, "y0": 6, "x1": 182, "y1": 14,
+        "floor_x0": 173, "floor_y0": 7, "floor_x1": 181, "floor_y1": 13,
     },
     {
         "id": "harbour_fishmonger", "name": "Kai's Catch", "kind": "house", "style": 1,
         "material": "wood",
-        "x0": 134, "y0": 20, "x1": 142, "y1": 28,
-        "floor_x0": 135, "floor_y0": 21, "floor_x1": 141, "floor_y1": 27,
+        "x0": 172, "y0": 20, "x1": 182, "y1": 28,
+        "floor_x0": 173, "floor_y0": 21, "floor_x1": 181, "floor_y1": 27,
     },
     {
         "id": "city_house_nw", "name": "Stonehaven Cottage", "kind": "house", "style": 1,
-        "material": "brick",
-        "x0": 82, "y0": 44, "x1": 90, "y1": 52,
-        "floor_x0": 83, "floor_y0": 45, "floor_x1": 89, "floor_y1": 51,
+        "material": "stone",
+        "x0": 102, "y0": 60, "x1": 110, "y1": 68,
+        "floor_x0": 103, "floor_y0": 61, "floor_x1": 109, "floor_y1": 67,
     },
     {
         "id": "city_house_sw", "name": "Stonehaven House", "kind": "house", "style": 1,
-        "material": "brick",
-        "x0": 82, "y0": 58, "x1": 90, "y1": 66,
-        "floor_x0": 83, "floor_y0": 59, "floor_x1": 89, "floor_y1": 65,
+        "material": "stone",
+        "x0": 102, "y0": 74, "x1": 110, "y1": 82,
+        "floor_x0": 103, "floor_y0": 75, "floor_x1": 109, "floor_y1": 81,
     },
     {
         "id": "city_barracks", "name": "City Barracks", "kind": "house", "style": 1,
-        "material": "brick",
-        "x0": 110, "y0": 58, "x1": 118, "y1": 68,
-        "floor_x0": 111, "floor_y0": 59, "floor_x1": 117, "floor_y1": 67,
+        "material": "stone",
+        "x0": 130, "y0": 74, "x1": 138, "y1": 84,
+        "floor_x0": 131, "floor_y0": 75, "floor_x1": 137, "floor_y1": 83,
     },
     {
         "id": "stonehaven_castle", "name": "Castle Keep", "kind": "castle", "style": 1,
-        "material": "brick",
-        "x0": 100, "y0": 42, "x1": 118, "y1": 54,
-        "floor_x0": 102, "floor_y0": 44, "floor_x1": 116, "floor_y1": 52,
+        "material": "stone",
+        "x0": 118, "y0": 58, "x1": 136, "y1": 70,
+        "floor_x0": 120, "floor_y0": 60, "floor_x1": 134, "floor_y1": 68,
     },
     {
         "id": "void_sanctum", "name": "Void Sanctum", "kind": "crypt", "style": 1,
         "material": "dark_stone",
-        "x0": 132, "y0": 74, "x1": 142, "y1": 80,
-        "floor_x0": 133, "floor_y0": 75, "floor_x1": 141, "floor_y1": 79,
+        "x0": 166, "y0": 102, "x1": 176, "y1": 108,
+        "floor_x0": 167, "floor_y0": 103, "floor_x1": 175, "floor_y1": 107,
     },
     {
         "id": "emberdeep_volcano", "name": "Emberdeep", "kind": "volcano", "style": 0,
         "material": "basalt",
-        "x0": 128, "y0": 46, "x1": 146, "y1": 58,
-        "floor_x0": 134, "floor_y0": 52, "floor_x1": 140, "floor_y1": 56,
+        "x0": 156, "y0": 60, "x1": 174, "y1": 72,
+        "floor_x0": 162, "floor_y0": 66, "floor_x1": 168, "floor_y1": 70,
     },
 ]
 
@@ -2849,3 +2973,86 @@ def is_bow(item_id):
 def bow_attack_range(item_id):
     item = ITEMS.get(item_id) or {}
     return max(4, int(item.get("range") or 4))
+
+
+def _apply_castle_v2():
+    """Move only the castle's own spots onto the v2 footprint. Flag off leaves the literals above."""
+    import castle_v2
+    if not castle_v2.active():
+        return
+
+    def put(obj, px, py):
+        x, y = castle_v2.w(px, py)
+        obj["x"], obj["y"] = x, y
+        return x, y
+
+    for b in BUILDINGS:
+        if b.get("id") == "stonehaven_castle":
+            b["x0"], b["y0"] = castle_v2.w(100, 31)
+            b["x1"], b["y1"] = castle_v2.w(123, 54)
+            b["floor_x0"], b["floor_y0"] = castle_v2.w(104, 35)
+            b["floor_x1"], b["floor_y1"] = castle_v2.w(119, 51)
+
+    doors = {
+        "castle_gate": (111, 52, 111, 50, 111, 55),
+        "castle_gate_e": (112, 52, 112, 50, 112, 55),
+        # The live map has three extra gate doors. Keep them on the 2-wide bridge
+        # so they are not left standing in the moat.
+        "castle_gate_w": (111, 53, 111, 50, 111, 55),
+        "castle_gate_w2": (111, 54, 111, 50, 111, 55),
+        "castle_gate_e2": (112, 53, 112, 50, 112, 55),
+    }
+    spots = {
+        "castle_throne": (113, 43),
+        "castle_rug": (113, 46),
+        "castle_table": (109, 46),
+        "castle_chair_a": (108, 46),
+        "castle_chair_b": (110, 46),
+        "castle_banner_w": (107, 43),
+        "castle_banner_e": (119, 43),
+        "castle_rack": (106, 48),
+        "castle_chest": (118, 48),
+        "castle_brazier_w": (106, 44),
+        "castle_brazier_e": (118, 44),
+        "castle_candle": (111, 44),
+    }
+    for spot in INTERACTABLES:
+        sid = spot.get("id")
+        if sid in doors:
+            x, y, ex, ey, ox, oy = doors[sid]
+            put(spot, x, y)
+            spot["enter_x"], spot["enter_y"] = castle_v2.w(ex, ey)
+            spot["exit_x"], spot["exit_y"] = castle_v2.w(ox, oy)
+        elif sid in spots:
+            put(spot, *spots[sid])
+
+    for npc in NPCS:
+        if npc.get("id") == "herald_rowan":
+            put(npc, 107, 51)
+
+    # Guide new knight / champion tiles, in the same order as the live spawn list.
+    knight_new = [(111, 48), (115, 46), (109, 44), (109, 55), (114, 55)]
+    ki = 0
+    for i, spawn in enumerate(MONSTER_SPAWNS):
+        kind, sx, sy = spawn[0], spawn[1], spawn[2]
+        if kind == "knight" and ki < len(knight_new):
+            nx, ny = castle_v2.w(*knight_new[ki])
+            MONSTER_SPAWNS[i] = (kind, nx, ny)
+            ki += 1
+        elif kind == "mythos_champion":
+            nx, ny = castle_v2.w(113, 46)
+            MONSTER_SPAWNS[i] = (kind, nx, ny)
+
+    places = {
+        "stonehaven_castle": (111, 45),
+        "quest_herald_rowan": (107, 51),
+        "knights": (111, 48),
+        "mythos_champion": (113, 46),
+    }
+    for place in TRAVEL_DESTINATIONS:
+        pid = place.get("id")
+        if pid in places:
+            put(place, *places[pid])
+
+
+_apply_castle_v2()

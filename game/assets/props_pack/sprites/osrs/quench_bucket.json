@@ -1,0 +1,42 @@
+{
+  "key": "quench_bucket",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "quench_bucket_2x.png": {
+      "file": "quench_bucket_2x.png",
+      "w": 52,
+      "h": 49,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        26.6,
+        36.5
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            -7.1,
+            39.5
+          ],
+          [
+            32.5,
+            53.4
+          ],
+          [
+            60.3,
+            33.5
+          ],
+          [
+            20.6,
+            19.7
+          ]
+        ]
+      ]
+    }
+  }
+}

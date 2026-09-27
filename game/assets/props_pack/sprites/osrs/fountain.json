@@ -1,0 +1,60 @@
+{
+  "key": "fountain",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "fountain_2x.png": {
+      "file": "fountain_2x.png",
+      "w": 170,
+      "h": 144,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        85.2,
+        99.7
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            -31.0,
+            109.9
+          ],
+          [
+            105.7,
+            157.8
+          ],
+          [
+            201.4,
+            89.5
+          ],
+          [
+            64.7,
+            41.6
+          ]
+        ]
+      ],
+      "interact_px": [
+        [
+          -44.9,
+          136.3
+        ],
+        [
+          60.9,
+          173.3
+        ],
+        [
+          91.8,
+          151.3
+        ],
+        [
+          -14.0,
+          114.2
+        ]
+      ]
+    }
+  }
+}

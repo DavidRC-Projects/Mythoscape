@@ -1,0 +1,362 @@
+{
+  "key": "wolf_bone_pile",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 0.0,
+    "elevation_deg": 32.0
+  },
+  "images": {
+    "wolf_bone_pile_1x.png": {
+      "file": "wolf_bone_pile_1x.png",
+      "w": 46,
+      "h": 25,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        24.3,
+        15.9
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            0.1,
+            26.6
+          ],
+          [
+            48.5,
+            26.6
+          ],
+          [
+            48.5,
+            5.2
+          ],
+          [
+            0.1,
+            5.2
+          ]
+        ]
+      ]
+    },
+    "wolf_bone_pile_2x.png": {
+      "file": "wolf_bone_pile_2x.png",
+      "w": 92,
+      "h": 50,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        48.5,
+        31.8
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            0.1,
+            53.1
+          ],
+          [
+            97.0,
+            53.1
+          ],
+          [
+            97.0,
+            10.4
+          ],
+          [
+            0.1,
+            10.4
+          ]
+        ]
+      ]
+    },
+    "wolf_bone_pile_3x.png": {
+      "file": "wolf_bone_pile_3x.png",
+      "w": 138,
+      "h": 75,
+      "px_per_m": 80.721,
+      "metres_per_px": 0.0124,
+      "origin_px": [
+        72.8,
+        47.6
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            0.2,
+            79.7
+          ],
+          [
+            145.4,
+            79.7
+          ],
+          [
+            145.4,
+            15.5
+          ],
+          [
+            0.2,
+            15.5
+          ]
+        ]
+      ]
+    },
+    "wolf_bone_pile_s_1x.png": {
+      "file": "wolf_bone_pile_s_1x.png",
+      "w": 46,
+      "h": 25,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        24.3,
+        15.9
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            0.1,
+            26.6
+          ],
+          [
+            48.5,
+            26.6
+          ],
+          [
+            48.5,
+            5.2
+          ],
+          [
+            0.1,
+            5.2
+          ]
+        ]
+      ]
+    },
+    "wolf_bone_pile_s_2x.png": {
+      "file": "wolf_bone_pile_s_2x.png",
+      "w": 92,
+      "h": 50,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        48.5,
+        31.8
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            0.1,
+            53.1
+          ],
+          [
+            97.0,
+            53.1
+          ],
+          [
+            97.0,
+            10.4
+          ],
+          [
+            0.1,
+            10.4
+          ]
+        ]
+      ]
+    },
+    "wolf_bone_pile_w_1x.png": {
+      "file": "wolf_bone_pile_w_1x.png",
+      "w": 39,
+      "h": 40,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        22.0,
+        28.7
+      ],
+      "heading_deg": 90,
+      "collider_px": [
+        [
+          [
+            42.2,
+            41.5
+          ],
+          [
+            42.2,
+            15.9
+          ],
+          [
+            1.8,
+            15.9
+          ],
+          [
+            1.8,
+            41.5
+          ]
+        ]
+      ]
+    },
+    "wolf_bone_pile_w_2x.png": {
+      "file": "wolf_bone_pile_w_2x.png",
+      "w": 79,
+      "h": 79,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        43.9,
+        57.4
+      ],
+      "heading_deg": 90,
+      "collider_px": [
+        [
+          [
+            84.3,
+            83.1
+          ],
+          [
+            84.3,
+            31.8
+          ],
+          [
+            3.6,
+            31.8
+          ],
+          [
+            3.6,
+            83.1
+          ]
+        ]
+      ]
+    },
+    "wolf_bone_pile_n_1x.png": {
+      "file": "wolf_bone_pile_n_1x.png",
+      "w": 46,
+      "h": 34,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        21.7,
+        21.6
+      ],
+      "heading_deg": 180,
+      "collider_px": [
+        [
+          [
+            45.9,
+            10.9
+          ],
+          [
+            -2.5,
+            10.9
+          ],
+          [
+            -2.5,
+            32.3
+          ],
+          [
+            45.9,
+            32.3
+          ]
+        ]
+      ]
+    },
+    "wolf_bone_pile_n_2x.png": {
+      "file": "wolf_bone_pile_n_2x.png",
+      "w": 92,
+      "h": 67,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        43.4,
+        43.2
+      ],
+      "heading_deg": 180,
+      "collider_px": [
+        [
+          [
+            91.8,
+            21.8
+          ],
+          [
+            -5.1,
+            21.8
+          ],
+          [
+            -5.1,
+            64.5
+          ],
+          [
+            91.8,
+            64.5
+          ]
+        ]
+      ]
+    },
+    "wolf_bone_pile_e_1x.png": {
+      "file": "wolf_bone_pile_e_1x.png",
+      "w": 39,
+      "h": 31,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        17.3,
+        18.8
+      ],
+      "heading_deg": -90,
+      "collider_px": [
+        [
+          [
+            -2.9,
+            6.0
+          ],
+          [
+            -2.9,
+            31.7
+          ],
+          [
+            37.5,
+            31.7
+          ],
+          [
+            37.5,
+            6.0
+          ]
+        ]
+      ]
+    },
+    "wolf_bone_pile_e_2x.png": {
+      "file": "wolf_bone_pile_e_2x.png",
+      "w": 79,
+      "h": 62,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        34.6,
+        37.7
+      ],
+      "heading_deg": -90,
+      "collider_px": [
+        [
+          [
+            -5.7,
+            12.0
+          ],
+          [
+            -5.7,
+            63.3
+          ],
+          [
+            75.0,
+            63.3
+          ],
+          [
+            75.0,
+            12.0
+          ]
+        ]
+      ]
+    }
+  }
+}

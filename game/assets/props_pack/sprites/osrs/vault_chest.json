@@ -1,0 +1,60 @@
+{
+  "key": "vault_chest",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "vault_chest_2x.png": {
+      "file": "vault_chest_2x.png",
+      "w": 103,
+      "h": 90,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        51.7,
+        64.2
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            3.2,
+            63.6
+          ],
+          [
+            78.2,
+            89.9
+          ],
+          [
+            109.0,
+            67.8
+          ],
+          [
+            34.1,
+            41.6
+          ]
+        ]
+      ],
+      "interact_px": [
+        [
+          -32.9,
+          87.1
+        ],
+        [
+          37.6,
+          111.8
+        ],
+        [
+          71.6,
+          87.5
+        ],
+        [
+          1.0,
+          62.9
+        ]
+      ]
+    }
+  }
+}

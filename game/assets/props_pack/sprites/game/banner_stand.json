@@ -1,0 +1,394 @@
+{
+  "key": "banner_stand",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 0.0,
+    "elevation_deg": 32.0
+  },
+  "images": {
+    "banner_stand_1x.png": {
+      "file": "banner_stand_1x.png",
+      "w": 36,
+      "h": 79,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        18.2,
+        71.7
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            11.4,
+            75.2
+          ],
+          [
+            24.9,
+            75.2
+          ],
+          [
+            24.9,
+            68.1
+          ],
+          [
+            11.4,
+            68.1
+          ]
+        ]
+      ]
+    },
+    "banner_stand_2x.png": {
+      "file": "banner_stand_2x.png",
+      "w": 73,
+      "h": 158,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        36.3,
+        143.3
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            22.9,
+            150.5
+          ],
+          [
+            49.8,
+            150.5
+          ],
+          [
+            49.8,
+            136.2
+          ],
+          [
+            22.9,
+            136.2
+          ]
+        ]
+      ]
+    },
+    "banner_stand_3x.png": {
+      "file": "banner_stand_3x.png",
+      "w": 109,
+      "h": 237,
+      "px_per_m": 80.721,
+      "metres_per_px": 0.0124,
+      "origin_px": [
+        54.5,
+        215.0
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            34.3,
+            225.7
+          ],
+          [
+            74.7,
+            225.7
+          ],
+          [
+            74.7,
+            204.3
+          ],
+          [
+            34.3,
+            204.3
+          ]
+        ]
+      ]
+    },
+    "banner_stand_match.png": {
+      "file": "banner_stand_match.png",
+      "w": 31,
+      "h": 67,
+      "px_per_m": 22.961,
+      "metres_per_px": 0.0436,
+      "origin_px": [
+        15.5,
+        61.2
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            9.8,
+            64.2
+          ],
+          [
+            21.2,
+            64.2
+          ],
+          [
+            21.2,
+            58.1
+          ],
+          [
+            9.8,
+            58.1
+          ]
+        ]
+      ]
+    },
+    "banner_stand_s_1x.png": {
+      "file": "banner_stand_s_1x.png",
+      "w": 36,
+      "h": 79,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        18.2,
+        71.7
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            11.4,
+            75.2
+          ],
+          [
+            24.9,
+            75.2
+          ],
+          [
+            24.9,
+            68.1
+          ],
+          [
+            11.4,
+            68.1
+          ]
+        ]
+      ]
+    },
+    "banner_stand_s_2x.png": {
+      "file": "banner_stand_s_2x.png",
+      "w": 73,
+      "h": 158,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        36.3,
+        143.3
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            22.9,
+            150.5
+          ],
+          [
+            49.8,
+            150.5
+          ],
+          [
+            49.8,
+            136.2
+          ],
+          [
+            22.9,
+            136.2
+          ]
+        ]
+      ]
+    },
+    "banner_stand_w_1x.png": {
+      "file": "banner_stand_w_1x.png",
+      "w": 25,
+      "h": 79,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        12.4,
+        71.7
+      ],
+      "heading_deg": 90,
+      "collider_px": [
+        [
+          [
+            19.1,
+            75.2
+          ],
+          [
+            19.1,
+            68.1
+          ],
+          [
+            5.7,
+            68.1
+          ],
+          [
+            5.7,
+            75.2
+          ]
+        ]
+      ]
+    },
+    "banner_stand_w_2x.png": {
+      "file": "banner_stand_w_2x.png",
+      "w": 50,
+      "h": 158,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        24.8,
+        143.3
+      ],
+      "heading_deg": 90,
+      "collider_px": [
+        [
+          [
+            38.2,
+            150.5
+          ],
+          [
+            38.2,
+            136.2
+          ],
+          [
+            11.3,
+            136.2
+          ],
+          [
+            11.3,
+            150.5
+          ]
+        ]
+      ]
+    },
+    "banner_stand_n_1x.png": {
+      "file": "banner_stand_n_1x.png",
+      "w": 36,
+      "h": 79,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        18.2,
+        71.7
+      ],
+      "heading_deg": 180,
+      "collider_px": [
+        [
+          [
+            24.9,
+            68.1
+          ],
+          [
+            11.4,
+            68.1
+          ],
+          [
+            11.4,
+            75.2
+          ],
+          [
+            24.9,
+            75.2
+          ]
+        ]
+      ]
+    },
+    "banner_stand_n_2x.png": {
+      "file": "banner_stand_n_2x.png",
+      "w": 73,
+      "h": 158,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        36.3,
+        143.3
+      ],
+      "heading_deg": 180,
+      "collider_px": [
+        [
+          [
+            49.8,
+            136.2
+          ],
+          [
+            22.9,
+            136.2
+          ],
+          [
+            22.9,
+            150.5
+          ],
+          [
+            49.8,
+            150.5
+          ]
+        ]
+      ]
+    },
+    "banner_stand_e_1x.png": {
+      "file": "banner_stand_e_1x.png",
+      "w": 25,
+      "h": 79,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        12.4,
+        71.7
+      ],
+      "heading_deg": -90,
+      "collider_px": [
+        [
+          [
+            5.7,
+            68.1
+          ],
+          [
+            5.7,
+            75.2
+          ],
+          [
+            19.1,
+            75.2
+          ],
+          [
+            19.1,
+            68.1
+          ]
+        ]
+      ]
+    },
+    "banner_stand_e_2x.png": {
+      "file": "banner_stand_e_2x.png",
+      "w": 50,
+      "h": 158,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        24.8,
+        143.3
+      ],
+      "heading_deg": -90,
+      "collider_px": [
+        [
+          [
+            11.3,
+            136.2
+          ],
+          [
+            11.3,
+            150.5
+          ],
+          [
+            38.2,
+            150.5
+          ],
+          [
+            38.2,
+            136.2
+          ]
+        ]
+      ]
+    }
+  }
+}

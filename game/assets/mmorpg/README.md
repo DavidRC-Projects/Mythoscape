@@ -28,6 +28,28 @@ python client.py 192.168.1.5  # LAN server
 ```
 Port **8765** must be reachable for LAN play.
 
+### Panda3D building prototype (optional)
+
+A **standalone test scene** (does not replace the live Pygame renderer): Panda3D
+owns its own window and shows one original low-poly medieval cottage under a
+fixed isometric-style camera. Geometry is original; open-source samples were
+used only as technique references (Panda procedural-cube / Modified BSD;
+Epihaius primitives maker-pattern idea / BSD-3; RTS_pygame data-vs-footprint
+pattern only — no assets copied).
+
+```
+cd game/assets/mmorpg
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\\Scripts\\activate
+pip install -r requirements.txt    # pygame, websockets, panda3d
+cd client
+python client.py --panda-building-proto
+```
+
+Controls: fixed iso by default · `0` reset iso · `[` `]` / `A` `D` optional yaw · `F` debug faces · `Esc` quit.
+
+See `client/panda_building_proto/` (`coords.py`, `cottage.py`, `geom_util.py`). Do not run the proto and the pygame client as two competing windows for the same session.
+
 On the login screen, click **Hiscores** (or press **F3**) for top players per skill.
 
 ## New player tips

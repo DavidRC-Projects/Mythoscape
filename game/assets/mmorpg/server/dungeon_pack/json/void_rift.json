@@ -1,0 +1,117 @@
+{
+  "key": "void_rift",
+  "title": "Void Rift",
+  "triangles": 1555,
+  "bounds_min": [
+    -4.889,
+    -4.25,
+    0.0
+  ],
+  "bounds_max": [
+    4.728,
+    4.666,
+    7.199
+  ],
+  "front": "-Y",
+  "up": "+Z",
+  "units": "metres",
+  "colliders": [
+    {
+      "name": "COL_platform_left",
+      "center": [
+        -2.9,
+        0.8,
+        1.5
+      ],
+      "size": [
+        2.4,
+        4.0,
+        3.0
+      ]
+    },
+    {
+      "name": "COL_platform_right",
+      "center": [
+        2.9,
+        0.8,
+        1.5
+      ],
+      "size": [
+        2.4,
+        4.0,
+        3.0
+      ]
+    },
+    {
+      "name": "COL_crystals_back",
+      "center": [
+        0,
+        2.6,
+        3.0
+      ],
+      "size": [
+        8.0,
+        2.2,
+        6.0
+      ]
+    }
+  ],
+  "trigger": {
+    "name": "TRIGGER_door",
+    "center": [
+      0,
+      -0.2,
+      1.5499999999999998
+    ],
+    "size": [
+      2.2,
+      0.8,
+      2.4
+    ]
+  },
+  "palette": {
+    "stone": "#3f3b46",
+    "stone_edge": "#57525e",
+    "crystal": "#3a3150",
+    "crystal_lt": "#5b4b7a",
+    "crystal_dk": "#241f33",
+    "rim": "#8a52b8",
+    "glow": "#b56ad9",
+    "glow_mid": "#6c3b99",
+    "core": "#2a1543",
+    "rune": "#b56ad9",
+    "rock": "#34303a",
+    "interior": "#2a231e",
+    "interior_deep": "#15110f",
+    "void_black": "#070606"
+  },
+  "emissive": {
+    "rim": 1.6,
+    "glow": 2.6,
+    "glow_mid": 1.6,
+    "core": 0.7,
+    "rune": 2.2
+  },
+  "openings": [
+    {
+      "width": 2.7,
+      "height": 3.7,
+      "depth": 0.0,
+      "y0": 0.0,
+      "z0": 0.35,
+      "note": "portal ellipse"
+    }
+  ],
+  "concept_camera": {
+    "target": [
+      -0.08,
+      0.208,
+      3.599
+    ],
+    "distance": 24.873,
+    "azimuth_deg": 35,
+    "elevation_deg": 30,
+    "fov_deg": 30,
+    "note": "camera sits front-right: target + dist*(sin az*cos el, -cos az*cos el, sin el)"
+  }
+}

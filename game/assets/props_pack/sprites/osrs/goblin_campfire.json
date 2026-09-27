@@ -1,0 +1,42 @@
+{
+  "key": "goblin_campfire",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "goblin_campfire_2x.png": {
+      "file": "goblin_campfire_2x.png",
+      "w": 143,
+      "h": 92,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        72.4,
+        58.3
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            27.4,
+            62.3
+          ],
+          [
+            80.3,
+            80.8
+          ],
+          [
+            117.4,
+            54.3
+          ],
+          [
+            64.5,
+            35.8
+          ]
+        ]
+      ]
+    }
+  }
+}

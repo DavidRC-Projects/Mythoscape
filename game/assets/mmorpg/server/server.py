@@ -15,7 +15,7 @@ import websockets
 
 from content import (
     ITEMS, MONSTERS, MONSTER_SPAWNS, NPCS, SHOPS, QUESTS, XP_SKILLS, RESOURCE_YIELDS,
-    CRAFT_RECIPES, INTERACTABLES, BUILDINGS, PETS,
+    CRAFT_RECIPES, INTERACTABLES, BUILDINGS, PETS, entrance_mouth_tiles,
     MAX_PURSE_COINS, MAX_BANK_COINS, MAX_ORES, ORE_ITEM_IDS, BANK_SLOTS,
     karma_total_bonus, FIRE_LOGS, cook_burn_chance, is_bow, bow_attack_range,
     MAGIC_ABILITIES, MAGIC_ABILITY_ORDER, MANUAL_MAGIC_CD_FACTOR,
@@ -28,12 +28,15 @@ from content import (
     inventory_tab_for_item, is_storage_bag,
 )
 from database import Database
+import explore_dungeons
+
 from world_map import (
     generate_world, build_resource_nodes, is_walkable, WIDTH, HEIGHT, SPAWN_POINT, get_zone,
     room_containing, in_room, FLOOR,
 )
 import combat
 import dungeon as tidehollow
+import dungeon_props
 import emberdeep
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -43,6 +46,8 @@ log = logging.getLogger("server")
 DUNGEON_MODS = {
     "tidehollow": tidehollow,
     "emberdeep": emberdeep,
+    "depths": explore_dungeons,
+    "sanctum": explore_dungeons,
 }
 DUNGEON_META = {
     "tidehollow": {
@@ -58,6 +63,20 @@ DUNGEON_META = {
         "medal_id": "emberdeep_amulet",
         "entrance_kinds": ("volcano_entrance",),
         "floors_attr": "EMBERDEEP_FLOORS",
+    },
+    "depths": {
+        "name": "The Depths",
+        "chat_from": "Dungeon",
+        "medal_id": None,
+        "entrance_kinds": ("dungeon_entrance",),
+        "floors_attr": None,
+    },
+    "sanctum": {
+        "name": "Void Sanctum",
+        "chat_from": "Void Sanctum",
+        "medal_id": None,
+        "entrance_kinds": ("dungeon_entrance",),
+        "floors_attr": None,
     },
 }
 
@@ -115,6 +134,8 @@ class PlayerSession:
         self.quests = {}     # quest_id -> {"status":, "progress":}
         self.quest_log_dirty = False  # push QUEST_LOG on next tick flush
         self.in_combat_with = None   # ("monster", instance_id) or ("player", player_id)
+        # After STOP_ATTACK / flee-click, skip auto-retaliate until this time
+        self.combat_flee_until = 0.0
         self.combat_style = "attack"  # attack | strength | defence | hitpoints | archery
         self.gathering_node = None   # (x, y) currently gathering
         self.dungeon = None  # Tidehollow private instance state or None
@@ -983,15 +1004,41 @@ class MonsterInstance:
         self.ticks_since_wander = 0
         self.no_respawn = no_respawn
         self.frozen_until = 0.0  # unix time — cannot attack while frozen
+        self.next_attack_at = 0.0  # unix time — attack cooldown gate
         # Short multi-step patrol (castle knights / city guards)
         self.patrol_dx = 0
         self.patrol_dy = 0
         self.patrol_steps_left = 0
-        # Dungeon monsters are confined to the room they spawned in
-        self.home_room = None if stats else room_containing(x, y)
+        # Dungeon monsters stay in spawn room; bosses may set confine_room=False
+        if stats or data.get("confine_room", True) is False:
+            self.home_room = None
+        else:
+            self.home_room = room_containing(x, y)
 
     def is_frozen(self):
         return time.time() < float(self.frozen_until or 0)
+
+    def attack_ready(self):
+        return time.time() >= float(self.next_attack_at or 0)
+
+    def mark_attacked(self, cooldown=None):
+        """Start post-swing cooldown (dragon defaults to 1s flee window)."""
+        mdef = self.def_stats() or {}
+        if cooldown is None:
+            cooldown = float(mdef.get("attack_cooldown") or 0.0)
+        if cooldown > 0:
+            self.next_attack_at = time.time() + cooldown
+
+    def can_strike(self, px, py):
+        """True if this monster may hit a target at (px, py) this tick."""
+        if not self.alive or self.is_frozen() or not self.attack_ready():
+            return False
+        mdef = self.def_stats() or {}
+        reach = max(1, int(mdef.get("attack_range") or 1))
+        if mdef.get("side_by_side"):
+            gap = abs(self.x - px)
+            return self.y == py and 1 <= gap <= reach
+        return chebyshev(self.x, self.y, px, py) <= reach
 
     def def_stats(self):
         if self.stats:
@@ -1017,9 +1064,12 @@ class World:
     def __init__(self):
         self.db = Database()
         self.grid = generate_world()
+        explore_dungeons.capture_and_hide(self.grid)
         self.resource_nodes = build_resource_nodes(self.grid)
         self.monsters = {}
         for mtype, x, y in MONSTER_SPAWNS:
+            if explore_dungeons.contains_region(x, y):
+                continue
             mid = next_id()
             self.monsters[mid] = MonsterInstance(mid, mtype, x, y)
         self.sessions = {}     # player_id -> PlayerSession
@@ -1192,16 +1242,6 @@ class World:
         if self.count_item(session, "tinderbox") > 0 or self.count_item_bank(session, "tinderbox") > 0:
             return False
         return self.add_item_to_inventory(session, "tinderbox", 1)
-
-    def ensure_david_mythos_helm(self, session):
-        """One-off Mythos Dragon Helm for username david (if they don't already own one)."""
-        if (session.username or "").strip().lower() != "david":
-            return False
-        if session.equipment.get("helmet") == "mythos_helmet":
-            return False
-        if self.count_item(session, "mythos_helmet") > 0 or self.count_item_bank(session, "mythos_helmet") > 0:
-            return False
-        return self.add_item_to_inventory(session, "mythos_helmet", 1)
 
     def count_ores(self, session):
         total = sum(
@@ -1491,8 +1531,6 @@ async def handle_login(ws, msg, is_register):
     WORLD.db.save_player_stats(session.player_id, owned_pets=json.dumps(session.owned_pets))
     if WORLD.ensure_tinderbox(session):
         log.info("%s received a starter tinderbox", session.char_name)
-    if WORLD.ensure_david_mythos_helm(session):
-        log.info("%s received a one-off Mythos Dragon Helm", session.char_name)
 
     needs_alloc = not session.stats_allocated
     await send(ws, "LOGIN_OK", player=session.full_state(), needs_stat_alloc=needs_alloc)
@@ -1661,6 +1699,11 @@ async def handle_move(session, msg):
             return
         session.x, session.y = nx, ny
         session.gathering_node = None
+        ex = session.dungeon.get("exit_x")
+        ey = session.dungeon.get("exit_y")
+        if ex is not None and (session.x, session.y) == (int(ex), int(ey)):
+            await handle_leave_dungeon(session)
+            return
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
         return
     if not is_walkable(WORLD.grid, nx, ny):
@@ -1672,6 +1715,10 @@ async def handle_move(session, msg):
     WORLD.db.save_player_position(session.player_id, nx, ny)
     await vacuum_ground_loot(session)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    # Walking into a dungeon mouth enters it — same as clicking the entrance.
+    spot, dungeon_id = _find_dungeon_entrance(session)
+    if dungeon_id and (session.x, session.y) in entrance_mouth_tiles(spot["x"], spot["y"]):
+        await handle_enter_dungeon(session, {"dungeon_id": dungeon_id})
 
 
 def _dungeon_mod(session_or_id):
@@ -1698,7 +1745,14 @@ def _build_dungeon_floor(session, floor: int, dungeon_id: str = None):
     meta = _dungeon_meta(dungeon_id)
     info = mod.floor_info(floor)
     tiles = mod.generate_floor_tiles(floor)
-    spots = mod.pick_spawn_tiles(tiles, info["count"])
+    props = dungeon_props.install(
+        tiles, dungeon_id, floor, mod.DUNGEON_SPAWN, (mod.DUNGEON_SPAWN[0], mod.DUNGEON_H - 1),
+    )
+    blocked = dungeon_props.cells(props)
+    spots = [
+        p for p in mod.pick_spawn_tiles(tiles, info["count"] + len(blocked))
+        if p not in blocked
+    ][: info["count"]]
     stats = mod.scaled_monster_stats(info["level"])
     visual = mod.visual_type_for_floor(floor)
     if hasattr(mod, "monster_display_name"):
@@ -1707,7 +1761,14 @@ def _build_dungeon_floor(session, floor: int, dungeon_id: str = None):
     for sx, sy in spots:
         mid = next_id()
         m = MonsterInstance(mid, visual, sx, sy, stats=dict(stats), no_respawn=True)
-        m.target_player_id = session.player_id
+        # Stay near where they spawned. They stop chasing once you leave that patch.
+        leash = 6
+        m.home_room = (
+            max(0, sx - leash),
+            max(0, sy - leash),
+            min(mod.DUNGEON_W - 1, sx + leash),
+            min(mod.DUNGEON_H - 1, sy + leash),
+        )
         monsters[mid] = m
     floors_list = getattr(mod, meta["floors_attr"], None) or getattr(mod, "TIDEHOLLOW_FLOORS", [])
     prev = session.dungeon or {}
@@ -1722,6 +1783,7 @@ def _build_dungeon_floor(session, floor: int, dungeon_id: str = None):
         "monsters": monsters,
         "return_x": prev.get("return_x", mod.CAVE_RETURN[0]),
         "return_y": prev.get("return_y", mod.CAVE_RETURN[1]),
+        "props": props,
     }
     session.x, session.y = mod.DUNGEON_SPAWN
     session.in_combat_with = None
@@ -1744,11 +1806,19 @@ def _dungeon_payload(session):
             if tiles[y][exit_x] == FLOOR:
                 exit_y = y
                 break
+    if d.get("explore") and d.get("exit_x") is not None:
+        exit_x = int(d["exit_x"])
+        exit_y = int(d["exit_y"])
+    else:
+        d["exit_x"] = exit_x
+        d["exit_y"] = exit_y
     return {
         "id": d["id"],
         "floor": d["floor"],
         "floors": d["floors"],
         "label": d["label"],
+        "explore": bool(d.get("explore")),
+        "name": d.get("name") or _dungeon_meta(d.get("id") or "tidehollow")["name"],
         "tiles": d["tiles"],
         "width": d["width"],
         "height": d["height"],
@@ -1758,6 +1828,7 @@ def _dungeon_payload(session):
         "player_y": session.y,
         "exit_x": exit_x,
         "exit_y": exit_y,
+        "props": d.get("props") or [],
     }
 
 
@@ -1809,6 +1880,48 @@ async def _grant_dungeon_kill_loot(session):
 _grant_tidehollow_kill_loot = _grant_dungeon_kill_loot
 
 
+async def _grant_monster_table(session, monster):
+    """Give a copied-dungeon kill its normal drop table, straight into the inventory."""
+    spec = (MONSTERS.get(monster.type) or {}).get("drops") or []
+    got = []
+    for item_id, chance, bounds in spec:
+        if random.random() > chance:
+            continue
+        if isinstance(item_id, (list, tuple)):
+            item_id = random.choice(item_id)
+        lo, hi = bounds
+        qty = random.randint(lo, hi)
+        if item_id == "coins":
+            gained, _left = WORLD.add_coins(session, qty)
+            if gained:
+                got.append(f"{gained} coins")
+            continue
+        if WORLD.add_item_to_inventory(session, item_id, qty):
+            name = ITEMS.get(item_id, {}).get("name", item_id)
+            got.append(f"{name} x{qty}" if qty > 1 else name)
+    if got:
+        await send(session.ws, "CHAT_MSG", **{
+            "from": "Loot", "text": "Loot: " + ", ".join(got[:4]) + ".",
+        })
+        await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+
+
+async def _finish_dungeon_kill(session, monster=None):
+    """Floor dungeons advance when cleared. Explore maps drop normal loot and stay open."""
+    d = session.dungeon
+    if not d:
+        return
+    if d.get("explore"):
+        if monster is not None:
+            await _grant_monster_table(session, monster)
+            check_quest_progress_on_kill(session, monster.type)
+        return
+    await _grant_dungeon_kill_loot(session)
+    remaining = sum(1 for m in d["monsters"].values() if m.alive)
+    if remaining == 0:
+        await _dungeon_on_clear(session)
+
+
 def _find_dungeon_entrance(session, preferred_id=None):
     """Return (spot, dungeon_id) if the player stands at a private-dungeon mouth."""
     kinds = set()
@@ -1818,7 +1931,8 @@ def _find_dungeon_entrance(session, preferred_id=None):
         kind = spot.get("kind")
         if kind not in kinds:
             continue
-        if not adjacent_or_same(session.x, session.y, spot["x"], spot["y"]):
+        on_mouth = (session.x, session.y) in entrance_mouth_tiles(spot["x"], spot["y"])
+        if not on_mouth and not adjacent_or_same(session.x, session.y, spot["x"], spot["y"]):
             continue
         did = spot.get("dungeon_id")
         if not did:
@@ -1845,7 +1959,23 @@ async def handle_enter_dungeon(session, msg):
         return
     mod = DUNGEON_MODS.get(dungeon_id, tidehollow)
     meta = _dungeon_meta(dungeon_id)
-    session._dungeon_return = (session.x, session.y)
+    # Step back off the mouth so leaving doesn't drop you straight back inside.
+    rx, ry = session.x, session.y
+    if (rx, ry) in entrance_mouth_tiles(spot["x"], spot["y"]):
+        rx, ry = spot["x"], spot["y"] + 1
+    session._dungeon_return = (rx, ry)
+    if explore_dungeons.is_explore(dungeon_id):
+        explore_dungeons.build(session, dungeon_id, next_id, MonsterInstance, MONSTER_SPAWNS)
+        session.dungeon["return_x"] = rx
+        session.dungeon["return_y"] = ry
+        await send(session.ws, "DUNGEON_ENTER", **_dungeon_payload(session))
+        await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        await send(
+            session.ws, "CHAT_MSG",
+            **{"from": meta["chat_from"],
+               "text": f"You enter {meta['name']}. The EXIT is just south of where you came in — walk onto it, or press Leave."},
+        )
+        return
     _build_dungeon_floor(session, 1, dungeon_id=dungeon_id)
     session.dungeon["return_x"] = mod.CAVE_RETURN[0]
     session.dungeon["return_y"] = mod.CAVE_RETURN[1]
@@ -1854,7 +1984,7 @@ async def handle_enter_dungeon(session, msg):
     await send(
         session.ws, "CHAT_MSG",
         **{"from": meta["chat_from"],
-           "text": f"Floor 1/{session.dungeon['floors']}: {session.dungeon['label']}. Slay every beast to advance."},
+           "text": f"Floor 1/{session.dungeon['floors']}: {session.dungeon['label']}. Slay every beast to advance. Leave anytime from the EXIT."},
     )
 
 
@@ -1868,11 +1998,12 @@ async def handle_leave_dungeon(session, msg=None, silent=False):
     saved = getattr(session, "_dungeon_return", None)
     if saved:
         rx, ry = saved
+    cave = getattr(mod, "CAVE_RETURN", None)
     session.dungeon = None
     session.in_combat_with = None
     session.pet_target_id = None
-    session.x = rx if rx is not None else mod.CAVE_RETURN[0]
-    session.y = ry if ry is not None else mod.CAVE_RETURN[1]
+    session.x = rx if rx is not None else (cave[0] if cave else session.x)
+    session.y = ry if ry is not None else (cave[1] if cave else session.y)
     WORLD.db.save_player_position(session.player_id, session.x, session.y)
     if session.pet_id:
         session.pet_x, session.pet_y = session.x, session.y
@@ -2066,7 +2197,15 @@ async def handle_chat(session, msg):
     await broadcast("CHAT_MSG", **{"from": session.char_name, "text": text})
 
 
-WISH_WELL_POS = (30, 21)
+def _wish_well_pos():
+    """Tile of the wishing well interactable. The old constant (30, 21) is not that tile."""
+    for spot in INTERACTABLES:
+        if spot.get("id") == "wishing_well" or spot.get("kind") == "wishing_well":
+            return int(spot["x"]), int(spot["y"])
+    return (32, 22)
+
+
+WISH_WELL_POS = _wish_well_pos()
 
 WISH_GEAR_POOL = [
     # Common / uncommon armour & weapons
@@ -2245,12 +2384,23 @@ async def handle_attack(session, msg):
     monster = None
     if session.dungeon:
         monster = session.dungeon["monsters"].get(target_id)
+        if monster is None and target_id is not None:
+            monster = session.dungeon["monsters"].get(int(target_id)) if str(target_id).isdigit() else None
     else:
         monster = WORLD.monsters.get(target_id)
+        if monster is None and target_id is not None:
+            try:
+                monster = WORLD.monsters.get(int(target_id))
+            except (TypeError, ValueError):
+                monster = None
     if monster is None or not monster.alive:
         await send(session.ws, "ERROR", message="That target isn't there.")
         return
     reach = session.attack_reach()
+    mdef = monster.def_stats() or {}
+    # Side-by-side foes: allow engaging from nearby; strikes still require same row.
+    if mdef.get("side_by_side"):
+        reach = max(reach, int(mdef.get("attack_range") or 1))
     if chebyshev(session.x, session.y, monster.x, monster.y) > reach:
         await send(session.ws, "ERROR", message="You're too far away to attack.")
         return
@@ -2258,9 +2408,18 @@ async def handle_attack(session, msg):
         if not session.has_arrow_ammo():
             await send(session.ws, "ERROR", message="You need arrows equipped to shoot.")
             return
+    session.combat_flee_until = 0.0
     session.in_combat_with = ("monster", monster.id)
     session.pet_target_id = monster.id  # pet only assists monsters you have attacked
     monster.target_player_id = session.player_id
+
+
+async def handle_stop_attack(session, msg):
+    """Player clicked away — stop auto-swinging; dragon may still chase in its lair."""
+    session.in_combat_with = None
+    session.pet_target_id = None
+    # Brief window so force_retaliate mobs don't instantly re-lock
+    session.combat_flee_until = time.time() + 1.0
 
 
 COMBAT_STYLES = ("attack", "strength", "defence", "hitpoints", "archery")
@@ -2392,10 +2551,7 @@ async def resolve_magic_kill(session, monster, events, dungeon_tag=None):
             "type": "DEATH",
             "data": {"entity_id": monster.id, "entity_kind": "monster", "_dungeon_player": dungeon_tag},
         })
-        await _grant_tidehollow_kill_loot(session)
-        remaining = sum(1 for m in session.dungeon["monsters"].values() if m.alive)
-        if remaining == 0:
-            await _dungeon_on_clear(session)
+        await _finish_dungeon_kill(session, monster)
 
 
 async def handle_cast_magic(session, msg):
@@ -4109,6 +4265,8 @@ async def handler(ws):
                 await handle_chat(session, msg)
             elif mtype == "ATTACK":
                 await handle_attack(session, msg)
+            elif mtype == "STOP_ATTACK":
+                await handle_stop_attack(session, msg)
             elif mtype == "ENTER_DUNGEON":
                 await handle_enter_dungeon(session, msg)
             elif mtype == "LEAVE_DUNGEON":
@@ -4194,17 +4352,21 @@ async def game_loop():
         WORLD.tick_count += 1
         events = []
 
-        await process_combat(events)
-        await process_gathering(events)
-        process_monster_respawns()
-        process_resource_respawns()
-        process_fires()
-        process_monster_ai()
-        process_dungeon_ai()
-        process_pets(events)
-        await process_stat_boosts()
-        await process_equip_regen()
-        await flush_quest_logs()
+        try:
+            await process_combat(events)
+            await process_gathering(events)
+            process_monster_respawns()
+            process_resource_respawns()
+            process_fires()
+            process_monster_ai()
+            process_dungeon_ai()
+            process_pets(events)
+            await process_stat_boosts()
+            await process_equip_regen()
+            await flush_quest_logs()
+        except Exception:
+            log.exception("game tick failed (tick=%s)", WORLD.tick_count)
+            events = []
 
         # Pet clears / loot of dungeon floors
         for ev in list(events):
@@ -4213,12 +4375,14 @@ async def game_loop():
                 pid = ev["data"].get("_dungeon_player")
                 s = WORLD.sessions.get(pid)
                 if s and s.dungeon:
-                    await _grant_tidehollow_kill_loot(s)
+                    mid = ev["data"].get("monster_id")
+                    monster = s.dungeon["monsters"].get(mid) if mid is not None else None
+                    await _finish_dungeon_kill(s, monster)
             elif ev["type"] == "_DUNGEON_CLEAR":
                 events.remove(ev)
                 pid = ev["data"].get("_dungeon_player")
                 s = WORLD.sessions.get(pid)
-                if s and s.dungeon:
+                if s and s.dungeon and not s.dungeon.get("explore"):
                     await _dungeon_on_clear(s)
 
         # World state for overworld players
@@ -4337,131 +4501,146 @@ async def process_combat(events):
         attackers = [
             m for m in pool
             if m.alive and m.target_player_id == session.player_id
-            and adjacent_or_same(session.x, session.y, m.x, m.y)
+            and m.can_strike(session.x, session.y)
         ]
-        attackers = attackers[:MAX_ATTACKERS]
+        # Prefer dragons so the boss isn't crowded out of the attacker cap
+        dragons = [m for m in attackers if m.type == "dragon"]
+        others = [m for m in attackers if m.type != "dragon"]
+        attackers = (dragons + others)[:MAX_ATTACKERS]
 
         primary = None
         if session.in_combat_with and session.in_combat_with[0] == "monster":
             mid = session.in_combat_with[1]
             primary = next((m for m in pool if m.id == mid), None)
             reach = session.attack_reach()
+            if primary:
+                mreach = int(primary.def_stats().get("attack_range") or 1)
+                if session.y == primary.y and abs(session.x - primary.x) <= mreach:
+                    reach = max(reach, mreach)
             if primary and (not primary.alive or chebyshev(session.x, session.y, primary.x, primary.y) > reach):
                 primary = None
         if primary is None and attackers:
-            primary = attackers[0]
-            session.in_combat_with = ("monster", primary.id)
+            # Auto-retaliate only when the monster forces it (default). Bosses like
+            # the dragon can hit you without locking you into fighting back.
+            fleeing = time.time() < float(getattr(session, "combat_flee_until", 0) or 0)
+            if not fleeing:
+                for atk in attackers:
+                    if atk.def_stats().get("force_retaliate", True):
+                        primary = atk
+                        session.in_combat_with = ("monster", atk.id)
+                        break
 
-        if primary and chebyshev(session.x, session.y, primary.x, primary.y) <= session.attack_reach():
-            ranged = bool(session.using_bow())
-            if ranged:
-                if not session.consume_one_arrow():
-                    await send(
-                        session.ws, "CHAT_MSG",
-                        **{"from": "You", "text": "You have run out of arrows."},
-                    )
-                    session.in_combat_with = None
-                    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
-                    continue
-                await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
-            mdef = primary.def_stats()
-            dmg, hit = combat.resolve_hit(session.combat_stats(), {
-                "attack": 1, "strength": 1, "defence": mdef["defence"],
-                "defence_bonus": mdef.get("def_bonus", 0),
-            })
-            crit = False
-            if hit and dmg > 0:
-                # Jewelry: flat void strike, then crit chance
-                flat = int(session.jewelry_ability_total("void_strike"))
-                if flat:
-                    dmg += flat
-                crit_chance = session.jewelry_ability_total("crit")
-                if crit_chance > 0 and random.random() < min(0.45, crit_chance):
-                    dmg = max(1, int(round(dmg * session.jewelry_crit_mult())))
-                    crit = True
-            primary.hp = max(0, primary.hp - dmg)
-            # Jewelry lifesteal on successful damage
-            healed = 0
-            if hit and dmg > 0:
-                steal = session.jewelry_ability_total("lifesteal")
-                if steal > 0:
-                    heal = max(1, int(round(dmg * min(0.40, steal))))
-                    max_hp = session.max_hp()
-                    if session.hp < max_hp:
-                        before_hp = session.hp
-                        session.hp = min(max_hp, session.hp + heal)
-                        healed = session.hp - before_hp
-                        if healed:
-                            WORLD.db.save_player_stats(session.player_id, hp=session.hp)
-            session.pet_target_id = primary.id  # pet assists only after you swing
-            ev = {
-                "attacker_id": session.player_id, "defender_id": primary.id, "damage": dmg,
-                "hit": hit, "defender_hp": primary.hp, "defender_max_hp": primary.max_hp,
-                "kind": "player_hits_monster",
-                "ranged": ranged,
-            }
-            if crit:
-                ev["crit"] = True
-            if healed:
-                ev["lifesteal"] = healed
-            if dungeon_tag:
-                ev["_dungeon_player"] = dungeon_tag
-            events.append({"type": "COMBAT_EVENT", "data": ev})
-            # Bow combat always trains Archery (no melee style switching while ranged).
-            if ranged:
-                style = "archery"
-                session.combat_style = "archery"
-            else:
-                style = session.combat_style if session.combat_style in COMBAT_STYLES else "attack"
-                if style == "archery":
-                    style = "attack"
-                    session.combat_style = "attack"
-            amount = dmg * 2
-            if amount > 0:
-                before, after = WORLD.grant_xp(session, style, amount)
-                xp_ev = {
-                    "player_id": session.player_id, "skill": style, "gained": amount,
-                    "xp": session.xp[style], "level": after, "leveled_up": after > before,
-                }
-                if dungeon_tag:
-                    xp_ev["_dungeon_player"] = dungeon_tag
-                events.append({"type": "SKILL_XP", "data": xp_ev})
-
-            # Auto quest-magic after a swing
-            try_auto_magic(session, primary, events, dungeon_tag=dungeon_tag)
-
-            if primary.hp <= 0:
-                primary.alive = False
-                if not getattr(primary, "no_respawn", False):
-                    primary.respawn_at_tick = WORLD.tick_count + MONSTERS[primary.type]["respawn_ticks"]
-                primary.target_player_id = None
-                if session.in_combat_with == ("monster", primary.id):
-                    session.in_combat_with = None
-                if not session.dungeon:
-                    drops = WORLD.drop_loot(primary.x, primary.y, MONSTERS[primary.type]["drops"])
-                    events.append({"type": "DEATH", "data": {"entity_id": primary.id, "entity_kind": "monster"}})
-                    if drops:
-                        events.append({"type": "LOOT_DROPPED", "data": {"x": primary.x, "y": primary.y, "items": drops}})
-                        await vacuum_ground_loot(session)
+        if primary:
+            reach = session.attack_reach()
+            # Side-by-side fights may leave a 1–2 tile gap; allow melee to land across it
+            # when the foe fights at extended range (e.g. dragonfire).
+            mreach = int(primary.def_stats().get("attack_range") or 1)
+            if session.y == primary.y and abs(session.x - primary.x) <= mreach:
+                reach = max(reach, mreach)
+            if chebyshev(session.x, session.y, primary.x, primary.y) <= reach:
+                ranged = bool(session.using_bow())
+                skip_player_swing = False
+                if ranged:
+                    if not session.consume_one_arrow():
+                        await send(
+                            session.ws, "CHAT_MSG",
+                            **{"from": "You", "text": "You have run out of arrows."},
+                        )
+                        session.in_combat_with = None
                         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
-                    check_quest_progress_on_kill(session, primary.type)
-                else:
-                    death_ev = {"entity_id": primary.id, "entity_kind": "monster", "_dungeon_player": dungeon_tag}
-                    events.append({"type": "DEATH", "data": death_ev})
-                    await _grant_tidehollow_kill_loot(session)
-                    # XP bonus from scaled dungeon beast
-                    bonus_xp = int(mdef.get("xp", 20))
-                    if bonus_xp > 0:
-                        before, after = WORLD.grant_xp(session, style, bonus_xp)
-                        events.append({"type": "SKILL_XP", "data": {
-                            "player_id": session.player_id, "skill": style, "gained": bonus_xp,
+                        skip_player_swing = True
+                    else:
+                        await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+                if not skip_player_swing:
+                    mdef = primary.def_stats()
+                    dmg, hit = combat.resolve_hit(session.combat_stats(), {
+                        "attack": 1, "strength": 1, "defence": mdef["defence"],
+                        "defence_bonus": mdef.get("def_bonus", 0),
+                    })
+                    crit = False
+                    if hit and dmg > 0:
+                        flat = int(session.jewelry_ability_total("void_strike"))
+                        if flat:
+                            dmg += flat
+                        crit_chance = session.jewelry_ability_total("crit")
+                        if crit_chance > 0 and random.random() < min(0.45, crit_chance):
+                            dmg = max(1, int(round(dmg * session.jewelry_crit_mult())))
+                            crit = True
+                    primary.hp = max(0, primary.hp - dmg)
+                    healed = 0
+                    if hit and dmg > 0:
+                        steal = session.jewelry_ability_total("lifesteal")
+                        if steal > 0:
+                            heal = max(1, int(round(dmg * min(0.40, steal))))
+                            max_hp = session.max_hp()
+                            if session.hp < max_hp:
+                                before_hp = session.hp
+                                session.hp = min(max_hp, session.hp + heal)
+                                healed = session.hp - before_hp
+                                if healed:
+                                    WORLD.db.save_player_stats(session.player_id, hp=session.hp)
+                    session.pet_target_id = primary.id
+                    ev = {
+                        "attacker_id": session.player_id, "defender_id": primary.id, "damage": dmg,
+                        "hit": hit, "defender_hp": primary.hp, "defender_max_hp": primary.max_hp,
+                        "kind": "player_hits_monster",
+                        "ranged": ranged,
+                    }
+                    if crit:
+                        ev["crit"] = True
+                    if healed:
+                        ev["lifesteal"] = healed
+                    if dungeon_tag:
+                        ev["_dungeon_player"] = dungeon_tag
+                    events.append({"type": "COMBAT_EVENT", "data": ev})
+                    if ranged:
+                        style = "archery"
+                        session.combat_style = "archery"
+                    else:
+                        style = session.combat_style if session.combat_style in COMBAT_STYLES else "attack"
+                        if style == "archery":
+                            style = "attack"
+                            session.combat_style = "attack"
+                    amount = dmg * 2
+                    if amount > 0:
+                        before, after = WORLD.grant_xp(session, style, amount)
+                        xp_ev = {
+                            "player_id": session.player_id, "skill": style, "gained": amount,
                             "xp": session.xp[style], "level": after, "leveled_up": after > before,
-                            "_dungeon_player": dungeon_tag,
-                        }})
-                    remaining = sum(1 for m in session.dungeon["monsters"].values() if m.alive)
-                    if remaining == 0:
-                        await _dungeon_on_clear(session)
-                attackers = [m for m in attackers if m is not primary]
+                        }
+                        if dungeon_tag:
+                            xp_ev["_dungeon_player"] = dungeon_tag
+                        events.append({"type": "SKILL_XP", "data": xp_ev})
+                    try_auto_magic(session, primary, events, dungeon_tag=dungeon_tag)
+                    if primary.hp <= 0:
+                        primary.alive = False
+                        if not getattr(primary, "no_respawn", False):
+                            primary.respawn_at_tick = WORLD.tick_count + MONSTERS[primary.type]["respawn_ticks"]
+                        primary.target_player_id = None
+                        if session.in_combat_with == ("monster", primary.id):
+                            session.in_combat_with = None
+                        if not session.dungeon:
+                            drops = WORLD.drop_loot(primary.x, primary.y, MONSTERS[primary.type]["drops"])
+                            events.append({"type": "DEATH", "data": {"entity_id": primary.id, "entity_kind": "monster"}})
+                            if drops:
+                                events.append({"type": "LOOT_DROPPED", "data": {"x": primary.x, "y": primary.y, "items": drops}})
+                                await vacuum_ground_loot(session)
+                                await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+                            check_quest_progress_on_kill(session, primary.type)
+                        else:
+                            death_ev = {"entity_id": primary.id, "entity_kind": "monster", "_dungeon_player": dungeon_tag}
+                            events.append({"type": "DEATH", "data": death_ev})
+                            if not session.dungeon.get("explore"):
+                                bonus_xp = int(mdef.get("xp", 20))
+                                if bonus_xp > 0:
+                                    before, after = WORLD.grant_xp(session, style, bonus_xp)
+                                    events.append({"type": "SKILL_XP", "data": {
+                                        "player_id": session.player_id, "skill": style, "gained": bonus_xp,
+                                        "xp": session.xp[style], "level": after, "leveled_up": after > before,
+                                        "_dungeon_player": dungeon_tag,
+                                    }})
+                            await _finish_dungeon_kill(session, primary)
+                        attackers = [m for m in attackers if m is not primary]
 
         died = False
         for monster in attackers:
@@ -4520,6 +4699,8 @@ async def process_combat(events):
                 "hit": hit2, "defender_hp": session.hp, "defender_max_hp": session.max_hp(),
                 "kind": "monster_hits_player",
             }
+            if monster.type == "dragon":
+                hit_ev["fx"] = "dragonfire"
             if dodged:
                 hit_ev["dodged"] = True
             if thorns_dmg:
@@ -4528,6 +4709,8 @@ async def process_combat(events):
             if dungeon_tag:
                 hit_ev["_dungeon_player"] = dungeon_tag
             events.append({"type": "COMBAT_EVENT", "data": hit_ev})
+            # Post-swing cooldown (dragon: 1s so the player can run)
+            monster.mark_attacked()
             before_hp, after_hp = WORLD.grant_xp(session, "hitpoints", 1)
             hp_ev = {
                 "player_id": session.player_id, "skill": "hitpoints", "gained": 1,
@@ -4656,14 +4839,15 @@ def process_pets(events):
                     if session.dungeon:
                         events.append({
                             "type": "_DUNGEON_LOOT",
-                            "data": {"_dungeon_player": session.player_id},
+                            "data": {"_dungeon_player": session.player_id, "monster_id": target.id},
                         })
-                        remaining = sum(1 for m in session.dungeon["monsters"].values() if m.alive)
-                        if remaining == 0:
-                            events.append({
-                                "type": "_DUNGEON_CLEAR",
-                                "data": {"_dungeon_player": session.player_id},
-                            })
+                        if not session.dungeon.get("explore"):
+                            remaining = sum(1 for m in session.dungeon["monsters"].values() if m.alive)
+                            if remaining == 0:
+                                events.append({
+                                    "type": "_DUNGEON_CLEAR",
+                                    "data": {"_dungeon_player": session.player_id},
+                                })
                     else:
                         drops = WORLD.drop_loot(target.x, target.y, MONSTERS[target.type]["drops"])
                         if drops:
@@ -4740,23 +4924,24 @@ def process_resource_respawns():
 
 
 def process_dungeon_ai():
-    """Chase the instance owner inside Tidehollow floors."""
+    """At most two monsters chase, and only while you are still in their area."""
+    max_pursuers = 2
     for session in list(WORLD.sessions.values()):
         if not session.dungeon:
             continue
         tiles = session.dungeon["tiles"]
-        for m in session.dungeon["monsters"].values():
-            if not m.alive:
-                continue
-            m.target_player_id = session.player_id
-            dist = max(abs(session.x - m.x), abs(session.y - m.y))
-            if not session.in_combat_with:
-                session.in_combat_with = ("monster", m.id)
-            if dist <= 1:
-                continue
-            dx = 0 if session.x == m.x else (1 if session.x > m.x else -1)
-            dy = 0 if session.y == m.y else (1 if session.y > m.y else -1)
-            if abs(session.x - m.x) >= abs(session.y - m.y):
+        mod = _dungeon_mod(session)
+        monsters = list(session.dungeon["monsters"].values())
+
+        def occupied(nx, ny, me):
+            return any(o.alive and o.id != me.id and o.x == nx and o.y == ny for o in monsters)
+
+        def step_toward(m, tx, ty, stay_in_room):
+            if (m.x, m.y) == (tx, ty):
+                return
+            dx = 0 if tx == m.x else (1 if tx > m.x else -1)
+            dy = 0 if ty == m.y else (1 if ty > m.y else -1)
+            if abs(tx - m.x) >= abs(ty - m.y):
                 steps = [(dx, 0), (0, dy), (dx, dy)]
             else:
                 steps = [(0, dy), (dx, 0), (dx, dy)]
@@ -4764,15 +4949,56 @@ def process_dungeon_ai():
                 if sx == 0 and sy == 0:
                     continue
                 nx, ny = m.x + sx, m.y + sy
-                if _dungeon_mod(session).dungeon_walkable(tiles, nx, ny) and (nx, ny) != (session.x, session.y):
-                    # Don't stack on other living beasts
-                    blocked = any(
-                        o.alive and o.id != m.id and o.x == nx and o.y == ny
-                        for o in session.dungeon["monsters"].values()
-                    )
-                    if not blocked:
-                        m.x, m.y = nx, ny
-                        break
+                if (nx, ny) == (session.x, session.y):
+                    continue
+                if stay_in_room and m.home_room and not in_room(nx, ny, m.home_room):
+                    continue
+                if not mod.dungeon_walkable(tiles, nx, ny) or occupied(nx, ny, m):
+                    continue
+                m.x, m.y = nx, ny
+                return
+
+        eligible = []
+        for m in monsters:
+            if not m.alive:
+                continue
+            in_area = in_room(session.x, session.y, m.home_room) if m.home_room else True
+            if not in_area:
+                if m.target_player_id == session.player_id:
+                    m.target_player_id = None
+                if session.in_combat_with == ("monster", m.id):
+                    session.in_combat_with = None
+                step_toward(m, m.spawn_x, m.spawn_y, stay_in_room=True)
+                continue
+            dist = max(abs(session.x - m.x), abs(session.y - m.y))
+            eligible.append((dist, m.id, m))
+        eligible.sort()
+        active_ids = {mid for _dist, mid, _m in eligible[:max_pursuers]}
+        closest_strike = None
+        for dist, mid, m in eligible:
+            if mid not in active_ids:
+                if m.target_player_id == session.player_id:
+                    m.target_player_id = None
+                if session.in_combat_with == ("monster", m.id):
+                    session.in_combat_with = None
+                continue
+            m.target_player_id = session.player_id
+            reach = 1
+            mdef = MONSTERS.get(m.type) or {}
+            if m.stats:
+                reach = max(1, int(m.stats.get("attack_range") or mdef.get("attack_range") or 1))
+            else:
+                reach = max(1, int(mdef.get("attack_range") or 1))
+            if dist <= reach and closest_strike is None:
+                closest_strike = m.id
+            if dist > 1:
+                step_toward(m, session.x, session.y, stay_in_room=True)
+        if closest_strike is not None:
+            session.in_combat_with = ("monster", closest_strike)
+        elif session.in_combat_with and session.in_combat_with[0] == "monster":
+            current = session.dungeon["monsters"].get(session.in_combat_with[1])
+            if current is None or not current.alive or current.id not in active_ids:
+                session.in_combat_with = None
 
 
 def process_monster_ai():
@@ -4798,22 +5024,29 @@ def process_monster_ai():
         if m.target_player_id and m.target_player_id not in WORLD.sessions:
             m.target_player_id = None
 
-        # Acquire aggro (respect simultaneous attacker cap)
+        # Acquire aggro (respect simultaneous attacker cap; bosses always acquire)
         if aggro and not m.target_player_id:
             best = None
             best_d = None
+            boss = bool(mdef.get("force_retaliate") and mdef.get("side_by_side")) or bool(
+                mdef.get("force_retaliate") and mdef.get("attack_range", 1) > 1
+            )
             for s in WORLD.sessions.values():
                 if getattr(s, "dungeon", None):
                     continue
-                if attackers_on(s.player_id) >= MAX_ATTACKERS:
+                # Confined bosses only aggro players still inside their lair
+                if m.home_room and not in_room(s.x, s.y, m.home_room):
+                    continue
+                if not boss and attackers_on(s.player_id) >= MAX_ATTACKERS:
                     continue
                 d = max(abs(s.x - m.x), abs(s.y - m.y))
                 if d <= aggro and (best_d is None or d < best_d):
                     best, best_d = s, d
             if best:
                 m.target_player_id = best.player_id
-                # Only lock combat if the player isn't already fighting someone else
-                if not best.in_combat_with:
+                # Lock the player into auto-hitting back only when the monster requires it
+                fleeing = time.time() < float(getattr(best, "combat_flee_until", 0) or 0)
+                if mdef.get("force_retaliate", True) and not best.in_combat_with and not fleeing:
                     best.in_combat_with = ("monster", m.id)
 
         if m.target_player_id:
@@ -4822,27 +5055,97 @@ def process_monster_ai():
                 m.target_player_id = None
                 continue
             dist = max(abs(session.x - m.x), abs(session.y - m.y))
-            # Lose interest if the player flees far enough
-            if dist > max(aggro * 2, 10):
+            atk_reach = max(1, int(mdef.get("attack_range") or 1))
+            # Leave the lair → drop aggro immediately and walk home
+            left_area = bool(m.home_room) and not in_room(session.x, session.y, m.home_room)
+            leash = max(int(aggro) * 2, 10) if aggro else 10
+            if left_area or dist > leash:
                 if session.in_combat_with == ("monster", m.id):
                     session.in_combat_with = None
                 m.target_player_id = None
+                m.fight_side = None
+                # Step toward spawn so the boss returns to its post
+                if (m.x, m.y) != (m.spawn_x, m.spawn_y):
+                    dx = 0 if m.spawn_x == m.x else (1 if m.spawn_x > m.x else -1)
+                    dy = 0 if m.spawn_y == m.y else (1 if m.spawn_y > m.y else -1)
+                    for sx, sy in ((dx, 0), (0, dy), (dx, dy)):
+                        if sx == 0 and sy == 0:
+                            continue
+                        nx, ny = m.x + sx, m.y + sy
+                        if (is_walkable(WORLD.grid, nx, ny)
+                                and in_room(nx, ny, m.home_room)
+                                and not WORLD.occupied(nx, ny)):
+                            m.x, m.y = nx, ny
+                            break
                 continue
-            # Keep the player locked into fighting back against one of their attackers
-            if not session.in_combat_with or session.in_combat_with[0] != "monster":
-                session.in_combat_with = ("monster", m.id)
-            elif session.in_combat_with[1] not in WORLD.monsters or not WORLD.monsters[session.in_combat_with[1]].alive:
-                session.in_combat_with = ("monster", m.id)
-            # Chase one step toward the player when not adjacent (stay in home room)
-            if dist > 1:
+            # Keep the player locked into fighting back (skipped when force_retaliate
+            # is False, or while the player is fleeing after STOP_ATTACK).
+            fleeing = time.time() < float(getattr(session, "combat_flee_until", 0) or 0)
+            if mdef.get("force_retaliate", True) and not fleeing and dist <= atk_reach:
+                if not session.in_combat_with or session.in_combat_with[0] != "monster":
+                    session.in_combat_with = ("monster", m.id)
+                elif session.in_combat_with[1] not in WORLD.monsters or not WORLD.monsters[session.in_combat_with[1]].alive:
+                    session.in_combat_with = ("monster", m.id)
+            # Side-by-side bosses: snap onto the player's row when above/below,
+            # then hold still once parallel (stops the jump flicker).
+            side_by_side = bool(mdef.get("side_by_side"))
+            prefer = max(1, min(int(mdef.get("side_gap") or 2), atk_reach))
+            if side_by_side:
+                gap = abs(m.x - session.x)
+                lined_up = (m.y == session.y and 1 <= gap <= atk_reach)
+                if lined_up:
+                    # Stay put on the side post (Y already matches)
+                    pass
+                else:
+                    side = getattr(m, "fight_side", None)
+                    if side not in (1, -1):
+                        side = 1 if m.x >= session.x else -1
+                        m.fight_side = side
+                    placed = False
+                    # Drop onto the player's row (same Y), east or west
+                    for g in (prefer, 3, 2, 1, 4):
+                        if g > atk_reach and g != prefer:
+                            continue
+                        for s in (side, -side):
+                            tx = session.x + s * g
+                            ty = session.y
+                            if (tx, ty) == (session.x, session.y):
+                                continue
+                            if (is_walkable(WORLD.grid, tx, ty)
+                                    and in_room(tx, ty, m.home_room)
+                                    and not WORLD.occupied(tx, ty)):
+                                m.x, m.y = tx, ty
+                                m.fight_side = s
+                                placed = True
+                                break
+                        if placed:
+                            break
+                    if not placed:
+                        # At minimum, drop onto the player's row this tick
+                        if m.y != session.y:
+                            old_y = m.y
+                            m.y = session.y
+                            if (WORLD.occupied(m.x, m.y)
+                                    or not is_walkable(WORLD.grid, m.x, m.y)
+                                    or not in_room(m.x, m.y, m.home_room)):
+                                # Side-step off the player / unblock
+                                stepped = False
+                                for s in (side, -side, 1, -1):
+                                    nx = session.x + s
+                                    if (is_walkable(WORLD.grid, nx, session.y)
+                                            and in_room(nx, session.y, m.home_room)
+                                            and not WORLD.occupied(nx, session.y)):
+                                        m.x, m.y = nx, session.y
+                                        m.fight_side = s if s in (1, -1) else side
+                                        stepped = True
+                                        break
+                                if not stepped:
+                                    m.y = old_y
+            elif dist > atk_reach:
+                # Generic chase: step toward the player
                 dx = 0 if session.x == m.x else (1 if session.x > m.x else -1)
                 dy = 0 if session.y == m.y else (1 if session.y > m.y else -1)
-                # Prefer axis with larger delta
-                if abs(session.x - m.x) >= abs(session.y - m.y):
-                    steps = [(dx, 0), (0, dy), (dx, dy)]
-                else:
-                    steps = [(0, dy), (dx, 0), (dx, dy)]
-                for sx, sy in steps:
+                for sx, sy in ((dx, 0), (0, dy), (dx, dy)):
                     if sx == 0 and sy == 0:
                         continue
                     nx, ny = m.x + sx, m.y + sy

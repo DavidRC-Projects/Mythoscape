@@ -90,9 +90,9 @@ class CameraYaw:
         return order[view_idx]
 
     def rotate_camera(self, steps=1):
-        """Rotate yaw by ±1 (or more). Returns new yaw."""
-        self.camera_yaw = (int(self.camera_yaw) + int(steps)) % 4
-        return self.camera_yaw
+        """Camera is fixed — no-op (kept for API compatibility)."""
+        self.camera_yaw = 0
+        return 0
 
     def building_view_bounds(self, b):
         """AABB of a building footprint in view tile space."""

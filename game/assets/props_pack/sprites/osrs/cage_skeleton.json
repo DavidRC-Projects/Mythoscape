@@ -1,0 +1,60 @@
+{
+  "key": "cage_skeleton",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "cage_skeleton_2x.png": {
+      "file": "cage_skeleton_2x.png",
+      "w": 88,
+      "h": 108,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        43.8,
+        90.0
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            5.7,
+            91.4
+          ],
+          [
+            54.2,
+            108.4
+          ],
+          [
+            81.9,
+            88.5
+          ],
+          [
+            33.4,
+            71.6
+          ]
+        ]
+      ],
+      "interact_px": [
+        [
+          -30.4,
+          112.4
+        ],
+        [
+          26.9,
+          132.5
+        ],
+        [
+          57.8,
+          110.5
+        ],
+        [
+          0.5,
+          90.4
+        ]
+      ]
+    }
+  }
+}

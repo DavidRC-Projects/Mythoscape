@@ -1,0 +1,394 @@
+{
+  "key": "barrel",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 0.0,
+    "elevation_deg": 32.0
+  },
+  "images": {
+    "barrel_1x.png": {
+      "file": "barrel_1x.png",
+      "w": 26,
+      "h": 33,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        10.7,
+        26.4
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            0.6,
+            33.1
+          ],
+          [
+            23.5,
+            33.1
+          ],
+          [
+            23.5,
+            21.0
+          ],
+          [
+            0.6,
+            21.0
+          ]
+        ]
+      ]
+    },
+    "barrel_2x.png": {
+      "file": "barrel_2x.png",
+      "w": 51,
+      "h": 66,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        21.5,
+        52.7
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            1.3,
+            66.3
+          ],
+          [
+            47.0,
+            66.3
+          ],
+          [
+            47.0,
+            42.0
+          ],
+          [
+            1.3,
+            42.0
+          ]
+        ]
+      ]
+    },
+    "barrel_3x.png": {
+      "file": "barrel_3x.png",
+      "w": 77,
+      "h": 98,
+      "px_per_m": 80.721,
+      "metres_per_px": 0.0124,
+      "origin_px": [
+        32.2,
+        79.1
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            1.9,
+            99.4
+          ],
+          [
+            70.5,
+            99.4
+          ],
+          [
+            70.5,
+            63.1
+          ],
+          [
+            1.9,
+            63.1
+          ]
+        ]
+      ]
+    },
+    "barrel_match.png": {
+      "file": "barrel_match.png",
+      "w": 21,
+      "h": 27,
+      "px_per_m": 21.998,
+      "metres_per_px": 0.0455,
+      "origin_px": [
+        8.8,
+        21.6
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            0.5,
+            27.1
+          ],
+          [
+            19.2,
+            27.1
+          ],
+          [
+            19.2,
+            17.2
+          ],
+          [
+            0.5,
+            17.2
+          ]
+        ]
+      ]
+    },
+    "barrel_s_1x.png": {
+      "file": "barrel_s_1x.png",
+      "w": 26,
+      "h": 33,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        10.7,
+        26.4
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            0.6,
+            33.1
+          ],
+          [
+            23.5,
+            33.1
+          ],
+          [
+            23.5,
+            21.0
+          ],
+          [
+            0.6,
+            21.0
+          ]
+        ]
+      ]
+    },
+    "barrel_s_2x.png": {
+      "file": "barrel_s_2x.png",
+      "w": 51,
+      "h": 66,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        21.5,
+        52.7
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            1.3,
+            66.3
+          ],
+          [
+            47.0,
+            66.3
+          ],
+          [
+            47.0,
+            42.0
+          ],
+          [
+            1.3,
+            42.0
+          ]
+        ]
+      ]
+    },
+    "barrel_w_1x.png": {
+      "file": "barrel_w_1x.png",
+      "w": 25,
+      "h": 32,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        10.7,
+        26.4
+      ],
+      "heading_deg": 90,
+      "collider_px": [
+        [
+          [
+            23.5,
+            31.8
+          ],
+          [
+            23.5,
+            19.7
+          ],
+          [
+            0.6,
+            19.7
+          ],
+          [
+            0.6,
+            31.8
+          ]
+        ]
+      ]
+    },
+    "barrel_w_2x.png": {
+      "file": "barrel_w_2x.png",
+      "w": 50,
+      "h": 64,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        21.5,
+        52.9
+      ],
+      "heading_deg": 90,
+      "collider_px": [
+        [
+          [
+            47.0,
+            63.6
+          ],
+          [
+            47.0,
+            39.3
+          ],
+          [
+            1.3,
+            39.3
+          ],
+          [
+            1.3,
+            63.6
+          ]
+        ]
+      ]
+    },
+    "barrel_n_1x.png": {
+      "file": "barrel_n_1x.png",
+      "w": 26,
+      "h": 32,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        15.0,
+        26.4
+      ],
+      "heading_deg": 180,
+      "collider_px": [
+        [
+          [
+            25.0,
+            19.6
+          ],
+          [
+            2.2,
+            19.6
+          ],
+          [
+            2.2,
+            31.7
+          ],
+          [
+            25.0,
+            31.7
+          ]
+        ]
+      ]
+    },
+    "barrel_n_2x.png": {
+      "file": "barrel_n_2x.png",
+      "w": 51,
+      "h": 64,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        29.9,
+        52.7
+      ],
+      "heading_deg": 180,
+      "collider_px": [
+        [
+          [
+            50.1,
+            39.2
+          ],
+          [
+            4.3,
+            39.2
+          ],
+          [
+            4.3,
+            63.4
+          ],
+          [
+            50.1,
+            63.4
+          ]
+        ]
+      ]
+    },
+    "barrel_e_1x.png": {
+      "file": "barrel_e_1x.png",
+      "w": 25,
+      "h": 33,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        14.1,
+        26.4
+      ],
+      "heading_deg": -90,
+      "collider_px": [
+        [
+          [
+            1.3,
+            21.0
+          ],
+          [
+            1.3,
+            33.1
+          ],
+          [
+            24.2,
+            33.1
+          ],
+          [
+            24.2,
+            21.0
+          ]
+        ]
+      ]
+    },
+    "barrel_e_2x.png": {
+      "file": "barrel_e_2x.png",
+      "w": 50,
+      "h": 66,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        28.2,
+        52.7
+      ],
+      "heading_deg": -90,
+      "collider_px": [
+        [
+          [
+            2.6,
+            42.0
+          ],
+          [
+            2.6,
+            66.3
+          ],
+          [
+            48.3,
+            66.3
+          ],
+          [
+            48.3,
+            42.0
+          ]
+        ]
+      ]
+    }
+  }
+}

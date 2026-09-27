@@ -1,0 +1,42 @@
+{
+  "key": "crypt_candelabra",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "crypt_candelabra_2x.png": {
+      "file": "crypt_candelabra_2x.png",
+      "w": 77,
+      "h": 116,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        30.2,
+        93.5
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            -14.3,
+            87.8
+          ],
+          [
+            56.2,
+            112.5
+          ],
+          [
+            80.9,
+            94.9
+          ],
+          [
+            10.4,
+            70.2
+          ]
+        ]
+      ]
+    }
+  }
+}

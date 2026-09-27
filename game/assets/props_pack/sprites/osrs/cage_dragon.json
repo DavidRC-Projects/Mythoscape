@@ -1,0 +1,60 @@
+{
+  "key": "cage_dragon",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "cage_dragon_2x.png": {
+      "file": "cage_dragon_2x.png",
+      "w": 98,
+      "h": 113,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        48.8,
+        92.6
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            5.8,
+            93.9
+          ],
+          [
+            60.9,
+            113.2
+          ],
+          [
+            91.8,
+            91.2
+          ],
+          [
+            36.7,
+            71.9
+          ]
+        ]
+      ],
+      "interact_px": [
+        [
+          -26.9,
+          116.1
+        ],
+        [
+          30.4,
+          136.2
+        ],
+        [
+          61.3,
+          114.2
+        ],
+        [
+          3.9,
+          94.1
+        ]
+      ]
+    }
+  }
+}

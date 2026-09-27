@@ -1,0 +1,60 @@
+{
+  "key": "void_altar",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "void_altar_2x.png": {
+      "file": "void_altar_2x.png",
+      "w": 153,
+      "h": 140,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        74.9,
+        103.5
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            7.9,
+            99.7
+          ],
+          [
+            104.8,
+            133.7
+          ],
+          [
+            148.1,
+            102.8
+          ],
+          [
+            51.1,
+            68.9
+          ]
+        ]
+      ],
+      "interact_px": [
+        [
+          -17.3,
+          127.1
+        ],
+        [
+          62.1,
+          154.8
+        ],
+        [
+          92.9,
+          132.8
+        ],
+        [
+          13.6,
+          105.0
+        ]
+      ]
+    }
+  }
+}

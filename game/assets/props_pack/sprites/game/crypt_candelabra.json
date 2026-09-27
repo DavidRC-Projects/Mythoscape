@@ -1,0 +1,362 @@
+{
+  "key": "crypt_candelabra",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 0.0,
+    "elevation_deg": 32.0
+  },
+  "images": {
+    "crypt_candelabra_1x.png": {
+      "file": "crypt_candelabra_1x.png",
+      "w": 46,
+      "h": 55,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        22.1,
+        44.6
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            0.5,
+            48.9
+          ],
+          [
+            43.6,
+            48.9
+          ],
+          [
+            43.6,
+            37.5
+          ],
+          [
+            0.5,
+            37.5
+          ]
+        ]
+      ]
+    },
+    "crypt_candelabra_2x.png": {
+      "file": "crypt_candelabra_2x.png",
+      "w": 92,
+      "h": 110,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        44.1,
+        89.3
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            1.1,
+            97.8
+          ],
+          [
+            87.2,
+            97.8
+          ],
+          [
+            87.2,
+            75.0
+          ],
+          [
+            1.1,
+            75.0
+          ]
+        ]
+      ]
+    },
+    "crypt_candelabra_3x.png": {
+      "file": "crypt_candelabra_3x.png",
+      "w": 138,
+      "h": 165,
+      "px_per_m": 80.721,
+      "metres_per_px": 0.0124,
+      "origin_px": [
+        66.2,
+        133.9
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            1.6,
+            146.7
+          ],
+          [
+            130.8,
+            146.7
+          ],
+          [
+            130.8,
+            112.5
+          ],
+          [
+            1.6,
+            112.5
+          ]
+        ]
+      ]
+    },
+    "crypt_candelabra_s_1x.png": {
+      "file": "crypt_candelabra_s_1x.png",
+      "w": 46,
+      "h": 55,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        22.1,
+        44.6
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            0.5,
+            48.9
+          ],
+          [
+            43.6,
+            48.9
+          ],
+          [
+            43.6,
+            37.5
+          ],
+          [
+            0.5,
+            37.5
+          ]
+        ]
+      ]
+    },
+    "crypt_candelabra_s_2x.png": {
+      "file": "crypt_candelabra_s_2x.png",
+      "w": 92,
+      "h": 110,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        44.1,
+        89.3
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            1.1,
+            97.8
+          ],
+          [
+            87.2,
+            97.8
+          ],
+          [
+            87.2,
+            75.0
+          ],
+          [
+            1.1,
+            75.0
+          ]
+        ]
+      ]
+    },
+    "crypt_candelabra_w_1x.png": {
+      "file": "crypt_candelabra_w_1x.png",
+      "w": 31,
+      "h": 59,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        12.5,
+        47.5
+      ],
+      "heading_deg": 90,
+      "collider_px": [
+        [
+          [
+            20.6,
+            58.9
+          ],
+          [
+            20.6,
+            36.1
+          ],
+          [
+            -0.9,
+            36.1
+          ],
+          [
+            -0.9,
+            58.9
+          ]
+        ]
+      ]
+    },
+    "crypt_candelabra_w_2x.png": {
+      "file": "crypt_candelabra_w_2x.png",
+      "w": 62,
+      "h": 118,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        25.1,
+        95.0
+      ],
+      "heading_deg": 90,
+      "collider_px": [
+        [
+          [
+            41.2,
+            117.8
+          ],
+          [
+            41.2,
+            72.2
+          ],
+          [
+            -1.8,
+            72.2
+          ],
+          [
+            -1.8,
+            117.8
+          ]
+        ]
+      ]
+    },
+    "crypt_candelabra_n_1x.png": {
+      "file": "crypt_candelabra_n_1x.png",
+      "w": 46,
+      "h": 51,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        24.0,
+        44.6
+      ],
+      "heading_deg": 180,
+      "collider_px": [
+        [
+          [
+            45.5,
+            40.3
+          ],
+          [
+            2.4,
+            40.3
+          ],
+          [
+            2.4,
+            51.8
+          ],
+          [
+            45.5,
+            51.8
+          ]
+        ]
+      ]
+    },
+    "crypt_candelabra_n_2x.png": {
+      "file": "crypt_candelabra_n_2x.png",
+      "w": 92,
+      "h": 102,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        47.9,
+        89.3
+      ],
+      "heading_deg": 180,
+      "collider_px": [
+        [
+          [
+            91.0,
+            80.7
+          ],
+          [
+            4.9,
+            80.7
+          ],
+          [
+            4.9,
+            103.5
+          ],
+          [
+            91.0,
+            103.5
+          ]
+        ]
+      ]
+    },
+    "crypt_candelabra_e_1x.png": {
+      "file": "crypt_candelabra_e_1x.png",
+      "w": 31,
+      "h": 60,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        18.6,
+        47.5
+      ],
+      "heading_deg": -90,
+      "collider_px": [
+        [
+          [
+            10.5,
+            36.1
+          ],
+          [
+            10.5,
+            58.9
+          ],
+          [
+            32.0,
+            58.9
+          ],
+          [
+            32.0,
+            36.1
+          ]
+        ]
+      ]
+    },
+    "crypt_candelabra_e_2x.png": {
+      "file": "crypt_candelabra_e_2x.png",
+      "w": 62,
+      "h": 119,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        37.1,
+        95.0
+      ],
+      "heading_deg": -90,
+      "collider_px": [
+        [
+          [
+            21.0,
+            72.2
+          ],
+          [
+            21.0,
+            117.8
+          ],
+          [
+            64.0,
+            117.8
+          ],
+          [
+            64.0,
+            72.2
+          ]
+        ]
+      ]
+    }
+  }
+}

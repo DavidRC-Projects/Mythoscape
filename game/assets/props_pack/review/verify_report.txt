@@ -1,0 +1,42 @@
+PASS  town     anvil              tris  228/ 400(S)  glow ember                          interact reachable; solid blocks
+PASS  town     bank_booth         tris  612/ 900(M)  glow -                              interact reachable; solid blocks
+PASS  castle   banner_stand       tris  253/ 400(S)  glow -                              solid blocks
+PASS  castle   banquet_table      tris  690/ 900(M)  glow candle                         solid blocks
+PASS  town     barrel             tris  174/ 400(S)  glow -                              solid blocks
+PASS  castle   brazier            tris  338/ 400(S)  glow fire,fire_core,ember           solid blocks
+PASS  pets     cage_cat           tris  654/ 900(M)  glow -                              interact reachable; solid blocks
+PASS  pets     cage_dragon        tris  686/ 900(M)  glow -                              interact reachable; solid blocks
+PASS  pets     cage_husky         tris  612/ 900(M)  glow -                              interact reachable; solid blocks
+PASS  pets     cage_skeleton      tris  906/1300(L)  glow -                              interact reachable; solid blocks
+PASS  castle   castle_chair       tris  156/ 400(S)  glow -                              solid blocks
+PASS  castle   chandelier         tris  442/ 900(M)  glow candle                         
+PASS  dungeons crypt_candelabra   tris  627/ 900(M)  glow candle                         solid blocks
+PASS  dungeons crypt_sarcophagus  tris  360/ 900(M)  glow candle                         solid blocks
+PASS  dungeons dragon_egg_nest    tris  818/1300(L)  glow ember                          solid blocks
+PASS  dungeons dragon_hoard       tris 1045/1300(L)  glow -                              solid blocks
+PASS  town     fountain           tris  440/ 900(M)  glow water,water_hi                 interact reachable; solid blocks
+PASS  town     furnace            tris  634/ 900(M)  glow fire,fire_core,ember           interact reachable; solid blocks
+PASS  dungeons giant_table        tris  368/ 900(M)  glow -                              solid blocks
+PASS  dungeons giant_throne       tris  556/ 900(M)  glow -                              solid blocks
+PASS  dungeons goblin_campfire    tris  496/ 900(M)  glow fire,fire_core,ember           solid blocks
+PASS  dungeons goblin_loot        tris  544/ 900(M)  glow -                              solid blocks
+PASS  town     hearth             tris  436/ 900(M)  glow fire,fire_core,ember           interact reachable; solid blocks
+PASS  town     market_stall       tris  634/ 900(M)  glow -                              interact reachable; solid blocks
+PASS  pets     pet_bed            tris  250/ 400(S)  glow -                              solid blocks
+PASS  town     quench_bucket      tris  164/ 400(S)  glow -                              solid blocks
+PASS  town     shop_counter       tris  328/ 400(S)  glow -                              interact reachable; solid blocks
+PASS  dungeons spider_cocoons     tris  414/ 900(M)  glow -                              solid blocks
+PASS  dungeons spider_egg_sacs    tris  350/ 900(M)  glow egg_glow                       solid blocks
+PASS  castle   suit_of_armour     tris  392/ 900(M)  glow -                              solid blocks
+PASS  castle   throne             tris  252/ 400(S)  glow -                              solid blocks
+PASS  town     vault_chest        tris  334/ 400(S)  glow -                              interact reachable; solid blocks
+PASS  town     vault_door         tris  556/ 900(M)  glow -                              interact reachable; solid blocks
+PASS  dungeons void_altar         tris  250/ 900(M)  glow void,void_core,candle          interact reachable; solid blocks
+PASS  dungeons void_crystals      tris  296/ 400(S)  glow void,void_core                 solid blocks
+PASS  town     weapon_rack        tris  315/ 400(S)  glow -                              solid blocks
+PASS  town     wishing_well       tris  728/ 900(M)  glow water,water_hi                 interact reachable; solid blocks
+PASS  dungeons wolf_bone_pile     tris 1071/1300(L)  glow -                              solid blocks
+PASS  dungeons wolf_den_bed       tris  476/ 900(M)  glow -                              solid blocks
+PASS  town     workbench          tris  236/ 400(S)  glow -                              solid blocks
+
+40/40 props PASS

@@ -1,0 +1,42 @@
+{
+  "key": "workbench",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "workbench_2x.png": {
+      "file": "workbench_2x.png",
+      "w": 114,
+      "h": 113,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        59.4,
+        90.2
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            5.9,
+            86.2
+          ],
+          [
+            85.2,
+            114.0
+          ],
+          [
+            113.0,
+            94.2
+          ],
+          [
+            33.6,
+            66.4
+          ]
+        ]
+      ]
+    }
+  }
+}

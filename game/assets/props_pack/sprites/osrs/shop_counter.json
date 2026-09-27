@@ -1,0 +1,60 @@
+{
+  "key": "shop_counter",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "shop_counter_2x.png": {
+      "file": "shop_counter_2x.png",
+      "w": 137,
+      "h": 115,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        69.2,
+        86.2
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            5.4,
+            77.8
+          ],
+          [
+            106.8,
+            113.3
+          ],
+          [
+            133.0,
+            94.6
+          ],
+          [
+            31.6,
+            59.1
+          ]
+        ]
+      ],
+      "interact_px": [
+        [
+          -21.2,
+          103.8
+        ],
+        [
+          67.0,
+          134.7
+        ],
+        [
+          97.9,
+          112.6
+        ],
+        [
+          9.7,
+          81.8
+        ]
+      ]
+    }
+  }
+}

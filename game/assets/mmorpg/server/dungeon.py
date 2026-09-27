@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import random
 
-from world_map import WALL, FLOOR, is_walkable as _world_walkable
+from world_map import WALL, FLOOR, widen_single_file_passages, is_walkable as _world_walkable
 
 # Floor combat levels (1..10) and spawn counts (fewer, harder deeper)
 TIDEHOLLOW_FLOORS = [
@@ -27,7 +27,7 @@ TIDEHOLLOW_FLOORS = [
 
 DUNGEON_W, DUNGEON_H = 28, 22
 DUNGEON_SPAWN = (14, 19)
-CAVE_RETURN = (138, 3)  # just south of the cave mouth
+CAVE_RETURN = (184, 38)  # just south of the cave mouth
 
 # Visual monster type by floor band (uses existing drawers)
 _FLOOR_VISUAL = {
@@ -172,6 +172,7 @@ def generate_floor_tiles(floor: int, rng=None):
         tiles[h - 1][sx - 1] = FLOOR
     if sx < w - 1:
         tiles[h - 1][sx + 1] = FLOOR
+    widen_single_file_passages(tiles)
     return tiles
 
 

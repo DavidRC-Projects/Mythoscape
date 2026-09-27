@@ -1,0 +1,362 @@
+{
+  "key": "goblin_campfire",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 0.0,
+    "elevation_deg": 32.0
+  },
+  "images": {
+    "goblin_campfire_1x.png": {
+      "file": "goblin_campfire_1x.png",
+      "w": 63,
+      "h": 35,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        32.6,
+        22.5
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            16.4,
+            31.0
+          ],
+          [
+            48.7,
+            31.0
+          ],
+          [
+            48.7,
+            13.9
+          ],
+          [
+            16.4,
+            13.9
+          ]
+        ]
+      ]
+    },
+    "goblin_campfire_2x.png": {
+      "file": "goblin_campfire_2x.png",
+      "w": 126,
+      "h": 70,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        65.1,
+        44.9
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            32.8,
+            62.0
+          ],
+          [
+            97.4,
+            62.0
+          ],
+          [
+            97.4,
+            27.8
+          ],
+          [
+            32.8,
+            27.8
+          ]
+        ]
+      ]
+    },
+    "goblin_campfire_3x.png": {
+      "file": "goblin_campfire_3x.png",
+      "w": 190,
+      "h": 105,
+      "px_per_m": 80.721,
+      "metres_per_px": 0.0124,
+      "origin_px": [
+        97.7,
+        67.4
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            49.2,
+            93.1
+          ],
+          [
+            146.1,
+            93.1
+          ],
+          [
+            146.1,
+            41.7
+          ],
+          [
+            49.2,
+            41.7
+          ]
+        ]
+      ]
+    },
+    "goblin_campfire_s_1x.png": {
+      "file": "goblin_campfire_s_1x.png",
+      "w": 63,
+      "h": 35,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        32.6,
+        22.5
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            16.4,
+            31.0
+          ],
+          [
+            48.7,
+            31.0
+          ],
+          [
+            48.7,
+            13.9
+          ],
+          [
+            16.4,
+            13.9
+          ]
+        ]
+      ]
+    },
+    "goblin_campfire_s_2x.png": {
+      "file": "goblin_campfire_s_2x.png",
+      "w": 126,
+      "h": 70,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        65.1,
+        44.9
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            32.8,
+            62.0
+          ],
+          [
+            97.4,
+            62.0
+          ],
+          [
+            97.4,
+            27.8
+          ],
+          [
+            32.8,
+            27.8
+          ]
+        ]
+      ]
+    },
+    "goblin_campfire_w_1x.png": {
+      "file": "goblin_campfire_w_1x.png",
+      "w": 45,
+      "h": 52,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        21.7,
+        34.0
+      ],
+      "heading_deg": 90,
+      "collider_px": [
+        [
+          [
+            37.8,
+            42.6
+          ],
+          [
+            37.8,
+            25.5
+          ],
+          [
+            5.5,
+            25.5
+          ],
+          [
+            5.5,
+            42.6
+          ]
+        ]
+      ]
+    },
+    "goblin_campfire_w_2x.png": {
+      "file": "goblin_campfire_w_2x.png",
+      "w": 89,
+      "h": 104,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        43.3,
+        68.1
+      ],
+      "heading_deg": 90,
+      "collider_px": [
+        [
+          [
+            75.6,
+            85.2
+          ],
+          [
+            75.6,
+            51.0
+          ],
+          [
+            11.0,
+            51.0
+          ],
+          [
+            11.0,
+            85.2
+          ]
+        ]
+      ]
+    },
+    "goblin_campfire_n_1x.png": {
+      "file": "goblin_campfire_n_1x.png",
+      "w": 63,
+      "h": 35,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        30.7,
+        22.7
+      ],
+      "heading_deg": 180,
+      "collider_px": [
+        [
+          [
+            46.8,
+            14.2
+          ],
+          [
+            14.5,
+            14.2
+          ],
+          [
+            14.5,
+            31.3
+          ],
+          [
+            46.8,
+            31.3
+          ]
+        ]
+      ]
+    },
+    "goblin_campfire_n_2x.png": {
+      "file": "goblin_campfire_n_2x.png",
+      "w": 126,
+      "h": 70,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        61.4,
+        45.4
+      ],
+      "heading_deg": 180,
+      "collider_px": [
+        [
+          [
+            93.6,
+            28.3
+          ],
+          [
+            29.1,
+            28.3
+          ],
+          [
+            29.1,
+            62.5
+          ],
+          [
+            93.6,
+            62.5
+          ]
+        ]
+      ]
+    },
+    "goblin_campfire_e_1x.png": {
+      "file": "goblin_campfire_e_1x.png",
+      "w": 45,
+      "h": 51,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        23.0,
+        34.0
+      ],
+      "heading_deg": -90,
+      "collider_px": [
+        [
+          [
+            6.9,
+            25.5
+          ],
+          [
+            6.9,
+            42.6
+          ],
+          [
+            39.1,
+            42.6
+          ],
+          [
+            39.1,
+            25.5
+          ]
+        ]
+      ]
+    },
+    "goblin_campfire_e_2x.png": {
+      "file": "goblin_campfire_e_2x.png",
+      "w": 89,
+      "h": 102,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        46.0,
+        68.1
+      ],
+      "heading_deg": -90,
+      "collider_px": [
+        [
+          [
+            13.7,
+            51.0
+          ],
+          [
+            13.7,
+            85.2
+          ],
+          [
+            78.3,
+            85.2
+          ],
+          [
+            78.3,
+            51.0
+          ]
+        ]
+      ]
+    }
+  }
+}

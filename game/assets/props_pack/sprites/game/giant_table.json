@@ -1,0 +1,362 @@
+{
+  "key": "giant_table",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 0.0,
+    "elevation_deg": 32.0
+  },
+  "images": {
+    "giant_table_1x.png": {
+      "file": "giant_table_1x.png",
+      "w": 100,
+      "h": 75,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        50.0,
+        60.8
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            1.6,
+            73.7
+          ],
+          [
+            98.5,
+            73.7
+          ],
+          [
+            98.5,
+            48.0
+          ],
+          [
+            1.6,
+            48.0
+          ]
+        ]
+      ]
+    },
+    "giant_table_2x.png": {
+      "file": "giant_table_2x.png",
+      "w": 200,
+      "h": 149,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        100.1,
+        121.7
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            3.2,
+            147.4
+          ],
+          [
+            197.0,
+            147.4
+          ],
+          [
+            197.0,
+            96.0
+          ],
+          [
+            3.2,
+            96.0
+          ]
+        ]
+      ]
+    },
+    "giant_table_3x.png": {
+      "file": "giant_table_3x.png",
+      "w": 300,
+      "h": 224,
+      "px_per_m": 80.721,
+      "metres_per_px": 0.0124,
+      "origin_px": [
+        150.1,
+        182.5
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            4.8,
+            221.0
+          ],
+          [
+            295.4,
+            221.0
+          ],
+          [
+            295.4,
+            144.0
+          ],
+          [
+            4.8,
+            144.0
+          ]
+        ]
+      ]
+    },
+    "giant_table_s_1x.png": {
+      "file": "giant_table_s_1x.png",
+      "w": 100,
+      "h": 75,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        50.0,
+        60.8
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            1.6,
+            73.7
+          ],
+          [
+            98.5,
+            73.7
+          ],
+          [
+            98.5,
+            48.0
+          ],
+          [
+            1.6,
+            48.0
+          ]
+        ]
+      ]
+    },
+    "giant_table_s_2x.png": {
+      "file": "giant_table_s_2x.png",
+      "w": 200,
+      "h": 149,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        100.1,
+        121.7
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            3.2,
+            147.4
+          ],
+          [
+            197.0,
+            147.4
+          ],
+          [
+            197.0,
+            96.0
+          ],
+          [
+            3.2,
+            96.0
+          ]
+        ]
+      ]
+    },
+    "giant_table_w_1x.png": {
+      "file": "giant_table_w_1x.png",
+      "w": 52,
+      "h": 98,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        25.8,
+        72.7
+      ],
+      "heading_deg": 90,
+      "collider_px": [
+        [
+          [
+            50.0,
+            98.4
+          ],
+          [
+            50.0,
+            47.0
+          ],
+          [
+            1.6,
+            47.0
+          ],
+          [
+            1.6,
+            98.4
+          ]
+        ]
+      ]
+    },
+    "giant_table_w_2x.png": {
+      "file": "giant_table_w_2x.png",
+      "w": 103,
+      "h": 196,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        51.7,
+        145.4
+      ],
+      "heading_deg": 90,
+      "collider_px": [
+        [
+          [
+            100.1,
+            196.7
+          ],
+          [
+            100.1,
+            94.1
+          ],
+          [
+            3.2,
+            94.1
+          ],
+          [
+            3.2,
+            196.7
+          ]
+        ]
+      ]
+    },
+    "giant_table_n_1x.png": {
+      "file": "giant_table_n_1x.png",
+      "w": 100,
+      "h": 72,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        50.0,
+        58.0
+      ],
+      "heading_deg": 180,
+      "collider_px": [
+        [
+          [
+            98.5,
+            45.2
+          ],
+          [
+            1.6,
+            45.2
+          ],
+          [
+            1.6,
+            70.8
+          ],
+          [
+            98.5,
+            70.8
+          ]
+        ]
+      ]
+    },
+    "giant_table_n_2x.png": {
+      "file": "giant_table_n_2x.png",
+      "w": 200,
+      "h": 143,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        100.1,
+        116.0
+      ],
+      "heading_deg": 180,
+      "collider_px": [
+        [
+          [
+            197.0,
+            90.3
+          ],
+          [
+            3.2,
+            90.3
+          ],
+          [
+            3.2,
+            141.6
+          ],
+          [
+            197.0,
+            141.6
+          ]
+        ]
+      ]
+    },
+    "giant_table_e_1x.png": {
+      "file": "giant_table_e_1x.png",
+      "w": 52,
+      "h": 94,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        25.8,
+        69.4
+      ],
+      "heading_deg": -90,
+      "collider_px": [
+        [
+          [
+            1.6,
+            43.7
+          ],
+          [
+            1.6,
+            95.1
+          ],
+          [
+            50.0,
+            95.1
+          ],
+          [
+            50.0,
+            43.7
+          ]
+        ]
+      ]
+    },
+    "giant_table_e_2x.png": {
+      "file": "giant_table_e_2x.png",
+      "w": 103,
+      "h": 189,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        51.7,
+        138.8
+      ],
+      "heading_deg": -90,
+      "collider_px": [
+        [
+          [
+            3.2,
+            87.5
+          ],
+          [
+            3.2,
+            190.1
+          ],
+          [
+            100.1,
+            190.1
+          ],
+          [
+            100.1,
+            87.5
+          ]
+        ]
+      ]
+    }
+  }
+}

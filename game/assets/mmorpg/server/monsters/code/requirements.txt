@@ -1,0 +1,3 @@
+panda3d>=1.10.14,<1.11
+pillow>=10      # tools only (concept renders, contact sheet)
+pygame>=2.5     # optional: portrait -> pygame.Surface

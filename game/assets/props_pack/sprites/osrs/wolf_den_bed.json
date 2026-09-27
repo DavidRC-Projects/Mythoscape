@@ -1,0 +1,42 @@
+{
+  "key": "wolf_den_bed",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "wolf_den_bed_2x.png": {
+      "file": "wolf_den_bed_2x.png",
+      "w": 106,
+      "h": 62,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        51.5,
+        35.1
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            -15.0,
+            38.1
+          ],
+          [
+            68.7,
+            67.4
+          ],
+          [
+            118.1,
+            32.2
+          ],
+          [
+            34.4,
+            2.8
+          ]
+        ]
+      ]
+    }
+  }
+}

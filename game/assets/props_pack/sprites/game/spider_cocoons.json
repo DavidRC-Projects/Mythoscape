@@ -1,0 +1,362 @@
+{
+  "key": "spider_cocoons",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 0.0,
+    "elevation_deg": 32.0
+  },
+  "images": {
+    "spider_cocoons_1x.png": {
+      "file": "spider_cocoons_1x.png",
+      "w": 64,
+      "h": 55,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        33.0,
+        43.4
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            7.5,
+            53.4
+          ],
+          [
+            58.6,
+            53.4
+          ],
+          [
+            58.6,
+            30.5
+          ],
+          [
+            7.5,
+            30.5
+          ]
+        ]
+      ]
+    },
+    "spider_cocoons_2x.png": {
+      "file": "spider_cocoons_2x.png",
+      "w": 128,
+      "h": 111,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        66.0,
+        86.7
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            14.9,
+            106.7
+          ],
+          [
+            117.1,
+            106.7
+          ],
+          [
+            117.1,
+            61.1
+          ],
+          [
+            14.9,
+            61.1
+          ]
+        ]
+      ]
+    },
+    "spider_cocoons_3x.png": {
+      "file": "spider_cocoons_3x.png",
+      "w": 193,
+      "h": 166,
+      "px_per_m": 80.721,
+      "metres_per_px": 0.0124,
+      "origin_px": [
+        99.0,
+        130.1
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            22.4,
+            160.1
+          ],
+          [
+            175.7,
+            160.1
+          ],
+          [
+            175.7,
+            91.6
+          ],
+          [
+            22.4,
+            91.6
+          ]
+        ]
+      ]
+    },
+    "spider_cocoons_s_1x.png": {
+      "file": "spider_cocoons_s_1x.png",
+      "w": 64,
+      "h": 55,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        33.0,
+        43.4
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            7.5,
+            53.4
+          ],
+          [
+            58.6,
+            53.4
+          ],
+          [
+            58.6,
+            30.5
+          ],
+          [
+            7.5,
+            30.5
+          ]
+        ]
+      ]
+    },
+    "spider_cocoons_s_2x.png": {
+      "file": "spider_cocoons_s_2x.png",
+      "w": 128,
+      "h": 111,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        66.0,
+        86.7
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            14.9,
+            106.7
+          ],
+          [
+            117.1,
+            106.7
+          ],
+          [
+            117.1,
+            61.1
+          ],
+          [
+            14.9,
+            61.1
+          ]
+        ]
+      ]
+    },
+    "spider_cocoons_w_1x.png": {
+      "file": "spider_cocoons_w_1x.png",
+      "w": 58,
+      "h": 66,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        36.0,
+        47.6
+      ],
+      "heading_deg": 90,
+      "collider_px": [
+        [
+          [
+            54.8,
+            61.1
+          ],
+          [
+            54.8,
+            34.1
+          ],
+          [
+            11.8,
+            34.1
+          ],
+          [
+            11.8,
+            61.1
+          ]
+        ]
+      ]
+    },
+    "spider_cocoons_w_2x.png": {
+      "file": "spider_cocoons_w_2x.png",
+      "w": 115,
+      "h": 131,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        72.0,
+        95.2
+      ],
+      "heading_deg": 90,
+      "collider_px": [
+        [
+          [
+            109.6,
+            122.3
+          ],
+          [
+            109.6,
+            68.1
+          ],
+          [
+            23.5,
+            68.1
+          ],
+          [
+            23.5,
+            122.3
+          ]
+        ]
+      ]
+    },
+    "spider_cocoons_n_1x.png": {
+      "file": "spider_cocoons_n_1x.png",
+      "w": 64,
+      "h": 71,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        31.2,
+        51.7
+      ],
+      "heading_deg": 180,
+      "collider_px": [
+        [
+          [
+            56.8,
+            41.7
+          ],
+          [
+            5.7,
+            41.7
+          ],
+          [
+            5.7,
+            64.6
+          ],
+          [
+            56.8,
+            64.6
+          ]
+        ]
+      ]
+    },
+    "spider_cocoons_n_2x.png": {
+      "file": "spider_cocoons_n_2x.png",
+      "w": 128,
+      "h": 143,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        62.4,
+        103.5
+      ],
+      "heading_deg": 180,
+      "collider_px": [
+        [
+          [
+            113.5,
+            83.5
+          ],
+          [
+            11.3,
+            83.5
+          ],
+          [
+            11.3,
+            129.1
+          ],
+          [
+            113.5,
+            129.1
+          ]
+        ]
+      ]
+    },
+    "spider_cocoons_e_1x.png": {
+      "file": "spider_cocoons_e_1x.png",
+      "w": 58,
+      "h": 67,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        21.7,
+        50.5
+      ],
+      "heading_deg": -90,
+      "collider_px": [
+        [
+          [
+            2.9,
+            37.0
+          ],
+          [
+            2.9,
+            64.1
+          ],
+          [
+            45.9,
+            64.1
+          ],
+          [
+            45.9,
+            37.0
+          ]
+        ]
+      ]
+    },
+    "spider_cocoons_e_2x.png": {
+      "file": "spider_cocoons_e_2x.png",
+      "w": 115,
+      "h": 135,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        43.4,
+        101.0
+      ],
+      "heading_deg": -90,
+      "collider_px": [
+        [
+          [
+            5.8,
+            73.9
+          ],
+          [
+            5.8,
+            128.1
+          ],
+          [
+            91.9,
+            128.1
+          ],
+          [
+            91.9,
+            73.9
+          ]
+        ]
+      ]
+    }
+  }
+}

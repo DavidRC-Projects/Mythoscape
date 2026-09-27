@@ -1,0 +1,124 @@
+{
+  "key": "giants_cavern",
+  "title": "Giant's Cavern",
+  "triangles": 1685,
+  "bounds_min": [
+    -10.135,
+    -5.028,
+    -0.05
+  ],
+  "bounds_max": [
+    10.074,
+    14.582,
+    13.56
+  ],
+  "front": "-Y",
+  "up": "+Z",
+  "units": "metres",
+  "colliders": [
+    {
+      "name": "COL_arch_left",
+      "center": [
+        -5.3,
+        0.8,
+        4.0
+      ],
+      "size": [
+        4.6,
+        4.0,
+        8.0
+      ]
+    },
+    {
+      "name": "COL_arch_right",
+      "center": [
+        5.3,
+        0.8,
+        4.0
+      ],
+      "size": [
+        4.6,
+        4.0,
+        8.0
+      ]
+    },
+    {
+      "name": "COL_door_right_leaf",
+      "center": [
+        1.5,
+        1.0,
+        2.95
+      ],
+      "size": [
+        3.0,
+        0.4,
+        5.9
+      ]
+    },
+    {
+      "name": "COL_hill",
+      "center": [
+        0,
+        9.0,
+        5.0
+      ],
+      "size": [
+        18.0,
+        8.0,
+        10.0
+      ]
+    }
+  ],
+  "trigger": {
+    "name": "TRIGGER_door",
+    "center": [
+      -1.5,
+      1.8,
+      1.5
+    ],
+    "size": [
+      2.8,
+      1.2,
+      3.0
+    ]
+  },
+  "palette": {
+    "boulder": "#7b776c",
+    "boulder_dk": "#5b584f",
+    "moss": "#5f6d3a",
+    "grass": "#63703d",
+    "wood": "#6b4c30",
+    "wood_dk": "#47331f",
+    "iron": "#505254",
+    "rivet": "#35373a",
+    "bone": "#bdb59c",
+    "hide": "#7d5b43",
+    "rope": "#a08a5c",
+    "socket": "#221e19",
+    "interior": "#27231f",
+    "interior_deep": "#12100e",
+    "void_black": "#070606"
+  },
+  "emissive": {},
+  "openings": [
+    {
+      "width": 6.0,
+      "height": 7.3,
+      "depth": 4.0,
+      "y0": 0.0,
+      "z0": 0.0
+    }
+  ],
+  "concept_camera": {
+    "target": [
+      -0.03,
+      4.777,
+      6.755
+    ],
+    "distance": 48.744,
+    "azimuth_deg": 35,
+    "elevation_deg": 30,
+    "fov_deg": 30,
+    "note": "camera sits front-right: target + dist*(sin az*cos el, -cos az*cos el, sin el)"
+  }
+}

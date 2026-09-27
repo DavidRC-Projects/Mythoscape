@@ -1,0 +1,42 @@
+{
+  "key": "pet_bed",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "pet_bed_2x.png": {
+      "file": "pet_bed_2x.png",
+      "w": 62,
+      "h": 38,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        30.8,
+        24.8
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            -2.5,
+            26.2
+          ],
+          [
+            39.4,
+            40.9
+          ],
+          [
+            64.1,
+            23.3
+          ],
+          [
+            22.2,
+            8.6
+          ]
+        ]
+      ]
+    }
+  }
+}

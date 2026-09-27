@@ -1,0 +1,42 @@
+{
+  "key": "crypt_sarcophagus",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "crypt_sarcophagus_2x.png": {
+      "file": "crypt_sarcophagus_2x.png",
+      "w": 157,
+      "h": 115,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        78.4,
+        78.0
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            3.2,
+            73.0
+          ],
+          [
+            113.4,
+            111.6
+          ],
+          [
+            153.6,
+            83.0
+          ],
+          [
+            43.4,
+            44.4
+          ]
+        ]
+      ]
+    }
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "key": "spider_nest",
+  "title": "Spider Nest",
+  "triangles": 1693,
+  "bounds_min": [
+    -6.081,
+    -3.38,
+    -0.15
+  ],
+  "bounds_max": [
+    6.08,
+    8.867,
+    4.766
+  ],
+  "front": "-Y",
+  "up": "+Z",
+  "units": "metres",
+  "colliders": [
+    {
+      "name": "COL_rim_left",
+      "center": [
+        -3.0,
+        1.2,
+        1.8
+      ],
+      "size": [
+        3.0,
+        3.6,
+        3.6
+      ]
+    },
+    {
+      "name": "COL_rim_right",
+      "center": [
+        3.0,
+        1.2,
+        1.8
+      ],
+      "size": [
+        3.0,
+        3.6,
+        3.6
+      ]
+    },
+    {
+      "name": "COL_mound",
+      "center": [
+        0,
+        5.0,
+        2.2
+      ],
+      "size": [
+        10.0,
+        5.0,
+        4.4
+      ]
+    }
+  ],
+  "trigger": {
+    "name": "TRIGGER_door",
+    "center": [
+      0,
+      1.0,
+      1.1
+    ],
+    "size": [
+      2.3,
+      1.2,
+      2.2
+    ]
+  },
+  "palette": {
+    "rock": "#57504a",
+    "dirt": "#5a4a3a",
+    "moss": "#4f5a36",
+    "web": "#cfcabc",
+    "egg": "#d8d0b8",
+    "egg_spot": "#9a8458",
+    "cocoon": "#b8ae96",
+    "bone": "#bdb59c",
+    "socket": "#221e19",
+    "eye": "#c23a26",
+    "interior": "#221d19",
+    "interior_deep": "#100d0b",
+    "void_black": "#070606"
+  },
+  "emissive": {
+    "eye": 2.2
+  },
+  "openings": [
+    {
+      "width": 2.8,
+      "height": 2.6148990770545533,
+      "depth": 2.8,
+      "y0": 0.0,
+      "z0": 0.0
+    }
+  ],
+  "concept_camera": {
+    "target": [
+      -0.0,
+      2.743,
+      2.308
+    ],
+    "distance": 28.848,
+    "azimuth_deg": 35,
+    "elevation_deg": 30,
+    "fov_deg": 30,
+    "note": "camera sits front-right: target + dist*(sin az*cos el, -cos az*cos el, sin el)"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "key": "spider_egg_sacs",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "spider_egg_sacs_2x.png": {
+      "file": "spider_egg_sacs_2x.png",
+      "w": 120,
+      "h": 69,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        52.3,
+        36.1
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            -4.6,
+            39.2
+          ],
+          [
+            65.9,
+            63.9
+          ],
+          [
+            109.1,
+            33.1
+          ],
+          [
+            38.6,
+            8.4
+          ]
+        ]
+      ]
+    }
+  }
+}

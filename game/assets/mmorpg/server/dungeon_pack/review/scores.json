@@ -1,0 +1,16 @@
+{
+  "dragon_lair":   {"score": 8.5, "history": ["v1 7/10: maw too narrow, horn growth-rings read as plates, box skull", "v2 8.5/10: 4 m maw with 6 fangs, clean horns, proper dragon skull, darker throat + ember glow"],
+                    "notes": "Strong silhouette (horns + fangs), deep dark maw, scorched ground, bones read at a glance."},
+  "goblin_cave":   {"score": 8.5, "history": ["v1 6/10: flat box facade + tiled grass slabs (David's 'pasted-on box' failure)", "v2 8.5/10: faceted earth bank merged into a hill, timber frame, torches, totem, skulls on stakes"],
+                    "notes": "Crude, chunky, readable; dark passage clearly goes in."},
+  "skeleton_crypt":{"score": 8.0, "history": ["v1 7/10: stairwell hidden by ground, plain", "v2 8/10: ground cut-out, iron railings, roof contrast, pilasters, sarcophagus lid, skulls"],
+                    "notes": "Reads as a mausoleum with steps going down to a cracked, half-open door. Could take more weathering/moss later."},
+  "spider_nest":   {"score": 8.0, "history": ["v1 5/10: rim boulders + mound skirt blocked the mouth", "v2 6/10: mouth still hidden, web sheets looked like paper", "v3 8/10: skirt fix, rim boulders pushed out, funnel web + corner webs, big egg clusters"],
+                    "notes": "Mouth, funnel web and egg sacs read; web strands are chunky 'sticks' by design so they survive at sprite sizes."},
+  "void_rift":     {"score": 8.5, "history": ["v1 8/10 (1.1k tris)", "v2 8.5/10: outer shard ring, ruin pillars, floating shards, smoother portal; Panda emission restored in loader"],
+                    "notes": "Glowing purple portal with a dark core (the 'interior'), dark crystal crown - strongest silhouette in the set."},
+  "giants_cavern": {"score": 8.0, "history": ["v1 5/10: mound skirt plate covered the door, arch boulders blocked the opening", "v2 7/10: open leaf hidden from the 3/4 camera", "v3 8/10: open leaf moved to the camera side, boulders kept outside the opening, stepping stones"],
+                    "notes": "Scale reads (1.8 m figure is tiny next to the 7.3 m arch and iron-banded door). Right-hand arch boulders still overlap the shut leaf a little from this angle."},
+  "wolf_den":      {"score": 8.0, "history": ["v1 7.5/10 (1.3k tris, sparse)", "v2 8/10: fallen log, flank roots, extra rocks/skull"],
+                    "notes": "Gnarled tree + roots over a dark den mouth, claw marks visible on the rock and bank."}
+}

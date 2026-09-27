@@ -1,0 +1,42 @@
+{
+  "key": "goblin_loot",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "goblin_loot_2x.png": {
+      "file": "goblin_loot_2x.png",
+      "w": 153,
+      "h": 130,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        69.6,
+        101.5
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            5.7,
+            95.5
+          ],
+          [
+            102.6,
+            129.5
+          ],
+          [
+            152.0,
+            94.2
+          ],
+          [
+            55.0,
+            60.2
+          ]
+        ]
+      ]
+    }
+  }
+}

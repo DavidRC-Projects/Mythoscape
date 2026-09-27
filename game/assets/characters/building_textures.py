@@ -105,13 +105,14 @@ def fill_polygon_textured(surf, pts, name, alpha=255, uv_origin=(0, 0)):
     return True
 
 
-def fill_polygon_tinted(surf, pts, name, tint, uv_origin=(0, 0), detail=0.55):
+def fill_polygon_tinted(surf, pts, name, tint, uv_origin=(0, 0), detail=0.55, scale=1.0):
     """
     Fill a polygon with photo texture colorized by `tint`.
 
     Textures are stored desaturated so multiplying by tint preserves silhouette
     colors (skin, cloth, fur) while adding real surface detail.
     detail: 0 = flat tint only, 1 = full texture contrast.
+    scale: <1 repeats the pattern more often (finer grain).
     """
     tex = get_texture(name)
     if tex is None or len(pts) < 3:
@@ -121,10 +122,22 @@ def fill_polygon_tinted(surf, pts, name, tint, uv_origin=(0, 0), detail=0.55):
     minx, maxx = min(xs), max(xs) + 1
     miny, maxy = min(ys), max(ys) + 1
     w, h = max(1, maxx - minx), max(1, maxy - miny)
-    if w > 400 or h > 400:
+    if w > 1600 or h > 1600:
         # Safety for huge polys — skip texture
         return False
     local = [(p[0] - minx, p[1] - miny) for p in pts]
+
+    sc = max(0.25, min(2.0, float(scale)))
+    if sc != 1.0:
+        tw, th = tex.get_size()
+        key = (name, round(sc, 2))
+        cached = _CACHE.get(f"_scaled:{key}")
+        if cached is None:
+            cached = pygame.transform.smoothscale(
+                tex, (max(16, int(tw * sc)), max(16, int(th * sc))),
+            )
+            _CACHE[f"_scaled:{key}"] = cached
+        tex = cached
 
     # Tiled detail
     detail_buf = pygame.Surface((w, h))

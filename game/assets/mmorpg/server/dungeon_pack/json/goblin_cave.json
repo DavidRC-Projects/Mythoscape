@@ -1,0 +1,126 @@
+{
+  "key": "goblin_cave",
+  "title": "Goblin Cave",
+  "triangles": 1579,
+  "bounds_min": [
+    -6.293,
+    -2.851,
+    -0.058
+  ],
+  "bounds_max": [
+    6.623,
+    8.872,
+    4.973
+  ],
+  "front": "-Y",
+  "up": "+Z",
+  "units": "metres",
+  "colliders": [
+    {
+      "name": "COL_bank_left",
+      "center": [
+        -2.4,
+        1.6,
+        2.0
+      ],
+      "size": [
+        2.6,
+        3.4,
+        4.0
+      ]
+    },
+    {
+      "name": "COL_bank_right",
+      "center": [
+        2.4,
+        1.6,
+        2.0
+      ],
+      "size": [
+        2.6,
+        3.4,
+        4.0
+      ]
+    },
+    {
+      "name": "COL_mound",
+      "center": [
+        0,
+        5.0,
+        2.3
+      ],
+      "size": [
+        9.0,
+        5.0,
+        4.6
+      ]
+    },
+    {
+      "name": "COL_totem",
+      "center": [
+        -3.1,
+        -1.4,
+        1.4
+      ],
+      "size": [
+        1.0,
+        1.0,
+        2.8
+      ]
+    }
+  ],
+  "trigger": {
+    "name": "TRIGGER_door",
+    "center": [
+      0,
+      0.9,
+      1.2
+    ],
+    "size": [
+      2.0,
+      1.2,
+      2.4
+    ]
+  },
+  "palette": {
+    "earth": "#6b5440",
+    "grass": "#5f6d3a",
+    "rock": "#7b776c",
+    "wood": "#6b4c30",
+    "wood_dark": "#47331f",
+    "rope": "#a08a5c",
+    "bone": "#d6cdb2",
+    "socket": "#221e19",
+    "paint_red": "#8c3b2a",
+    "paint_ochre": "#a3823f",
+    "goblin": "#6e7b3c",
+    "interior": "#2e2620",
+    "interior_deep": "#17120f",
+    "flame": "#e0a542",
+    "void_black": "#070606"
+  },
+  "emissive": {
+    "flame": 3.0
+  },
+  "openings": [
+    {
+      "width": 2.2,
+      "height": 2.6,
+      "depth": 2.6,
+      "y0": 0.0,
+      "z0": 0.0
+    }
+  ],
+  "concept_camera": {
+    "target": [
+      0.165,
+      3.011,
+      2.457
+    ],
+    "distance": 26.022,
+    "azimuth_deg": 35,
+    "elevation_deg": 30,
+    "fov_deg": 30,
+    "note": "camera sits front-right: target + dist*(sin az*cos el, -cos az*cos el, sin el)"
+  }
+}

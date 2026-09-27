@@ -1,0 +1,10 @@
+{
+ "collision_nodes_hidden": 14,
+ "file": "models/stonehaven_castle_v2.bam",
+ "geomnodes": 10,
+ "node_castle_bridge": true,
+ "node_castle_portcullis": true,
+ "node_castle_chain_l": true,
+ "node_castle_chain_r": true,
+ "collision_nodes": 13
+}

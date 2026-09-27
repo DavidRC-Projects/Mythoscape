@@ -1,0 +1,23 @@
+{
+  "key": "chandelier",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "chandelier_2x.png": {
+      "file": "chandelier_2x.png",
+      "w": 86,
+      "h": 82,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        42.9,
+        171.4
+      ],
+      "heading_deg": 0,
+      "collider_px": []
+    }
+  }
+}

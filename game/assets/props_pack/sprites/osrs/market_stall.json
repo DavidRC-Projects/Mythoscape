@@ -1,0 +1,60 @@
+{
+  "key": "market_stall",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "market_stall_2x.png": {
+      "file": "market_stall_2x.png",
+      "w": 164,
+      "h": 178,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        75.7,
+        146.2
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            8.4,
+            139.1
+          ],
+          [
+            120.8,
+            178.4
+          ],
+          [
+            151.7,
+            156.4
+          ],
+          [
+            39.3,
+            117.0
+          ]
+        ]
+      ],
+      "interact_px": [
+        [
+          -16.3,
+          164.9
+        ],
+        [
+          71.9,
+          195.8
+        ],
+        [
+          102.8,
+          173.7
+        ],
+        [
+          14.6,
+          142.9
+        ]
+      ]
+    }
+  }
+}

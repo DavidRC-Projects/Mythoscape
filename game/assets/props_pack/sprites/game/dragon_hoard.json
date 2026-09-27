@@ -1,0 +1,362 @@
+{
+  "key": "dragon_hoard",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 0.0,
+    "elevation_deg": 32.0
+  },
+  "images": {
+    "dragon_hoard_1x.png": {
+      "file": "dragon_hoard_1x.png",
+      "w": 70,
+      "h": 51,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        35.2,
+        35.1
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            3.0,
+            46.5
+          ],
+          [
+            67.5,
+            46.5
+          ],
+          [
+            67.5,
+            20.9
+          ],
+          [
+            3.0,
+            20.9
+          ]
+        ]
+      ]
+    },
+    "dragon_hoard_2x.png": {
+      "file": "dragon_hoard_2x.png",
+      "w": 139,
+      "h": 101,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        70.5,
+        70.2
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            5.9,
+            93.1
+          ],
+          [
+            135.1,
+            93.1
+          ],
+          [
+            135.1,
+            41.7
+          ],
+          [
+            5.9,
+            41.7
+          ]
+        ]
+      ]
+    },
+    "dragon_hoard_3x.png": {
+      "file": "dragon_hoard_3x.png",
+      "w": 209,
+      "h": 152,
+      "px_per_m": 80.721,
+      "metres_per_px": 0.0124,
+      "origin_px": [
+        105.7,
+        105.4
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            8.9,
+            139.6
+          ],
+          [
+            202.6,
+            139.6
+          ],
+          [
+            202.6,
+            62.6
+          ],
+          [
+            8.9,
+            62.6
+          ]
+        ]
+      ]
+    },
+    "dragon_hoard_s_1x.png": {
+      "file": "dragon_hoard_s_1x.png",
+      "w": 70,
+      "h": 51,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        35.2,
+        35.1
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            3.0,
+            46.5
+          ],
+          [
+            67.5,
+            46.5
+          ],
+          [
+            67.5,
+            20.9
+          ],
+          [
+            3.0,
+            20.9
+          ]
+        ]
+      ]
+    },
+    "dragon_hoard_s_2x.png": {
+      "file": "dragon_hoard_s_2x.png",
+      "w": 139,
+      "h": 101,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        70.5,
+        70.2
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            5.9,
+            93.1
+          ],
+          [
+            135.1,
+            93.1
+          ],
+          [
+            135.1,
+            41.7
+          ],
+          [
+            5.9,
+            41.7
+          ]
+        ]
+      ]
+    },
+    "dragon_hoard_w_1x.png": {
+      "file": "dragon_hoard_w_1x.png",
+      "w": 61,
+      "h": 47,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        33.2,
+        28.1
+      ],
+      "heading_deg": 90,
+      "collider_px": [
+        [
+          [
+            54.7,
+            45.2
+          ],
+          [
+            54.7,
+            10.9
+          ],
+          [
+            6.3,
+            10.9
+          ],
+          [
+            6.3,
+            45.2
+          ]
+        ]
+      ]
+    },
+    "dragon_hoard_w_2x.png": {
+      "file": "dragon_hoard_w_2x.png",
+      "w": 122,
+      "h": 95,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        66.3,
+        56.1
+      ],
+      "heading_deg": 90,
+      "collider_px": [
+        [
+          [
+            109.4,
+            90.3
+          ],
+          [
+            109.4,
+            21.9
+          ],
+          [
+            12.5,
+            21.9
+          ],
+          [
+            12.5,
+            90.3
+          ]
+        ]
+      ]
+    },
+    "dragon_hoard_n_1x.png": {
+      "file": "dragon_hoard_n_1x.png",
+      "w": 70,
+      "h": 49,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        34.5,
+        30.9
+      ],
+      "heading_deg": 180,
+      "collider_px": [
+        [
+          [
+            66.8,
+            19.5
+          ],
+          [
+            2.2,
+            19.5
+          ],
+          [
+            2.2,
+            45.2
+          ],
+          [
+            66.8,
+            45.2
+          ]
+        ]
+      ]
+    },
+    "dragon_hoard_n_2x.png": {
+      "file": "dragon_hoard_n_2x.png",
+      "w": 139,
+      "h": 99,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        68.9,
+        61.9
+      ],
+      "heading_deg": 180,
+      "collider_px": [
+        [
+          [
+            133.5,
+            39.1
+          ],
+          [
+            4.4,
+            39.1
+          ],
+          [
+            4.4,
+            90.4
+          ],
+          [
+            133.5,
+            90.4
+          ]
+        ]
+      ]
+    },
+    "dragon_hoard_e_1x.png": {
+      "file": "dragon_hoard_e_1x.png",
+      "w": 61,
+      "h": 59,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        27.8,
+        40.2
+      ],
+      "heading_deg": -90,
+      "collider_px": [
+        [
+          [
+            6.3,
+            23.1
+          ],
+          [
+            6.3,
+            57.3
+          ],
+          [
+            54.7,
+            57.3
+          ],
+          [
+            54.7,
+            23.1
+          ]
+        ]
+      ]
+    },
+    "dragon_hoard_e_2x.png": {
+      "file": "dragon_hoard_e_2x.png",
+      "w": 122,
+      "h": 118,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        55.6,
+        80.4
+      ],
+      "heading_deg": -90,
+      "collider_px": [
+        [
+          [
+            12.5,
+            46.2
+          ],
+          [
+            12.5,
+            114.6
+          ],
+          [
+            109.4,
+            114.6
+          ],
+          [
+            109.4,
+            46.2
+          ]
+        ]
+      ]
+    }
+  }
+}

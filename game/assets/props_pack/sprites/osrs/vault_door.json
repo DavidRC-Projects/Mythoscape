@@ -1,0 +1,60 @@
+{
+  "key": "vault_door",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "vault_door_2x.png": {
+      "file": "vault_door_2x.png",
+      "w": 170,
+      "h": 211,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        80.6,
+        178.8
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            3.2,
+            156.6
+          ],
+          [
+            148.7,
+            207.5
+          ],
+          [
+            170.3,
+            192.1
+          ],
+          [
+            24.8,
+            141.2
+          ]
+        ]
+      ],
+      "interact_px": [
+        [
+          -3.8,
+          196.8
+        ],
+        [
+          75.5,
+          224.6
+        ],
+        [
+          106.4,
+          202.6
+        ],
+        [
+          27.0,
+          174.8
+        ]
+      ]
+    }
+  }
+}

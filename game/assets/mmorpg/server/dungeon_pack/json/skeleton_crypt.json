@@ -1,0 +1,202 @@
+{
+  "key": "skeleton_crypt",
+  "title": "Skeleton Crypt",
+  "triangles": 1863,
+  "bounds_min": [
+    -4.815,
+    -6.655,
+    -1.55
+  ],
+  "bounds_max": [
+    4.916,
+    7.4,
+    6.35
+  ],
+  "front": "-Y",
+  "up": "+Z",
+  "units": "metres",
+  "colliders": [
+    {
+      "name": "COL_stair_wall_left",
+      "center": [
+        -1.45,
+        -3.0,
+        0.0
+      ],
+      "size": [
+        0.5,
+        6.0,
+        1.0
+      ]
+    },
+    {
+      "name": "COL_stair_wall_right",
+      "center": [
+        1.45,
+        -3.0,
+        0.0
+      ],
+      "size": [
+        0.5,
+        6.0,
+        1.0
+      ]
+    },
+    {
+      "name": "COL_mausoleum",
+      "center": [
+        0,
+        4.5,
+        2.0
+      ],
+      "size": [
+        7.8,
+        5.0,
+        7.0
+      ]
+    },
+    {
+      "name": "COL_front_wall_left",
+      "center": [
+        -2.3,
+        0.3,
+        1.5
+      ],
+      "size": [
+        2.4,
+        0.8,
+        5.0
+      ]
+    },
+    {
+      "name": "COL_front_wall_right",
+      "center": [
+        2.3,
+        0.3,
+        1.5
+      ],
+      "size": [
+        2.4,
+        0.8,
+        5.0
+      ]
+    },
+    {
+      "name": "COL_pillar_-3.3",
+      "center": [
+        -3.3,
+        -1.35,
+        2.0
+      ],
+      "size": [
+        0.8,
+        0.8,
+        4.0
+      ]
+    },
+    {
+      "name": "COL_pillar_-1.9",
+      "center": [
+        -1.9,
+        -1.35,
+        2.0
+      ],
+      "size": [
+        0.8,
+        0.8,
+        4.0
+      ]
+    },
+    {
+      "name": "COL_pillar_+1.9",
+      "center": [
+        1.9,
+        -1.35,
+        2.0
+      ],
+      "size": [
+        0.8,
+        0.8,
+        4.0
+      ]
+    },
+    {
+      "name": "COL_pillar_+3.3",
+      "center": [
+        3.3,
+        -1.35,
+        2.0
+      ],
+      "size": [
+        0.8,
+        0.8,
+        4.0
+      ]
+    }
+  ],
+  "trigger": {
+    "name": "TRIGGER_door",
+    "center": [
+      0,
+      0.9,
+      -0.30000000000000004
+    ],
+    "size": [
+      1.8000000000000003,
+      1.2,
+      2.4
+    ]
+  },
+  "palette": {
+    "stone": "#8a8578",
+    "stone_dark": "#6c685e",
+    "roof": "#5d5a55",
+    "slab": "#9d978a",
+    "moss": "#5f6d3a",
+    "door": "#77736a",
+    "crack": "#1d1a18",
+    "bone": "#d6cdb2",
+    "socket": "#221e19",
+    "iron": "#505254",
+    "necro": "#86d1b8",
+    "interior": "#27241f",
+    "interior_deep": "#121110",
+    "void_black": "#070606"
+  },
+  "emissive": {
+    "necro": 2.0
+  },
+  "openings": [
+    {
+      "width": 2.2,
+      "height": 3.4,
+      "depth": 3.0,
+      "y0": 0.0,
+      "z0": -1.5
+    }
+  ],
+  "ground_cutout": {
+    "center": [
+      0,
+      -1.5,
+      0
+    ],
+    "size": [
+      2.6,
+      9.0
+    ],
+    "note": "stairwell + passage: lower/hide terrain here in 3D"
+  },
+  "concept_camera": {
+    "target": [
+      0.051,
+      0.372,
+      3.025
+    ],
+    "distance": 33.864,
+    "azimuth_deg": 35,
+    "elevation_deg": 30,
+    "fov_deg": 30,
+    "note": "camera sits front-right: target + dist*(sin az*cos el, -cos az*cos el, sin el)"
+  }
+}

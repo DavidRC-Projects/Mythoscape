@@ -1,0 +1,153 @@
+{
+  "key": "chandelier",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 0.0,
+    "elevation_deg": 32.0
+  },
+  "images": {
+    "chandelier_1x.png": {
+      "file": "chandelier_1x.png",
+      "w": 41,
+      "h": 41,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        20.6,
+        84.0
+      ],
+      "heading_deg": 0,
+      "collider_px": []
+    },
+    "chandelier_2x.png": {
+      "file": "chandelier_2x.png",
+      "w": 82,
+      "h": 82,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        41.2,
+        168.1
+      ],
+      "heading_deg": 0,
+      "collider_px": []
+    },
+    "chandelier_3x.png": {
+      "file": "chandelier_3x.png",
+      "w": 123,
+      "h": 123,
+      "px_per_m": 80.721,
+      "metres_per_px": 0.0124,
+      "origin_px": [
+        61.8,
+        252.1
+      ],
+      "heading_deg": 0,
+      "collider_px": []
+    },
+    "chandelier_s_1x.png": {
+      "file": "chandelier_s_1x.png",
+      "w": 41,
+      "h": 41,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        20.6,
+        84.0
+      ],
+      "heading_deg": 0,
+      "collider_px": []
+    },
+    "chandelier_s_2x.png": {
+      "file": "chandelier_s_2x.png",
+      "w": 82,
+      "h": 82,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        41.2,
+        168.1
+      ],
+      "heading_deg": 0,
+      "collider_px": []
+    },
+    "chandelier_w_1x.png": {
+      "file": "chandelier_w_1x.png",
+      "w": 43,
+      "h": 41,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        21.5,
+        84.0
+      ],
+      "heading_deg": 90,
+      "collider_px": []
+    },
+    "chandelier_w_2x.png": {
+      "file": "chandelier_w_2x.png",
+      "w": 86,
+      "h": 83,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        43.1,
+        168.1
+      ],
+      "heading_deg": 90,
+      "collider_px": []
+    },
+    "chandelier_n_1x.png": {
+      "file": "chandelier_n_1x.png",
+      "w": 41,
+      "h": 41,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        20.5,
+        84.0
+      ],
+      "heading_deg": 180,
+      "collider_px": []
+    },
+    "chandelier_n_2x.png": {
+      "file": "chandelier_n_2x.png",
+      "w": 82,
+      "h": 82,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        41.0,
+        168.1
+      ],
+      "heading_deg": 180,
+      "collider_px": []
+    },
+    "chandelier_e_1x.png": {
+      "file": "chandelier_e_1x.png",
+      "w": 43,
+      "h": 41,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        21.5,
+        84.0
+      ],
+      "heading_deg": -90,
+      "collider_px": []
+    },
+    "chandelier_e_2x.png": {
+      "file": "chandelier_e_2x.png",
+      "w": 86,
+      "h": 83,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        43.1,
+        168.1
+      ],
+      "heading_deg": -90,
+      "collider_px": []
+    }
+  }
+}

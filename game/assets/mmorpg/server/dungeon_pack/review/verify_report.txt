@@ -1,0 +1,7 @@
+dragon_lair	1495	True	True	ok (6 CollisionNodes)	PASS	
+giants_cavern	1685	True	True	ok (5 CollisionNodes)	PASS	
+goblin_cave	1579	True	True	ok (5 CollisionNodes)	PASS	
+skeleton_crypt	1863	True	True	ok (10 CollisionNodes)	PASS	
+spider_nest	1693	True	True	ok (4 CollisionNodes)	PASS	
+void_rift	1555	True	True	ok (4 CollisionNodes)	PASS	
+wolf_den	1585	True	True	ok (5 CollisionNodes)	PASS	

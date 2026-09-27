@@ -1,0 +1,362 @@
+{
+  "key": "spider_egg_sacs",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 0.0,
+    "elevation_deg": 32.0
+  },
+  "images": {
+    "spider_egg_sacs_1x.png": {
+      "file": "spider_egg_sacs_1x.png",
+      "w": 59,
+      "h": 35,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        28.4,
+        17.9
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            6.9,
+            27.9
+          ],
+          [
+            49.9,
+            27.9
+          ],
+          [
+            49.9,
+            7.9
+          ],
+          [
+            6.9,
+            7.9
+          ]
+        ]
+      ]
+    },
+    "spider_egg_sacs_2x.png": {
+      "file": "spider_egg_sacs_2x.png",
+      "w": 119,
+      "h": 70,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        56.8,
+        35.8
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            13.7,
+            55.7
+          ],
+          [
+            99.9,
+            55.7
+          ],
+          [
+            99.9,
+            15.8
+          ],
+          [
+            13.7,
+            15.8
+          ]
+        ]
+      ]
+    },
+    "spider_egg_sacs_3x.png": {
+      "file": "spider_egg_sacs_3x.png",
+      "w": 178,
+      "h": 105,
+      "px_per_m": 80.721,
+      "metres_per_px": 0.0124,
+      "origin_px": [
+        85.2,
+        53.6
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            20.6,
+            83.6
+          ],
+          [
+            149.8,
+            83.6
+          ],
+          [
+            149.8,
+            23.7
+          ],
+          [
+            20.6,
+            23.7
+          ]
+        ]
+      ]
+    },
+    "spider_egg_sacs_s_1x.png": {
+      "file": "spider_egg_sacs_s_1x.png",
+      "w": 59,
+      "h": 35,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        28.4,
+        17.9
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            6.9,
+            27.9
+          ],
+          [
+            49.9,
+            27.9
+          ],
+          [
+            49.9,
+            7.9
+          ],
+          [
+            6.9,
+            7.9
+          ]
+        ]
+      ]
+    },
+    "spider_egg_sacs_s_2x.png": {
+      "file": "spider_egg_sacs_s_2x.png",
+      "w": 119,
+      "h": 70,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        56.8,
+        35.8
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            13.7,
+            55.7
+          ],
+          [
+            99.9,
+            55.7
+          ],
+          [
+            99.9,
+            15.8
+          ],
+          [
+            13.7,
+            15.8
+          ]
+        ]
+      ]
+    },
+    "spider_egg_sacs_w_1x.png": {
+      "file": "spider_egg_sacs_w_1x.png",
+      "w": 63,
+      "h": 34,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        31.9,
+        18.3
+      ],
+      "heading_deg": 90,
+      "collider_px": [
+        [
+          [
+            50.7,
+            29.7
+          ],
+          [
+            50.7,
+            6.9
+          ],
+          [
+            13.0,
+            6.9
+          ],
+          [
+            13.0,
+            29.7
+          ]
+        ]
+      ]
+    },
+    "spider_egg_sacs_w_2x.png": {
+      "file": "spider_egg_sacs_w_2x.png",
+      "w": 126,
+      "h": 68,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        63.8,
+        36.6
+      ],
+      "heading_deg": 90,
+      "collider_px": [
+        [
+          [
+            101.4,
+            59.4
+          ],
+          [
+            101.4,
+            13.8
+          ],
+          [
+            26.1,
+            13.8
+          ],
+          [
+            26.1,
+            59.4
+          ]
+        ]
+      ]
+    },
+    "spider_egg_sacs_n_1x.png": {
+      "file": "spider_egg_sacs_n_1x.png",
+      "w": 59,
+      "h": 35,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        30.9,
+        17.5
+      ],
+      "heading_deg": 180,
+      "collider_px": [
+        [
+          [
+            52.4,
+            7.5
+          ],
+          [
+            9.4,
+            7.5
+          ],
+          [
+            9.4,
+            27.5
+          ],
+          [
+            52.4,
+            27.5
+          ]
+        ]
+      ]
+    },
+    "spider_egg_sacs_n_2x.png": {
+      "file": "spider_egg_sacs_n_2x.png",
+      "w": 119,
+      "h": 70,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        61.8,
+        35.0
+      ],
+      "heading_deg": 180,
+      "collider_px": [
+        [
+          [
+            104.8,
+            15.1
+          ],
+          [
+            18.7,
+            15.1
+          ],
+          [
+            18.7,
+            55.0
+          ],
+          [
+            104.8,
+            55.0
+          ]
+        ]
+      ]
+    },
+    "spider_egg_sacs_e_1x.png": {
+      "file": "spider_egg_sacs_e_1x.png",
+      "w": 63,
+      "h": 35,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        31.2,
+        18.3
+      ],
+      "heading_deg": -90,
+      "collider_px": [
+        [
+          [
+            12.3,
+            6.9
+          ],
+          [
+            12.3,
+            29.7
+          ],
+          [
+            50.0,
+            29.7
+          ],
+          [
+            50.0,
+            6.9
+          ]
+        ]
+      ]
+    },
+    "spider_egg_sacs_e_2x.png": {
+      "file": "spider_egg_sacs_e_2x.png",
+      "w": 126,
+      "h": 70,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        62.4,
+        36.6
+      ],
+      "heading_deg": -90,
+      "collider_px": [
+        [
+          [
+            24.7,
+            13.8
+          ],
+          [
+            24.7,
+            59.4
+          ],
+          [
+            100.0,
+            59.4
+          ],
+          [
+            100.0,
+            13.8
+          ]
+        ]
+      ]
+    }
+  }
+}

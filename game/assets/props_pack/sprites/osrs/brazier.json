@@ -1,0 +1,42 @@
+{
+  "key": "brazier",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "brazier_2x.png": {
+      "file": "brazier_2x.png",
+      "w": 53,
+      "h": 77,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        26.8,
+        63.2
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            -3.2,
+            65.9
+          ],
+          [
+            32.1,
+            78.2
+          ],
+          [
+            56.8,
+            60.6
+          ],
+          [
+            21.5,
+            48.2
+          ]
+        ]
+      ]
+    }
+  }
+}

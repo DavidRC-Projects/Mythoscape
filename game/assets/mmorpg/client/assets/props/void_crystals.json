@@ -1,0 +1,362 @@
+{
+  "key": "void_crystals",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 0.0,
+    "elevation_deg": 32.0
+  },
+  "images": {
+    "void_crystals_1x.png": {
+      "file": "void_crystals_1x.png",
+      "w": 50,
+      "h": 52,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        25.9,
+        38.7
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            7.0,
+            47.2
+          ],
+          [
+            44.7,
+            47.2
+          ],
+          [
+            44.7,
+            30.1
+          ],
+          [
+            7.0,
+            30.1
+          ]
+        ]
+      ]
+    },
+    "void_crystals_2x.png": {
+      "file": "void_crystals_2x.png",
+      "w": 100,
+      "h": 103,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        51.7,
+        77.4
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            14.1,
+            94.5
+          ],
+          [
+            89.4,
+            94.5
+          ],
+          [
+            89.4,
+            60.3
+          ],
+          [
+            14.1,
+            60.3
+          ]
+        ]
+      ]
+    },
+    "void_crystals_3x.png": {
+      "file": "void_crystals_3x.png",
+      "w": 151,
+      "h": 155,
+      "px_per_m": 80.721,
+      "metres_per_px": 0.0124,
+      "origin_px": [
+        77.6,
+        116.1
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            21.1,
+            141.7
+          ],
+          [
+            134.1,
+            141.7
+          ],
+          [
+            134.1,
+            90.4
+          ],
+          [
+            21.1,
+            90.4
+          ]
+        ]
+      ]
+    },
+    "void_crystals_s_1x.png": {
+      "file": "void_crystals_s_1x.png",
+      "w": 50,
+      "h": 52,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        25.9,
+        38.7
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            7.0,
+            47.2
+          ],
+          [
+            44.7,
+            47.2
+          ],
+          [
+            44.7,
+            30.1
+          ],
+          [
+            7.0,
+            30.1
+          ]
+        ]
+      ]
+    },
+    "void_crystals_s_2x.png": {
+      "file": "void_crystals_s_2x.png",
+      "w": 100,
+      "h": 103,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        51.7,
+        77.4
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            14.1,
+            94.5
+          ],
+          [
+            89.4,
+            94.5
+          ],
+          [
+            89.4,
+            60.3
+          ],
+          [
+            14.1,
+            60.3
+          ]
+        ]
+      ]
+    },
+    "void_crystals_w_1x.png": {
+      "file": "void_crystals_w_1x.png",
+      "w": 52,
+      "h": 54,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        28.8,
+        39.5
+      ],
+      "heading_deg": 90,
+      "collider_px": [
+        [
+          [
+            45.0,
+            49.5
+          ],
+          [
+            45.0,
+            29.5
+          ],
+          [
+            12.7,
+            29.5
+          ],
+          [
+            12.7,
+            49.5
+          ]
+        ]
+      ]
+    },
+    "void_crystals_w_2x.png": {
+      "file": "void_crystals_w_2x.png",
+      "w": 105,
+      "h": 107,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        57.7,
+        79.0
+      ],
+      "heading_deg": 90,
+      "collider_px": [
+        [
+          [
+            90.0,
+            99.0
+          ],
+          [
+            90.0,
+            59.1
+          ],
+          [
+            25.4,
+            59.1
+          ],
+          [
+            25.4,
+            99.0
+          ]
+        ]
+      ]
+    },
+    "void_crystals_n_1x.png": {
+      "file": "void_crystals_n_1x.png",
+      "w": 50,
+      "h": 54,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        24.3,
+        38.7
+      ],
+      "heading_deg": 180,
+      "collider_px": [
+        [
+          [
+            43.2,
+            30.1
+          ],
+          [
+            5.5,
+            30.1
+          ],
+          [
+            5.5,
+            47.2
+          ],
+          [
+            43.2,
+            47.2
+          ]
+        ]
+      ]
+    },
+    "void_crystals_n_2x.png": {
+      "file": "void_crystals_n_2x.png",
+      "w": 100,
+      "h": 109,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        48.7,
+        77.4
+      ],
+      "heading_deg": 180,
+      "collider_px": [
+        [
+          [
+            86.4,
+            60.3
+          ],
+          [
+            11.0,
+            60.3
+          ],
+          [
+            11.0,
+            94.5
+          ],
+          [
+            86.4,
+            94.5
+          ]
+        ]
+      ]
+    },
+    "void_crystals_e_1x.png": {
+      "file": "void_crystals_e_1x.png",
+      "w": 52,
+      "h": 51,
+      "px_per_m": 26.907,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        23.5,
+        38.7
+      ],
+      "heading_deg": -90,
+      "collider_px": [
+        [
+          [
+            7.3,
+            28.7
+          ],
+          [
+            7.3,
+            48.7
+          ],
+          [
+            39.6,
+            48.7
+          ],
+          [
+            39.6,
+            28.7
+          ]
+        ]
+      ]
+    },
+    "void_crystals_e_2x.png": {
+      "file": "void_crystals_e_2x.png",
+      "w": 105,
+      "h": 103,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        46.9,
+        77.4
+      ],
+      "heading_deg": -90,
+      "collider_px": [
+        [
+          [
+            14.7,
+            57.4
+          ],
+          [
+            14.7,
+            97.4
+          ],
+          [
+            79.2,
+            97.4
+          ],
+          [
+            79.2,
+            57.4
+          ]
+        ]
+      ]
+    }
+  }
+}

@@ -1,0 +1,138 @@
+{
+  "key": "dragon_lair",
+  "title": "Dragon Lair",
+  "triangles": 1495,
+  "bounds_min": [
+    -7.287,
+    -4.676,
+    -0.064
+  ],
+  "bounds_max": [
+    7.613,
+    10.486,
+    9.4
+  ],
+  "front": "-Y",
+  "up": "+Z",
+  "units": "metres",
+  "colliders": [
+    {
+      "name": "COL_cliff_left",
+      "center": [
+        -3.4,
+        2.5,
+        3.0
+      ],
+      "size": [
+        3.4,
+        5.0,
+        6.0
+      ]
+    },
+    {
+      "name": "COL_cliff_right",
+      "center": [
+        3.4,
+        2.5,
+        3.0
+      ],
+      "size": [
+        3.4,
+        5.0,
+        6.0
+      ]
+    },
+    {
+      "name": "COL_cliff_back",
+      "center": [
+        0,
+        7.0,
+        3.5
+      ],
+      "size": [
+        13.0,
+        6.0,
+        7.0
+      ]
+    },
+    {
+      "name": "COL_skull",
+      "center": [
+        -3.3,
+        -2.5,
+        0.5
+      ],
+      "size": [
+        1.6,
+        2.6,
+        1.0
+      ]
+    },
+    {
+      "name": "COL_ribcage",
+      "center": [
+        2.9,
+        -1.7,
+        0.8
+      ],
+      "size": [
+        2.0,
+        2.6,
+        1.6
+      ]
+    }
+  ],
+  "trigger": {
+    "name": "TRIGGER_door",
+    "center": [
+      0,
+      1.2,
+      1.3
+    ],
+    "size": [
+      3.6,
+      1.4,
+      2.6
+    ]
+  },
+  "palette": {
+    "rock": "#4d433c",
+    "ash": "#6b625a",
+    "char": "#2b2623",
+    "scorch": "#332c28",
+    "bone": "#cfc3a0",
+    "horn": "#bfb49a",
+    "horn_dark": "#8f8570",
+    "socket": "#221e19",
+    "ember": "#d0662e",
+    "ember_deep": "#8c3b2a",
+    "interior": "#221a16",
+    "interior_deep": "#120d0b",
+    "void_black": "#070606"
+  },
+  "emissive": {
+    "ember": 2.5,
+    "ember_deep": 1.5
+  },
+  "openings": [
+    {
+      "width": 4.0,
+      "height": 4.199999999999999,
+      "depth": 3.4,
+      "y0": 0.0,
+      "z0": 0.0
+    }
+  ],
+  "concept_camera": {
+    "target": [
+      0.163,
+      2.905,
+      4.668
+    ],
+    "distance": 34.398,
+    "azimuth_deg": 35,
+    "elevation_deg": 30,
+    "fov_deg": 30,
+    "note": "camera sits front-right: target + dist*(sin az*cos el, -cos az*cos el, sin el)"
+  }
+}

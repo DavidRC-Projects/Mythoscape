@@ -1,0 +1,42 @@
+{
+  "key": "weapon_rack",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "weapon_rack_2x.png": {
+      "file": "weapon_rack_2x.png",
+      "w": 86,
+      "h": 119,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        43.2,
+        98.2
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            -0.2,
+            92.9
+          ],
+          [
+            68.1,
+            116.8
+          ],
+          [
+            86.7,
+            103.6
+          ],
+          [
+            18.3,
+            79.7
+          ]
+        ]
+      ]
+    }
+  }
+}

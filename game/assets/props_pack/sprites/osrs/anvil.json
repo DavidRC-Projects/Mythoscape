@@ -1,0 +1,60 @@
+{
+  "key": "anvil",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 35.0,
+    "elevation_deg": 30.0
+  },
+  "images": {
+    "anvil_2x.png": {
+      "file": "anvil_2x.png",
+      "w": 56,
+      "h": 68,
+      "px_per_m": 53.814,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        24.7,
+        51.9
+      ],
+      "heading_deg": 0,
+      "collider_px": [
+        [
+          [
+            -7.5,
+            53.8
+          ],
+          [
+            32.2,
+            67.7
+          ],
+          [
+            56.8,
+            50.1
+          ],
+          [
+            17.2,
+            36.2
+          ]
+        ]
+      ],
+      "interact_px": [
+        [
+          -51.0,
+          73.1
+        ],
+        [
+          10.8,
+          94.7
+        ],
+        [
+          41.6,
+          72.6
+        ],
+        [
+          -20.1,
+          51.0
+        ]
+      ]
+    }
+  }
+}
