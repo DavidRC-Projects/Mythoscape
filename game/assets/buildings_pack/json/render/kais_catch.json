@@ -1,0 +1,27 @@
+{
+ "key": "kais_catch",
+ "building_id": "harbour_fishmonger",
+ "name": "Kai's Catch",
+ "ppt_2x": 80,
+ "size_2x": [
+  1280,
+  1200
+ ],
+ "origin_2x": [
+  80,
+  400
+ ],
+ "tiles": {
+  "left": -1,
+  "right": 15,
+  "top": 5,
+  "bottom": -10
+ },
+ "tris": {
+  "body": 2242,
+  "ground": 12
+ },
+ "tris_total": 2254,
+ "door_face_ly": 7.7,
+ "sprite_z_exaggeration": 1.4
+}

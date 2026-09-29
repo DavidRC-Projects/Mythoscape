@@ -1,0 +1,27 @@
+{
+ "key": "resting_ox",
+ "building_id": "cottage_sw",
+ "name": "The Resting Ox",
+ "ppt_2x": 80,
+ "size_2x": [
+  1280,
+  1680
+ ],
+ "origin_2x": [
+  80,
+  640
+ ],
+ "tiles": {
+  "left": -1,
+  "right": 15,
+  "top": 8,
+  "bottom": -13
+ },
+ "tris": {
+  "body": 3356,
+  "ground": 12
+ },
+ "tris_total": 3368,
+ "door_face_ly": 10.7,
+ "sprite_z_exaggeration": 1.4
+}

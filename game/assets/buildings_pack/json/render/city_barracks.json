@@ -1,0 +1,27 @@
+{
+ "key": "city_barracks",
+ "building_id": "city_barracks",
+ "name": "City Barracks",
+ "ppt_2x": 80,
+ "size_2x": [
+  1040,
+  1440
+ ],
+ "origin_2x": [
+  80,
+  400
+ ],
+ "tiles": {
+  "left": -1,
+  "right": 12,
+  "top": 5,
+  "bottom": -13
+ },
+ "tris": {
+  "body": 2390,
+  "ground": 12
+ },
+ "tris_total": 2402,
+ "door_face_ly": 10.7,
+ "sprite_z_exaggeration": 1.4
+}

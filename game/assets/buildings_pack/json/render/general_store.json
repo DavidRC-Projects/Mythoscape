@@ -1,0 +1,27 @@
+{
+ "key": "general_store",
+ "building_id": "cottage_ne",
+ "name": "General Store",
+ "ppt_2x": 80,
+ "size_2x": [
+  1040,
+  1280
+ ],
+ "origin_2x": [
+  80,
+  400
+ ],
+ "tiles": {
+  "left": -1,
+  "right": 12,
+  "top": 5,
+  "bottom": -11
+ },
+ "tris": {
+  "body": 2616,
+  "ground": 12
+ },
+ "tris_total": 2628,
+ "door_face_ly": 8.7,
+ "sprite_z_exaggeration": 1.4
+}

@@ -1,0 +1,27 @@
+{
+ "key": "stonehaven_cottage",
+ "building_id": "city_house_nw",
+ "name": "Stonehaven Cottage",
+ "ppt_2x": 80,
+ "size_2x": [
+  1040,
+  1440
+ ],
+ "origin_2x": [
+  80,
+  480
+ ],
+ "tiles": {
+  "left": -1,
+  "right": 12,
+  "top": 6,
+  "bottom": -12
+ },
+ "tris": {
+  "body": 1324,
+  "ground": 12
+ },
+ "tris_total": 1336,
+ "door_face_ly": 9.7,
+ "sprite_z_exaggeration": 1.4
+}

@@ -1,0 +1,27 @@
+{
+ "key": "pet_emporium",
+ "building_id": "pet_emporium",
+ "name": "Pet Emporium",
+ "ppt_2x": 80,
+ "size_2x": [
+  1280,
+  1360
+ ],
+ "origin_2x": [
+  80,
+  400
+ ],
+ "tiles": {
+  "left": -1,
+  "right": 15,
+  "top": 5,
+  "bottom": -12
+ },
+ "tris": {
+  "body": 3410,
+  "ground": 24
+ },
+ "tris_total": 3434,
+ "door_face_ly": 9.7,
+ "sprite_z_exaggeration": 1.4
+}

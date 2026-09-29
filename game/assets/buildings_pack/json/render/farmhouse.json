@@ -1,0 +1,27 @@
+{
+ "key": "farmhouse",
+ "building_id": "cottage_se",
+ "name": "Farmhouse",
+ "ppt_2x": 80,
+ "size_2x": [
+  1200,
+  1280
+ ],
+ "origin_2x": [
+  80,
+  400
+ ],
+ "tiles": {
+  "left": -1,
+  "right": 14,
+  "top": 5,
+  "bottom": -11
+ },
+ "tris": {
+  "body": 1578,
+  "ground": 24
+ },
+ "tris_total": 1602,
+ "door_face_ly": 8.7,
+ "sprite_z_exaggeration": 1.4
+}

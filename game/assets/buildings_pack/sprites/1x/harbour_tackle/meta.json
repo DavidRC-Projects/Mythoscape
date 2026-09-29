@@ -1,0 +1,139 @@
+{
+ "key": "harbour_tackle",
+ "building_id": "harbour_tackle",
+ "name": "Harbourreach Tackle",
+ "flag": "USE_NEW_BUILDINGS",
+ "version": 2,
+ "footprint": {
+  "x0": 134,
+  "y0": 6,
+  "x1": 146,
+  "y1": 14,
+  "w": 13,
+  "h": 9
+ },
+ "floor": {
+  "floor_x0": 135,
+  "floor_y0": 7,
+  "floor_x1": 141,
+  "floor_y1": 12
+ },
+ "old": {
+  "x0": 134,
+  "y0": 6,
+  "x1": 142,
+  "y1": 14,
+  "floor_x0": 135,
+  "floor_y0": 7,
+  "floor_x1": 141,
+  "floor_y1": 13
+ },
+ "door": {
+  "id": "tackle_door",
+  "x": 138,
+  "y": 14,
+  "enter": [
+   138,
+   12
+  ],
+  "exit": [
+   138,
+   15
+  ],
+  "unchanged": true,
+  "doorway_path_tiles": [
+   [
+    138,
+    13
+   ],
+   [
+    138,
+    14
+   ]
+  ]
+ },
+ "tile_px": 40,
+ "sprite_1x": {
+  "size": [
+   600,
+   720
+  ],
+  "origin_px": [
+   40.0,
+   320.0
+  ]
+ },
+ "sprite_2x": {
+  "size": [
+   1200,
+   1440
+  ],
+  "origin_px": [
+   80,
+   640
+  ]
+ },
+ "anchor_note": "origin_px = pixel of the NW corner of world tile (x0,y0) in every layer. Blit at (tile_screen_x(x0) - origin_px.x*TILE/40, tile_screen_y(y0) - origin_px.y*TILE/40), scaled by TILE/40.",
+ "layers": [
+  {
+   "name": "ground",
+   "file": "harbour_tackle/ground.png",
+   "order": "after floor tiles, before entities (porch boards, steps, yard soil/grass, dock water)"
+  },
+  {
+   "name": "body",
+   "file": "harbour_tackle/body.png",
+   "order": "y-sorted like an entity standing on world row 14: after entities with y <= 14, before entities with y > 14"
+  },
+  {
+   "name": "cutaway",
+   "file": "harbour_tackle/cutaway.png",
+   "order": "replaces body while the local player is inside (floor rect or doorway tiles); walls cut at 1.6 m"
+  }
+ ],
+ "walkability": {
+  "origin": [
+   134,
+   6
+  ],
+  "rows": [
+   "WWWWWWWWWWWWW",
+   "WFFFFFFFWWWWW",
+   "WFFFFFFFWWWWW",
+   "WFFFFFFFWWWWW",
+   "WFFFFFFFWWWWW",
+   "WFFFFFFFWWWWW",
+   "WFFFFFFFWWWWW",
+   "PPPPDPPPPPPPP",
+   "PPPPDPPPPPPPP"
+  ],
+  "legend": {
+   "W": "WALL (walls/roof mass)",
+   "F": "FLOOR (interior)",
+   "D": "PATH doorway column (door tile at the bottom)",
+   "P": "WALL porch/yard (props stand here)"
+  }
+ },
+ "entity_moves": {},
+ "camera": {
+  "type": "ortho",
+  "azimuth_deg": 0,
+  "elevation_deg": 32,
+  "y_prestretch": "1/sin(32)",
+  "sun_euler_deg": [
+   40,
+   15,
+   -30
+  ]
+ },
+ "triangles": {
+  "body": 2278,
+  "ground": 60
+ },
+ "tris_total": 2338,
+ "models": {
+  "blend": "models/harbour_tackle.blend",
+  "glb": "models/harbour_tackle.glb",
+  "bam": "models/harbour_tackle.bam"
+ }
+}

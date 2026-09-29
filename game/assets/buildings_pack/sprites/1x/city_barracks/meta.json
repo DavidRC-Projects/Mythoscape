@@ -1,0 +1,142 @@
+{
+ "key": "city_barracks",
+ "building_id": "city_barracks",
+ "name": "City Barracks",
+ "flag": "USE_NEW_BUILDINGS",
+ "version": 2,
+ "footprint": {
+  "x0": 109,
+  "y0": 57,
+  "x1": 119,
+  "y1": 68,
+  "w": 11,
+  "h": 12
+ },
+ "floor": {
+  "floor_x0": 110,
+  "floor_y0": 58,
+  "floor_x1": 118,
+  "floor_y1": 66
+ },
+ "old": {
+  "x0": 110,
+  "y0": 58,
+  "x1": 118,
+  "y1": 68,
+  "floor_x0": 111,
+  "floor_y0": 59,
+  "floor_x1": 117,
+  "floor_y1": 67
+ },
+ "door": {
+  "id": "city_barracks_door",
+  "x": 114,
+  "y": 68,
+  "enter": [
+   114,
+   66
+  ],
+  "exit": [
+   114,
+   69
+  ],
+  "unchanged": true,
+  "doorway_path_tiles": [
+   [
+    114,
+    67
+   ],
+   [
+    114,
+    68
+   ]
+  ]
+ },
+ "tile_px": 40,
+ "sprite_1x": {
+  "size": [
+   520,
+   720
+  ],
+  "origin_px": [
+   40.0,
+   200.0
+  ]
+ },
+ "sprite_2x": {
+  "size": [
+   1040,
+   1440
+  ],
+  "origin_px": [
+   80,
+   400
+  ]
+ },
+ "anchor_note": "origin_px = pixel of the NW corner of world tile (x0,y0) in every layer. Blit at (tile_screen_x(x0) - origin_px.x*TILE/40, tile_screen_y(y0) - origin_px.y*TILE/40), scaled by TILE/40.",
+ "layers": [
+  {
+   "name": "ground",
+   "file": "city_barracks/ground.png",
+   "order": "after floor tiles, before entities (porch boards, steps, yard soil/grass, dock water)"
+  },
+  {
+   "name": "body",
+   "file": "city_barracks/body.png",
+   "order": "y-sorted like an entity standing on world row 68: after entities with y <= 68, before entities with y > 68"
+  },
+  {
+   "name": "cutaway",
+   "file": "city_barracks/cutaway.png",
+   "order": "replaces body while the local player is inside (floor rect or doorway tiles); walls cut at 1.6 m"
+  }
+ ],
+ "walkability": {
+  "origin": [
+   109,
+   57
+  ],
+  "rows": [
+   "WWWWWWWWWWW",
+   "WFFFFFFFFFW",
+   "WFFFFFFFFFW",
+   "WFFFFFFFFFW",
+   "WFFFFFFFFFW",
+   "WFFFFFFFFFW",
+   "WFFFFFFFFFW",
+   "WFFFFFFFFFW",
+   "WFFFFFFFFFW",
+   "WFFFFFFFFFW",
+   "PPPPPDPPPPP",
+   "PPPPPDPPPPP"
+  ],
+  "legend": {
+   "W": "WALL (walls/roof mass)",
+   "F": "FLOOR (interior)",
+   "D": "PATH doorway column (door tile at the bottom)",
+   "P": "WALL porch/yard (props stand here)"
+  }
+ },
+ "entity_moves": {},
+ "camera": {
+  "type": "ortho",
+  "azimuth_deg": 0,
+  "elevation_deg": 32,
+  "y_prestretch": "1/sin(32)",
+  "sun_euler_deg": [
+   40,
+   15,
+   -30
+  ]
+ },
+ "triangles": {
+  "body": 2390,
+  "ground": 12
+ },
+ "tris_total": 2402,
+ "models": {
+  "blend": "models/city_barracks.blend",
+  "glb": "models/city_barracks.glb",
+  "bam": "models/city_barracks.bam"
+ }
+}

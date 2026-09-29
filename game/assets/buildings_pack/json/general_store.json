@@ -1,0 +1,152 @@
+{
+ "key": "general_store",
+ "building_id": "cottage_ne",
+ "name": "General Store",
+ "flag": "USE_NEW_BUILDINGS",
+ "version": 2,
+ "footprint": {
+  "x0": 23,
+  "y0": 2,
+  "x1": 33,
+  "y1": 11,
+  "w": 11,
+  "h": 10
+ },
+ "floor": {
+  "floor_x0": 24,
+  "floor_y0": 3,
+  "floor_x1": 32,
+  "floor_y1": 9
+ },
+ "old": {
+  "x0": 23,
+  "y0": 3,
+  "x1": 31,
+  "y1": 11,
+  "floor_x0": 24,
+  "floor_y0": 4,
+  "floor_x1": 30,
+  "floor_y1": 10
+ },
+ "door": {
+  "id": "cottage_ne_door",
+  "x": 27,
+  "y": 11,
+  "enter": [
+   27,
+   9
+  ],
+  "exit": [
+   27,
+   12
+  ],
+  "unchanged": true,
+  "doorway_path_tiles": [
+   [
+    27,
+    10
+   ],
+   [
+    27,
+    11
+   ]
+  ]
+ },
+ "tile_px": 40,
+ "sprite_1x": {
+  "size": [
+   520,
+   640
+  ],
+  "origin_px": [
+   40.0,
+   200.0
+  ]
+ },
+ "sprite_2x": {
+  "size": [
+   1040,
+   1280
+  ],
+  "origin_px": [
+   80,
+   400
+  ]
+ },
+ "anchor_note": "origin_px = pixel of the NW corner of world tile (x0,y0) in every layer. Blit at (tile_screen_x(x0) - origin_px.x*TILE/40, tile_screen_y(y0) - origin_px.y*TILE/40), scaled by TILE/40.",
+ "layers": [
+  {
+   "name": "ground",
+   "file": "general_store/ground.png",
+   "order": "after floor tiles, before entities (porch boards, steps, yard soil/grass, dock water)"
+  },
+  {
+   "name": "body",
+   "file": "general_store/body.png",
+   "order": "y-sorted like an entity standing on world row 11: after entities with y <= 11, before entities with y > 11"
+  },
+  {
+   "name": "cutaway",
+   "file": "general_store/cutaway.png",
+   "order": "replaces body while the local player is inside (floor rect or doorway tiles); walls cut at 1.6 m"
+  }
+ ],
+ "walkability": {
+  "origin": [
+   23,
+   2
+  ],
+  "rows": [
+   "WWWWWWWWWWW",
+   "WFFFFFFFFFW",
+   "WFFFFFFFFFW",
+   "WFFFFFFFFFW",
+   "WFFFFFFFFFW",
+   "WFFFFFFFFFW",
+   "WFFFFFFFFFW",
+   "WFFFFFFFFFW",
+   "PPPPDPPPPPP",
+   "PPPPDPPPPPP"
+  ],
+  "legend": {
+   "W": "WALL (walls/roof mass)",
+   "F": "FLOOR (interior)",
+   "D": "PATH doorway column (door tile at the bottom)",
+   "P": "WALL porch/yard (props stand here)"
+  }
+ },
+ "entity_moves": {
+  "jeweler_lira": {
+   "npc": [
+    33,
+    8
+   ],
+   "new": [
+    35,
+    8
+   ],
+   "also": "PLACES 'jeweler' label (33,8) -> (35,8)"
+  }
+ },
+ "camera": {
+  "type": "ortho",
+  "azimuth_deg": 0,
+  "elevation_deg": 32,
+  "y_prestretch": "1/sin(32)",
+  "sun_euler_deg": [
+   40,
+   15,
+   -30
+  ]
+ },
+ "triangles": {
+  "body": 2616,
+  "ground": 12
+ },
+ "tris_total": 2628,
+ "models": {
+  "blend": "models/general_store.blend",
+  "glb": "models/general_store.glb",
+  "bam": "models/general_store.bam"
+ }
+}

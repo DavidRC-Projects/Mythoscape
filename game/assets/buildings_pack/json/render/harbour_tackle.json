@@ -1,0 +1,27 @@
+{
+ "key": "harbour_tackle",
+ "building_id": "harbour_tackle",
+ "name": "Harbourreach Tackle",
+ "ppt_2x": 80,
+ "size_2x": [
+  1200,
+  1440
+ ],
+ "origin_2x": [
+  80,
+  640
+ ],
+ "tiles": {
+  "left": -1,
+  "right": 14,
+  "top": 8,
+  "bottom": -10
+ },
+ "tris": {
+  "body": 2278,
+  "ground": 60
+ },
+ "tris_total": 2338,
+ "door_face_ly": 7.7,
+ "sprite_z_exaggeration": 1.4
+}

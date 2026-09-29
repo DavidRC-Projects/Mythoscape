@@ -1,0 +1,27 @@
+{
+ "key": "stonehaven_house",
+ "building_id": "city_house_sw",
+ "name": "Stonehaven House",
+ "ppt_2x": 80,
+ "size_2x": [
+  1200,
+  1440
+ ],
+ "origin_2x": [
+  80,
+  640
+ ],
+ "tiles": {
+  "left": -1,
+  "right": 14,
+  "top": 8,
+  "bottom": -10
+ },
+ "tris": {
+  "body": 2240,
+  "ground": 36
+ },
+ "tris_total": 2276,
+ "door_face_ly": 7.7,
+ "sprite_z_exaggeration": 1.4
+}

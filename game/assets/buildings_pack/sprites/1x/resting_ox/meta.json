@@ -1,0 +1,142 @@
+{
+ "key": "resting_ox",
+ "building_id": "cottage_sw",
+ "name": "The Resting Ox",
+ "flag": "USE_NEW_BUILDINGS",
+ "version": 2,
+ "footprint": {
+  "x0": 2,
+  "y0": 21,
+  "x1": 15,
+  "y1": 32,
+  "w": 14,
+  "h": 12
+ },
+ "floor": {
+  "floor_x0": 3,
+  "floor_y0": 22,
+  "floor_x1": 14,
+  "floor_y1": 30
+ },
+ "old": {
+  "x0": 3,
+  "y0": 24,
+  "x1": 11,
+  "y1": 32,
+  "floor_x0": 4,
+  "floor_y0": 25,
+  "floor_x1": 10,
+  "floor_y1": 31
+ },
+ "door": {
+  "id": "cottage_sw_door",
+  "x": 7,
+  "y": 32,
+  "enter": [
+   7,
+   30
+  ],
+  "exit": [
+   7,
+   33
+  ],
+  "unchanged": true,
+  "doorway_path_tiles": [
+   [
+    7,
+    31
+   ],
+   [
+    7,
+    32
+   ]
+  ]
+ },
+ "tile_px": 40,
+ "sprite_1x": {
+  "size": [
+   640,
+   840
+  ],
+  "origin_px": [
+   40.0,
+   320.0
+  ]
+ },
+ "sprite_2x": {
+  "size": [
+   1280,
+   1680
+  ],
+  "origin_px": [
+   80,
+   640
+  ]
+ },
+ "anchor_note": "origin_px = pixel of the NW corner of world tile (x0,y0) in every layer. Blit at (tile_screen_x(x0) - origin_px.x*TILE/40, tile_screen_y(y0) - origin_px.y*TILE/40), scaled by TILE/40.",
+ "layers": [
+  {
+   "name": "ground",
+   "file": "resting_ox/ground.png",
+   "order": "after floor tiles, before entities (porch boards, steps, yard soil/grass, dock water)"
+  },
+  {
+   "name": "body",
+   "file": "resting_ox/body.png",
+   "order": "y-sorted like an entity standing on world row 32: after entities with y <= 32, before entities with y > 32"
+  },
+  {
+   "name": "cutaway",
+   "file": "resting_ox/cutaway.png",
+   "order": "replaces body while the local player is inside (floor rect or doorway tiles); walls cut at 1.6 m"
+  }
+ ],
+ "walkability": {
+  "origin": [
+   2,
+   21
+  ],
+  "rows": [
+   "WWWWWWWWWWWWWW",
+   "WFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFW",
+   "PPPPPDPPPPPPPP",
+   "PPPPPDPPPPPPPP"
+  ],
+  "legend": {
+   "W": "WALL (walls/roof mass)",
+   "F": "FLOOR (interior)",
+   "D": "PATH doorway column (door tile at the bottom)",
+   "P": "WALL porch/yard (props stand here)"
+  }
+ },
+ "entity_moves": {},
+ "camera": {
+  "type": "ortho",
+  "azimuth_deg": 0,
+  "elevation_deg": 32,
+  "y_prestretch": "1/sin(32)",
+  "sun_euler_deg": [
+   40,
+   15,
+   -30
+  ]
+ },
+ "triangles": {
+  "body": 3356,
+  "ground": 12
+ },
+ "tris_total": 3368,
+ "models": {
+  "blend": "models/resting_ox.blend",
+  "glb": "models/resting_ox.glb",
+  "bam": "models/resting_ox.bam"
+ }
+}

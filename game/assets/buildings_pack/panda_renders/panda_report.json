@@ -1,0 +1,244 @@
+{
+ "city_barracks": {
+  "glb": {
+   "loaded": true,
+   "geomnodes": 2,
+   "tris": 2402,
+   "size_m": [
+    16.51,
+    17.72,
+    13.0
+   ]
+  },
+  "bam": {
+   "loaded": true,
+   "geomnodes": 2,
+   "tris": 2402,
+   "size_m": [
+    16.51,
+    17.72,
+    13.0
+   ]
+  }
+ },
+ "elders_hall": {
+  "glb": {
+   "loaded": true,
+   "geomnodes": 2,
+   "tris": 2100,
+   "size_m": [
+    26.76,
+    15.27,
+    11.85
+   ]
+  },
+  "bam": {
+   "loaded": true,
+   "geomnodes": 2,
+   "tris": 2100,
+   "size_m": [
+    26.76,
+    15.27,
+    11.85
+   ]
+  }
+ },
+ "farmhouse": {
+  "glb": {
+   "loaded": true,
+   "geomnodes": 2,
+   "tris": 1602,
+   "size_m": [
+    20.22,
+    15.46,
+    8.86
+   ]
+  },
+  "bam": {
+   "loaded": true,
+   "geomnodes": 2,
+   "tris": 1602,
+   "size_m": [
+    20.22,
+    15.46,
+    8.86
+   ]
+  }
+ },
+ "general_store": {
+  "glb": {
+   "loaded": true,
+   "geomnodes": 2,
+   "tris": 2628,
+   "size_m": [
+    16.78,
+    14.94,
+    9.37
+   ]
+  },
+  "bam": {
+   "loaded": true,
+   "geomnodes": 2,
+   "tris": 2628,
+   "size_m": [
+    16.78,
+    14.94,
+    9.37
+   ]
+  }
+ },
+ "harbour_tackle": {
+  "glb": {
+   "loaded": true,
+   "geomnodes": 2,
+   "tris": 2338,
+   "size_m": [
+    20.13,
+    14.28,
+    8.94
+   ]
+  },
+  "bam": {
+   "loaded": true,
+   "geomnodes": 2,
+   "tris": 2338,
+   "size_m": [
+    20.13,
+    14.28,
+    8.94
+   ]
+  }
+ },
+ "kais_catch": {
+  "glb": {
+   "loaded": true,
+   "geomnodes": 2,
+   "tris": 2254,
+   "size_m": [
+    21.32,
+    13.38,
+    7.96
+   ]
+  },
+  "bam": {
+   "loaded": true,
+   "geomnodes": 2,
+   "tris": 2254,
+   "size_m": [
+    21.32,
+    13.38,
+    7.96
+   ]
+  }
+ },
+ "pet_emporium": {
+  "glb": {
+   "loaded": true,
+   "geomnodes": 2,
+   "tris": 3434,
+   "size_m": [
+    20.74,
+    16.43,
+    9.46
+   ]
+  },
+  "bam": {
+   "loaded": true,
+   "geomnodes": 2,
+   "tris": 3434,
+   "size_m": [
+    20.74,
+    16.43,
+    9.46
+   ]
+  }
+ },
+ "resting_ox": {
+  "glb": {
+   "loaded": true,
+   "geomnodes": 2,
+   "tris": 3368,
+   "size_m": [
+    21.51,
+    18.14,
+    12.46
+   ]
+  },
+  "bam": {
+   "loaded": true,
+   "geomnodes": 2,
+   "tris": 3368,
+   "size_m": [
+    21.51,
+    18.14,
+    12.46
+   ]
+  }
+ },
+ "stonehaven_cottage": {
+  "glb": {
+   "loaded": true,
+   "geomnodes": 2,
+   "tris": 1336,
+   "size_m": [
+    17.1,
+    16.65,
+    9.65
+   ]
+  },
+  "bam": {
+   "loaded": true,
+   "geomnodes": 2,
+   "tris": 1336,
+   "size_m": [
+    17.1,
+    16.65,
+    9.65
+   ]
+  }
+ },
+ "stonehaven_house": {
+  "glb": {
+   "loaded": true,
+   "geomnodes": 2,
+   "tris": 2276,
+   "size_m": [
+    20.03,
+    13.61,
+    11.65
+   ]
+  },
+  "bam": {
+   "loaded": true,
+   "geomnodes": 2,
+   "tris": 2276,
+   "size_m": [
+    20.03,
+    13.61,
+    11.65
+   ]
+  }
+ },
+ "village_bank": {
+  "glb": {
+   "loaded": true,
+   "geomnodes": 2,
+   "tris": 1595,
+   "size_m": [
+    16.51,
+    11.92,
+    8.45
+   ]
+  },
+  "bam": {
+   "loaded": true,
+   "geomnodes": 2,
+   "tris": 1595,
+   "size_m": [
+    16.51,
+    11.92,
+    8.45
+   ]
+  }
+ }
+}

@@ -1,0 +1,139 @@
+{
+ "key": "kais_catch",
+ "building_id": "harbour_fishmonger",
+ "name": "Kai's Catch",
+ "flag": "USE_NEW_BUILDINGS",
+ "version": 2,
+ "footprint": {
+  "x0": 130,
+  "y0": 20,
+  "x1": 143,
+  "y1": 28,
+  "w": 14,
+  "h": 9
+ },
+ "floor": {
+  "floor_x0": 135,
+  "floor_y0": 21,
+  "floor_x1": 142,
+  "floor_y1": 26
+ },
+ "old": {
+  "x0": 134,
+  "y0": 20,
+  "x1": 142,
+  "y1": 28,
+  "floor_x0": 135,
+  "floor_y0": 21,
+  "floor_x1": 141,
+  "floor_y1": 27
+ },
+ "door": {
+  "id": "fishmonger_door",
+  "x": 138,
+  "y": 28,
+  "enter": [
+   138,
+   26
+  ],
+  "exit": [
+   138,
+   29
+  ],
+  "unchanged": true,
+  "doorway_path_tiles": [
+   [
+    138,
+    27
+   ],
+   [
+    138,
+    28
+   ]
+  ]
+ },
+ "tile_px": 40,
+ "sprite_1x": {
+  "size": [
+   640,
+   600
+  ],
+  "origin_px": [
+   40.0,
+   200.0
+  ]
+ },
+ "sprite_2x": {
+  "size": [
+   1280,
+   1200
+  ],
+  "origin_px": [
+   80,
+   400
+  ]
+ },
+ "anchor_note": "origin_px = pixel of the NW corner of world tile (x0,y0) in every layer. Blit at (tile_screen_x(x0) - origin_px.x*TILE/40, tile_screen_y(y0) - origin_px.y*TILE/40), scaled by TILE/40.",
+ "layers": [
+  {
+   "name": "ground",
+   "file": "kais_catch/ground.png",
+   "order": "after floor tiles, before entities (porch boards, steps, yard soil/grass, dock water)"
+  },
+  {
+   "name": "body",
+   "file": "kais_catch/body.png",
+   "order": "y-sorted like an entity standing on world row 28: after entities with y <= 28, before entities with y > 28"
+  },
+  {
+   "name": "cutaway",
+   "file": "kais_catch/cutaway.png",
+   "order": "replaces body while the local player is inside (floor rect or doorway tiles); walls cut at 1.6 m"
+  }
+ ],
+ "walkability": {
+  "origin": [
+   130,
+   20
+  ],
+  "rows": [
+   "WWWWWWWWWWWWWW",
+   "WWWWWFFFFFFFFW",
+   "WWWWWFFFFFFFFW",
+   "WWWWWFFFFFFFFW",
+   "WWWWWFFFFFFFFW",
+   "WWWWWFFFFFFFFW",
+   "WWWWWFFFFFFFFW",
+   "PPPPPPPPDPPPPP",
+   "PPPPPPPPDPPPPP"
+  ],
+  "legend": {
+   "W": "WALL (walls/roof mass)",
+   "F": "FLOOR (interior)",
+   "D": "PATH doorway column (door tile at the bottom)",
+   "P": "WALL porch/yard (props stand here)"
+  }
+ },
+ "entity_moves": {},
+ "camera": {
+  "type": "ortho",
+  "azimuth_deg": 0,
+  "elevation_deg": 32,
+  "y_prestretch": "1/sin(32)",
+  "sun_euler_deg": [
+   40,
+   15,
+   -30
+  ]
+ },
+ "triangles": {
+  "body": 2242,
+  "ground": 12
+ },
+ "tris_total": 2254,
+ "models": {
+  "blend": "models/kais_catch.blend",
+  "glb": "models/kais_catch.glb",
+  "bam": "models/kais_catch.bam"
+ }
+}

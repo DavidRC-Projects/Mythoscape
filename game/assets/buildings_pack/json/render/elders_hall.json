@@ -1,0 +1,27 @@
+{
+ "key": "elders_hall",
+ "building_id": "cottage_nw",
+ "name": "Elder's Hall",
+ "ppt_2x": 80,
+ "size_2x": [
+  1600,
+  1520
+ ],
+ "origin_2x": [
+  160,
+  640
+ ],
+ "tiles": {
+  "left": -2,
+  "right": 18,
+  "top": 8,
+  "bottom": -11
+ },
+ "tris": {
+  "body": 2064,
+  "ground": 36
+ },
+ "tris_total": 2100,
+ "door_face_ly": 8.7,
+ "sprite_z_exaggeration": 1.4
+}

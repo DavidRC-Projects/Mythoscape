@@ -1,0 +1,27 @@
+{
+ "key": "village_bank",
+ "building_id": "bank",
+ "name": "Village Bank",
+ "ppt_2x": 80,
+ "size_2x": [
+  1040,
+  1200
+ ],
+ "origin_2x": [
+  80,
+  480
+ ],
+ "tiles": {
+  "left": -1,
+  "right": 12,
+  "top": 6,
+  "bottom": -9
+ },
+ "tris": {
+  "body": 1547,
+  "ground": 48
+ },
+ "tris_total": 1595,
+ "door_face_ly": 6.5,
+ "sprite_z_exaggeration": 1.4
+}

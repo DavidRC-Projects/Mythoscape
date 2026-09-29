@@ -1,0 +1,140 @@
+{
+ "key": "elders_hall",
+ "building_id": "cottage_nw",
+ "name": "Elder's Hall",
+ "flag": "USE_NEW_BUILDINGS",
+ "version": 2,
+ "footprint": {
+  "x0": 2,
+  "y0": 2,
+  "x1": 17,
+  "y1": 11,
+  "w": 16,
+  "h": 10
+ },
+ "floor": {
+  "floor_x0": 3,
+  "floor_y0": 3,
+  "floor_x1": 16,
+  "floor_y1": 9
+ },
+ "old": {
+  "x0": 3,
+  "y0": 3,
+  "x1": 11,
+  "y1": 11,
+  "floor_x0": 4,
+  "floor_y0": 4,
+  "floor_x1": 10,
+  "floor_y1": 10
+ },
+ "door": {
+  "id": "cottage_nw_door",
+  "x": 7,
+  "y": 11,
+  "enter": [
+   7,
+   9
+  ],
+  "exit": [
+   7,
+   12
+  ],
+  "unchanged": true,
+  "doorway_path_tiles": [
+   [
+    7,
+    10
+   ],
+   [
+    7,
+    11
+   ]
+  ]
+ },
+ "tile_px": 40,
+ "sprite_1x": {
+  "size": [
+   800,
+   760
+  ],
+  "origin_px": [
+   80.0,
+   320.0
+  ]
+ },
+ "sprite_2x": {
+  "size": [
+   1600,
+   1520
+  ],
+  "origin_px": [
+   160,
+   640
+  ]
+ },
+ "anchor_note": "origin_px = pixel of the NW corner of world tile (x0,y0) in every layer. Blit at (tile_screen_x(x0) - origin_px.x*TILE/40, tile_screen_y(y0) - origin_px.y*TILE/40), scaled by TILE/40.",
+ "layers": [
+  {
+   "name": "ground",
+   "file": "elders_hall/ground.png",
+   "order": "after floor tiles, before entities (porch boards, steps, yard soil/grass, dock water)"
+  },
+  {
+   "name": "body",
+   "file": "elders_hall/body.png",
+   "order": "y-sorted like an entity standing on world row 11: after entities with y <= 11, before entities with y > 11"
+  },
+  {
+   "name": "cutaway",
+   "file": "elders_hall/cutaway.png",
+   "order": "replaces body while the local player is inside (floor rect or doorway tiles); walls cut at 1.6 m"
+  }
+ ],
+ "walkability": {
+  "origin": [
+   2,
+   2
+  ],
+  "rows": [
+   "WWWWWWWWWWWWWWWW",
+   "WFFFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFFFW",
+   "PPPPPDPPPPPPPPPP",
+   "PPPPPDPPPPPPPPPP"
+  ],
+  "legend": {
+   "W": "WALL (walls/roof mass)",
+   "F": "FLOOR (interior)",
+   "D": "PATH doorway column (door tile at the bottom)",
+   "P": "WALL porch/yard (props stand here)"
+  }
+ },
+ "entity_moves": {},
+ "camera": {
+  "type": "ortho",
+  "azimuth_deg": 0,
+  "elevation_deg": 32,
+  "y_prestretch": "1/sin(32)",
+  "sun_euler_deg": [
+   40,
+   15,
+   -30
+  ]
+ },
+ "triangles": {
+  "body": 2064,
+  "ground": 36
+ },
+ "tris_total": 2100,
+ "models": {
+  "blend": "models/elders_hall.blend",
+  "glb": "models/elders_hall.glb",
+  "bam": "models/elders_hall.bam"
+ }
+}
