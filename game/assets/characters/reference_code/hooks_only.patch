@@ -1,0 +1,92 @@
+diff --git a/game/assets/characters/procedural_sprites_finished.py b/game/assets/characters/procedural_sprites_finished.py
+index eaee3ab..2c8b059 100644
+--- a/game/assets/characters/procedural_sprites_finished.py
++++ b/game/assets/characters/procedural_sprites_finished.py
+@@ -1689,7 +1689,14 @@ def draw_monster(surf, mtype, cx, cy, tile, t, hurt=False, attacking=0.0, facing
+ # ---------------------------------------------------------------------------
+ # Item icons (for inventory / shop panels)
+ # ---------------------------------------------------------------------------
++USE_NEW_ITEM_ICONS = False  # client sets this from USE_NEW_CHARACTERS
++
++
+ def draw_item_icon(surf, rect, item_id, items_db):
++    if USE_NEW_ITEM_ICONS:
++        import gear_v2
++        if gear_v2.draw_icon(surf, rect, item_id, items_db):
++            return
+     item = items_db.get(item_id, {})
+     itype = item.get("type", "misc")
+     cx, cy = rect.center
+diff --git a/game/assets/characters/rs_humanoid.py b/game/assets/characters/rs_humanoid.py
+index 2d6d9f5..82607de 100644
+--- a/game/assets/characters/rs_humanoid.py
++++ b/game/assets/characters/rs_humanoid.py
+@@ -13,6 +13,10 @@ import pygame
+ import rs_style as rs
+ 
+ 
++# Feature flag — client sets this from its own USE_NEW_CHARACTERS constant.
++USE_NEW_CHARACTERS = False
++
++
+ def _parse_facing(facing):
+     """Return (view, side) with view in side|front|back and side ±1 for profile."""
+     if isinstance(facing, str):
+@@ -1626,6 +1630,14 @@ def draw_skeletal_humanoid(
+     gender="male",
+ ):
+     """Anatomical adventurer with volumetric limbs and directional lighting."""
++    if USE_NEW_CHARACTERS:
++        # New shapes/faces/gear looks; SAME rig maths + pose (see rs_humanoid_v2).
++        import rs_humanoid_v2
++        rs_humanoid_v2.draw(
++            surf, cx, cy, tile, body_color, skin_color, hair_color, weapon, shield,
++            moving, t, robe, facing, equipment, attacking, action, gender,
++        )
++        return
+     equipment = equipment or {}
+     view, facing = _parse_facing(facing)
+     feminine = str(gender).lower() == "female"
+diff --git a/game/assets/mmorpg/client/client.py b/game/assets/mmorpg/client/client.py
+index 158ea94..d73ed66 100644
+--- a/game/assets/mmorpg/client/client.py
++++ b/game/assets/mmorpg/client/client.py
+@@ -53,6 +53,10 @@ import prop_sprites  # noqa: E402 — pack sprites for interior props
+ import castle_sprites  # noqa: E402 — pre-rendered castle layers
+ import castle_v2  # noqa: E402 — castle v2 footprint (shifted onto the live keep)
+ from feature_flags import USE_NEW_CASTLE  # noqa: E402
++from feature_flags import USE_NEW_CHARACTERS, USE_NEW_EQUIPMENT_UI  # noqa: E402
++import rs_humanoid as _rs_humanoid  # noqa: E402
++_rs_humanoid.USE_NEW_CHARACTERS = USE_NEW_CHARACTERS
++sprites.USE_NEW_ITEM_ICONS = USE_NEW_CHARACTERS
+ 
+ SERVER_HOST = sys.argv[1] if len(sys.argv) > 1 else "localhost"
+ SERVER_URI = f"ws://{SERVER_HOST}:8765"
+@@ -9839,6 +9843,10 @@ class GameClient(CameraYaw):
+                           (box.x + 12, box.y + box.h - 20))
+ 
+     def draw_equipment_modal(self):
++        if USE_NEW_EQUIPMENT_UI:
++            import equipment_ui_v2
++            equipment_ui_v2.draw(self, ITEMS, karma_slot_bonus, sprites, weapon_style)
++            return
+         box = pygame.Rect(90, 36, 760, 560)
+         pygame.draw.rect(self.screen, (16, 18, 26), box, border_radius=8)
+         pygame.draw.rect(self.screen, YELLOW, box, 2, border_radius=8)
+diff --git a/game/assets/mmorpg/server/feature_flags.py b/game/assets/mmorpg/server/feature_flags.py
+index 5a98f74..d9a29bc 100644
+--- a/game/assets/mmorpg/server/feature_flags.py
++++ b/game/assets/mmorpg/server/feature_flags.py
+@@ -7,3 +7,12 @@ def _on(name, default="1"):
+ # Bigger pre-rendered castle (moat, drawbridge, portcullis).
+ # Set USE_NEW_CASTLE=0 to keep today's volume castle and tile grid.
+ USE_NEW_CASTLE = _on("USE_NEW_CASTLE")
++
++# OSRS-leaning character bodies/faces + per-item armour/weapon looks and icons.
++# Walk/attack animation maths is unchanged (see characters/rs_humanoid_v2.py).
++# Off by default: set USE_NEW_CHARACTERS=1 to try it.
++USE_NEW_CHARACTERS = _on("USE_NEW_CHARACTERS", "0")
++
++# Redesigned Equipment & Stats screen (paper doll + slot icons + bonus cards).
++# Off by default: set USE_NEW_EQUIPMENT_UI=1 to try it.
++USE_NEW_EQUIPMENT_UI = _on("USE_NEW_EQUIPMENT_UI", "0")

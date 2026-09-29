@@ -13,6 +13,10 @@ import pygame
 import rs_style as rs
 
 
+# Client sets this from feature_flags.USE_NEW_CHARACTERS.
+USE_NEW_CHARACTERS = False
+
+
 def _parse_facing(facing):
     """Return (view, side) with view in side|front|back and side ±1 for profile."""
     if isinstance(facing, str):
@@ -1626,6 +1630,14 @@ def draw_skeletal_humanoid(
     gender="male",
 ):
     """Anatomical adventurer with volumetric limbs and directional lighting."""
+    if USE_NEW_CHARACTERS:
+        # New shapes and faces. The rig and pose stay the same.
+        import rs_humanoid_v2
+        rs_humanoid_v2.draw(
+            surf, cx, cy, tile, body_color, skin_color, hair_color, weapon, shield,
+            moving, t, robe, facing, equipment, attacking, action, gender,
+        )
+        return
     equipment = equipment or {}
     view, facing = _parse_facing(facing)
     feminine = str(gender).lower() == "female"

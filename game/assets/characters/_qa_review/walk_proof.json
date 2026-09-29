@@ -1,0 +1,212 @@
+{
+ "frames_checked": 3200,
+ "segments_checked": 25600,
+ "max_abs_diff": 0.0,
+ "mismatches": 0,
+ "pose_identical": true,
+ "cases": [
+  {
+   "gear": "unarmed",
+   "gender": "male",
+   "dir": "down (front)",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "unarmed",
+   "gender": "male",
+   "dir": "up (back)",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "unarmed",
+   "gender": "male",
+   "dir": "left",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "unarmed",
+   "gender": "male",
+   "dir": "right",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "unarmed",
+   "gender": "female",
+   "dir": "down (front)",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "unarmed",
+   "gender": "female",
+   "dir": "up (back)",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "unarmed",
+   "gender": "female",
+   "dir": "left",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "unarmed",
+   "gender": "female",
+   "dir": "right",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "steel_set",
+   "gender": "male",
+   "dir": "down (front)",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "steel_set",
+   "gender": "male",
+   "dir": "up (back)",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "steel_set",
+   "gender": "male",
+   "dir": "left",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "steel_set",
+   "gender": "male",
+   "dir": "right",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "steel_set",
+   "gender": "female",
+   "dir": "down (front)",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "steel_set",
+   "gender": "female",
+   "dir": "up (back)",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "steel_set",
+   "gender": "female",
+   "dir": "left",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "steel_set",
+   "gender": "female",
+   "dir": "right",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "eclipse_set",
+   "gender": "male",
+   "dir": "down (front)",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "eclipse_set",
+   "gender": "male",
+   "dir": "up (back)",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "eclipse_set",
+   "gender": "male",
+   "dir": "left",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "eclipse_set",
+   "gender": "male",
+   "dir": "right",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "eclipse_set",
+   "gender": "female",
+   "dir": "down (front)",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "eclipse_set",
+   "gender": "female",
+   "dir": "up (back)",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "eclipse_set",
+   "gender": "female",
+   "dir": "left",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "eclipse_set",
+   "gender": "female",
+   "dir": "right",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "mythos_set",
+   "gender": "male",
+   "dir": "down (front)",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "mythos_set",
+   "gender": "male",
+   "dir": "up (back)",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "mythos_set",
+   "gender": "male",
+   "dir": "left",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "mythos_set",
+   "gender": "male",
+   "dir": "right",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "mythos_set",
+   "gender": "female",
+   "dir": "down (front)",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "mythos_set",
+   "gender": "female",
+   "dir": "up (back)",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "mythos_set",
+   "gender": "female",
+   "dir": "left",
+   "max_abs_diff": 0.0
+  },
+  {
+   "gear": "mythos_set",
+   "gender": "female",
+   "dir": "right",
+   "max_abs_diff": 0.0
+  }
+ ],
+ "attack_frames_checked": 1176,
+ "attack_mismatches": 0,
+ "walk_timing": {
+  "cadence_rad_per_s": 7.225663103256523,
+  "cycle_seconds": 0.8695652173913044,
+  "frame_source": "continuous t=time.time() (client.py:4924) -> rs.resolve_pose -> pose_walk; unchanged",
+  "directions": "client facing_for()/facing_for_view() -> _parse_facing(); unchanged",
+  "moving_flag": "client moving_for(): 0.55 s hold after each tile step; unchanged",
+  "bob": "side root_bob*s, ortho root_bob*s*0.55 (copied verbatim, verified via hip joints)"
+ },
+ "PASS": true
+}

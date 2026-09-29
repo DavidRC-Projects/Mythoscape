@@ -78,10 +78,38 @@ def draw_grass(surf, rect, seed_x, seed_y):
         pygame.draw.circle(surf, (130, 128, 118), (px - 1, py - 1), 1)
 
 
+def draw_void_ground(surf, rect, seed_x, seed_y):
+    """Void Sanctum grounds — purple flagstones with violet grout."""
+    shades = ((46, 34, 68), (34, 26, 52), (62, 44, 88), (26, 20, 40))
+    line = (92, 62, 138)
+    _paint_flagstones(surf, rect, seed_x, seed_y, shades, line)
+    if _seeded(seed_x, seed_y, 11) < 0.2:
+        fx = rect.x + 2 + int(_seeded(seed_x, seed_y, 12) * max(1, rect.w - 4))
+        fy = rect.y + 2 + int(_seeded(seed_x, seed_y, 13) * max(1, rect.h - 4))
+        pygame.draw.circle(surf, (150, 96, 210), (fx, fy), 1)
+
+
+def draw_void_path(surf, rect, seed_x, seed_y):
+    """Lighter violet track so the road reads against the sanctum flagstones."""
+    fill = (96, 68, 132)
+    if _seeded(seed_x, seed_y, 2) > 0.5:
+        fill = (84, 58, 118)
+    pygame.draw.rect(surf, fill, rect)
+    pygame.draw.line(surf, (54, 36, 82), (rect.left, rect.top), (rect.right, rect.top), 1)
+    pygame.draw.line(surf, (140, 104, 176), (rect.left, rect.bottom - 1), (rect.right, rect.bottom - 1), 1)
+    for i in range(3):
+        px = rect.x + int(_seeded(seed_x, seed_y, 30 + i) * max(1, rect.w - 2))
+        py = rect.y + int(_seeded(seed_x, seed_y, 40 + i) * max(1, rect.h - 2))
+        pygame.draw.circle(surf, (150, 112, 186), (px, py), 1)
+
+
 def draw_path(surf, rect, seed_x, seed_y, zone=None):
     """Worn dirt path — or cobbled city street when zone is city."""
     if zone == "city":
         draw_city_street(surf, rect, seed_x, seed_y)
+        return
+    if zone == "shadow_crypt":
+        draw_void_path(surf, rect, seed_x, seed_y)
         return
     base, dark, light, _ = rs.DIRT_PALETTE
     r1 = _seeded(seed_x, seed_y, 2)
@@ -159,10 +187,57 @@ def draw_pier(surf, rect, seed_x, seed_y):
     pygame.draw.line(surf, (170, 140, 95), (rect.left + 1, rect.top + 1), (rect.right - 2, rect.top + 1), 1)
 
 
-def draw_floor(surf, rect, seed_x, seed_y, zone=None):
+def _paint_wood_planks(surf, rect, seed_x, seed_y, shades, line):
+    """A few boards per tile. Seams line up with the tiles beside this one."""
+    n = 4 if rect.h >= 12 else max(2, rect.h // 4)
+    ph = rect.h / float(n)
+    for i in range(n):
+        y0 = rect.y + int(i * ph)
+        y1 = rect.y + int((i + 1) * ph)
+        if y1 <= y0:
+            y1 = y0 + 1
+        base = shades[i % 2]
+        hi, mid, sh, _ = rs.material(base)
+        pygame.draw.rect(surf, mid, (rect.x, y0, rect.w, y1 - y0))
+        if i:
+            pygame.draw.line(surf, line, (rect.left, y0), (rect.right - 1, y0))
+        else:
+            pygame.draw.line(surf, hi, (rect.left + 1, y0 + 1), (rect.right - 2, y0 + 1))
+        if _seeded(seed_x, seed_y, 20 + i) < 0.45 and (y1 - y0) >= 4:
+            gy = y0 + (y1 - y0) // 2
+            x1 = rect.x + 2 + int(_seeded(seed_x, seed_y, 40 + i) * rect.w * 0.35)
+            pygame.draw.line(surf, sh, (x1, gy), (min(rect.right - 2, x1 + max(3, rect.w // 4)), gy))
+    if seed_x % 4 == 0:
+        pygame.draw.line(surf, line, (rect.left, rect.top), (rect.left, rect.bottom - 1))
+
+
+def _paint_flagstones(surf, rect, seed_x, seed_y, shades, line):
+    """Two-by-two slabs with a grout line."""
+    cols, rows = 2, 2
+    cw = rect.w / float(cols)
+    ch = rect.h / float(rows)
+    for iy in range(rows):
+        for ix in range(cols):
+            x0 = rect.x + int(ix * cw)
+            y0 = rect.y + int(iy * ch)
+            x1 = rect.x + int((ix + 1) * cw)
+            y1 = rect.y + int((iy + 1) * ch)
+            base = shades[(ix + iy + int(seed_x) + int(seed_y)) % len(shades)]
+            hi, mid, sh, _ = rs.material(base)
+            pygame.draw.rect(surf, mid, (x0, y0, max(1, x1 - x0), max(1, y1 - y0)))
+            pygame.draw.line(surf, hi, (x0 + 1, y0 + 1), (max(x0 + 1, x1 - 2), y0 + 1))
+    pygame.draw.line(surf, line, (rect.centerx, rect.top), (rect.centerx, rect.bottom))
+    pygame.draw.line(surf, line, (rect.left, rect.centery), (rect.right, rect.centery))
+    pygame.draw.rect(surf, line, rect, 1)
+
+
+def draw_floor(surf, rect, seed_x, seed_y, zone=None, interior=False):
     """Flagstone / plank floor with lit top edge."""
     if zone == "volcano":
         draw_volcano_floor(surf, rect, seed_x, seed_y)
+        return
+    if zone == "shadow_crypt":
+        draw_void_ground(surf, rect, seed_x, seed_y)
         return
     r0 = _seeded(seed_x, seed_y, 1)
     if zone == "village":
@@ -186,6 +261,12 @@ def draw_floor(surf, rect, seed_x, seed_y, zone=None):
     else:
         shades = ((76, 70, 84), (64, 58, 72), (90, 84, 98), (48, 44, 56))
         line = (34, 30, 40)
+    if interior and zone not in ("dungeon", "shadow_crypt", "mine"):
+        if zone == "city":
+            _paint_flagstones(surf, rect, seed_x, seed_y, shades, line)
+        else:
+            _paint_wood_planks(surf, rect, seed_x, seed_y, shades, line)
+        return
     base = shades[int(r0 * 4) % 4]
     hi, mid, sh, _ = rs.material(base)
     pygame.draw.rect(surf, mid, rect)
@@ -1689,7 +1770,14 @@ def draw_monster(surf, mtype, cx, cy, tile, t, hurt=False, attacking=0.0, facing
 # ---------------------------------------------------------------------------
 # Item icons (for inventory / shop panels)
 # ---------------------------------------------------------------------------
+USE_NEW_ITEM_ICONS = False  # client sets this from USE_NEW_CHARACTERS
+
+
 def draw_item_icon(surf, rect, item_id, items_db):
+    if USE_NEW_ITEM_ICONS:
+        import gear_v2
+        if gear_v2.draw_icon(surf, rect, item_id, items_db):
+            return
     item = items_db.get(item_id, {})
     itype = item.get("type", "misc")
     cx, cy = rect.center
@@ -5557,6 +5645,26 @@ def draw_dungeon_entrance(surf, cx, cy, tile, t=0.0, yaw=0):
     if yaw:
         tmp = pygame.transform.rotate(tmp, yaw * 90)
     surf.blit(tmp, (cx - tmp.get_width() // 2, cy - tmp.get_height() // 2))
+
+
+def draw_signpost(surf, cx, cy, tile, t=0.0, facing="e"):
+    """Wooden wayfinder. Arrow on the board points along the road."""
+    s = _s(tile, "object") * 0.72
+    pygame.draw.rect(surf, (78, 52, 28), (cx - 1.6 * s, cy - 2 * s, 3.2 * s, 16 * s))
+    pygame.draw.rect(surf, (168, 124, 64), (cx - 13 * s, cy - 18 * s, 26 * s, 12 * s))
+    pygame.draw.rect(surf, (92, 60, 28), (cx - 13 * s, cy - 18 * s, 26 * s, 12 * s), max(1, int(s)))
+    ax, ay = int(cx), int(cy - 12 * s)
+    d = max(3, int(4 * s))
+    face = (facing or "e")[0]
+    if face == "e":
+        pts = [(ax - d, ay - d), (ax - d, ay + d), (ax + d + 1, ay)]
+    elif face == "w":
+        pts = [(ax + d, ay - d), (ax + d, ay + d), (ax - d - 1, ay)]
+    elif face == "n":
+        pts = [(ax - d, ay + d), (ax + d, ay + d), (ax, ay - d - 1)]
+    else:
+        pts = [(ax - d, ay - d), (ax + d, ay - d), (ax, ay + d + 1)]
+    pygame.draw.polygon(surf, (48, 28, 14), pts)
 
 
 def draw_warning_sign(surf, cx, cy, tile, t=0.0):
