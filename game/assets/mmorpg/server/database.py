@@ -148,6 +148,10 @@ class Database:
             self.conn.execute(
                 "ALTER TABLE players ADD COLUMN gender TEXT NOT NULL DEFAULT 'male'"
             )
+        if "pickup_ignore" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN pickup_ignore TEXT NOT NULL DEFAULT '[]'"
+            )
         if "last_wish_date" not in cols:
             self.conn.execute("ALTER TABLE players ADD COLUMN last_wish_date TEXT")
         if "fletching_xp" not in cols:

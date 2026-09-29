@@ -145,6 +145,11 @@ class PlayerSession:
         self.last_move_tick = 0
         self.last_equip_regen_at = 0.0  # passive HP from worn gear (e.g. Tidehollow Medal)
         self.auto_pickup_items = bool(row["auto_pickup_items"]) if "auto_pickup_items" in row.keys() else False
+        raw_ignore = row["pickup_ignore"] if "pickup_ignore" in row.keys() else "[]"
+        try:
+            self.pickup_ignore = set(json.loads(raw_ignore or "[]"))
+        except (TypeError, ValueError):
+            self.pickup_ignore = set()
         # Missing column (pre-migration) => already allocated
         if "stats_allocated" in row.keys():
             self.stats_allocated = bool(row["stats_allocated"])
@@ -838,6 +843,7 @@ class PlayerSession:
             "inventory": self.inventory,
             "combat_style": self.combat_style,
             "auto_pickup_items": self.auto_pickup_items,
+            "pickup_ignore": sorted(self.pickup_ignore),
             "stats_allocated": self.stats_allocated,
             "max_purse_coins": MAX_PURSE_COINS,
             "max_bank_coins": MAX_BANK_COINS,
@@ -1526,6 +1532,8 @@ async def handle_login(ws, msg, is_register):
     session.quests = WORLD.db.get_quest_progress(row["id"])
     WORLD.sessions[session.player_id] = session
     enforce_bound_items(session)
+    import void_v2
+    void_v2.strip_keys(session)
     WORLD.rearrange_bags_tab(session)
     # Persist owned-pets list (includes migrated active_pet)
     WORLD.db.save_player_stats(session.player_id, owned_pets=json.dumps(session.owned_pets))
@@ -1603,6 +1611,9 @@ async def handle_allocate_stats(session, msg):
     session.hp = session.max_hp()
     xp_fields["hp"] = session.hp
     xp_fields["stats_allocated"] = 1
+    gender = "female" if str(msg.get("gender") or "male").lower() == "female" else "male"
+    session.gender = gender
+    xp_fields["gender"] = gender
     WORLD.db.save_player_stats(session.player_id, **xp_fields)
     session.stats_allocated = True
     await send(session.ws, "CHAT_MSG", **{
@@ -1640,6 +1651,22 @@ def shop_will_buy(shop, item_id):
 def item_is_tradeable(item_id):
     item = ITEMS.get(item_id) or {}
     return item.get("tradeable", True)
+
+
+def item_is_bankable(item_id):
+    """Medals stay unsellable, but they can sit in the bank."""
+    item = ITEMS.get(item_id) or {}
+    if item.get("dungeon_bound"):
+        return False
+    if "bankable" in item:
+        return bool(item["bankable"])
+    return item.get("tradeable", True)
+
+
+def pickup_ignored(session, item_id):
+    if item_id == "coins" or (ITEMS.get(item_id) or {}).get("karma_xp"):
+        return False
+    return item_id in session.pickup_ignore
 
 
 def session_has_item(session, item_id):
@@ -1689,6 +1716,8 @@ async def handle_leaderboard(ws, msg):
 
 
 async def handle_move(session, msg):
+    if getattr(session, "rooted_until", 0) > WORLD.tick_count:
+        return
     dx, dy = msg.get("dx", 0), msg.get("dy", 0)
     if abs(dx) + abs(dy) != 1:
         return
@@ -1760,7 +1789,7 @@ def _build_dungeon_floor(session, floor: int, dungeon_id: str = None):
     monsters = {}
     for sx, sy in spots:
         mid = next_id()
-        m = MonsterInstance(mid, visual, sx, sy, stats=dict(stats), no_respawn=True)
+        m = MonsterInstance(mid, visual, sx, sy, stats=dict(stats))
         # Stay near where they spawned. They stop chasing once you leave that patch.
         leash = 6
         m.home_room = (
@@ -1795,7 +1824,7 @@ def _build_dungeon_floor(session, floor: int, dungeon_id: str = None):
 
 def _dungeon_payload(session):
     d = session.dungeon
-    alive = [m.public_state() for m in d["monsters"].values() if m.alive]
+    alive = [m.public_state() for m in d["monsters"].values() if m.alive and not getattr(m, "concealed", False)]
     mod = _dungeon_mod(session)
     spawn = getattr(mod, "DUNGEON_SPAWN", (d["width"] // 2, max(0, d["height"] - 2)))
     exit_x, exit_y = int(spawn[0]), int(spawn[1])
@@ -1812,7 +1841,7 @@ def _dungeon_payload(session):
     else:
         d["exit_x"] = exit_x
         d["exit_y"] = exit_y
-    return {
+    payload = {
         "id": d["id"],
         "floor": d["floor"],
         "floors": d["floors"],
@@ -1823,13 +1852,20 @@ def _dungeon_payload(session):
         "width": d["width"],
         "height": d["height"],
         "monsters": alive,
-        "remaining": len(alive),
+        "remaining": _dungeon_remaining(d),
         "player_x": session.x,
         "player_y": session.y,
         "exit_x": exit_x,
         "exit_y": exit_y,
         "props": d.get("props") or [],
     }
+    if d.get("v2") == "depths":
+        import depths_v2
+        payload.update(depths_v2.client_extra(session))
+    elif d.get("v2"):
+        import void_v2
+        payload.update(void_v2.client_extra(session))
+    return payload
 
 
 async def _grant_dungeon_kill_loot(session):
@@ -1915,10 +1951,15 @@ async def _finish_dungeon_kill(session, monster=None):
         if monster is not None:
             await _grant_monster_table(session, monster)
             check_quest_progress_on_kill(session, monster.type)
+            if d.get("v2") and monster.type == "nyxarath":
+                import void_v2
+                await void_v2.announce_first_kill(session)
+            if d.get("v2") == "depths" and monster.type == "morvath":
+                import depths_v2
+                await depths_v2.announce_first_kill(session)
         return
     await _grant_dungeon_kill_loot(session)
-    remaining = sum(1 for m in d["monsters"].values() if m.alive)
-    if remaining == 0:
+    if not d.get("explore") and _floor_uncleared(d) == 0:
         await _dungeon_on_clear(session)
 
 
@@ -1991,6 +2032,9 @@ async def handle_enter_dungeon(session, msg):
 async def handle_leave_dungeon(session, msg=None, silent=False):
     if not session.dungeon:
         return
+    if session.dungeon.get("v2"):
+        import void_v2
+        void_v2.strip_keys(session)
     dungeon_id = session.dungeon.get("id") or "tidehollow"
     mod = DUNGEON_MODS.get(dungeon_id, tidehollow)
     meta = _dungeon_meta(dungeon_id)
@@ -2124,6 +2168,10 @@ async def vacuum_ground_loot(session, quiet=False):
     """Scoop coins underfoot and adjacent; scoop items on your tile if auto-pickup is on.
     Bones are always auto-buried one at a time (never kept in inventory from the ground).
     """
+    if session.dungeon and session.dungeon.get("v2"):
+        import void_v2
+        await void_v2.vacuum(session, quiet)
+        return
     tiles = [(session.x, session.y)]
     for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)):
         tiles.append((session.x + dx, session.y + dy))
@@ -2148,6 +2196,9 @@ async def vacuum_ground_loot(session, quiet=False):
             if ITEMS.get(item_id, {}).get("karma_xp"):
                 await bury_bone_stack(session, item_id, qty, quiet=True)
                 bones_buried += qty
+                continue
+            if pickup_ignored(session, item_id):
+                remaining.append(entry)
                 continue
             if not (on_me and session.auto_pickup_items):
                 remaining.append(entry)
@@ -2180,6 +2231,7 @@ async def vacuum_ground_loot(session, quiet=False):
 
 
 async def handle_set_option(session, msg):
+    changed = False
     if "auto_pickup_items" in msg:
         session.auto_pickup_items = bool(msg["auto_pickup_items"])
         WORLD.db.save_player_stats(session.player_id, auto_pickup_items=1 if session.auto_pickup_items else 0)
@@ -2187,6 +2239,30 @@ async def handle_set_option(session, msg):
         await send(session.ws, "CHAT_MSG", **{
             "from": "Options", "text": f"Auto-pickup items: {state} (coins always collect).",
         })
+        changed = True
+    add_id = msg.get("pickup_ignore_add")
+    remove_id = msg.get("pickup_ignore_remove")
+    if add_id and add_id in ITEMS and add_id != "coins":
+        session.pickup_ignore.add(add_id)
+        WORLD.db.save_player_stats(
+            session.player_id, pickup_ignore=json.dumps(sorted(session.pickup_ignore)),
+        )
+        name = ITEMS[add_id]["name"]
+        await send(session.ws, "CHAT_MSG", **{
+            "from": "Options", "text": f"You will never pick up {name} again.",
+        })
+        changed = True
+    if remove_id and remove_id in session.pickup_ignore:
+        session.pickup_ignore.discard(remove_id)
+        WORLD.db.save_player_stats(
+            session.player_id, pickup_ignore=json.dumps(sorted(session.pickup_ignore)),
+        )
+        name = ITEMS.get(remove_id, {}).get("name", remove_id)
+        await send(session.ws, "CHAT_MSG", **{
+            "from": "Options", "text": f"You will pick up {name} again.",
+        })
+        changed = True
+    if changed:
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
 
 
@@ -2490,6 +2566,9 @@ def apply_magic_cast(session, ability_id, monster, manual, events, dungeon_tag=N
     dmg = max(0, int(ab.get("damage") or 0))
     freeze = float(ab.get("freeze") or 0)
     effect = ab.get("effect") or "lightning"
+    if session.dungeon and session.dungeon.get("v2"):
+        import void_v2
+        dmg = void_v2.mitigate(session, monster, dmg)
     monster.hp = max(0, monster.hp - dmg)
     session.pet_target_id = monster.id
     if freeze > 0:
@@ -2533,10 +2612,7 @@ async def resolve_magic_kill(session, monster, events, dungeon_tag=None):
     """Shared death/loot path after magic (or other) finishes a monster."""
     if monster.hp > 0:
         return
-    monster.alive = False
-    if not getattr(monster, "no_respawn", False):
-        monster.respawn_at_tick = WORLD.tick_count + MONSTERS[monster.type]["respawn_ticks"]
-    monster.target_player_id = None
+    _mark_monster_dead(monster)
     if session.in_combat_with == ("monster", monster.id):
         session.in_combat_with = None
     if not session.dungeon:
@@ -2986,7 +3062,7 @@ async def handle_bank_deposit(session, msg):
             if not entry:
                 continue
             item_id, qty = entry["item_id"], entry["qty"]
-            if not item_is_tradeable(item_id):
+            if not item_is_bankable(item_id):
                 skipped += 1
                 continue
             placed = False
@@ -3018,7 +3094,7 @@ async def handle_bank_deposit(session, msg):
                 "from": "Bank", "text": f"Deposited {deposited} stack{'s' if deposited != 1 else ''}{extra}.",
             })
         elif skipped and not deposited:
-            await send(session.ws, "ERROR", message="Nothing tradeable to deposit.")
+            await send(session.ws, "ERROR", message="Nothing you can bank.")
         return
     # Deposit inventory slot
     slot = msg.get("slot_index")
@@ -3032,7 +3108,7 @@ async def handle_bank_deposit(session, msg):
     if not entry:
         return
     item_id, qty = entry["item_id"], entry["qty"]
-    if not item_is_tradeable(item_id):
+    if not item_is_bankable(item_id):
         await send(session.ws, "ERROR", message="You can't bank that.")
         return
     # stack into existing bank slot or free slot
@@ -3927,7 +4003,11 @@ async def handle_drop(session, msg):
         await send(session.ws, "ERROR", message="You can't drop that.")
         return
     WORLD.remove_item_qty(session, item_id, qty)
-    WORLD.ground_items.setdefault((session.x, session.y), []).append({"item_id": item_id, "qty": qty})
+    if session.dungeon and session.dungeon.get("v2"):
+        import void_v2
+        void_v2.place_ground(session, item_id, qty)
+    else:
+        WORLD.ground_items.setdefault((session.x, session.y), []).append({"item_id": item_id, "qty": qty})
     name = ITEMS.get(item_id, {}).get("name", "item")
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     if qty > 1:
@@ -3973,20 +4053,39 @@ async def handle_inv_move(session, msg):
 
 
 async def handle_pickup(session, msg):
-    """Manual pickup: take one stack, or all=True for the whole pile."""
+    """Manual pickup: take one stack, or all=True for the whole pile.
+    Item types on the never-pickup list stay on the ground unless this click forces one.
+    """
+    if session.dungeon and session.dungeon.get("v2"):
+        import void_v2
+        await void_v2.handle_pickup(session, msg)
+        return
     await vacuum_ground_loot(session, quiet=True)
     take_all = bool(msg.get("all"))
+    force = bool(msg.get("force"))
+    want = msg.get("item_id")
     picked = 0
     while True:
         items_here = WORLD.ground_items.get((session.x, session.y))
         if not items_here:
             break
-        entry = items_here.pop(0)
+        idx = None
+        for i, cand in enumerate(items_here):
+            cid = cand["item_id"]
+            if want and cid != want:
+                continue
+            if pickup_ignored(session, cid) and not (force and cid == want):
+                continue
+            idx = i
+            break
+        if idx is None:
+            break
+        entry = items_here.pop(idx)
         item_id, qty = entry["item_id"], entry["qty"]
         if item_id == "coins":
             gained, left = WORLD.add_coins(session, qty)
             if left:
-                items_here.insert(0, {"item_id": "coins", "qty": left})
+                items_here.insert(idx, {"item_id": "coins", "qty": left})
             if gained:
                 picked += 1
                 if not take_all:
@@ -3999,11 +4098,11 @@ async def handle_pickup(session, msg):
             if not take_all:
                 break
         elif item_id in ORE_ITEM_IDS and WORLD.count_ores(session) + qty > MAX_ORES:
-            items_here.insert(0, entry)
+            items_here.insert(idx, entry)
             await send(session.ws, "ERROR", message=f"You can't carry more than {MAX_ORES} ores.")
             break
         elif not WORLD.add_item_to_inventory(session, item_id, qty):
-            items_here.insert(0, entry)
+            items_here.insert(idx, entry)
             await send(session.ws, "ERROR", message="Your inventory is full.")
             break
         else:
@@ -4271,6 +4370,13 @@ async def handler(ws):
                 await handle_enter_dungeon(session, msg)
             elif mtype == "LEAVE_DUNGEON":
                 await handle_leave_dungeon(session, msg)
+            elif mtype == "DUNGEON_INTERACT":
+                if session.dungeon and session.dungeon.get("v2") == "depths":
+                    import depths_v2
+                    await depths_v2.handle_interact(session, msg)
+                else:
+                    import void_v2
+                    await void_v2.handle_interact(session, msg)
             elif mtype == "SET_COMBAT_STYLE":
                 await handle_set_combat_style(session, msg)
             elif mtype == "CAST_MAGIC":
@@ -4360,6 +4466,10 @@ async def game_loop():
             process_fires()
             process_monster_ai()
             process_dungeon_ai()
+            import void_v2
+            await void_v2.tick_sessions()
+            import depths_v2
+            await depths_v2.tick_sessions()
             process_pets(events)
             await process_stat_boosts()
             await process_equip_regen()
@@ -4402,19 +4512,22 @@ async def game_loop():
         for session in list(WORLD.sessions.values()):
             if session.dungeon:
                 d = session.dungeon
-                alive = [m.public_state() for m in d["monsters"].values() if m.alive]
+                alive = [m.public_state() for m in d["monsters"].values() if m.alive and not getattr(m, "concealed", False)]
                 await send(session.ws, "STATE_UPDATE", **{
                     "players": [session.public_state()],
                     "monsters": alive,
                     "pets": [session.pet_public()] if session.pet_id else [],
-                    "ground_items": {},
+                    "ground_items": (
+                        __import__("void_v2").ground_public(d) if d.get("v2") else {}
+                    ),
                     "resources": {},
                     "fires": [],
                     "dungeon": {
                         "floor": d["floor"],
                         "floors": d["floors"],
-                        "remaining": len(alive),
+                        "remaining": _dungeon_remaining(d),
                         "label": d["label"],
+                        **(__import__("void_v2").hud_state(d, WORLD.tick_count) if d.get("v2") else {}),
                     },
                 })
             else:
@@ -4492,7 +4605,7 @@ async def process_combat(events):
     MAX_ATTACKERS = 2
     for session in list(WORLD.sessions.values()):
         if session.dungeon:
-            pool = [m for m in session.dungeon["monsters"].values() if m.alive]
+            pool = [m for m in session.dungeon["monsters"].values() if m.alive and not getattr(m, "concealed", False)]
             dungeon_tag = session.player_id
         else:
             pool = list(WORLD.monsters.values())
@@ -4566,6 +4679,9 @@ async def process_combat(events):
                         if crit_chance > 0 and random.random() < min(0.45, crit_chance):
                             dmg = max(1, int(round(dmg * session.jewelry_crit_mult())))
                             crit = True
+                    if session.dungeon and session.dungeon.get("v2"):
+                        import void_v2
+                        dmg = void_v2.mitigate(session, primary, dmg)
                     primary.hp = max(0, primary.hp - dmg)
                     healed = 0
                     if hit and dmg > 0:
@@ -4601,7 +4717,7 @@ async def process_combat(events):
                         if style == "archery":
                             style = "attack"
                             session.combat_style = "attack"
-                    amount = dmg * 2
+                    amount = dmg * 3
                     if amount > 0:
                         before, after = WORLD.grant_xp(session, style, amount)
                         xp_ev = {
@@ -4611,12 +4727,19 @@ async def process_combat(events):
                         if dungeon_tag:
                             xp_ev["_dungeon_player"] = dungeon_tag
                         events.append({"type": "SKILL_XP", "data": xp_ev})
+                    if hit:
+                        before_hp, after_hp = WORLD.grant_xp(session, "hitpoints", 1)
+                        hp_ev = {
+                            "player_id": session.player_id, "skill": "hitpoints", "gained": 1,
+                            "xp": session.xp["hitpoints"], "level": after_hp,
+                            "leveled_up": after_hp > before_hp,
+                        }
+                        if dungeon_tag:
+                            hp_ev["_dungeon_player"] = dungeon_tag
+                        events.append({"type": "SKILL_XP", "data": hp_ev})
                     try_auto_magic(session, primary, events, dungeon_tag=dungeon_tag)
                     if primary.hp <= 0:
-                        primary.alive = False
-                        if not getattr(primary, "no_respawn", False):
-                            primary.respawn_at_tick = WORLD.tick_count + MONSTERS[primary.type]["respawn_ticks"]
-                        primary.target_player_id = None
+                        _mark_monster_dead(primary)
                         if session.in_combat_with == ("monster", primary.id):
                             session.in_combat_with = None
                         if not session.dungeon:
@@ -4677,10 +4800,7 @@ async def process_combat(events):
                     thorns_dmg = reflect
                     monster.hp = max(0, monster.hp - reflect)
                     if monster.hp <= 0:
-                        monster.alive = False
-                        if not getattr(monster, "no_respawn", False):
-                            monster.respawn_at_tick = WORLD.tick_count + MONSTERS[monster.type]["respawn_ticks"]
-                        monster.target_player_id = None
+                        _mark_monster_dead(monster)
                         if session.in_combat_with == ("monster", monster.id):
                             session.in_combat_with = None
                         if not session.dungeon:
@@ -4694,6 +4814,7 @@ async def process_combat(events):
                                 "entity_id": monster.id, "entity_kind": "monster",
                                 "_dungeon_player": dungeon_tag,
                             }})
+                            await _finish_dungeon_kill(session, monster)
             hit_ev = {
                 "attacker_id": monster.id, "defender_id": session.player_id, "damage": dmg2,
                 "hit": hit2, "defender_hp": session.hp, "defender_max_hp": session.max_hp(),
@@ -4711,14 +4832,6 @@ async def process_combat(events):
             events.append({"type": "COMBAT_EVENT", "data": hit_ev})
             # Post-swing cooldown (dragon: 1s so the player can run)
             monster.mark_attacked()
-            before_hp, after_hp = WORLD.grant_xp(session, "hitpoints", 1)
-            hp_ev = {
-                "player_id": session.player_id, "skill": "hitpoints", "gained": 1,
-                "xp": session.xp["hitpoints"], "level": after_hp, "leveled_up": after_hp > before_hp,
-            }
-            if dungeon_tag:
-                hp_ev["_dungeon_player"] = dungeon_tag
-            events.append({"type": "SKILL_XP", "data": hp_ev})
             if session.hp <= 0:
                 died = True
                 break
@@ -4730,11 +4843,23 @@ async def process_combat(events):
             session.in_combat_with = None
             session.pet_target_id = None
             if session.dungeon:
-                await handle_leave_dungeon(session, silent=True)
-                await send(
-                    session.ws, "CHAT_MSG",
-                    **{"from": "Tidehollow", "text": "You fall in the cave and wake outside — the depths reclaim their silence."},
-                )
+                v2_kind = session.dungeon.get("v2")
+                v2_death = bool(v2_kind)
+                if v2_death and session.dungeon.get("checkpoint"):
+                    import void_v2
+                    await void_v2.on_death(session)
+                else:
+                    if v2_death:
+                        import void_v2
+                        void_v2.strip_keys(session)
+                    await handle_leave_dungeon(session, silent=True)
+                    if v2_kind == "depths":
+                        fall = "You fall in the crypt and wake outside. The dead keep what you carried."
+                    elif v2_death:
+                        fall = "You fall in the sanctum and wake outside. The dark keeps what you carried."
+                    else:
+                        fall = "You fall in the cave and wake outside — the depths reclaim their silence."
+                    await send(session.ws, "CHAT_MSG", **{"from": "Tidehollow", "text": fall})
             else:
                 session.x, session.y = SPAWN_POINT
                 if session.pet_id:
@@ -4824,11 +4949,7 @@ def process_pets(events):
                     hit_ev["_dungeon_player"] = dungeon_tag
                 events.append({"type": "COMBAT_EVENT", "data": hit_ev})
                 if target.hp <= 0:
-                    target.alive = False
-                    target.target_player_id = None
-                    if not getattr(target, "no_respawn", False):
-                        base = MONSTERS.get(target.type, {})
-                        target.respawn_at_tick = WORLD.tick_count + base.get("respawn_ticks", 20)
+                    _mark_monster_dead(target)
                     if session.in_combat_with == ("monster", target.id):
                         session.in_combat_with = None
                     session.pet_target_id = None
@@ -4841,13 +4962,11 @@ def process_pets(events):
                             "type": "_DUNGEON_LOOT",
                             "data": {"_dungeon_player": session.player_id, "monster_id": target.id},
                         })
-                        if not session.dungeon.get("explore"):
-                            remaining = sum(1 for m in session.dungeon["monsters"].values() if m.alive)
-                            if remaining == 0:
-                                events.append({
-                                    "type": "_DUNGEON_CLEAR",
-                                    "data": {"_dungeon_player": session.player_id},
-                                })
+                        if not session.dungeon.get("explore") and _floor_uncleared(session.dungeon) == 0:
+                            events.append({
+                                "type": "_DUNGEON_CLEAR",
+                                "data": {"_dungeon_player": session.player_id},
+                            })
                     else:
                         drops = WORLD.drop_loot(target.x, target.y, MONSTERS[target.type]["drops"])
                         if drops:
@@ -4909,12 +5028,57 @@ async def process_gathering(events):
             await send(session.ws, "CHAT_MSG", **{"from": "You", "text": msg})
 
 
+def _respawn_delay(monster):
+    """Ticks until a corpse stands back up. Unknown types wait about 15s."""
+    data = MONSTERS.get(monster.type) or {}
+    stats = monster.stats or {}
+    ticks = stats.get("respawn_ticks", data.get("respawn_ticks", 25))
+    return max(10, int(ticks))
+
+
+def _mark_monster_dead(monster):
+    monster.alive = False
+    monster.defeated = True
+    monster.target_player_id = None
+    if getattr(monster, "no_respawn", False):
+        return
+    monster.respawn_at_tick = WORLD.tick_count + _respawn_delay(monster)
+
+
+def _floor_uncleared(dungeon):
+    return sum(1 for m in dungeon["monsters"].values() if not getattr(m, "defeated", False))
+
+
+def _dungeon_remaining(dungeon):
+    if dungeon.get("explore"):
+        return sum(1 for m in dungeon["monsters"].values() if m.alive)
+    return _floor_uncleared(dungeon)
+
+
+def _revive_monster(monster):
+    monster.hp = monster.max_hp
+    monster.x, monster.y = monster.spawn_x, monster.spawn_y
+    monster.alive = True
+    monster.target_player_id = None
+    monster.frozen_until = 0.0
+    monster.patrol_steps_left = 0
+    monster.fight_side = None
+
+
 def process_monster_respawns():
-    for m in WORLD.monsters.values():
-        if not m.alive and WORLD.tick_count >= m.respawn_at_tick:
-            m.hp = m.max_hp
-            m.x, m.y = m.spawn_x, m.spawn_y
-            m.alive = True
+    pending = list(WORLD.monsters.values())
+    for session in WORLD.sessions.values():
+        dungeon = getattr(session, "dungeon", None)
+        if dungeon:
+            pending.extend(dungeon["monsters"].values())
+    for m in pending:
+        if m.alive or getattr(m, "no_respawn", False):
+            continue
+        if m.respawn_at_tick <= 0:
+            m.respawn_at_tick = WORLD.tick_count + _respawn_delay(m)
+            continue
+        if WORLD.tick_count >= m.respawn_at_tick:
+            _revive_monster(m)
 
 
 def process_resource_respawns():
@@ -4931,6 +5095,10 @@ def process_dungeon_ai():
             continue
         tiles = session.dungeon["tiles"]
         mod = _dungeon_mod(session)
+        if session.dungeon.get("v2"):
+            import void_v2
+            void_v2.process_ai(session)
+            continue
         monsters = list(session.dungeon["monsters"].values())
 
         def occupied(nx, ny, me):

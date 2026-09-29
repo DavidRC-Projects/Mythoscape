@@ -1,0 +1,190 @@
+{
+ "key": "smithy",
+ "building_id": "smithy",
+ "name": "Gareth's Smithy",
+ "flag": "USE_NEW_BUILDINGS",
+ "version": 2,
+ "footprint": {
+  "x0": 78,
+  "y0": 4,
+  "x1": 94,
+  "y1": 18,
+  "w": 17,
+  "h": 15
+ },
+ "floor": {
+  "floor_x0": 79,
+  "floor_y0": 5,
+  "floor_x1": 93,
+  "floor_y1": 17
+ },
+ "old": {
+  "x0": 78,
+  "y0": 4,
+  "x1": 94,
+  "y1": 18,
+  "floor_x0": 79,
+  "floor_y0": 5,
+  "floor_x1": 93,
+  "floor_y1": 17
+ },
+ "footprint_unchanged": true,
+ "door": {
+  "id": "smithy_door",
+  "x": 86,
+  "y": 18,
+  "enter": [
+   86,
+   16
+  ],
+  "exit": [
+   86,
+   19
+  ],
+  "unchanged": true,
+  "doorway_path_tiles": [
+   [
+    85,
+    18
+   ],
+   [
+    86,
+    18
+   ],
+   [
+    87,
+    18
+   ]
+  ],
+  "door_gap_width": 3
+ },
+ "tile_px": 40,
+ "sprite_1x": {
+  "size": [
+   760,
+   840
+  ],
+  "origin_px": [
+   40.0,
+   200.0
+  ]
+ },
+ "sprite_2x": {
+  "size": [
+   1520,
+   1680
+  ],
+  "origin_px": [
+   80,
+   400
+  ]
+ },
+ "anchor_note": "origin_px = pixel of the NW corner of world tile (x0,y0) in every layer. Blit at (tile_screen_x(x0) - origin_px.x*TILE/40, tile_screen_y(y0) - origin_px.y*TILE/40), scaled by TILE/40.",
+ "layers": [
+  {
+   "name": "ground",
+   "file": "smithy/ground.png",
+   "order": "after floor tiles, before entities (cobble apron, yard floor, soot under the lean-to)"
+  },
+  {
+   "name": "body",
+   "file": "smithy/body.png",
+   "order": "y-sorted like an entity standing on world row 18: after entities with y <= 18, before entities with y > 18"
+  },
+  {
+   "name": "cutaway",
+   "file": "smithy/cutaway.png",
+   "order": "replaces body while the local player is inside (floor rect or doorway tiles); walls cut at 1.6 m"
+  }
+ ],
+ "fx": {
+  "optional": true,
+  "glow": {
+   "files": [
+    "smithy/body_glow0.png",
+    "smithy/body_glow1.png",
+    "smithy/body_glow2.png"
+   ],
+   "sequence": [
+    0,
+    1,
+    2,
+    1
+   ],
+   "fps": 4,
+   "note": "drop-in replacements for body.png (forge coals, windows and forge light pulse). body.png == body_glow1 look. Same size/origin."
+  },
+  "smoke": {
+   "files": [
+    "smithy/smoke0.png",
+    "smithy/smoke1.png",
+    "smithy/smoke2.png",
+    "smithy/smoke3.png"
+   ],
+   "sequence": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "fps": 5,
+   "order": "draw right after body (outside view only; skip with cutaway). Already masked behind the chimney. Same size/origin."
+  }
+ },
+ "walkability": {
+  "origin": [
+   78,
+   4
+  ],
+  "rows": [
+   "WGGGGGGGGGGGGGGGW",
+   "WFFFFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFFFFW",
+   "WFFFFFFFFFFFFFFFW",
+   "PPPPPPPDDDPPPPPPP"
+  ],
+  "legend": {
+   "W": "WALL (walls/roof mass)",
+   "F": "FLOOR (interior)",
+   "D": "PATH 3-wide south door gap (85-87,18) as stamped by _punch_south_door",
+   "G": "GRASS walkable strip behind the building (north row, unchanged)",
+   "P": "WALL south wall row (props stand here)"
+  },
+  "note": "identical to today's _building(78, 4, 94, 18, door_x=86) stamp: no collision change"
+ },
+ "entity_moves": {},
+ "camera": {
+  "type": "ortho",
+  "azimuth_deg": 0,
+  "elevation_deg": 32,
+  "y_prestretch": "1/sin(32)",
+  "sun_euler_deg": [
+   40,
+   15,
+   -30
+  ]
+ },
+ "triangles": {
+  "body": 4676,
+  "ground": 48,
+  "smoke0": 320,
+  "smoke1": 320,
+  "smoke2": 320,
+  "smoke3": 320
+ },
+ "tris_total": 6004,
+ "models": {
+  "blend": "models/smithy.blend",
+  "glb": "models/smithy.glb"
+ }
+}

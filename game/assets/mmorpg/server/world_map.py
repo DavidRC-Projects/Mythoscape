@@ -27,6 +27,8 @@ import random
 import sys
 
 import castle_v2
+import buildings_v2
+import feature_flags
 
 (
     GRASS, TREE, WATER, ORE, WALL, PATH, FLOOR, OAK_TREE, IRON_ORE, FISH_SPOT,
@@ -48,12 +50,19 @@ ZONES = {
     "fishing_village": (168, 1, 198, 42),
     "mine":    (1, 56, 40, 88),
     "dungeon": (44, 54, 90, 143),
-    "city":    (98, 56, 148, 96),
+    "city":    (98, 56, 148, 96),  # flag-off shell. city_bounds() grows it.
     "volcano": (154, 58, 190, 94),
-    "shadow_crypt": (154, 98, 190, 140),
+    "shadow_crypt": (153, 96, 196, 142),
 }
 
 SPAWN_POINT = (28, 24)  # village crossroads
+
+
+def city_bounds():
+    """Stonehaven plaza. The new houses need the ground south of the castle."""
+    if feature_flags.USE_NEW_BUILDINGS:
+        return (94, 56, 152, 132)
+    return ZONES["city"]
 
 # Dungeon combat rooms — monsters spawned inside one stay inside it.
 # Shifted with dungeon zone (origin ~44,54).
@@ -552,7 +561,7 @@ def generate_world():
             grid[y][x] = ADAMANTITE_ORE
 
     # --- Stonehaven City (east of dungeon, south of forest) ---
-    cx0, cy0, cx1, cy1 = ZONES["city"]
+    cx0, cy0, cx1, cy1 = city_bounds()
     # Outer stone plaza
     _rect(grid, cx0 + 1, cy0 + 1, cx1 - 1, cy1 - 1, STONE)
     # City walls (brick shell with south gate + west road)
@@ -568,6 +577,14 @@ def generate_world():
     for y in range(cy0 + 2, cy1 - 1):
         grid[y][118] = PATH
         grid[y][128] = PATH
+    if feature_flags.USE_NEW_BUILDINGS:
+        # Street in front of the cottage and barracks, and one in front of the house.
+        for x in range(cx0 + 2, cx1):
+            grid[98][x] = PATH
+            grid[99][x] = PATH
+        for x in range(100, 132):
+            grid[124][x] = PATH
+            grid[125][x] = PATH
     # Market square
     _rect(grid, 112, 70, 124, 80, STONE)
     _rect(grid, 114, 72, 122, 78, PATH)
@@ -707,15 +724,12 @@ def generate_world():
         if grid[y][x] in (GRASS, PATH):
             grid[y][x] = WALL
     # Road from Stonehaven east gate into the crater mouth
-    for x in range(148, 162):
+    for x in range(cx1, 162):
         for y in (72, 73, 74):
             if 0 <= x < WIDTH and grid[y][x] in (GRASS, *TREE_TILES, PATH, WALL, STONE):
-                if x == 148 and grid[y][x] == WALL:
-                    grid[y][x] = PATH
-                elif x > 148:
-                    grid[y][x] = PATH
+                grid[y][x] = PATH
     for y in (72, 73, 74):
-        grid[y][148] = PATH  # east city gate
+        grid[y][cx1] = PATH  # east city gate
     # Dragon-lair mouth south of the crater, with a walk-in pad.
     _rect(grid, 158, 80, 172, 90, PATH)
     for y in range(78, 85):
@@ -760,22 +774,37 @@ def generate_world():
     # Punch 3-wide door gap in the building south wall
     for ax in (170, 171, 172):
         grid[108][ax] = PATH
-    # Road from Stonehaven south gate east, then south to the sanctum
-    for x in range(118, 172):
-        for yy in (cy1 + 1, cy1 + 2):
-            if 0 <= yy < HEIGHT and grid[yy][x] in (GRASS, PATH, STONE, WALL):
-                # Don't erase city wall except the existing south gate tiles
-                if yy == cy1:
-                    continue
-                grid[yy][x] = PATH
-    for y in range(cy1 + 1, 110):
-        for x in (170, 171, 172):
-            if grid[y][x] in (GRASS, PATH, WALL) and not (166 < x < 176 and 102 < y < 108):
-                grid[y][x] = PATH
+    # Road from Stonehaven to the sanctum door.
+    # The expanded plaza sits beside the crypt, so that road leaves the east street.
+    if cy1 > 110:
+        for y in (98, 99):
+            grid[y][cx1] = PATH
+        for x in range(cx1, 172):
+            for yy in (98, 99):
+                if grid[yy][x] in (GRASS, PATH, STONE, WALL):
+                    grid[yy][x] = PATH
+        for y in range(99, 110):
+            for x in (170, 171, 172):
+                if grid[y][x] in (GRASS, PATH, WALL) and not (166 < x < 176 and 102 < y < 108):
+                    grid[y][x] = PATH
+    else:
+        for x in range(118, 172):
+            for yy in (cy1 + 1, cy1 + 2):
+                if 0 <= yy < HEIGHT and grid[yy][x] in (GRASS, PATH, STONE, WALL):
+                    if yy == cy1:
+                        continue
+                    grid[yy][x] = PATH
+        for y in range(cy1 + 1, 110):
+            for x in (170, 171, 172):
+                if grid[y][x] in (GRASS, PATH, WALL) and not (166 < x < 176 and 102 < y < 108):
+                    grid[y][x] = PATH
     grid[108][171] = PATH
 
     castle_v2.apply_stamp(grid, sys.modules[__name__])
+    buildings_v2.apply_stamp(grid, sys.modules[__name__])
     _clear_trees_near_buildings(grid)
+    _paint_void_grounds(grid)
+    _lay_wayfinder_roads(grid)
     return grid
 
 
@@ -815,10 +844,128 @@ def _clear_trees_near_buildings(grid, margin=2, canopy_south=4):
                     grid[y][x] = GRASS
 
 
+def _stamp_road(grid, x0, y0, x1, y1, half=1):
+    """Axis-aligned road, three tiles wide. Skips walls, water, and ore."""
+    ok = {GRASS, PATH, STONE, FLOOR, *TREE_TILES}
+    if x0 > x1:
+        x0, x1 = x1, x0
+    if y0 > y1:
+        y0, y1 = y1, y0
+    horizontal = y0 == y1
+    for y in range(y0, y1 + 1):
+        for x in range(x0, x1 + 1):
+            for d in range(-half, half + 1):
+                nx, ny = (x, y + d) if horizontal else (x + d, y)
+                if not (0 <= nx < WIDTH and 0 <= ny < HEIGHT):
+                    continue
+                if grid[ny][nx] in ok:
+                    grid[ny][nx] = PATH
+
+
+def _lay_wayfinder_roads(grid):
+    """Clear roads to every region. Runs after stamps so buildings cannot erase them.
+
+    Walls, water, and the castle moat stay put. The road jogs around them.
+    """
+    roads = (
+        # Village spine and the shop rows off it.
+        (8, 24, 54, 24),
+        (28, 16, 28, 52),
+        (8, 17, 50, 17),
+        (48, 17, 48, 21),
+        (6, 50, 96, 50),
+        (28, 50, 28, 56),
+        # Around the bank, then east clear of the lake.
+        (54, 24, 54, 32),
+        (54, 32, 74, 32),
+        (64, 28, 64, 32),
+        (72, 24, 72, 32),
+        (74, 32, 74, 25),
+        (86, 19, 86, 26),
+        (74, 25, 130, 25),
+        (98, 22, 98, 25),
+        # Forest up to the pass, across to Harbourreach, south to Tidehollow.
+        (130, 16, 130, 25),
+        (130, 16, 176, 16),
+        (170, 15, 178, 15),
+        (166, 16, 166, 36),
+        (166, 36, 184, 36),
+        # Mine's east side, down to the dungeon mouth.
+        (42, 52, 42, 72),
+        (36, 71, 42, 71),
+        # West of the castle moat, into Stonehaven's west gate.
+        (108, 25, 108, 54),
+        (92, 54, 108, 54),
+        (92, 54, 92, 72),
+        # City streets, Emberdeep, and the sanctum approach.
+        (94, 72, 150, 72),
+        (118, 73, 118, 130),
+        (128, 73, 128, 125),
+        (150, 73, 162, 73),
+        (164, 73, 164, 84),
+        (100, 98, 180, 98),
+        (180, 98, 180, 101),
+        (168, 100, 180, 100),
+    )
+    for seg in roads:
+        _stamp_road(grid, *seg)
+    # Designed mouths. These few cells are the gates, not building walls.
+    for x, y in (
+        (94, 71), (94, 72), (94, 73),
+        (152, 72), (152, 73), (152, 74),
+        (170, 108), (171, 108), (172, 108),
+    ):
+        if 0 <= x < WIDTH and 0 <= y < HEIGHT and grid[y][x] != WATER:
+            grid[y][x] = PATH
+    for y in range(74, 85):
+        for x in (163, 164, 165):
+            if grid[y][x] != WATER:
+                grid[y][x] = PATH
+
+
+def _paint_void_grounds(grid):
+    """Walkable void floor around the sanctum. Room walls and the gatehouse stay."""
+    x0, y0, x1, y1 = ZONES["shadow_crypt"]
+    building = (166, 102, 176, 108)
+    rooms = [
+        (156, 108, 164, 112),
+        (168, 108, 178, 112),
+        (156, 114, 164, 120),
+        (168, 114, 178, 120),
+        (156, 122, 164, 128),
+        (168, 122, 178, 128),
+    ]
+
+    def _ring(x, y, rect):
+        rx0, ry0, rx1, ry1 = rect
+        if rx0 - 1 <= x <= rx1 + 1 and ry0 - 1 <= y <= ry1 + 1:
+            return not (rx0 <= x <= rx1 and ry0 <= y <= ry1)
+        return False
+
+    for y in range(y0, y1 + 1):
+        for x in range(x0, x1 + 1):
+            tile = grid[y][x]
+            if tile in (WATER, STONE):
+                continue
+            if tile == WALL and (
+                _ring(x, y, building)
+                or (building[0] <= x <= building[2] and building[1] <= y <= building[3])
+                or any(_ring(x, y, room) for room in rooms)
+            ):
+                continue
+            if tile in (WALL, GRASS, PATH, *TREE_TILES):
+                grid[y][x] = FLOOR
+
+
 def get_zone(x, y):
     if castle_v2.counts_as_city(x, y):
         return "city"
+    x0, y0, x1, y1 = city_bounds()
+    if x0 <= x <= x1 and y0 <= y <= y1:
+        return "city"
     for name, (x0, y0, x1, y1) in ZONES.items():
+        if name == "city":
+            continue
         if x0 <= x <= x1 and y0 <= y <= y1:
             return name
     return "wilderness"

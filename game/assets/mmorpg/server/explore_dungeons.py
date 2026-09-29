@@ -125,6 +125,16 @@ def is_explore(dungeon_id: str) -> bool:
 
 
 def build(session, dungeon_id: str, next_id, monster_cls, spawns) -> None:
+    if dungeon_id == "sanctum":
+        import feature_flags
+        if feature_flags.USE_NEW_VOID_DUNGEON:
+            import void_v2
+            return void_v2.build(session, next_id, monster_cls, spawns)
+    if dungeon_id == "depths":
+        import feature_flags
+        if feature_flags.USE_NEW_DEPTHS_DUNGEON:
+            import depths_v2
+            return depths_v2.build(session, next_id, monster_cls, spawns)
     snap = _SNAPSHOTS[dungeon_id]
     tiles = [row[:] for row in snap["tiles"]]
     x0, y0, x1, y1 = snap["bounds"]

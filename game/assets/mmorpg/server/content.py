@@ -14,6 +14,21 @@ so it's easy to unit test and easy to expand later.
 # Bows use weapon_type "bow" with range / ranged_att / ranged_str (Archery combat).
 ITEMS = {
     "coins":            {"name": "Coins",             "type": "currency", "stackable": True,  "value": 1,   "equip_slot": None},
+    "void_key_amethyst": {"name": "Amethyst Key", "type": "key", "stackable": False, "value": 0, "equip_slot": None,
+                          "tradeable": False, "sellable": False, "bankable": False, "dungeon_bound": "sanctum_v2"},
+    "void_key_obsidian": {"name": "Obsidian Key", "type": "key", "stackable": False, "value": 0, "equip_slot": None,
+                          "tradeable": False, "sellable": False, "bankable": False, "dungeon_bound": "sanctum_v2"},
+    "void_rift_sigil":   {"name": "Rift Sigil", "type": "key", "stackable": False, "value": 0, "equip_slot": None,
+                          "tradeable": False, "sellable": False, "bankable": False, "dungeon_bound": "sanctum_v2"},
+    "depths_bone_key": {"name": "Bone Key", "type": "key", "stackable": False, "value": 0, "equip_slot": None,
+                        "tradeable": False, "sellable": False, "bankable": False, "dungeon_bound": "depths_v2"},
+    "depths_tide_key": {"name": "Tide Key", "type": "key", "stackable": False, "value": 0, "equip_slot": None,
+                        "tradeable": False, "sellable": False, "bankable": False, "dungeon_bound": "depths_v2"},
+    "depths_knight_seal": {"name": "Knights' Seal", "type": "key", "stackable": False, "value": 0, "equip_slot": None,
+                           "tradeable": False, "sellable": False, "bankable": False, "dungeon_bound": "depths_v2"},
+    "bone_crown": {"name": "Bone Crown", "type": "armor", "stackable": False, "value": 4000,
+                   "equip_slot": "helmet", "def_bonus": 4,
+                   "desc": "A crown of the Bone King's ribs. It is only for wearing."},
 
     "bronze_sword":     {"name": "Bronze Sword",       "type": "weapon", "stackable": False, "value": 20,  "equip_slot": "weapon", "str_bonus": 5,  "att_bonus": 4},
     "iron_sword":       {"name": "Iron Sword",         "type": "weapon", "stackable": False, "value": 60,  "equip_slot": "weapon", "str_bonus": 11, "att_bonus": 10},
@@ -63,14 +78,14 @@ ITEMS = {
         "name": "Tidehollow Medal", "type": "armor", "stackable": False, "value": 1,
         "equip_slot": "amulet", "def_bonus": 5, "att_bonus": 5, "str_bonus": 5,
         "regen_hp": 1, "regen_seconds": 3,
-        "tradeable": False, "sellable": False,
+        "tradeable": False, "sellable": False, "bankable": True,
         "desc": "Proof you cleared Tidehollow. While worn: restore 1 Hitpoint every 3 seconds.",
     },
     "emberdeep_amulet": {
         "name": "Emberdeep Medal", "type": "armor", "stackable": False, "value": 1,
         "equip_slot": "amulet", "def_bonus": 8, "att_bonus": 6, "str_bonus": 6,
         "regen_hp": 1, "regen_seconds": 2,
-        "tradeable": False, "sellable": False,
+        "tradeable": False, "sellable": False, "bankable": True,
         "desc": "Proof you conquered Emberdeep. While worn: restore 1 Hitpoint every 2 seconds.",
     },
     # Bound unique — only granted to username "david"; cannot buy/sell/smith/trade/drop
@@ -994,6 +1009,124 @@ MONSTERS = {
         "side_by_side": True,
         "side_gap": 3,
         "attack_cooldown": 1.0,
+    },
+    "gallery_warden": {
+        "name": "Gallery Warden", "level": 68, "hp": 190, "attack": 62, "strength": 66, "defence": 55,
+        "def_bonus": 26, "xp": 520, "respawn_ticks": 55, "aggro_range": 6,
+        "visual": "crypt_ghoul", "tint": (255, 200, 90), "scale": 1.2,
+        "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.0,
+        "drops": [
+            ("void_key_amethyst", 1.0, (1, 1)),
+            ("coins", 1.0, (300, 600)),
+            (("mithril_sword", "mithril_helmet", "mithril_chainbody"), 0.15, (1, 1)),
+        ],
+    },
+    "void_crawler": {
+        "name": "Void Crawler", "level": 82, "hp": 170, "attack": 80, "strength": 82, "defence": 70,
+        "def_bonus": 36, "xp": 520, "respawn_ticks": 60, "aggro_range": 6,
+        "visual": "void_imp", "tint": (80, 120, 255),
+        "force_retaliate": True,
+        "drops": [("onyx", 0.10, (1, 1)), ("coins", 0.8, (80, 180))],
+    },
+    "knight_captain_vorn": {
+        "name": "Knight-Captain Vorn", "level": 92, "hp": 320, "attack": 100, "strength": 108, "defence": 96,
+        "def_bonus": 52, "xp": 1100, "respawn_ticks": 80, "aggro_range": 7,
+        "visual": "shadow_knight", "tint": (255, 80, 60), "scale": 1.2,
+        "force_retaliate": True,
+        "drops": [
+            ("void_rift_sigil", 1.0, (1, 1)),
+            (("mythos_dagger", "mythos_helmet"), 0.06, (1, 1)),
+            ("coins", 1.0, (600, 1200)),
+        ],
+    },
+    "rift_wraith": {
+        "name": "Rift Wraith", "level": 91, "hp": 210, "attack": 98, "strength": 102, "defence": 88,
+        "def_bonus": 46, "xp": 700, "respawn_ticks": 80, "aggro_range": 7,
+        "visual": "shade", "tint": (170, 60, 255),
+        "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.0,
+        "drops": [
+            ("void_ring", 0.015, (1, 1)),
+            ("super_attack_potion", 0.25, (1, 1)),
+            ("super_strength_potion", 0.25, (1, 1)),
+            ("coins", 0.9, (100, 240)),
+        ],
+    },
+    "nyxarath": {
+        "name": "Nyxarath, the Hollow Eclipse", "level": 110, "hp": 900,
+        "attack": 125, "strength": 135, "defence": 115,
+        "def_bonus": 60, "xp": 4000, "respawn_ticks": 9999, "aggro_range": 12,
+        "visual": "void_horror", "scale": 1.9, "confine_room": True,
+        "force_retaliate": True, "attack_range": 3, "side_by_side": True, "side_gap": 3, "attack_cooldown": 1.0,
+        "drops": [
+            ("coins", 1.0, (2000, 5000)),
+            ("dragon_bones", 1.0, (1, 1)),
+            ("onyx", 1.0, (2, 4)),
+            ("super_attack_potion", 0.60, (1, 2)),
+            ("adamantite_bar", 0.40, (3, 3)),
+            ("void_amulet", 0.10, (1, 1)),
+            ("void_ring", 0.12, (1, 1)),
+            (("mythos_longsword", "mythos_body", "mythos_shield"), 0.06, (1, 1)),
+            ("eclipse_helmet", 1 / 60, (1, 1)),
+            ("eclipse_legs", 1 / 60, (1, 1)),
+            ("eclipse_body", 1 / 60, (1, 1)),
+            ("eclipse_shield", 1 / 60, (1, 1)),
+        ],
+    },
+    "ossuary_keeper": {
+        "name": "Ossuary Keeper", "level": 34, "hp": 90, "attack": 24, "strength": 26, "defence": 20,
+        "def_bonus": 12, "xp": 220, "respawn_ticks": 9999, "aggro_range": 5,
+        "visual": "big_skeleton", "tint": (255, 220, 150), "scale": 1.15,
+        "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.2,
+        "drops": [
+            ("depths_bone_key", 1.0, (1, 1)),
+            ("big_bones", 1.0, (1, 1)),
+            ("coins", 1.0, (150, 300)),
+        ],
+    },
+    "drowned_dead": {
+        "name": "Drowned Dead", "level": 36, "hp": 68, "attack": 26, "strength": 28, "defence": 20,
+        "def_bonus": 10, "xp": 140, "respawn_ticks": 45, "aggro_range": 6,
+        "visual": "skeleton", "tint": (90, 200, 170),
+        "force_retaliate": True,
+        "drops": [("bones", 1.0, (1, 1)), ("coins", 0.9, (40, 90))],
+    },
+    "barrow_knight": {
+        "name": "Barrow Knight", "level": 44, "hp": 88, "attack": 34, "strength": 36, "defence": 32,
+        "def_bonus": 22, "xp": 190, "respawn_ticks": 50, "aggro_range": 6,
+        "visual": "shadow_knight", "tint": (160, 200, 170),
+        "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.1,
+        "drops": [("bones", 1.0, (1, 1)), ("coins", 1.0, (80, 160)), ("steel_longsword", 0.08, (1, 1))],
+    },
+    "sir_aldric": {
+        "name": "Sir Aldric the Unquiet", "level": 52, "hp": 180, "attack": 42, "strength": 44, "defence": 40,
+        "def_bonus": 30, "xp": 520, "respawn_ticks": 9999, "aggro_range": 8,
+        "visual": "shadow_knight", "tint": (255, 110, 70), "scale": 1.3,
+        "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.1,
+        "drops": [
+            ("depths_knight_seal", 1.0, (1, 1)),
+            (("mithril_sword", "mithril_sq_shield"), 0.5, (1, 1)),
+            ("coins", 1.0, (400, 700)),
+        ],
+    },
+    "morvath": {
+        "name": "Morvath, the Bone King", "level": 70, "hp": 420, "attack": 62, "strength": 66, "defence": 55,
+        "def_bonus": 40, "xp": 1800, "respawn_ticks": 9999, "aggro_range": 12,
+        "visual": "big_skeleton", "tint": (120, 255, 160), "scale": 2.0, "confine_room": True,
+        "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.2,
+        "drops": [
+            ("big_bones", 1.0, (3, 3)),
+            ("coins", 1.0, (800, 1500)),
+            ("adamant_body", 0.06, (1, 1)),
+            ("adamant_sword", 0.06, (1, 1)),
+            ("adamant_helmet", 0.06, (1, 1)),
+            (("mithril_sword", "mithril_helmet", "mithril_chainbody"), 0.20, (1, 1)),
+            ("ruby", 0.15, (1, 1)),
+            ("diamond", 0.05, (1, 1)),
+            (("strength_potion", "health_potion"), 0.20, (2, 2)),
+            (("ruby_ring", "diamond_ring"), 1 / 40, (1, 1)),
+            ("bone_crown", 1 / 64, (1, 1)),
+            (("mythos_longsword", "mythos_body", "mythos_helmet"), 1 / 150, (1, 1)),
+        ],
     },
     # Emberdeep instance visuals (spawned only inside the private dungeon)
     "magma_slug": {
@@ -2397,6 +2530,48 @@ INTERACTABLES = [
     {"id": "void_candle_a", "kind": "candle", "name": "Void Candle", "x": 168, "y": 104},
     {"id": "void_candle_b", "kind": "candle", "name": "Void Candle", "x": 174, "y": 104},
     {"id": "void_altar", "kind": "bookshelf", "name": "Forbidden Tomes", "x": 167, "y": 103},
+
+    # Wayfinder posts. They sit on the road and do not block walking.
+    {"id": "sign_crossroads", "kind": "signpost", "name": "Crossroads",
+     "x": 31, "y": 23, "facing": "e",
+     "lines": ["→ Forest · Harbour", "↓ Mine · Dungeon", "↑ Village shops"]},
+    {"id": "sign_elders", "kind": "signpost", "name": "Elder's Hall",
+     "x": 12, "y": 18, "facing": "n", "lines": ["↑ Elder's Hall"]},
+    {"id": "sign_store", "kind": "signpost", "name": "General Store",
+     "x": 45, "y": 18, "facing": "n", "lines": ["↑ General Store"]},
+    {"id": "sign_bank", "kind": "signpost", "name": "Bank",
+     "x": 64, "y": 33, "facing": "n", "lines": ["↑ Bank"]},
+    {"id": "sign_smithy", "kind": "signpost", "name": "Smithy",
+     "x": 86, "y": 22, "facing": "n", "lines": ["↑ Smithy"]},
+    {"id": "sign_inn", "kind": "signpost", "name": "Inn",
+     "x": 10, "y": 51, "facing": "n", "lines": ["↑ Inn"]},
+    {"id": "sign_farm", "kind": "signpost", "name": "Farm",
+     "x": 45, "y": 51, "facing": "n", "lines": ["↑ Farm"]},
+    {"id": "sign_pets", "kind": "signpost", "name": "Pet Shop",
+     "x": 85, "y": 51, "facing": "n", "lines": ["↑ Pet Shop"]},
+    {"id": "sign_lake", "kind": "signpost", "name": "Fishing Lake",
+     "x": 106, "y": 26, "facing": "n", "lines": ["↑ Fishing Lake"]},
+    {"id": "sign_pass", "kind": "signpost", "name": "Mountain Pass",
+     "x": 126, "y": 25, "facing": "e",
+     "lines": ["→ Mountain Pass · Harbour"]},
+    {"id": "sign_city_road", "kind": "signpost", "name": "Stonehaven",
+     "x": 108, "y": 30, "facing": "s", "lines": ["↓ Stonehaven"]},
+    {"id": "sign_harbour", "kind": "signpost", "name": "Harbourreach",
+     "x": 166, "y": 16, "facing": "e", "lines": ["→ Harbourreach"]},
+    {"id": "sign_tidehollow", "kind": "signpost", "name": "Tidehollow",
+     "x": 166, "y": 34, "facing": "s", "lines": ["↓ Tidehollow"]},
+    {"id": "sign_mine", "kind": "signpost", "name": "Mine",
+     "x": 30, "y": 50, "facing": "s", "lines": ["↓ Mine"]},
+    {"id": "sign_dungeon", "kind": "signpost", "name": "Dungeon",
+     "x": 40, "y": 66, "facing": "s", "lines": ["↓ Dungeon"]},
+    {"id": "sign_city", "kind": "signpost", "name": "Stonehaven",
+     "x": 96, "y": 70, "facing": "e", "lines": ["→ Stonehaven"]},
+    {"id": "sign_castle", "kind": "signpost", "name": "Castle",
+     "x": 124, "y": 74, "facing": "n", "lines": ["↑ Castle"]},
+    {"id": "sign_ember", "kind": "signpost", "name": "Emberdeep",
+     "x": 160, "y": 74, "facing": "e", "lines": ["→ Emberdeep"]},
+    {"id": "sign_sanctum", "kind": "signpost", "name": "Void Sanctum",
+     "x": 168, "y": 99, "facing": "s", "lines": ["↓ Void Sanctum"]},
 ]
 
 # Enterable buildings — roofs hide when the local player stands on the floor.
@@ -3056,3 +3231,122 @@ def _apply_castle_v2():
 
 
 _apply_castle_v2()
+
+
+def _apply_buildings_v2():
+    """Door-aligned pack houses. Flag off leaves the literals above."""
+    import buildings_v2
+
+    def _inside(pos, rect):
+        x, y = pos
+        x0, y0, x1, y1 = rect
+        return x0 <= x <= x1 and y0 <= y <= y1
+
+    def _nearest(pos, floor, taken):
+        x, y = pos
+        best = None
+        for fx, fy in floor:
+            if (fx, fy) in taken:
+                continue
+            dist = abs(fx - x) + abs(fy - y)
+            key = (dist, abs(fx - x), -fy)
+            if best is None or key < best[0]:
+                best = (key, fx, fy)
+        return best[1], best[2]
+
+    # Stonehaven houses move south of the castle. Other doors stay put.
+    city_doors = {
+        "city_house_nw": (105, 96, 105, 94, 105, 97),
+        "city_house_sw": (106, 122, 106, 120, 106, 123),
+        "city_barracks": (140, 96, 140, 94, 140, 97),
+    }
+    homes = []
+    for b in BUILDINGS:
+        bid = b.get("id")
+        if not buildings_v2.enabled(bid):
+            continue
+        if (buildings_v2.meta(bid) or {}).get("footprint_unchanged"):
+            continue
+        x0, y0, x1, y1 = buildings_v2.footprint(bid)
+        fx0, fy0, fx1, fy1 = buildings_v2.floor_rect(bid)
+        b["x0"], b["y0"], b["x1"], b["y1"] = x0, y0, x1, y1
+        b["floor_x0"], b["floor_y0"] = fx0, fy0
+        b["floor_x1"], b["floor_y1"] = fx1, fy1
+        homes.append(bid)
+    if not homes:
+        return
+
+    door_delta = {}
+    for spot in INTERACTABLES:
+        bid = spot.get("building")
+        if spot.get("kind") != "door" or bid not in city_doors or bid not in homes:
+            continue
+        nx, ny, ex, ey, ox, oy = city_doors[bid]
+        door_delta[bid] = (nx - int(spot["x"]), ny - int(spot["y"]))
+        spot["x"], spot["y"] = nx, ny
+        spot["enter_x"], spot["enter_y"] = ex, ey
+        spot["exit_x"], spot["exit_y"] = ox, oy
+    for i, spawn in enumerate(MONSTER_SPAWNS):
+        pos = (int(spawn[1]), int(spawn[2]))
+        for bid, (dx, dy) in door_delta.items():
+            if not _inside(pos, buildings_v2.old_shell(bid)):
+                continue
+            floor = buildings_v2.floor_cells(bid)
+            nx, ny = pos[0] + dx, pos[1] + dy
+            if (nx, ny) not in floor:
+                nx, ny = _nearest((nx, ny), floor, set())
+            MONSTER_SPAWNS[i] = (spawn[0], nx, ny) + tuple(spawn[3:])
+            break
+
+    # Anyone left in a wall, or on the strip the new art no longer covers, moves
+    # onto that house's floor. Doors stay. Joe and the other shopkeepers stay
+    # when they are already on the floor.
+    for bid in homes:
+        floor = buildings_v2.floor_cells(bid)
+        shell = buildings_v2.old_shell(bid)
+        covered = buildings_v2.footprint_cells(bid)
+        owned = []
+        for npc in NPCS:
+            pos = (int(npc["x"]), int(npc["y"]))
+            if _inside(pos, shell) or pos in covered:
+                owned.append(npc)
+        for spot in INTERACTABLES:
+            if spot.get("kind") == "door":
+                continue
+            pos = (int(spot["x"]), int(spot["y"]))
+            if _inside(pos, shell) or pos in covered:
+                owned.append(spot)
+        taken = set()
+        for ent in owned:
+            if ent.get("kind") == "place":
+                continue
+            pos = (int(ent["x"]), int(ent["y"]))
+            if pos in floor:
+                taken.add(pos)
+        for ent in owned:
+            if ent.get("kind") == "place":
+                continue
+            pos = (int(ent["x"]), int(ent["y"]))
+            if bid in door_delta and _inside(pos, shell):
+                dx, dy = door_delta[bid]
+                pos = (pos[0] + dx, pos[1] + dy)
+                ent["x"], ent["y"] = pos
+            if pos in floor:
+                taken.add(pos)
+                continue
+            ent["x"], ent["y"] = _nearest(pos, floor, taken)
+            taken.add((int(ent["x"]), int(ent["y"])))
+        for ent in owned:
+            if ent.get("kind") != "place":
+                continue
+            pos = (int(ent["x"]), int(ent["y"]))
+            if bid in door_delta and _inside(pos, shell):
+                dx, dy = door_delta[bid]
+                pos = (pos[0] + dx, pos[1] + dy)
+                ent["x"], ent["y"] = pos
+            if pos in floor:
+                continue
+            ent["x"], ent["y"] = _nearest(pos, floor, set())
+
+
+_apply_buildings_v2()

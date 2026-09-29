@@ -52,7 +52,14 @@ import dungeon_entrances  # noqa: E402 — pack sprites for entrance exteriors
 import prop_sprites  # noqa: E402 — pack sprites for interior props
 import castle_sprites  # noqa: E402 — pre-rendered castle layers
 import castle_v2  # noqa: E402 — castle v2 footprint (shifted onto the live keep)
-from feature_flags import USE_NEW_CASTLE  # noqa: E402
+import house_sprites  # noqa: E402 — pre-rendered unique houses
+import buildings_v2  # noqa: E402 — house footprints shifted onto live doors
+from feature_flags import (  # noqa: E402
+    USE_NEW_CASTLE, USE_NEW_BUILDINGS, USE_NEW_CHARACTERS, USE_NEW_EQUIPMENT_UI,
+)
+import rs_humanoid as _rs_humanoid  # noqa: E402
+_rs_humanoid.USE_NEW_CHARACTERS = USE_NEW_CHARACTERS
+sprites.USE_NEW_ITEM_ICONS = USE_NEW_CHARACTERS
 
 SERVER_HOST = sys.argv[1] if len(sys.argv) > 1 else "localhost"
 SERVER_URI = f"ws://{SERVER_HOST}:8765"
@@ -62,8 +69,8 @@ MAP_W, MAP_H = 900, 640
 SIDEBAR_X = MAP_W
 # World tile size — RS-era default; player can zoom out (smaller tiles = more world visible)
 TILE_ZOOM_SIZES = (40, 32, 24, 16, 12)  # 100% → 80% → 60% → 40% → 30%
-# Login starts on the widest view (smallest tiles).
-TILE = TILE_ZOOM_SIZES[-1]
+# Start at 80%.
+TILE = TILE_ZOOM_SIZES[1]
 
 # Low-poly dragon visuals (pre-baked sheets). False = original procedural draw_dragon.
 USE_LOWPOLY_DRAGONS = True
@@ -157,7 +164,7 @@ class GameClient(CameraYaw):
         self.cam_drag = None
         self._cam_drag_threshold = 56
         self.BUILDING_WORLD_ROTATION_DEG = 0
-        self.zoom_level = len(TILE_ZOOM_SIZES) - 1  # fully zoomed out on login
+        self.zoom_level = 1  # 80%
         self._zoom_toast_until = 0.0
 
         # Readable UI text (slightly larger after skill/UI growth)
@@ -184,7 +191,7 @@ class GameClient(CameraYaw):
         self.state = "LOGIN"
         self.login_mode = "login"  # or "register"
         self.fields = {"username": "", "password": "", "char_name": ""}
-        self.register_gender = "male"
+        self.stat_gender = "male"
         self.active_field = "username"
         self.login_error = ""
         self.stat_alloc = {"attack": 0, "strength": 0, "defence": 0, "hitpoints": 0}
@@ -276,6 +283,7 @@ class GameClient(CameraYaw):
         self.dungeon = None  # Tidehollow instance HUD state or None
         self._overworld_tiles = None
         self._overworld_size = None
+        self._overworld_npcs = None
         self.show_skills = False
         self.skills_scroll = 0  # pixel offset into the skills list
         self.skills_drag = None  # scrollbar drag state
@@ -305,6 +313,8 @@ class GameClient(CameraYaw):
         self.fire_prompt_rects = {}
         self.drop_prompt = None  # {"slot", "item_id", "name", "qty"} or None
         self.drop_prompt_rects = {}
+        self.loot_prompt = None  # ground item: pick up / never pick up
+        self.loot_prompt_rects = {}
         self.arrow_prompt = None  # {"slot", "item_id", "name", "qty"} load quiver / drop
         self.arrow_prompt_rects = {}
         self.tip_prompt = None  # {"slot", "item_id", "name", "qty"} pack tip box / drop
@@ -328,6 +338,9 @@ class GameClient(CameraYaw):
         self.dungeon_prompt = None  # True when confirming Tidehollow entry
         self.dungeon_prompt_rects = {}
         self.dungeon_leave_rect = None
+        self.dungeon_hud_hidden = False
+        self.dungeon_hud_tab = None
+        self.dungeon_hud_hide_rect = None
         self.show_wish = False
         self.wish_rects = {}
         self.wish_stat_choice = None  # {"skills": [...], "message": str} or None
@@ -364,6 +377,7 @@ class GameClient(CameraYaw):
         self.combat_quick = None  # above-head heal/potion buttons while under attack
         self.combat_quick_rects = {}
         self.combat_quick_until = 0.0
+        self.combat_quick_collapsed = False
         self._low_hp_warn_until = 0.0  # pulse timer for sidebar warning
         self.death_banner_until = 0.0
         self.death_banner_text = ""
@@ -433,6 +447,7 @@ class GameClient(CameraYaw):
                 self.stat_alloc = {"attack": 0, "strength": 0, "defence": 0, "hitpoints": 0}
                 self.stat_alloc_points = 10
                 self.stat_alloc_error = ""
+                self.stat_gender = "male"
             else:
                 self.state = "GAME"
         elif t == "STAT_ALLOC_REQUIRED":
@@ -443,6 +458,7 @@ class GameClient(CameraYaw):
             skills = msg.get("skills") or list(self.stat_alloc.keys())
             self.stat_alloc = {s: 0 for s in skills}
             self.stat_alloc_error = ""
+            self.stat_gender = "male"
         elif t == "WORLD_STATE":
             self.tiles = msg["tiles"]
             self.world_w, self.world_h = msg["width"], msg["height"]
@@ -473,6 +489,9 @@ class GameClient(CameraYaw):
                     "remaining": msg["dungeon"].get("remaining", 0),
                     "label": msg["dungeon"].get("label", self.dungeon.get("label")),
                 })
+                if self.dungeon.get("v2"):
+                    import void_v2_client
+                    void_v2_client.on_state(self, msg["dungeon"])
             # Keep local player coords in sync so the camera can follow.
             if self.player and self.player["id"] in self.players:
                 live = self.players[self.player["id"]]
@@ -483,6 +502,21 @@ class GameClient(CameraYaw):
                 self.player["gathering"] = live.get("gathering")
         elif t == "DUNGEON_ENTER":
             self._enter_dungeon_view(msg)
+        elif t == "DUNGEON_TILES":
+            import void_v2_client
+            void_v2_client.apply_tiles(self, msg)
+        elif t == "VOID_WIND":
+            import void_v2_client
+            void_v2_client.on_wind(self, msg)
+        elif t == "BOSS_TELEGRAPH":
+            import void_v2_client
+            void_v2_client.on_telegraph(self, msg)
+        elif t == "LORE_NOTE":
+            import void_v2_client
+            void_v2_client.on_lore(self, msg)
+        elif t == "WARNING_STONE":
+            import void_v2_client
+            void_v2_client.on_warning(self)
         elif t == "DUNGEON_FLOOR":
             self._enter_dungeon_view(msg, advance=True)
         elif t == "DUNGEON_EXIT":
@@ -971,11 +1005,11 @@ class GameClient(CameraYaw):
             register_tab = R(508, pad + 99, 410 + 55, 36)
             field_x, field_w, field_h = R(200, 0, 620, 42).x, R(200, 0, 620, 42).w, R(0, 0, 1, 42).h
             # Nudge left/down so typed text + focus bands sit inside the mockup slots
-            field_x -= 22
+            field_x -= 40
             user_y = R(0, pad + 214, 1, 1).y - 2   # username sits a bit higher than the others
             pass_y = R(0, pad + 298, 1, 1).y + 8
             char_y = R(0, pad + 400, 1, 1).y + 8
-            user_text_dx = -26  # extra left shift for typed text
+            user_text_dx = -18  # extra left shift for typed text
             pass_text_dx = -18
             char_text_dx = -18
             # Full ornate gender buttons (match baked female-selected crops)
@@ -1069,10 +1103,8 @@ class GameClient(CameraYaw):
         return cache
 
     def _load_login_ui(self):
-        """Load login or register mockup art for the current mode/gender."""
+        """Load login or register mockup art for the current mode."""
         mode = getattr(self, "login_mode", "login")
-        if mode == "register" and getattr(self, "register_gender", "male") == "female":
-            return self._register_ui_female_selected()
         attr = "_login_ui_img_register" if mode == "register" else "_login_ui_img"
         img = getattr(self, attr, None)
         if img is not None:
@@ -1083,8 +1115,26 @@ class GameClient(CameraYaw):
             img = pygame.image.load(path).convert()
         except Exception:
             img = None
+        if img is not None and mode == "register":
+            self._blank_register_gender(img)
         setattr(self, attr, img)
         return img
+
+    def _blank_register_gender(self, img):
+        """Cover the Male/Female buttons with the panel fill beside them."""
+        gutter = pygame.Rect(145, 468, 40, 80)
+        dest = pygame.Rect(188, 468, 664, 80)
+        try:
+            patch = img.subsurface(gutter).copy()
+        except ValueError:
+            return
+        old = img.get_clip()
+        img.set_clip(dest)
+        x = dest.x
+        while x < dest.right:
+            img.blit(patch, (x, dest.y))
+            x += patch.get_width()
+        img.set_clip(old)
 
     def _register_ui_female_selected(self):
         """
@@ -1281,14 +1331,6 @@ class GameClient(CameraYaw):
             if hs.collidepoint(mx, my):
                 self.request_leaderboard()
                 return
-            if self.login_mode == "register":
-                # Padded click targets aligned to the visible gender buttons
-                if self._login_hit(lay["male_btn"], 16, 14).collidepoint(mx, my):
-                    self.register_gender = "male"
-                    return
-                if self._login_hit(lay["female_btn"], 16, 14).collidepoint(mx, my):
-                    self.register_gender = "female"
-                    return
             # Fields: pad vertically so clicking near the label/chrome still focuses
             fx, fw = lay["field_x"], lay["field_w"]
             fh = lay.get("field_h", 38)
@@ -1329,8 +1371,7 @@ class GameClient(CameraYaw):
             if not c:
                 self.login_error = "Enter a character name."
                 return
-            self.net.send("CREATE_CHARACTER", username=u, password=p, char_name=c,
-                          gender=self.register_gender)
+            self.net.send("CREATE_CHARACTER", username=u, password=p, char_name=c)
         else:
             self.net.send("LOGIN", username=u, password=p)
 
@@ -1388,7 +1429,7 @@ class GameClient(CameraYaw):
                     self.show_shop_panel = False
                     self.shop = None
                 return
-            if self.show_forge or self.show_cook or self.show_fletch or self.show_equipment or self.show_help or self.show_skills or self.show_pets or self.show_travel or self.show_world_map or self.fire_prompt or self.drop_prompt or self.arrow_prompt or self.tip_prompt or self.food_prompt or self.raw_prompt or self.food_bag_prompt or self.pack_prompt or self.log_prompt or self.potion_prompt or self.cook_prompt or self.dungeon_prompt or self.show_wish or self.wish_stat_choice or self.combat_style_prompt:
+            if self.show_forge or self.show_cook or self.show_fletch or self.show_equipment or self.show_help or self.show_skills or self.show_pets or self.show_travel or self.show_world_map or self.fire_prompt or self.drop_prompt or self.loot_prompt or self.arrow_prompt or self.tip_prompt or self.food_prompt or self.raw_prompt or self.food_bag_prompt or self.pack_prompt or self.log_prompt or self.potion_prompt or self.cook_prompt or self.dungeon_prompt or self.show_wish or self.wish_stat_choice or self.combat_style_prompt:
                 if event.key == pygame.K_ESCAPE:
                     self.show_forge = False
                     self.show_cook = False
@@ -1401,6 +1442,7 @@ class GameClient(CameraYaw):
                     self.show_world_map = False
                     self.fire_prompt = None
                     self.drop_prompt = None
+                    self.loot_prompt = None
                     self.arrow_prompt = None
                     self.tip_prompt = None
                     self.food_prompt = None
@@ -1526,19 +1568,19 @@ class GameClient(CameraYaw):
                     self.skills_scroll = max(0, self.skills_scroll - step * 5)
                 else:
                     self.skills_scroll = min(max_scroll, self.skills_scroll + step * 5)
-            elif event.key == pygame.K_UP:
+            elif event.key in (pygame.K_UP, pygame.K_KP8, pygame.K_KP_8) or event.scancode in (pygame.KSCAN_KP8, pygame.KSCAN_KP_8):
                 self.clear_walk()
                 dx, dy = self.rotate_move_delta(0, -1)
                 self.try_move(dx, dy)
-            elif event.key == pygame.K_DOWN:
+            elif event.key in (pygame.K_DOWN, pygame.K_KP2, pygame.K_KP_2) or event.scancode in (pygame.KSCAN_KP2, pygame.KSCAN_KP_2):
                 self.clear_walk()
                 dx, dy = self.rotate_move_delta(0, 1)
                 self.try_move(dx, dy)
-            elif event.key == pygame.K_LEFT:
+            elif event.key in (pygame.K_LEFT, pygame.K_KP4, pygame.K_KP_4) or event.scancode in (pygame.KSCAN_KP4, pygame.KSCAN_KP_4):
                 self.clear_walk()
                 dx, dy = self.rotate_move_delta(-1, 0)
                 self.try_move(dx, dy)
-            elif event.key == pygame.K_RIGHT:
+            elif event.key in (pygame.K_RIGHT, pygame.K_KP6, pygame.K_KP_6) or event.scancode in (pygame.KSCAN_KP6, pygame.KSCAN_KP_6):
                 self.clear_walk()
                 dx, dy = self.rotate_move_delta(1, 0)
                 self.try_move(dx, dy)
@@ -1647,9 +1689,9 @@ class GameClient(CameraYaw):
                         self.set_combat_style(style)
                 elif style != "archery":
                     self.set_combat_style(style)
-            elif event.key in (pygame.K_MINUS, pygame.K_KP_MINUS, pygame.K_LEFTBRACKET):
+            elif event.key in (pygame.K_MINUS, pygame.K_KP_MINUS, pygame.K_LEFTBRACKET) or event.scancode == pygame.KSCAN_KP_MINUS:
                 self.adjust_zoom(-1)  # zoom out — more world visible
-            elif event.key in (pygame.K_EQUALS, pygame.K_PLUS, pygame.K_KP_PLUS, pygame.K_RIGHTBRACKET):
+            elif event.key in (pygame.K_EQUALS, pygame.K_PLUS, pygame.K_KP_PLUS, pygame.K_RIGHTBRACKET) or event.scancode == pygame.KSCAN_KP_PLUS:
                 self.adjust_zoom(1)  # zoom in
             elif event.key == pygame.K_ESCAPE:
                 if self.dungeon and not (
@@ -1675,6 +1717,7 @@ class GameClient(CameraYaw):
                 self.show_cook = False
                 self.fire_prompt = None
                 self.drop_prompt = None
+                self.loot_prompt = None
                 self.arrow_prompt = None
                 self.tip_prompt = None
                 self.food_prompt = None
@@ -1894,6 +1937,7 @@ class GameClient(CameraYaw):
         self.show_bank = False
         self.fire_prompt = None
         self.drop_prompt = None
+        self.loot_prompt = None
         self.arrow_prompt = None
         self.tip_prompt = None
         self.food_prompt = None
@@ -2674,6 +2718,7 @@ class GameClient(CameraYaw):
         if not advance or self._overworld_tiles is None:
             self._overworld_tiles = [row[:] for row in self.tiles]
             self._overworld_size = (self.world_w, self.world_h)
+            self._overworld_npcs = list(self.npcs)
         tiles = msg.get("tiles") or []
         self.tiles = tiles
         self.world_w = int(msg.get("width") or (len(tiles[0]) if tiles else 0))
@@ -2697,6 +2742,9 @@ class GameClient(CameraYaw):
         self.npcs = []
         self.clear_walk()
         self._minimap_base = None
+        if msg.get("v2"):
+            import void_v2_client
+            void_v2_client.attach(self, msg)
         if self.player:
             self.player["x"] = msg.get("player_x", self.player.get("x", 0))
             self.player["y"] = msg.get("player_y", self.player.get("y", 0))
@@ -2708,6 +2756,9 @@ class GameClient(CameraYaw):
                 self.world_w, self.world_h = self._overworld_size
             self._overworld_tiles = None
             self._overworld_size = None
+        if self._overworld_npcs is not None:
+            self.npcs = self._overworld_npcs
+            self._overworld_npcs = None
         self.dungeon = None
         self.clear_walk()
         self._minimap_base = None
@@ -2816,6 +2867,8 @@ class GameClient(CameraYaw):
         if not action:
             return True
         kind = action["type"]
+        if kind == "DUNGEON_INTERACT":
+            return max(abs(action["x"] - px), abs(action["y"] - py)) <= 1
         if kind == "ATTACK":
             m = self.monsters.get(action["target_id"]) or self._monster_by_id(action.get("target_id"))
             if not m or not m.get("alive"):
@@ -2863,6 +2916,9 @@ class GameClient(CameraYaw):
         if not action:
             return
         kind = action["type"]
+        if kind == "DUNGEON_INTERACT":
+            self.net.send("DUNGEON_INTERACT", x=action["x"], y=action["y"])
+            return
         if kind == "ATTACK":
             self.begin_attack(action["target_id"])
         elif kind == "TALK":
@@ -2893,6 +2949,10 @@ class GameClient(CameraYaw):
             kwargs = {}
             if action.get("all"):
                 kwargs["all"] = True
+            if action.get("item_id"):
+                kwargs["item_id"] = action["item_id"]
+            if action.get("force"):
+                kwargs["force"] = True
             self.net.send("PICKUP", **kwargs)
 
     def walk_and_act(self, goals, action=None):
@@ -3117,15 +3177,29 @@ class GameClient(CameraYaw):
                         self.set_zoom(action)
                     return
         # Leave dungeon button (always on top of the map HUD)
-        if self.dungeon and self.dungeon_leave_rect and self.dungeon_leave_rect.collidepoint(mx, my):
-            self.clear_walk()
-            self.net.send("LEAVE_DUNGEON")
-            return
+        if self.dungeon and self.dungeon_hud_hidden:
+            tab = self.dungeon_hud_tab
+            if tab and tab.collidepoint(mx, my):
+                self.dungeon_hud_hidden = False
+                return
+        elif self.dungeon:
+            hide = self.dungeon_hud_hide_rect
+            if hide and hide.collidepoint(mx, my):
+                self.dungeon_hud_hidden = True
+                self.dungeon_leave_rect = None
+                return
+            if self.dungeon_leave_rect and self.dungeon_leave_rect.collidepoint(mx, my):
+                self.clear_walk()
+                self.net.send("LEAVE_DUNGEON")
+                return
         if self.dungeon_prompt:
             self.handle_dungeon_prompt_click(mx, my)
             return
         if self.drop_prompt:
             self.handle_drop_prompt_click(mx, my)
+            return
+        if self.loot_prompt:
+            self.handle_loot_prompt_click(mx, my)
             return
         if self.arrow_prompt:
             self.handle_arrow_prompt_click(mx, my)
@@ -3247,6 +3321,14 @@ class GameClient(CameraYaw):
                     goals = set(goals) | {(ex, ey)}
                 self.walk_and_act(goals, {"type": "LEAVE_DUNGEON"})
                 return
+            if self.dungeon.get("v2") == "depths":
+                import depths_v2_client
+                if depths_v2_client.handle_click(self, tx, ty):
+                    return
+            elif self.dungeon.get("v2"):
+                import void_v2_client
+                if void_v2_client.handle_click(self, tx, ty):
+                    return
             # Inside instance: only walk / attack / pickup (no overworld interactables)
             pass
         else:
@@ -3319,13 +3401,25 @@ class GameClient(CameraYaw):
         key = f"{tx},{ty}"
         if key in self.ground_items and self.ground_items[key]:
             shift = bool(pygame.key.get_mods() & pygame.KMOD_SHIFT)
-            pickup = {"type": "PICKUP", "x": tx, "y": ty}
-            if shift:
-                pickup["all"] = True
-            if self.tile_walkable(tx, ty):
-                self.walk_and_act({(tx, ty)}, pickup)
+            pile = self.ground_items[key]
+            chosen = None
+            for entry in pile:
+                iid = entry.get("item_id")
+                if iid == "coins" or (ITEMS.get(iid) or {}).get("karma_xp"):
+                    continue
+                chosen = entry
+                if not self._pickup_ignored(iid):
+                    break
+            if shift or chosen is None:
+                pickup = {"type": "PICKUP", "x": tx, "y": ty}
+                if shift:
+                    pickup["all"] = True
+                if self.tile_walkable(tx, ty):
+                    self.walk_and_act({(tx, ty)}, pickup)
+                else:
+                    self.walk_and_act(self.adjacent_goals(tx, ty), pickup)
             else:
-                self.walk_and_act(self.adjacent_goals(tx, ty), pickup)
+                self.open_loot_prompt(tx, ty, chosen)
             return
         # monster? Prefer exact foot tile. Soft radius only if the click isn't a
         # clear walk-away onto empty ground (oversized dragon sprites used to
@@ -3756,6 +3850,7 @@ class GameClient(CameraYaw):
         name = ITEMS.get(item_id, {}).get("name", "item")
         qty = max(1, int(entry.get("qty") or 1))
         self.drop_prompt = {"slot": slot, "item_id": item_id, "name": name, "qty": qty}
+        self.loot_prompt = None
         self.cook_prompt = None
         self.fire_prompt = None
         self.arrow_prompt = None
@@ -3975,8 +4070,64 @@ class GameClient(CameraYaw):
         if rects.get("cancel") and rects["cancel"].collidepoint(mx, my):
             self.drop_prompt = None
             return
+        if rects.get("ignore") and rects["ignore"].collidepoint(mx, my):
+            item_id = prompt.get("item_id")
+            self._set_pickup_ignore(item_id, not self._pickup_ignored(item_id))
+            self.drop_prompt = None
+            return
         if box and not box.collidepoint(mx, my):
             self.drop_prompt = None
+
+    def _pickup_ignored(self, item_id):
+        return item_id in ((self.player or {}).get("pickup_ignore") or [])
+
+    def _set_pickup_ignore(self, item_id, ignore):
+        if not item_id or item_id == "coins":
+            return
+        current = [i for i in ((self.player or {}).get("pickup_ignore") or []) if i != item_id]
+        if ignore:
+            current.append(item_id)
+            self.net.send("SET_OPTION", pickup_ignore_add=item_id)
+        else:
+            self.net.send("SET_OPTION", pickup_ignore_remove=item_id)
+        if self.player is not None:
+            self.player["pickup_ignore"] = current
+
+    def open_loot_prompt(self, tx, ty, entry):
+        item_id = entry.get("item_id")
+        name = ITEMS.get(item_id, {}).get("name", "item")
+        self.loot_prompt = {
+            "x": tx, "y": ty, "item_id": item_id, "name": name,
+            "ignored": self._pickup_ignored(item_id),
+        }
+        self.drop_prompt = None
+
+    def handle_loot_prompt_click(self, mx, my):
+        rects = self.loot_prompt_rects
+        prompt = self.loot_prompt
+        if not prompt:
+            return
+        if rects.get("pickup") and rects["pickup"].collidepoint(mx, my):
+            tx, ty = prompt["x"], prompt["y"]
+            pickup = {
+                "type": "PICKUP", "x": tx, "y": ty,
+                "item_id": prompt["item_id"], "force": True,
+            }
+            self.loot_prompt = None
+            if self.tile_walkable(tx, ty):
+                self.walk_and_act({(tx, ty)}, pickup)
+            else:
+                self.walk_and_act(self.adjacent_goals(tx, ty), pickup)
+            return
+        if rects.get("ignore") and rects["ignore"].collidepoint(mx, my):
+            self._set_pickup_ignore(prompt.get("item_id"), not prompt.get("ignored"))
+            self.loot_prompt = None
+            return
+        if rects.get("cancel") and rects["cancel"].collidepoint(mx, my):
+            self.loot_prompt = None
+            return
+        if rects.get("box") and not rects["box"].collidepoint(mx, my):
+            self.loot_prompt = None
 
     def handle_arrow_prompt_click(self, mx, my):
         rects = self.arrow_prompt_rects
@@ -4219,8 +4370,13 @@ class GameClient(CameraYaw):
         for kind, rect in rects.items():
             if kind == "dismiss":
                 if rect.collidepoint(mx, my):
-                    self.combat_quick = None
-                    self.combat_quick_until = 0.0
+                    self.combat_quick_collapsed = True
+                    return True
+                continue
+            if kind == "expand":
+                if rect.collidepoint(mx, my):
+                    self.combat_quick_collapsed = False
+                    self.combat_quick_until = time.time() + 10.0
                     return True
                 continue
             if rect.collidepoint(mx, my):
@@ -4420,6 +4576,10 @@ class GameClient(CameraYaw):
                 if not rect.collidepoint(mx, my):
                     continue
                 skill, action = key
+                if skill == "gender":
+                    self.stat_gender = action
+                    self.stat_alloc_error = ""
+                    return
                 if action == "plus" and self.remaining_stat_points() > 0:
                     self.stat_alloc[skill] += 1
                     self.stat_alloc_error = ""
@@ -4427,7 +4587,7 @@ class GameClient(CameraYaw):
                     self.stat_alloc[skill] -= 1
                     self.stat_alloc_error = ""
                 return
-            confirm = pygame.Rect(400, 520, 400, 44)
+            confirm = pygame.Rect(400, 540, 400, 44)
             if confirm.collidepoint(mx, my):
                 self.submit_stat_alloc()
 
@@ -4436,7 +4596,7 @@ class GameClient(CameraYaw):
         if left != 0:
             self.stat_alloc_error = f"Spend exactly 10 points ({left} left)."
             return
-        self.net.send("ALLOCATE_STATS", stats=dict(self.stat_alloc))
+        self.net.send("ALLOCATE_STATS", stats=dict(self.stat_alloc), gender=self.stat_gender)
 
     def draw_stat_alloc(self):
         title = self.font_big.render("Choose your starting stats", True, WHITE)
@@ -4447,13 +4607,29 @@ class GameClient(CameraYaw):
 
         left = self.remaining_stat_points()
         pts = self.font_big.render(f"Points left: {left}", True, GREEN if left == 0 else WHITE)
-        self.screen.blit(pts, (SCREEN_W // 2 - pts.get_width() // 2, 160))
+        self.screen.blit(pts, (SCREEN_W // 2 - pts.get_width() // 2, 156))
 
-        box = pygame.Rect(340, 210, 520, 280)
+        body = self.font.render("Body", True, WHITE)
+        self.screen.blit(body, (340, 198))
+        male = pygame.Rect(430, 190, 200, 40)
+        female = pygame.Rect(650, 190, 200, 40)
+        for rect, label, selected in (
+            (male, "Male", self.stat_gender == "male"),
+            (female, "Female", self.stat_gender == "female"),
+        ):
+            pygame.draw.rect(self.screen, (45, 100, 55) if selected else (28, 30, 38), rect)
+            pygame.draw.rect(self.screen, GREEN if selected else PANEL_LINE, rect, 2)
+            ctxt = self.font.render(label, True, WHITE if selected else GREY)
+            self.screen.blit(ctxt, (rect.centerx - ctxt.get_width() // 2, rect.centery - ctxt.get_height() // 2))
+
+        box = pygame.Rect(340, 248, 520, 250)
         pygame.draw.rect(self.screen, (18, 20, 28), box)
         pygame.draw.rect(self.screen, (120, 190, 255), box, 2)
 
-        self.stat_alloc_rects = {}
+        self.stat_alloc_rects = {
+            ("gender", "male"): male,
+            ("gender", "female"): female,
+        }
         y = box.y + 24
         for skill in ("attack", "strength", "defence", "hitpoints"):
             base = self.stat_alloc_base.get(skill, 1)
@@ -4481,9 +4657,9 @@ class GameClient(CameraYaw):
             "Each point raises that skill by 1 level. Confirm when all 10 are spent.",
             True, GREY,
         )
-        self.screen.blit(hint, (SCREEN_W // 2 - hint.get_width() // 2, 500))
+        self.screen.blit(hint, (SCREEN_W // 2 - hint.get_width() // 2, 512))
 
-        confirm = pygame.Rect(400, 520, 400, 44)
+        confirm = pygame.Rect(400, 540, 400, 44)
         ready = left == 0
         pygame.draw.rect(self.screen, (45, 100, 55) if ready else (40, 42, 50), confirm)
         pygame.draw.rect(self.screen, GREEN if ready else PANEL_LINE, confirm, 2)
@@ -4493,10 +4669,10 @@ class GameClient(CameraYaw):
 
         if self.stat_alloc_error:
             err = self.font.render(self.stat_alloc_error, True, RED)
-            self.screen.blit(err, (SCREEN_W // 2 - err.get_width() // 2, 580))
+            self.screen.blit(err, (SCREEN_W // 2 - err.get_width() // 2, 600))
         if self.login_error:
             err = self.font.render(self.login_error, True, RED)
-            self.screen.blit(err, (SCREEN_W // 2 - err.get_width() // 2, 610))
+            self.screen.blit(err, (SCREEN_W // 2 - err.get_width() // 2, 630))
 
     def _load_login_backdrop(self):
         """Load and cache the adventurous title-screen art."""
@@ -4857,6 +5033,14 @@ class GameClient(CameraYaw):
         self.draw_chat()
         if self.dungeon:
             self.draw_dungeon_hud()
+            if self.dungeon.get("v2"):
+                now = time.time()
+                if self.dungeon.get("v2") == "depths":
+                    import depths_v2_client
+                    depths_v2_client.draw_overlay(self, now)
+                else:
+                    import void_v2_client
+                    void_v2_client.draw_overlay(self, now)
         if self.dialogue:
             self.draw_dialogue()
         if self.show_shop_panel and self.shop:
@@ -4889,6 +5073,8 @@ class GameClient(CameraYaw):
             self.draw_fire_prompt()
         if self.drop_prompt:
             self.draw_drop_prompt()
+        if self.loot_prompt:
+            self.draw_loot_prompt()
         if self.arrow_prompt:
             self.draw_arrow_prompt()
         if self.tip_prompt:
@@ -5092,7 +5278,7 @@ class GameClient(CameraYaw):
         if not self.dungeon:
             outdoor_kinds = {
                 "door", "dungeon_entrance", "cave_entrance", "volcano_entrance", "wishing_well",
-                "warning_sign",
+                "warning_sign", "signpost",
                 "fountain", "market_stall",
             }
             for spot in self.interactables:
@@ -5166,6 +5352,16 @@ class GameClient(CameraYaw):
                         elif kind == "warning_sign":
                             sprites.draw_warning_sign(self.screen, cx, cy, TILE, t)
                             self.blit_nameplate(spot.get("name", "⚠ DANGER"), cx, cy - TILE // 2 - 8, (255, 140, 90))
+                        elif kind == "signpost":
+                            sprites.draw_signpost(
+                                self.screen, cx, cy, TILE, t, facing=spot.get("facing", "e"),
+                            )
+                            lines = spot.get("lines") or [spot.get("name", "Path")]
+                            top = cy - TILE // 2 - 10
+                            for i, line in enumerate(lines):
+                                self.blit_nameplate(
+                                    line, cx, top - (len(lines) - 1 - i) * 16, (255, 228, 170),
+                                )
                         elif kind == "cave_entrance":
                             entrance_top = None
                             pack = spot.get("pack")
@@ -5365,10 +5561,14 @@ class GameClient(CameraYaw):
                     atk_arg = atk if swinging else -1.0
                     # Stand still visually while swinging (don't blend walk into the attack).
                     draw_moving = m_moving and not swinging
+                    _mdef = MONSTERS.get(m["type"]) or {}
+                    _vis = _mdef.get("visual") or m["type"]
+                    _scale = float(_mdef.get("scale") or 1.0)
+                    _ts = max(8, int(TILE * _scale))
                     if (
                         lowpoly
                         and lowpoly_dragon_sprites.draw_lowpoly_dragon(
-                            self.screen, m["type"], cx, cy, TILE, t,
+                            self.screen, _vis, cx, cy, _ts, t,
                             hurt=hurt, attacking=atk_arg, facing=face, moving=draw_moving,
                             foe_cx=player_cx,
                             drop_down=bool(near and side_fight),
@@ -5378,7 +5578,7 @@ class GameClient(CameraYaw):
                     elif (
                         strip
                         and anim_strip_sprites.draw_anim_strip_monster(
-                            self.screen, m["type"], cx, cy, TILE, t,
+                            self.screen, _vis, cx, cy, _ts, t,
                             hurt=hurt, attacking=atk_arg, facing=face, moving=draw_moving,
                             foe_cx=player_cx,
                             drop_down=bool(near and side_fight),
@@ -5387,9 +5587,15 @@ class GameClient(CameraYaw):
                         pass  # anim strip drawn
                     else:
                         sprites.draw_monster(
-                            self.screen, m["type"], cx, cy, TILE, t,
+                            self.screen, _vis, cx, cy, _ts, t,
                             hurt=hurt, attacking=atk, facing=face, moving=m_moving,
                         )
+                    if _mdef.get("visual"):
+                        import void_v2_client
+                        void_v2_client.tint_and_halo(self, m, cx, cy, TILE)
+                    if m.get("type") == "morvath":
+                        import depths_v2_client
+                        depths_v2_client.draw_bone_crown(self.screen, cx, cy - TILE, TILE)
                     ny, hy = self.entity_anchor(cx, cy, "monster")
                     lvl = int(m.get("level") or 1)
                     lvl_color = self.monster_threat_color(lvl)
@@ -5465,16 +5671,18 @@ class GameClient(CameraYaw):
                         else:
                             # Pure N/S cast — face toward a side that also borders water
                             face = self._entity_facing.get(key, face)
-                            for side in (1, -1, face):
-                                nx = p["x"] + side
-                                ny = p["y"]
+                            # Facing is 1/-1 or "front"/"back". Only numbers shift a tile.
+                            for side in (1, -1):
+                                nx = int(p["x"]) + side
+                                ny = int(p["y"])
                                 if (0 <= ny < len(self.tiles) and 0 <= nx < self.world_w
                                         and self.tiles[ny][nx] == wm.WATER):
                                     face = side
                                     break
                             else:
-                                # Prefer facing the larger water delta visually (east for harbour)
-                                face = 1 if dy == 0 else face
+                                face = 1
+                        if face not in (1, -1):
+                            face = 1
                         self._entity_facing[key] = face
                     # Remember water target so the cast pose can lean toward it
                     if is_self:
@@ -5519,30 +5727,12 @@ class GameClient(CameraYaw):
             self._queue_buildings(draw_list, cam_x, cam_y, vis_w, vis_h)
             if USE_NEW_CASTLE and castle_sprites.ready():
                 castle_sprites.queue(self, draw_list, cam_x, cam_y, TILE)
+            if USE_NEW_BUILDINGS:
+                house_sprites.queue(self, draw_list, cam_x, cam_y, TILE)
 
         draw_list.sort(key=lambda item: (item[0], item[1]))
         for _, __, fn in draw_list:
             fn()
-
-        # 3D dungeon interior props (Void Sanctum pillars, braziers, walls)
-        zone = wm.get_zone(self.player["x"], self.player["y"]) if self.player else None
-        if zone == "shadow_crypt" and not self.dungeon:
-            # Void Sanctum rooms - add 3D interior props
-            # Get room bounds in screen space
-            for sy in range(vis_h + 1):
-                for sx in range(vis_w + 1):
-                    vx, vy = cam_x + sx, cam_y + sy
-                    if 0 <= vx < vw and 0 <= vy < vh:
-                        wx, wy = self.view_to_world(vx, vy)
-                        if wm.get_zone(wx, wy) == "shadow_crypt":
-                            # Check if this is a room corner/center for props
-                            # Draw props for the visible room area
-                            room_rect = pygame.Rect(sx * TILE, sy * TILE, TILE * 4, TILE * 4)
-                            if sx % 4 == 0 and sy % 4 == 0:  # Room anchor points
-                                dungeon_interior_3d.draw_dungeon_props(
-                                    self.screen, room_rect, TILE, zone="shadow_crypt", t=t
-                                )
-                                break
 
         # Combat quick-heal buttons above the local player's head
         if getattr(self, "_combat_quick_anchor", None):
@@ -5666,6 +5856,9 @@ class GameClient(CameraYaw):
             except (IndexError, TypeError):
                 pass
         bid = b.get("id")
+        if USE_NEW_BUILDINGS and buildings_v2.enabled(bid):
+            if (px, py) in buildings_v2.doorway_tiles(bid):
+                return True
         for spot in self.interactables:
             if spot.get("kind") == "door" and spot.get("building") == bid:
                 if px == spot["x"] and py == spot["y"]:
@@ -5733,6 +5926,13 @@ class GameClient(CameraYaw):
             # v2 hides only the bailey. Moat, bridge, apron and wall-walk stay visible.
             if b.get("kind") == "castle":
                 if USE_NEW_CASTLE and (x, y) in castle_v2.bailey_tiles():
+                    return True
+                continue
+            if USE_NEW_BUILDINGS and buildings_v2.enabled(b.get("id")):
+                if (
+                    b["floor_x0"] <= x <= b["floor_x1"]
+                    and b["floor_y0"] <= y <= b["floor_y1"]
+                ):
                     return True
                 continue
             if b["x0"] <= x <= b["x1"] and b["y0"] <= y <= b["y1"]:
@@ -5866,6 +6066,10 @@ class GameClient(CameraYaw):
         for b in self.buildings:
             if USE_NEW_CASTLE and b.get("id") == "stonehaven_castle" and castle_sprites.ready():
                 continue
+            if USE_NEW_BUILDINGS and house_sprites.ready(b.get("id")):
+                # The smithy sprite is azimuth 0 only. Any other yaw keeps the volume.
+                if b.get("id") != "smithy" or self.camera_yaw % 4 == 0:
+                    continue
             inside = self.player_inside_building(b)
             vx0, vy0, vx1, vy1 = self.building_view_bounds(b)
             sx0, sy0 = vx0 - cam_x, vy0 - cam_y
@@ -5938,6 +6142,14 @@ class GameClient(CameraYaw):
 
     def _queue_volcano_cliffs(self, draw_list, cam_x, cam_y, vis_w, vis_h, t):
         """Queue tall cliff sprites for volcano rock faces and dungeon corridor walls."""
+        if self.dungeon and self.dungeon.get("v2") == "depths":
+            import depths_v2_client
+            depths_v2_client.queue_wall_faces(self, draw_list, cam_x, cam_y, vis_w, vis_h, t)
+            return
+        if self.dungeon and self.dungeon.get("v2"):
+            import void_v2_client
+            void_v2_client.queue_wall_faces(self, draw_list, cam_x, cam_y, vis_w, vis_h, t)
+            return
         in_ember = bool(self.dungeon and self.dungeon.get("id") == "emberdeep")
         in_dungeon = bool(self.dungeon)
         # "Camera-south" neighbor in world space (tile toward bottom of screen)
@@ -6045,6 +6257,14 @@ class GameClient(CameraYaw):
         self.walk_and_act(goals, None)
 
     def draw_terrain_tile(self, rect, tile_id, wx, wy, t):
+        if self.dungeon and self.dungeon.get("v2") == "depths":
+            import depths_v2_client
+            depths_v2_client.draw_tile(self, rect, tile_id, wx, wy, t)
+            return
+        if self.dungeon and self.dungeon.get("v2"):
+            import void_v2_client
+            void_v2_client.draw_tile(self, rect, tile_id, wx, wy, t)
+            return
         if self.dungeon:
             zone = "volcano" if self.dungeon.get("id") == "emberdeep" else "dungeon"
         else:
@@ -6070,7 +6290,7 @@ class GameClient(CameraYaw):
                 else:
                     sprites.draw_grass(self.screen, rect, wx, wy)
             else:
-                sprites.draw_floor(self.screen, rect, wx, wy, zone=zone)
+                sprites.draw_floor(self.screen, rect, wx, wy, zone=zone, interior=True)
         elif tile_id == wm.WALL:
             # Never draw old 2D building walls. Under shells: stone in city/castle, else grass.
             shell = self.building_at_tile(wx, wy)
@@ -6379,6 +6599,8 @@ class GameClient(CameraYaw):
     def draw_gather_fx(self, cx, cy, skill, gather, t, facing=1):
         """Chips / sparks / splash timed to the gather swing loop."""
         import math as _m
+        if not isinstance(facing, (int, float)):
+            facing = 1
         facing = 1 if facing >= 0 else -1
         if skill == "woodcutting":
             ph = (t * 1.1) % 1.0
@@ -6719,7 +6941,14 @@ class GameClient(CameraYaw):
                     continue
                 px0 = int(vx * mm_w / vw)
                 px1 = int((vx + 1) * mm_w / vw)
-                color = self.minimap_tile_color(self.tiles[wy][wx])
+                if self.dungeon and self.dungeon.get("v2"):
+                    import void_v2_client
+                    if void_v2_client.minimap_hidden(self, wx, wy):
+                        color = (8, 6, 12)
+                    else:
+                        color = self.minimap_tile_color(self.tiles[wy][wx])
+                else:
+                    color = self.minimap_tile_color(self.tiles[wy][wx])
                 if px1 <= px0:
                     px1 = px0 + 1
                 if py1 <= py0:
@@ -7258,7 +7487,7 @@ class GameClient(CameraYaw):
         prompt = self.drop_prompt or {}
         name = prompt.get("name", "item")
         qty = max(1, int(prompt.get("qty") or 1))
-        box = pygame.Rect(340, 230, 420, 220)
+        box = pygame.Rect(340, 200, 440, 280)
         self.drop_prompt_rects = {"box": box}
         pygame.draw.rect(self.screen, (18, 22, 30), box, border_radius=8)
         pygame.draw.rect(self.screen, (200, 150, 90), box, 2, border_radius=8)
@@ -7271,6 +7500,15 @@ class GameClient(CameraYaw):
             True, GREY,
         )
         self.screen.blit(tip, (box.x + 24, box.y + 100))
+
+        ignored = self._pickup_ignored(prompt.get("item_id"))
+        ignore = pygame.Rect(box.x + 24, box.bottom - 112, 250, 36)
+        self.drop_prompt_rects["ignore"] = ignore
+        pygame.draw.rect(self.screen, (70, 55, 40), ignore, border_radius=6)
+        pygame.draw.rect(self.screen, (200, 160, 80), ignore, 1, border_radius=6)
+        ilabel = "Allow pickup again" if ignored else "Never pick up"
+        it = self.font.render(ilabel, True, WHITE)
+        self.screen.blit(it, (ignore.centerx - it.get_width() // 2, ignore.centery - it.get_height() // 2))
 
         one = pygame.Rect(box.x + 24, box.bottom - 58, 110, 36)
         self.drop_prompt_rects["one"] = one
@@ -7290,6 +7528,46 @@ class GameClient(CameraYaw):
         else:
             cancel = pygame.Rect(box.right - 118, box.bottom - 58, 94, 36)
         self.drop_prompt_rects["cancel"] = cancel
+        pygame.draw.rect(self.screen, (70, 45, 40), cancel, border_radius=6)
+        pygame.draw.rect(self.screen, (180, 90, 70), cancel, 1, border_radius=6)
+        ct = self.font.render("Cancel", True, WHITE)
+        self.screen.blit(ct, (cancel.centerx - ct.get_width() // 2, cancel.centery - ct.get_height() // 2))
+
+    def draw_loot_prompt(self):
+        prompt = self.loot_prompt or {}
+        name = prompt.get("name", "item")
+        ignored = bool(prompt.get("ignored"))
+        box = pygame.Rect(260, 210, 580, 230)
+        self.loot_prompt_rects = {"box": box}
+        pygame.draw.rect(self.screen, (18, 22, 30), box, border_radius=8)
+        pygame.draw.rect(self.screen, (200, 150, 90), box, 2, border_radius=8)
+        title = self.font_big.render(name, True, WHITE)
+        self.screen.blit(title, (box.x + 24, box.y + 18))
+        if ignored:
+            lines = ("You leave this on the ground.", "Pick it up once, or allow pickup again.")
+        else:
+            lines = ("Pick it up now,", "or never pick this item up again.")
+        for i, line in enumerate(lines):
+            bt = self.font.render(line, True, (220, 210, 190))
+            self.screen.blit(bt, (box.x + 24, box.y + 64 + i * 28))
+
+        pickup = pygame.Rect(box.x + 24, box.bottom - 58, 130, 36)
+        self.loot_prompt_rects["pickup"] = pickup
+        pygame.draw.rect(self.screen, (40, 90, 60), pickup, border_radius=6)
+        pygame.draw.rect(self.screen, (120, 200, 140), pickup, 1, border_radius=6)
+        pt = self.font.render("Pick up", True, WHITE)
+        self.screen.blit(pt, (pickup.centerx - pt.get_width() // 2, pickup.centery - pt.get_height() // 2))
+
+        ignore = pygame.Rect(box.x + 166, box.bottom - 58, 200, 36)
+        self.loot_prompt_rects["ignore"] = ignore
+        pygame.draw.rect(self.screen, (70, 55, 40), ignore, border_radius=6)
+        pygame.draw.rect(self.screen, (200, 160, 80), ignore, 1, border_radius=6)
+        ilabel = "Allow pickup" if ignored else "Never pick up"
+        it = self.font.render(ilabel, True, WHITE)
+        self.screen.blit(it, (ignore.centerx - it.get_width() // 2, ignore.centery - it.get_height() // 2))
+
+        cancel = pygame.Rect(box.right - 118, box.bottom - 58, 94, 36)
+        self.loot_prompt_rects["cancel"] = cancel
         pygame.draw.rect(self.screen, (70, 45, 40), cancel, border_radius=6)
         pygame.draw.rect(self.screen, (180, 90, 70), cancel, 1, border_radius=6)
         ct = self.font.render("Cancel", True, WHITE)
@@ -7887,15 +8165,25 @@ class GameClient(CameraYaw):
         if not self.combat_quick or time.time() > float(getattr(self, "combat_quick_until", 0) or 0):
             self.combat_quick = None
             return
+        if self.combat_quick_collapsed:
+            chip = pygame.Rect(int(cx - 16), int(top_y - 16), 32, 14)
+            chip.x = max(4, min(chip.x, MAP_W - chip.w - 4))
+            chip.y = max(4, chip.y)
+            pygame.draw.rect(self.screen, (28, 36, 32), chip, border_radius=4)
+            pygame.draw.rect(self.screen, (120, 180, 120), chip, 1, border_radius=4)
+            label = self.font_tiny.render("Eat", True, WHITE)
+            self.screen.blit(label, (chip.centerx - label.get_width() // 2, chip.centery - label.get_height() // 2))
+            self.combat_quick_rects["expand"] = chip
+            return
         # Refresh availability so used-up pots disappear
         opts = self.combat_consumable_options()
         order = ("food", "health", "attack", "strength", "defence")
         labels = {
-            "food": "Eat food",
-            "health": "HP potion",
-            "attack": "Att pot",
-            "strength": "Str pot",
-            "defence": "Def pot",
+            "food": "Eat",
+            "health": "HP",
+            "attack": "Att",
+            "strength": "Str",
+            "defence": "Def",
         }
         colors = {
             "food": ((50, 110, 60), (120, 200, 120)),
@@ -7912,38 +8200,37 @@ class GameClient(CameraYaw):
             "buttons": buttons,
             "labels": {k: labels[k] for k in buttons},
         }
-        btn_h = 22
-        pad = 4
+        btn_h = 16
+        pad = 3
         # Measure widths
         surfs = []
         for k in buttons:
             surfs.append((k, self.font_tiny.render(labels[k], True, WHITE)))
-        widths = [max(58, s.get_width() + 12) for _, s in surfs]
-        total_w = sum(widths) + pad * (len(widths) - 1) + 22  # + dismiss
+        widths = [max(28, s.get_width() + 8) for _, s in surfs]
+        total_w = sum(widths) + pad * (len(widths) - 1) + 16  # + dismiss
         x0 = int(cx - total_w // 2)
-        y0 = int(top_y - btn_h - 4)
+        y0 = int(top_y - btn_h - 2)
         # Keep on screen
         x0 = max(4, min(x0, MAP_W - total_w - 4))
         y0 = max(4, y0)
 
-        # Soft panel behind buttons
-        panel = pygame.Rect(x0 - 4, y0 - 4, total_w + 8, btn_h + 8)
-        pygame.draw.rect(self.screen, (18, 22, 30), panel, border_radius=6)
-        pygame.draw.rect(self.screen, (200, 180, 90), panel, 1, border_radius=6)
+        panel = pygame.Rect(x0 - 2, y0 - 2, total_w + 4, btn_h + 4)
+        pygame.draw.rect(self.screen, (18, 22, 30), panel, border_radius=4)
+        pygame.draw.rect(self.screen, (160, 140, 70), panel, 1, border_radius=4)
 
         x = x0
         for (k, surf), w in zip(surfs, widths):
             r = pygame.Rect(x, y0, w, btn_h)
             bg, edge = colors[k]
-            pygame.draw.rect(self.screen, bg, r, border_radius=5)
-            pygame.draw.rect(self.screen, edge, r, 1, border_radius=5)
+            pygame.draw.rect(self.screen, bg, r, border_radius=3)
+            pygame.draw.rect(self.screen, edge, r, 1, border_radius=3)
             self.screen.blit(surf, (r.centerx - surf.get_width() // 2, r.centery - surf.get_height() // 2))
             self.combat_quick_rects[k] = r
             x = r.right + pad
 
-        dismiss = pygame.Rect(x, y0, 18, btn_h)
-        pygame.draw.rect(self.screen, (70, 40, 40), dismiss, border_radius=5)
-        pygame.draw.rect(self.screen, (180, 90, 80), dismiss, 1, border_radius=5)
+        dismiss = pygame.Rect(x, y0, 14, btn_h)
+        pygame.draw.rect(self.screen, (70, 40, 40), dismiss, border_radius=3)
+        pygame.draw.rect(self.screen, (180, 90, 80), dismiss, 1, border_radius=3)
         xt = self.font_tiny.render("×", True, WHITE)
         self.screen.blit(xt, (dismiss.centerx - xt.get_width() // 2, dismiss.centery - xt.get_height() // 2))
         self.combat_quick_rects["dismiss"] = dismiss
@@ -9255,10 +9542,6 @@ class GameClient(CameraYaw):
 
     def draw_dungeon_hud(self):
         d = self.dungeon or {}
-        box = pygame.Rect(12, 12, 400, 78)
-        pygame.draw.rect(self.screen, (18, 22, 32, 220), box, border_radius=8)
-        # opaque fallback
-        panel = pygame.Surface((box.w, box.h), pygame.SRCALPHA)
         did = d.get("id") or "tidehollow"
         names = {
             "emberdeep": "Emberdeep",
@@ -9268,45 +9551,55 @@ class GameClient(CameraYaw):
         }
         name = d.get("name") or names.get(did, "Dungeon")
         if did == "emberdeep":
-            panel.fill((36, 18, 14, 220))
-            border = (255, 140, 60)
-            title_col = (255, 200, 110)
+            fill, border, title_col = (36, 18, 14, 230), (255, 140, 60), (255, 200, 110)
         elif did == "sanctum":
-            panel.fill((28, 16, 40, 220))
-            border = (180, 120, 255)
-            title_col = (220, 190, 255)
+            fill, border, title_col = (28, 16, 40, 230), (180, 120, 255), (220, 190, 255)
         else:
-            panel.fill((16, 20, 30, 210))
-            border = (210, 175, 70)
-            title_col = (255, 220, 110)
-        self.screen.blit(panel, box.topleft)
-        pygame.draw.rect(self.screen, border, box, 2, border_radius=8)
+            fill, border, title_col = (16, 20, 30, 220), (210, 175, 70), (255, 220, 110)
         if d.get("explore"):
-            title = self.font.render(name, True, title_col)
-            sub = self.font_small.render(
-                "Walk onto the EXIT to leave",
-                True, (200, 205, 220),
-            )
+            title_txt = name
+            sub_txt = "Exit to leave"
         else:
-            title = self.font.render(
-                f"{name} · Floor {d.get('floor', 1)}/{d.get('floors', 10)}",
-                True, title_col,
-            )
-            sub = self.font_small.render(
-                f"{d.get('label', '')}  ·  {d.get('remaining', 0)} beasts left",
-                True, (200, 205, 220),
-            )
-        self.screen.blit(title, (box.x + 12, box.y + 10))
-        self.screen.blit(sub, (box.x + 12, box.y + 40))
-        # Explicit Leave button (Esc also works)
-        leave = pygame.Rect(box.right - 108, box.y + 18, 92, 42)
+            title_txt = f"{name} {d.get('floor', 1)}/{d.get('floors', 10)}"
+            sub_txt = f"{d.get('remaining', 0)} left"
+
+        if self.dungeon_hud_hidden:
+            self.dungeon_leave_rect = None
+            self.dungeon_hud_hide_rect = None
+            tab = pygame.Rect(8, 8, 78, 18)
+            self.dungeon_hud_tab = tab
+            panel = pygame.Surface((tab.w, tab.h), pygame.SRCALPHA)
+            panel.fill(fill)
+            self.screen.blit(panel, tab.topleft)
+            pygame.draw.rect(self.screen, border, tab, 1, border_radius=4)
+            label = self.font_tiny.render(title_txt[:14], True, title_col)
+            self.screen.blit(label, (tab.x + 4, tab.y + 3))
+            return
+
+        self.dungeon_hud_tab = None
+        title = self.font_tiny.render(title_txt, True, title_col)
+        sub = self.font_tiny.render(sub_txt, True, (200, 205, 220))
+        box_w = max(168, title.get_width() + 78)
+        box = pygame.Rect(8, 8, box_w, 36)
+        panel = pygame.Surface((box.w, box.h), pygame.SRCALPHA)
+        panel.fill(fill)
+        self.screen.blit(panel, box.topleft)
+        pygame.draw.rect(self.screen, border, box, 1, border_radius=5)
+        self.screen.blit(title, (box.x + 6, box.y + 3))
+        self.screen.blit(sub, (box.x + 6, box.y + 18))
+
+        hide = pygame.Rect(box.right - 16, box.y + 2, 14, 14)
+        self.dungeon_hud_hide_rect = hide
+        pygame.draw.rect(self.screen, (50, 40, 36), hide, border_radius=3)
+        hx = self.font_tiny.render("×", True, (220, 200, 180))
+        self.screen.blit(hx, (hide.centerx - hx.get_width() // 2, hide.centery - hx.get_height() // 2))
+
+        leave = pygame.Rect(box.right - 58, box.y + 16, 40, 16)
         self.dungeon_leave_rect = leave
-        pygame.draw.rect(self.screen, (90, 40, 35), leave, border_radius=6)
-        pygame.draw.rect(self.screen, (220, 100, 80), leave, 2, border_radius=6)
-        lt = self.font_small.render("Leave", True, WHITE)
-        self.screen.blit(lt, (leave.centerx - lt.get_width() // 2, leave.y + 6))
-        tip = self.font_tiny.render("Esc", True, (200, 180, 160))
-        self.screen.blit(tip, (leave.centerx - tip.get_width() // 2, leave.y + 24))
+        pygame.draw.rect(self.screen, (90, 40, 35), leave, border_radius=3)
+        pygame.draw.rect(self.screen, (220, 100, 80), leave, 1, border_radius=3)
+        lt = self.font_tiny.render("Leave", True, WHITE)
+        self.screen.blit(lt, (leave.centerx - lt.get_width() // 2, leave.centery - lt.get_height() // 2))
 
     # -- modals ---------------------------------------------------------------
     def draw_dialogue(self):
@@ -9839,6 +10132,10 @@ class GameClient(CameraYaw):
                           (box.x + 12, box.y + box.h - 20))
 
     def draw_equipment_modal(self):
+        if USE_NEW_EQUIPMENT_UI:
+            import equipment_ui_v2
+            equipment_ui_v2.draw(self, ITEMS, karma_slot_bonus, sprites, weapon_style)
+            return
         box = pygame.Rect(90, 36, 760, 560)
         pygame.draw.rect(self.screen, (16, 18, 26), box, border_radius=8)
         pygame.draw.rect(self.screen, YELLOW, box, 2, border_radius=8)
@@ -10876,12 +11173,12 @@ class GameClient(CameraYaw):
             ("Inventory", [
                 ("Left-click", "Equip, eat, drink, use, or open bag Pack/Unpack"),
                 ("Drag item", "Rearrange inventory slots"),
-                ("Right-click", "Drop prompt (1 / all) or bury bones"),
+                ("Right-click", "Drop, or set Never pick up so this item stays on the ground"),
                 ("Shift+right", "Drop the whole stack immediately"),
                 ("Bags", "Pack/Unpack storage bags; crafting draws from bags first"),
             ]),
             ("Bank", [
-                ("Deposit inventory", "Banks every tradeable item at once"),
+                ("Deposit inventory", "Banks every item you can store, including the Tidehollow Medal"),
                 ("Vault click", "Withdraw stack · Shift+click = withdraw 1"),
                 ("Shop sell", "Click = sell 1 · Shift+click = sell whole stack"),
                 ("Esc", "Closes bank, shops, and most popups"),
