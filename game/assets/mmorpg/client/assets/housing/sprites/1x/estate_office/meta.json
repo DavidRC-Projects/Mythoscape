@@ -1,0 +1,21 @@
+{
+  "key": "estate_office",
+  "origin_px": [
+    40,
+    240
+  ],
+  "tile_px": 40,
+  "layers": {
+    "ground": "sprites/1x/estate_office/ground.png",
+    "body": "sprites/1x/estate_office/body.png",
+    "cutaway": "sprites/1x/estate_office/cutaway.png"
+  },
+  "size_2x": [
+    880,
+    960
+  ],
+  "origin_2x": [
+    80,
+    480
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "key": "ash_manor",
+  "origin_px": [
+    40,
+    320
+  ],
+  "tile_px": 40,
+  "layers": {
+    "ground": "sprites/1x/ash_manor/ground.png",
+    "body": "sprites/1x/ash_manor/body.png",
+    "cutaway": "sprites/1x/ash_manor/cutaway.png"
+  },
+  "size_2x": [
+    960,
+    1280
+  ],
+  "origin_2x": [
+    80,
+    640
+  ]
+}

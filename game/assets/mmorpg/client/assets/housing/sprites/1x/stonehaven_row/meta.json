@@ -1,0 +1,21 @@
+{
+  "key": "stonehaven_row",
+  "origin_px": [
+    40,
+    400
+  ],
+  "tile_px": 40,
+  "layers": {
+    "ground": "sprites/1x/stonehaven_row/ground.png",
+    "body": "sprites/1x/stonehaven_row/body.png",
+    "cutaway": "sprites/1x/stonehaven_row/cutaway.png"
+  },
+  "size_2x": [
+    960,
+    1520
+  ],
+  "origin_2x": [
+    80,
+    800
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "key": "estate_grounds",
+  "origin_px": [
+    40,
+    80
+  ],
+  "tile_px": 40,
+  "layers": {
+    "ground": "sprites/1x/estate_grounds/ground.png",
+    "body": "sprites/1x/estate_grounds/body.png",
+    "cutaway": "sprites/1x/estate_grounds/cutaway.png"
+  },
+  "size_2x": [
+    4000,
+    3920
+  ],
+  "origin_2x": [
+    80,
+    160
+  ]
+}

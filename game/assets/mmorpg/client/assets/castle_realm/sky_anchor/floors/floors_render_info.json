@@ -1,0 +1,50 @@
+{
+ "sky_f1": {
+  "size_2x": [
+   1280,
+   1280
+  ],
+  "origin_2x": [
+   0,
+   160
+  ],
+  "tris": 4746,
+  "building": "keep"
+ },
+ "sky_f2": {
+  "size_2x": [
+   1280,
+   1280
+  ],
+  "origin_2x": [
+   0,
+   160
+  ],
+  "tris": 4274,
+  "building": "keep"
+ },
+ "sky_f3": {
+  "size_2x": [
+   1280,
+   1280
+  ],
+  "origin_2x": [
+   0,
+   160
+  ],
+  "tris": 4844,
+  "building": "keep"
+ },
+ "sky_f4": {
+  "size_2x": [
+   1280,
+   1280
+  ],
+  "origin_2x": [
+   0,
+   160
+  ],
+  "tris": 3535,
+  "building": "keep"
+ }
+}

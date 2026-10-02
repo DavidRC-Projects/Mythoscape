@@ -1,0 +1,21 @@
+{
+  "key": "meadow_house",
+  "origin_px": [
+    40,
+    320
+  ],
+  "tile_px": 40,
+  "layers": {
+    "ground": "sprites/1x/meadow_house/ground.png",
+    "body": "sprites/1x/meadow_house/body.png",
+    "cutaway": "sprites/1x/meadow_house/cutaway.png"
+  },
+  "size_2x": [
+    800,
+    1200
+  ],
+  "origin_2x": [
+    80,
+    640
+  ]
+}

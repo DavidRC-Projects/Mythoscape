@@ -1,0 +1,21 @@
+{
+ "pass": true,
+ "errors": [],
+ "log": [
+  "overworld portal (111,43) -> realm spawn (150,182): BFS visited 55933 tiles over 5 planes",
+  "gothic drawbridge 4/4 tiles reachable",
+  "gothic portcullis 2/2 tiles reachable",
+  "gothic bailey     196/196 tiles reachable",
+  "gothic keep door  2/2 tiles reachable",
+  "floor 1 Hall of Shadows  walkable 131/131 reachable, rooms 4/4",
+  "floor 2 Great Hall       walkable 133/133 reachable, rooms 3/3",
+  "floor 3 Lord's Chambers  walkable 115/115 reachable, rooms 6/6",
+  "floor 4 Spire Top        walkable 63/63 reachable, rooms 3/3",
+  "spacing gothic     <-> king        58 tiles",
+  "spacing gothic     <-> white_rose 169 tiles",
+  "spacing gothic     <-> sky_anchor  52 tiles",
+  "spacing king       <-> white_rose  51 tiles",
+  "spacing king       <-> sky_anchor  55 tiles",
+  "spacing white_rose <-> sky_anchor 166 tiles"
+ ]
+}

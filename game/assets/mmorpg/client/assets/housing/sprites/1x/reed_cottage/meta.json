@@ -1,0 +1,21 @@
+{
+  "key": "reed_cottage",
+  "origin_px": [
+    40,
+    320
+  ],
+  "tile_px": 40,
+  "layers": {
+    "ground": "sprites/1x/reed_cottage/ground.png",
+    "body": "sprites/1x/reed_cottage/body.png",
+    "cutaway": "sprites/1x/reed_cottage/cutaway.png"
+  },
+  "size_2x": [
+    720,
+    1120
+  ],
+  "origin_2x": [
+    80,
+    640
+  ]
+}

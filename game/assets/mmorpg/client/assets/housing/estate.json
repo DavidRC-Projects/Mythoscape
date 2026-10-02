@@ -1,0 +1,2334 @@
+{
+  "version": 1,
+  "flag": "USE_PLAYER_HOUSING",
+  "estate": {
+    "key": "kings_row_estate",
+    "name": "King's Row Estate",
+    "x0": 4,
+    "y0": 96,
+    "x1": 51,
+    "y1": 141,
+    "w": 48,
+    "h": 46,
+    "gate": {
+      "x": 27,
+      "y": 141
+    },
+    "agent_lot": {
+      "x0": 22,
+      "y0": 136,
+      "x1": 32,
+      "y1": 140
+    }
+  },
+  "lease": {
+    "weekly_gold": 50000,
+    "grace_weeks": 1,
+    "recipient": "king",
+    "source": "bank_coins",
+    "reminder": true
+  },
+  "bank_note": {
+    "current_max_bank_coins": 10000000,
+    "required_for_top_tier": 50000000,
+    "recommended_max_bank_coins": 100000000,
+    "max_purse_coins": 65000
+  },
+  "agent": {
+    "key": "estate_office",
+    "name": "Estate Office",
+    "building_id": "estate_agent",
+    "npc": "estate_agent_mira",
+    "npc_title": "Estate Agent",
+    "footprint": {
+      "x0": 23,
+      "y0": 136,
+      "x1": 31,
+      "y1": 140,
+      "w": 9,
+      "h": 5
+    },
+    "floor": {
+      "floor_x0": 24,
+      "floor_y0": 137,
+      "floor_x1": 30,
+      "floor_y1": 138
+    },
+    "door": {
+      "id": "estate_office_door",
+      "x": 27,
+      "y": 140,
+      "enter": [
+        27,
+        138
+      ],
+      "exit": [
+        27,
+        141
+      ],
+      "doorway_path_tiles": [
+        [
+          27,
+          139
+        ],
+        [
+          27,
+          140
+        ]
+      ]
+    },
+    "tile_px": 40
+  },
+  "houses": [
+    {
+      "key": "willow_cottage",
+      "building_id": "willow_cottage",
+      "name": "Willow Cottage",
+      "price_gold": 1000000,
+      "floors": 2,
+      "roof": "thatch",
+      "wall": "plaster",
+      "accent": "green",
+      "footprint": {
+        "x0": 6,
+        "y0": 128,
+        "x1": 11,
+        "y1": 132,
+        "w": 6,
+        "h": 5
+      },
+      "floor": {
+        "floor_x0": 7,
+        "floor_y0": 129,
+        "floor_x1": 10,
+        "floor_y1": 130
+      },
+      "door": {
+        "id": "willow_cottage_door",
+        "x": 9,
+        "y": 132,
+        "enter": [
+          9,
+          130
+        ],
+        "exit": [
+          9,
+          133
+        ],
+        "doorway_path_tiles": [
+          [
+            9,
+            131
+          ],
+          [
+            9,
+            132
+          ]
+        ]
+      },
+      "floor_plans": [
+        {
+          "level": 0,
+          "name": "Ground",
+          "w": 4,
+          "d": 2,
+          "walkable": [
+            [
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": [
+            1,
+            1
+          ],
+          "stairs_down": null
+        },
+        {
+          "level": 1,
+          "name": "Upper",
+          "w": 4,
+          "d": 2,
+          "walkable": [
+            [
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": null,
+          "stairs_down": [
+            1,
+            1
+          ]
+        }
+      ],
+      "tile_px": 40,
+      "flag": "USE_PLAYER_HOUSING",
+      "ownership": {
+        "deed_item": "deed_willow_cottage",
+        "name_plaque": true,
+        "vacant_label": "For Sale"
+      }
+    },
+    {
+      "key": "reed_cottage",
+      "building_id": "reed_cottage",
+      "name": "Reed Cottage",
+      "price_gold": 2000000,
+      "floors": 2,
+      "roof": "thatch",
+      "wall": "plank_w",
+      "accent": "yellow",
+      "footprint": {
+        "x0": 14,
+        "y0": 128,
+        "x1": 20,
+        "y1": 132,
+        "w": 7,
+        "h": 5
+      },
+      "floor": {
+        "floor_x0": 15,
+        "floor_y0": 129,
+        "floor_x1": 19,
+        "floor_y1": 130
+      },
+      "door": {
+        "id": "reed_cottage_door",
+        "x": 17,
+        "y": 132,
+        "enter": [
+          17,
+          130
+        ],
+        "exit": [
+          17,
+          133
+        ],
+        "doorway_path_tiles": [
+          [
+            17,
+            131
+          ],
+          [
+            17,
+            132
+          ]
+        ]
+      },
+      "floor_plans": [
+        {
+          "level": 0,
+          "name": "Ground",
+          "w": 5,
+          "d": 2,
+          "walkable": [
+            [
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": [
+            1,
+            1
+          ],
+          "stairs_down": null
+        },
+        {
+          "level": 1,
+          "name": "Upper",
+          "w": 5,
+          "d": 2,
+          "walkable": [
+            [
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": null,
+          "stairs_down": [
+            1,
+            1
+          ]
+        }
+      ],
+      "tile_px": 40,
+      "flag": "USE_PLAYER_HOUSING",
+      "ownership": {
+        "deed_item": "deed_reed_cottage",
+        "name_plaque": true,
+        "vacant_label": "For Sale"
+      }
+    },
+    {
+      "key": "meadow_house",
+      "building_id": "meadow_house",
+      "name": "Meadow House",
+      "price_gold": 3500000,
+      "floors": 2,
+      "roof": "roof_brown",
+      "wall": "plaster",
+      "accent": "flower_r",
+      "footprint": {
+        "x0": 23,
+        "y0": 127,
+        "x1": 30,
+        "y1": 132,
+        "w": 8,
+        "h": 6
+      },
+      "floor": {
+        "floor_x0": 24,
+        "floor_y0": 128,
+        "floor_x1": 29,
+        "floor_y1": 130
+      },
+      "door": {
+        "id": "meadow_house_door",
+        "x": 27,
+        "y": 132,
+        "enter": [
+          27,
+          130
+        ],
+        "exit": [
+          27,
+          133
+        ],
+        "doorway_path_tiles": [
+          [
+            27,
+            131
+          ],
+          [
+            27,
+            132
+          ]
+        ]
+      },
+      "floor_plans": [
+        {
+          "level": 0,
+          "name": "Ground",
+          "w": 6,
+          "d": 3,
+          "walkable": [
+            [
+              0,
+              1,
+              1,
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": [
+            1,
+            1
+          ],
+          "stairs_down": null
+        },
+        {
+          "level": 1,
+          "name": "Upper",
+          "w": 6,
+          "d": 3,
+          "walkable": [
+            [
+              0,
+              1,
+              1,
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": null,
+          "stairs_down": [
+            1,
+            1
+          ]
+        }
+      ],
+      "tile_px": 40,
+      "flag": "USE_PLAYER_HOUSING",
+      "ownership": {
+        "deed_item": "deed_meadow_house",
+        "name_plaque": true,
+        "vacant_label": "For Sale"
+      }
+    },
+    {
+      "key": "oak_villa",
+      "building_id": "oak_villa",
+      "name": "Oak Villa",
+      "price_gold": 5000000,
+      "floors": 2,
+      "roof": "roof_tile",
+      "wall": "sstone",
+      "accent": "beam",
+      "footprint": {
+        "x0": 33,
+        "y0": 127,
+        "x1": 41,
+        "y1": 132,
+        "w": 9,
+        "h": 6
+      },
+      "floor": {
+        "floor_x0": 34,
+        "floor_y0": 128,
+        "floor_x1": 40,
+        "floor_y1": 130
+      },
+      "door": {
+        "id": "oak_villa_door",
+        "x": 37,
+        "y": 132,
+        "enter": [
+          37,
+          130
+        ],
+        "exit": [
+          37,
+          133
+        ],
+        "doorway_path_tiles": [
+          [
+            37,
+            131
+          ],
+          [
+            37,
+            132
+          ]
+        ]
+      },
+      "floor_plans": [
+        {
+          "level": 0,
+          "name": "Ground",
+          "w": 7,
+          "d": 3,
+          "walkable": [
+            [
+              0,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": [
+            1,
+            1
+          ],
+          "stairs_down": null
+        },
+        {
+          "level": 1,
+          "name": "Upper",
+          "w": 7,
+          "d": 3,
+          "walkable": [
+            [
+              0,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": null,
+          "stairs_down": [
+            1,
+            1
+          ]
+        }
+      ],
+      "tile_px": 40,
+      "flag": "USE_PLAYER_HOUSING",
+      "ownership": {
+        "deed_item": "deed_oak_villa",
+        "name_plaque": true,
+        "vacant_label": "For Sale"
+      }
+    },
+    {
+      "key": "ash_manor",
+      "building_id": "ash_manor",
+      "name": "Ash Manor",
+      "price_gold": 7500000,
+      "floors": 2,
+      "roof": "roof_slate",
+      "wall": "sstone",
+      "accent": "blue",
+      "footprint": {
+        "x0": 6,
+        "y0": 116,
+        "x1": 15,
+        "y1": 122,
+        "w": 10,
+        "h": 7
+      },
+      "floor": {
+        "floor_x0": 7,
+        "floor_y0": 117,
+        "floor_x1": 14,
+        "floor_y1": 120
+      },
+      "door": {
+        "id": "ash_manor_door",
+        "x": 11,
+        "y": 122,
+        "enter": [
+          11,
+          120
+        ],
+        "exit": [
+          11,
+          123
+        ],
+        "doorway_path_tiles": [
+          [
+            11,
+            121
+          ],
+          [
+            11,
+            122
+          ]
+        ]
+      },
+      "floor_plans": [
+        {
+          "level": 0,
+          "name": "Ground",
+          "w": 8,
+          "d": 4,
+          "walkable": [
+            [
+              0,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": [
+            1,
+            1
+          ],
+          "stairs_down": null
+        },
+        {
+          "level": 1,
+          "name": "Upper",
+          "w": 8,
+          "d": 4,
+          "walkable": [
+            [
+              0,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": null,
+          "stairs_down": [
+            1,
+            1
+          ]
+        }
+      ],
+      "tile_px": 40,
+      "flag": "USE_PLAYER_HOUSING",
+      "ownership": {
+        "deed_item": "deed_ash_manor",
+        "name_plaque": true,
+        "vacant_label": "For Sale"
+      }
+    },
+    {
+      "key": "cedar_townhouse",
+      "building_id": "cedar_townhouse",
+      "name": "Cedar Townhouse",
+      "price_gold": 10000000,
+      "floors": 3,
+      "roof": "roof_tile",
+      "wall": "plank_w",
+      "accent": "red",
+      "footprint": {
+        "x0": 18,
+        "y0": 115,
+        "x1": 25,
+        "y1": 122,
+        "w": 8,
+        "h": 8
+      },
+      "floor": {
+        "floor_x0": 19,
+        "floor_y0": 116,
+        "floor_x1": 24,
+        "floor_y1": 120
+      },
+      "door": {
+        "id": "cedar_townhouse_door",
+        "x": 22,
+        "y": 122,
+        "enter": [
+          22,
+          120
+        ],
+        "exit": [
+          22,
+          123
+        ],
+        "doorway_path_tiles": [
+          [
+            22,
+            121
+          ],
+          [
+            22,
+            122
+          ]
+        ]
+      },
+      "floor_plans": [
+        {
+          "level": 0,
+          "name": "Ground",
+          "w": 6,
+          "d": 5,
+          "walkable": [
+            [
+              0,
+              1,
+              1,
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": [
+            1,
+            1
+          ],
+          "stairs_down": null
+        },
+        {
+          "level": 1,
+          "name": "Upper",
+          "w": 6,
+          "d": 5,
+          "walkable": [
+            [
+              0,
+              1,
+              1,
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": [
+            1,
+            1
+          ],
+          "stairs_down": [
+            1,
+            1
+          ]
+        },
+        {
+          "level": 2,
+          "name": "Attic",
+          "w": 6,
+          "d": 5,
+          "walkable": [
+            [
+              0,
+              1,
+              1,
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": null,
+          "stairs_down": [
+            1,
+            1
+          ]
+        }
+      ],
+      "tile_px": 40,
+      "flag": "USE_PLAYER_HOUSING",
+      "ownership": {
+        "deed_item": "deed_cedar_townhouse",
+        "name_plaque": true,
+        "vacant_label": "For Sale"
+      }
+    },
+    {
+      "key": "stonehaven_row",
+      "building_id": "stonehaven_row",
+      "name": "Stonehaven Row",
+      "price_gold": 15000000,
+      "floors": 3,
+      "roof": "roof_slate",
+      "wall": "sstone",
+      "accent": "gold",
+      "footprint": {
+        "x0": 28,
+        "y0": 115,
+        "x1": 37,
+        "y1": 122,
+        "w": 10,
+        "h": 8
+      },
+      "floor": {
+        "floor_x0": 29,
+        "floor_y0": 116,
+        "floor_x1": 36,
+        "floor_y1": 120
+      },
+      "door": {
+        "id": "stonehaven_row_door",
+        "x": 33,
+        "y": 122,
+        "enter": [
+          33,
+          120
+        ],
+        "exit": [
+          33,
+          123
+        ],
+        "doorway_path_tiles": [
+          [
+            33,
+            121
+          ],
+          [
+            33,
+            122
+          ]
+        ]
+      },
+      "floor_plans": [
+        {
+          "level": 0,
+          "name": "Ground",
+          "w": 8,
+          "d": 5,
+          "walkable": [
+            [
+              0,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              0,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": [
+            1,
+            1
+          ],
+          "stairs_down": null
+        },
+        {
+          "level": 1,
+          "name": "Upper",
+          "w": 8,
+          "d": 5,
+          "walkable": [
+            [
+              0,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": [
+            1,
+            1
+          ],
+          "stairs_down": [
+            1,
+            1
+          ]
+        },
+        {
+          "level": 2,
+          "name": "Attic",
+          "w": 8,
+          "d": 5,
+          "walkable": [
+            [
+              0,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": null,
+          "stairs_down": [
+            1,
+            1
+          ]
+        }
+      ],
+      "tile_px": 40,
+      "flag": "USE_PLAYER_HOUSING",
+      "ownership": {
+        "deed_item": "deed_stonehaven_row",
+        "name_plaque": true,
+        "vacant_label": "For Sale"
+      }
+    },
+    {
+      "key": "riverview_estate",
+      "building_id": "riverview_estate",
+      "name": "Riverview Estate",
+      "price_gold": 25000000,
+      "floors": 3,
+      "roof": "roof_green",
+      "wall": "marble",
+      "accent": "teal",
+      "footprint": {
+        "x0": 6,
+        "y0": 102,
+        "x1": 17,
+        "y1": 110,
+        "w": 12,
+        "h": 9
+      },
+      "floor": {
+        "floor_x0": 7,
+        "floor_y0": 103,
+        "floor_x1": 16,
+        "floor_y1": 108
+      },
+      "door": {
+        "id": "riverview_estate_door",
+        "x": 12,
+        "y": 110,
+        "enter": [
+          12,
+          108
+        ],
+        "exit": [
+          12,
+          111
+        ],
+        "doorway_path_tiles": [
+          [
+            12,
+            109
+          ],
+          [
+            12,
+            110
+          ]
+        ]
+      },
+      "floor_plans": [
+        {
+          "level": 0,
+          "name": "Ground",
+          "w": 10,
+          "d": 6,
+          "walkable": [
+            [
+              0,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              0,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              0,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": [
+            1,
+            1
+          ],
+          "stairs_down": null
+        },
+        {
+          "level": 1,
+          "name": "Upper",
+          "w": 10,
+          "d": 6,
+          "walkable": [
+            [
+              0,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": [
+            1,
+            1
+          ],
+          "stairs_down": [
+            1,
+            1
+          ]
+        },
+        {
+          "level": 2,
+          "name": "Attic",
+          "w": 10,
+          "d": 6,
+          "walkable": [
+            [
+              0,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": null,
+          "stairs_down": [
+            1,
+            1
+          ]
+        }
+      ],
+      "tile_px": 40,
+      "flag": "USE_PLAYER_HOUSING",
+      "ownership": {
+        "deed_item": "deed_riverview_estate",
+        "name_plaque": true,
+        "vacant_label": "For Sale"
+      }
+    },
+    {
+      "key": "crown_villa",
+      "building_id": "crown_villa",
+      "name": "Crown Villa",
+      "price_gold": 35000000,
+      "floors": 3,
+      "roof": "roof_purple",
+      "wall": "marble",
+      "accent": "gold",
+      "footprint": {
+        "x0": 20,
+        "y0": 101,
+        "x1": 33,
+        "y1": 110,
+        "w": 14,
+        "h": 10
+      },
+      "floor": {
+        "floor_x0": 21,
+        "floor_y0": 102,
+        "floor_x1": 32,
+        "floor_y1": 108
+      },
+      "door": {
+        "id": "crown_villa_door",
+        "x": 27,
+        "y": 110,
+        "enter": [
+          27,
+          108
+        ],
+        "exit": [
+          27,
+          111
+        ],
+        "doorway_path_tiles": [
+          [
+            27,
+            109
+          ],
+          [
+            27,
+            110
+          ]
+        ]
+      },
+      "floor_plans": [
+        {
+          "level": 0,
+          "name": "Ground",
+          "w": 12,
+          "d": 7,
+          "walkable": [
+            [
+              0,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": [
+            1,
+            1
+          ],
+          "stairs_down": null
+        },
+        {
+          "level": 1,
+          "name": "Upper",
+          "w": 12,
+          "d": 7,
+          "walkable": [
+            [
+              0,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": [
+            1,
+            1
+          ],
+          "stairs_down": [
+            1,
+            1
+          ]
+        },
+        {
+          "level": 2,
+          "name": "Attic",
+          "w": 12,
+          "d": 7,
+          "walkable": [
+            [
+              0,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": null,
+          "stairs_down": [
+            1,
+            1
+          ]
+        }
+      ],
+      "tile_px": 40,
+      "flag": "USE_PLAYER_HOUSING",
+      "ownership": {
+        "deed_item": "deed_crown_villa",
+        "name_plaque": true,
+        "vacant_label": "For Sale"
+      }
+    },
+    {
+      "key": "kings_folly",
+      "building_id": "kings_folly",
+      "name": "King's Folly",
+      "price_gold": 50000000,
+      "floors": 3,
+      "roof": "roof_slate",
+      "wall": "sstone",
+      "accent": "gold",
+      "footprint": {
+        "x0": 36,
+        "y0": 100,
+        "x1": 49,
+        "y1": 110,
+        "w": 14,
+        "h": 11
+      },
+      "floor": {
+        "floor_x0": 37,
+        "floor_y0": 101,
+        "floor_x1": 48,
+        "floor_y1": 108
+      },
+      "door": {
+        "id": "kings_folly_door",
+        "x": 43,
+        "y": 110,
+        "enter": [
+          43,
+          108
+        ],
+        "exit": [
+          43,
+          111
+        ],
+        "doorway_path_tiles": [
+          [
+            43,
+            109
+          ],
+          [
+            43,
+            110
+          ]
+        ]
+      },
+      "floor_plans": [
+        {
+          "level": 0,
+          "name": "Ground",
+          "w": 12,
+          "d": 8,
+          "walkable": [
+            [
+              0,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": [
+            1,
+            1
+          ],
+          "stairs_down": null
+        },
+        {
+          "level": 1,
+          "name": "Upper",
+          "w": 12,
+          "d": 8,
+          "walkable": [
+            [
+              0,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": [
+            1,
+            1
+          ],
+          "stairs_down": [
+            1,
+            1
+          ]
+        },
+        {
+          "level": 2,
+          "name": "Attic",
+          "w": 12,
+          "d": 8,
+          "walkable": [
+            [
+              0,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              0
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ],
+          "stairs_up": null,
+          "stairs_down": [
+            1,
+            1
+          ]
+        }
+      ],
+      "tile_px": 40,
+      "flag": "USE_PLAYER_HOUSING",
+      "ownership": {
+        "deed_item": "deed_kings_folly",
+        "name_plaque": true,
+        "vacant_label": "For Sale"
+      }
+    }
+  ]
+}

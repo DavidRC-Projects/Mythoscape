@@ -1,0 +1,21 @@
+{
+  "key": "riverview_estate",
+  "origin_px": [
+    40,
+    400
+  ],
+  "tile_px": 40,
+  "layers": {
+    "ground": "sprites/1x/riverview_estate/ground.png",
+    "body": "sprites/1x/riverview_estate/body.png",
+    "cutaway": "sprites/1x/riverview_estate/cutaway.png"
+  },
+  "size_2x": [
+    1120,
+    1600
+  ],
+  "origin_2x": [
+    80,
+    800
+  ]
+}

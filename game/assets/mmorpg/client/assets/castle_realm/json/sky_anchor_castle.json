@@ -1,0 +1,1474 @@
+{
+ "id": "sky_anchor",
+ "name": "Sky-Anchor Citadel",
+ "realm": "castle_realm",
+ "flag": "USE_CASTLE_REALM",
+ "version": 1,
+ "footprint": {
+  "x0": 26,
+  "y0": 118,
+  "x1": 73,
+  "y1": 165,
+  "w": 48,
+  "h": 48,
+  "plane": "realm"
+ },
+ "keep_rect_local": [
+  16,
+  11,
+  31,
+  24
+ ],
+ "building_rects_local": {
+  "keep": [
+   16,
+   11,
+   31,
+   24
+  ]
+ },
+ "grid_legend": {
+  "M": "moat / Anchor Mere under the floating rock (blocked)",
+  "W": "wall/tower (blocked)",
+  "K": "lift pier / tower bases (blocked, sprite)",
+  "F": "ward / anchor walk (walkable; drawn behind sort_24 under the rock tips)",
+  "A": "wall-walk (NPC only, not player-reachable)",
+  "P": "gate passage",
+  "G": "portcullis (walkable when open)",
+  "B": "drawbridge (walkable when down)",
+  "D": "chain-lift door -> floating keep floor 1 (transition)",
+  "N": "chain-anchor bastion (blocked)",
+  "H": "crystal garden / brazier / pine (blocked)"
+ },
+ "walkability": [
+  "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM",
+  "MWWWWMMMMMMMMMMMMMMMMMMWWMMMMMMMMMMMMMMMMMMWWWWM",
+  "MWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWM",
+  "MWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWM",
+  "MWWWWFFFFFFFFFFFFFFFFFFWWFFFFFFFFFFFFFFFFFFWWWWM",
+  "MMWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWMM",
+  "MMWWFFFFMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMFFFFWWMM",
+  "MMWWFFFFMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMFFFFWWMM",
+  "MMWWFFFFMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMFFFFWWMM",
+  "MMWWFFFFMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMFFFFWWMM",
+  "MMWWFFFFMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMFFFFWWMM",
+  "MMWWFFFFMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMFFFFWWMM",
+  "MMWWFFFFMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMFFFFWWMM",
+  "MMWWFFFFMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMFFFFWWMM",
+  "MMWWFFFFMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMFFFFWWMM",
+  "MMWWFFFFMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMFFFFWWMM",
+  "MMWWFFFFMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMFFFFWWMM",
+  "MMWWFFFFMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMFFFFWWMM",
+  "MMWWFFFFMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMFFFFWWMM",
+  "MMWWFFFFMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMFFFFWWMM",
+  "MMWWFFFFMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMFFFFWWMM",
+  "MMWWFFFFMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMFFFFWWMM",
+  "MMWWFFFFMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMFFFFWWMM",
+  "MWWWWFFFMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMFFFWWWWM",
+  "MWWWWFFFFFFFFFFFKKKKKKKDDKKKKKKKFFFFFFFFFFFWWWWM",
+  "MMWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWMM",
+  "MMWWFFFFNNNNFFFFFFFFFFFFFFFFFFFFFFFFNNNNFFFFWWMM",
+  "MMWWFFFFNNNNFFFFFFFFFFFFFFFFFFFFFFFFNNNNFFFFWWMM",
+  "MMWWFFFFNNNNFFFFFFFFFFFFFFFFFFFFFFFFNNNNFFFFWWMM",
+  "MMWWFFFFNNNNFFFFFFFFFFFFFFFFFFFFFFFFNNNNFFFFWWMM",
+  "MMWWFFFFFFFFFFHFFFFFFFFFFFFFFFFFFHFFFFFFFFFFWWMM",
+  "MMWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWMM",
+  "MMWWHHHHHFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFHHHHHWWMM",
+  "MMWWHHHHHFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFHHHHHWWMM",
+  "MMWWHHHHHFFFFFFFFFFFHFFFFFFHFFFFFFFFFFFHHHHHWWMM",
+  "MMWWHHHHHFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFHHHHHWWMM",
+  "MMWWHHHHHFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFHHHHHWWMM",
+  "MMWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWMM",
+  "MMWWFFFFFFFFHFFFFFFFFFFFFFFFFFFFFFFHFFFFFFFFWWMM",
+  "MMWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWMM",
+  "MMWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWMM",
+  "MMWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWMM",
+  "MMWWFFFFFFFFFFFFFFWWWWWPPWWWWWFFFFFFFFFFFFFFWWMM",
+  "MWWWWFFFFFFFFFFFFWWWWWWPPWWWWWWFFFFFFFFFFFFWWWWM",
+  "MWWWWWWWWWWWWWWWWWWWWWWPPWWWWWWWWWWWWWWWWWWWWWWM",
+  "MWWWWWWWWWWWWWWWWWWWWWWGGWWWWWWWWWWWWWWWWWWWWWWM",
+  "MWWWWMMMMMMMMMMMMWWWMMMBBMMMWWWMMMMMMMMMMMMWWWWM",
+  "MMMMMMMMMMMMMMMMMMMMMMMBBMMMMMMMMMMMMMMMMMMMMMMM"
+ ],
+ "walkable_chars": [
+  "B",
+  "D",
+  "F",
+  "G",
+  "P"
+ ],
+ "keep_doors": [
+  {
+   "tile_local": [
+    23,
+    24
+   ],
+   "tile": [
+    49,
+    142
+   ],
+   "to_plane": "sky_f1",
+   "arrive": [
+    7,
+    12
+   ],
+   "building": "keep"
+  },
+  {
+   "tile_local": [
+    24,
+    24
+   ],
+   "tile": [
+    50,
+    142
+   ],
+   "to_plane": "sky_f1",
+   "arrive": [
+    8,
+    12
+   ],
+   "building": "keep"
+  }
+ ],
+ "trigger_tiles": {
+  "outer": [
+   [
+    48,
+    166
+   ],
+   [
+    49,
+    166
+   ],
+   [
+    50,
+    166
+   ],
+   [
+    51,
+    166
+   ]
+  ],
+  "hold": [
+   [
+    49,
+    160
+   ],
+   [
+    50,
+    160
+   ],
+   [
+    49,
+    161
+   ],
+   [
+    50,
+    161
+   ],
+   [
+    49,
+    162
+   ],
+   [
+    50,
+    162
+   ],
+   [
+    49,
+    163
+   ],
+   [
+    50,
+    163
+   ],
+   [
+    49,
+    164
+   ],
+   [
+    50,
+    164
+   ],
+   [
+    49,
+    165
+   ],
+   [
+    50,
+    165
+   ]
+  ],
+  "inner": [
+   [
+    49,
+    158
+   ],
+   [
+    50,
+    158
+   ],
+   [
+    49,
+    159
+   ],
+   [
+    50,
+    159
+   ]
+  ],
+  "rule": "same as castle_v2: gate opens while the local player stands on outer/inner/hold; closes when none"
+ },
+ "floor_legend": {
+  "#": "wall (blocked)",
+  ".": "floor",
+  "D": "door (walkable, between rooms)",
+  "U": "stairs up (transition)",
+  "V": "stairs down (transition)",
+  "E": "exit to bailey (transition)",
+  "x": "furniture (blocked, see furniture list)"
+ },
+ "floor_walkable_chars": [
+  ".",
+  "D",
+  "E",
+  "U",
+  "V"
+ ],
+ "floors": [
+  {
+   "plane": "sky_f1",
+   "building": "keep",
+   "level": 1,
+   "name": "Lift Landing & Hall of Chains",
+   "width": 16,
+   "height": 14,
+   "height_m": 14.0,
+   "rows": [
+    "################",
+    "#x....xxxx....x#",
+    "#..............#",
+    "#..xxx....xxx..#",
+    "#..............#",
+    "#..xx.....xx...#",
+    "#x............x#",
+    "##D#####D#######",
+    "#x..x#x...x#...#",
+    "#....#.....#...#",
+    "#....D.....D.U.#",
+    "#..x.#.....#...#",
+    "#x..x#x...x#x..#",
+    "#######EE#######"
+   ],
+   "sprite_2x": "floors/sky_f1.png",
+   "sprite_1x": "floors/1x/sky_f1.png",
+   "rooms": [
+    {
+     "kind": "great_hall",
+     "name": "Hall of Chains",
+     "rect": [
+      1,
+      1,
+      14,
+      6
+     ]
+    },
+    {
+     "kind": "kitchen",
+     "name": "Sky Kitchen",
+     "rect": [
+      1,
+      8,
+      4,
+      12
+     ]
+    },
+    {
+     "kind": "vestibule",
+     "name": "Lift Landing",
+     "rect": [
+      6,
+      8,
+      10,
+      12
+     ]
+    },
+    {
+     "kind": "stair_hall",
+     "name": "Crystal Stair",
+     "rect": [
+      12,
+      8,
+      14,
+      12
+     ]
+    }
+   ],
+   "doors": [
+    {
+     "tile": [
+      8,
+      7
+     ]
+    },
+    {
+     "tile": [
+      5,
+      10
+     ]
+    },
+    {
+     "tile": [
+      11,
+      10
+     ]
+    },
+    {
+     "tile": [
+      2,
+      7
+     ]
+    }
+   ],
+   "stairs": [
+    {
+     "tile": [
+      13,
+      10
+     ],
+     "dir": "up",
+     "to_plane": "sky_f2",
+     "arrive": [
+      14,
+      11
+     ]
+    }
+   ],
+   "exits": [
+    {
+     "tile": [
+      7,
+      13
+     ],
+     "to_plane": "realm",
+     "arrive": [
+      49,
+      143
+     ]
+    },
+    {
+     "tile": [
+      8,
+      13
+     ],
+     "to_plane": "realm",
+     "arrive": [
+      50,
+      143
+     ]
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "hearth",
+     "tile": [
+      7,
+      1
+     ]
+    },
+    {
+     "kind": "hearth",
+     "tile": [
+      8,
+      1
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      3,
+      3
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      4,
+      3
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      5,
+      3
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      10,
+      3
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      11,
+      3
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      12,
+      3
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      3,
+      5
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      4,
+      5
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      10,
+      5
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      11,
+      5
+     ]
+    },
+    {
+     "kind": "brazier",
+     "tile": [
+      1,
+      1
+     ]
+    },
+    {
+     "kind": "brazier",
+     "tile": [
+      14,
+      1
+     ]
+    },
+    {
+     "kind": "armour_stand",
+     "tile": [
+      1,
+      6
+     ]
+    },
+    {
+     "kind": "armour_stand",
+     "tile": [
+      14,
+      6
+     ]
+    },
+    {
+     "kind": "crystal",
+     "tile": [
+      6,
+      1
+     ]
+    },
+    {
+     "kind": "crystal",
+     "tile": [
+      9,
+      1
+     ]
+    },
+    {
+     "kind": "hearth",
+     "tile": [
+      1,
+      8
+     ]
+    },
+    {
+     "kind": "table",
+     "tile": [
+      3,
+      11
+     ]
+    },
+    {
+     "kind": "barrel",
+     "tile": [
+      4,
+      12
+     ]
+    },
+    {
+     "kind": "barrel",
+     "tile": [
+      1,
+      12
+     ]
+    },
+    {
+     "kind": "shelf",
+     "tile": [
+      4,
+      8
+     ]
+    },
+    {
+     "kind": "statue",
+     "tile": [
+      6,
+      8
+     ]
+    },
+    {
+     "kind": "statue",
+     "tile": [
+      10,
+      8
+     ]
+    },
+    {
+     "kind": "planter",
+     "tile": [
+      6,
+      12
+     ]
+    },
+    {
+     "kind": "planter",
+     "tile": [
+      10,
+      12
+     ]
+    },
+    {
+     "kind": "planter",
+     "tile": [
+      12,
+      12
+     ]
+    }
+   ],
+   "file": "floors/1x/sky_f1.png",
+   "sprite_size_2x": [
+    1280,
+    1280
+   ],
+   "origin_px_2x": [
+    0,
+    160
+   ],
+   "origin_px_1x": [
+    0,
+    80
+   ],
+   "tris": 4746
+  },
+  {
+   "plane": "sky_f2",
+   "building": "keep",
+   "level": 2,
+   "name": "Hall of Winds",
+   "width": 16,
+   "height": 14,
+   "height_m": 18.5,
+   "rows": [
+    "################",
+    "#x.x.xx.x.x#x.x#",
+    "#..........#...#",
+    "#..........#.x.#",
+    "#..........#.x.#",
+    "#..x....x..#...#",
+    "#..........#x.x#",
+    "#..........##D##",
+    "#..........#...#",
+    "#..x....x..#...#",
+    "#..........D.UV#",
+    "#..........#...#",
+    "#x........x#x..#",
+    "################"
+   ],
+   "sprite_2x": "floors/sky_f2.png",
+   "sprite_1x": "floors/1x/sky_f2.png",
+   "rooms": [
+    {
+     "kind": "throne_room",
+     "name": "Sky Throne Hall",
+     "rect": [
+      1,
+      1,
+      10,
+      12
+     ]
+    },
+    {
+     "kind": "council",
+     "name": "Star-Chart Room",
+     "rect": [
+      12,
+      1,
+      14,
+      6
+     ]
+    },
+    {
+     "kind": "stair_hall",
+     "name": "Crystal Stair",
+     "rect": [
+      12,
+      8,
+      14,
+      12
+     ]
+    }
+   ],
+   "doors": [
+    {
+     "tile": [
+      11,
+      10
+     ]
+    },
+    {
+     "tile": [
+      13,
+      7
+     ]
+    }
+   ],
+   "stairs": [
+    {
+     "tile": [
+      13,
+      10
+     ],
+     "dir": "up",
+     "to_plane": "sky_f3",
+     "arrive": [
+      14,
+      11
+     ]
+    },
+    {
+     "tile": [
+      14,
+      10
+     ],
+     "dir": "down",
+     "to_plane": "sky_f1",
+     "arrive": [
+      13,
+      11
+     ]
+    }
+   ],
+   "exits": [],
+   "furniture": [
+    {
+     "kind": "throne",
+     "tile": [
+      5,
+      1
+     ]
+    },
+    {
+     "kind": "throne",
+     "tile": [
+      6,
+      1
+     ]
+    },
+    {
+     "kind": "armour_stand",
+     "tile": [
+      3,
+      1
+     ]
+    },
+    {
+     "kind": "armour_stand",
+     "tile": [
+      8,
+      1
+     ]
+    },
+    {
+     "kind": "brazier",
+     "tile": [
+      1,
+      1
+     ]
+    },
+    {
+     "kind": "brazier",
+     "tile": [
+      10,
+      1
+     ]
+    },
+    {
+     "kind": "pillar",
+     "tile": [
+      3,
+      5
+     ]
+    },
+    {
+     "kind": "pillar",
+     "tile": [
+      8,
+      5
+     ]
+    },
+    {
+     "kind": "pillar",
+     "tile": [
+      3,
+      9
+     ]
+    },
+    {
+     "kind": "pillar",
+     "tile": [
+      8,
+      9
+     ]
+    },
+    {
+     "kind": "crystal",
+     "tile": [
+      1,
+      12
+     ]
+    },
+    {
+     "kind": "crystal",
+     "tile": [
+      10,
+      12
+     ]
+    },
+    {
+     "kind": "table",
+     "tile": [
+      13,
+      3
+     ]
+    },
+    {
+     "kind": "table",
+     "tile": [
+      13,
+      4
+     ]
+    },
+    {
+     "kind": "bookshelf",
+     "tile": [
+      12,
+      1
+     ]
+    },
+    {
+     "kind": "bookshelf",
+     "tile": [
+      14,
+      1
+     ]
+    },
+    {
+     "kind": "telescope",
+     "tile": [
+      14,
+      6
+     ]
+    },
+    {
+     "kind": "armchair",
+     "tile": [
+      12,
+      6
+     ]
+    },
+    {
+     "kind": "planter",
+     "tile": [
+      12,
+      12
+     ]
+    }
+   ],
+   "file": "floors/1x/sky_f2.png",
+   "sprite_size_2x": [
+    1280,
+    1280
+   ],
+   "origin_px_2x": [
+    0,
+    160
+   ],
+   "origin_px_1x": [
+    0,
+    80
+   ],
+   "tris": 4274
+  },
+  {
+   "plane": "sky_f3",
+   "building": "keep",
+   "level": 3,
+   "name": "Stormwarden's Quarters",
+   "width": 16,
+   "height": 14,
+   "height_m": 23.0,
+   "rows": [
+    "################",
+    "#.xx..x#xx..x..#",
+    "#......#.......#",
+    "#......#......x#",
+    "#....x.#.......#",
+    "#......#......x#",
+    "###D#######D####",
+    "#..............#",
+    "##D#########D###",
+    "#x.xxxxxx..#...#",
+    "#..........#.UV#",
+    "#x.........#...#",
+    "#.........x#...#",
+    "################"
+   ],
+   "sprite_2x": "floors/sky_f3.png",
+   "sprite_1x": "floors/1x/sky_f3.png",
+   "rooms": [
+    {
+     "kind": "bedchamber",
+     "name": "Stormwarden's Bedchamber",
+     "rect": [
+      1,
+      1,
+      6,
+      5
+     ]
+    },
+    {
+     "kind": "workshop",
+     "name": "Crystal Workshop",
+     "rect": [
+      8,
+      1,
+      14,
+      5
+     ]
+    },
+    {
+     "kind": "corridor",
+     "name": "Wind Gallery",
+     "rect": [
+      1,
+      7,
+      14,
+      7
+     ]
+    },
+    {
+     "kind": "library",
+     "name": "Sky Library",
+     "rect": [
+      1,
+      9,
+      10,
+      12
+     ]
+    },
+    {
+     "kind": "stair_hall",
+     "name": "Crystal Stair",
+     "rect": [
+      12,
+      9,
+      14,
+      12
+     ]
+    }
+   ],
+   "doors": [
+    {
+     "tile": [
+      3,
+      6
+     ]
+    },
+    {
+     "tile": [
+      11,
+      6
+     ]
+    },
+    {
+     "tile": [
+      12,
+      8
+     ]
+    },
+    {
+     "tile": [
+      2,
+      8
+     ]
+    }
+   ],
+   "stairs": [
+    {
+     "tile": [
+      13,
+      10
+     ],
+     "dir": "up",
+     "to_plane": "sky_f4",
+     "arrive": [
+      14,
+      11
+     ]
+    },
+    {
+     "tile": [
+      14,
+      10
+     ],
+     "dir": "down",
+     "to_plane": "sky_f2",
+     "arrive": [
+      13,
+      11
+     ]
+    }
+   ],
+   "exits": [],
+   "furniture": [
+    {
+     "kind": "bed_big",
+     "tile": [
+      2,
+      1
+     ]
+    },
+    {
+     "kind": "bed_big",
+     "tile": [
+      3,
+      1
+     ]
+    },
+    {
+     "kind": "wardrobe",
+     "tile": [
+      6,
+      1
+     ]
+    },
+    {
+     "kind": "armchair",
+     "tile": [
+      5,
+      4
+     ]
+    },
+    {
+     "kind": "crystal",
+     "tile": [
+      9,
+      1
+     ]
+    },
+    {
+     "kind": "crystal",
+     "tile": [
+      12,
+      1
+     ]
+    },
+    {
+     "kind": "desk",
+     "tile": [
+      14,
+      3
+     ]
+    },
+    {
+     "kind": "shelf",
+     "tile": [
+      8,
+      1
+     ]
+    },
+    {
+     "kind": "telescope",
+     "tile": [
+      14,
+      5
+     ]
+    },
+    {
+     "kind": "bookshelf",
+     "tile": [
+      3,
+      9
+     ]
+    },
+    {
+     "kind": "bookshelf",
+     "tile": [
+      4,
+      9
+     ]
+    },
+    {
+     "kind": "bookshelf",
+     "tile": [
+      5,
+      9
+     ]
+    },
+    {
+     "kind": "bookshelf",
+     "tile": [
+      6,
+      9
+     ]
+    },
+    {
+     "kind": "bookshelf",
+     "tile": [
+      7,
+      9
+     ]
+    },
+    {
+     "kind": "bookshelf",
+     "tile": [
+      8,
+      9
+     ]
+    },
+    {
+     "kind": "desk",
+     "tile": [
+      1,
+      11
+     ]
+    },
+    {
+     "kind": "armchair",
+     "tile": [
+      1,
+      9
+     ]
+    },
+    {
+     "kind": "planter",
+     "tile": [
+      10,
+      12
+     ]
+    }
+   ],
+   "file": "floors/1x/sky_f3.png",
+   "sprite_size_2x": [
+    1280,
+    1280
+   ],
+   "origin_px_2x": [
+    0,
+    160
+   ],
+   "origin_px_1x": [
+    0,
+    80
+   ],
+   "tris": 4844
+  },
+  {
+   "plane": "sky_f4",
+   "building": "keep",
+   "level": 4,
+   "name": "The Crystal Crown",
+   "width": 16,
+   "height": 14,
+   "height_m": 27.5,
+   "rows": [
+    "################",
+    "#x.x........x.x#",
+    "#..............#",
+    "#...########...#",
+    "#...#x....x#...#",
+    "#...#......#...#",
+    "#x..#..xx..#...#",
+    "#...#......#...#",
+    "#...#......#...#",
+    "#...#......#...#",
+    "#...###D####..V#",
+    "#..............#",
+    "#x.............#",
+    "################"
+   ],
+   "sprite_2x": "floors/sky_f4.png",
+   "sprite_1x": "floors/1x/sky_f4.png",
+   "rooms": [
+    {
+     "kind": "terrace",
+     "name": "Sky Terrace",
+     "rect": [
+      1,
+      1,
+      14,
+      12
+     ]
+    },
+    {
+     "kind": "crown_room",
+     "name": "Heart-Crystal Chamber",
+     "rect": [
+      5,
+      4,
+      10,
+      9
+     ]
+    },
+    {
+     "kind": "stair_head",
+     "name": "Stair Head",
+     "rect": [
+      12,
+      9,
+      14,
+      12
+     ]
+    }
+   ],
+   "doors": [
+    {
+     "tile": [
+      7,
+      10
+     ]
+    }
+   ],
+   "stairs": [
+    {
+     "tile": [
+      14,
+      10
+     ],
+     "dir": "down",
+     "to_plane": "sky_f3",
+     "arrive": [
+      13,
+      11
+     ]
+    }
+   ],
+   "exits": [],
+   "furniture": [
+    {
+     "kind": "crystal",
+     "tile": [
+      7,
+      6
+     ]
+    },
+    {
+     "kind": "crystal",
+     "tile": [
+      8,
+      6
+     ]
+    },
+    {
+     "kind": "telescope",
+     "tile": [
+      1,
+      1
+     ]
+    },
+    {
+     "kind": "brazier",
+     "tile": [
+      14,
+      1
+     ]
+    },
+    {
+     "kind": "banner_pole",
+     "tile": [
+      1,
+      6
+     ]
+    },
+    {
+     "kind": "planter",
+     "tile": [
+      1,
+      12
+     ]
+    },
+    {
+     "kind": "cannon",
+     "tile": [
+      3,
+      1
+     ]
+    },
+    {
+     "kind": "cannon",
+     "tile": [
+      12,
+      1
+     ]
+    },
+    {
+     "kind": "armour_stand",
+     "tile": [
+      5,
+      4
+     ]
+    },
+    {
+     "kind": "armour_stand",
+     "tile": [
+      10,
+      4
+     ]
+    }
+   ],
+   "roof_open": true,
+   "file": "floors/1x/sky_f4.png",
+   "sprite_size_2x": [
+    1280,
+    1280
+   ],
+   "origin_px_2x": [
+    0,
+    160
+   ],
+   "origin_px_1x": [
+    0,
+    80
+   ],
+   "tris": 3535
+  }
+ ],
+ "tile_px": 40,
+ "sprite_2x": {
+  "size": [
+   4000,
+   4880
+  ],
+  "origin_px": [
+   80,
+   960
+  ]
+ },
+ "sprite_1x": {
+  "size": [
+   2000,
+   2440
+  ],
+  "origin_px": [
+   40,
+   480
+  ]
+ },
+ "anchor_note": "identical convention to castle_v2 / gothic / white_rose / king: origin_px = pixel of the NW corner of footprint tile (x0,y0)",
+ "layers": [
+  {
+   "name": "ground",
+   "file": "sprites/1x/sky_ground.png"
+  },
+  {
+   "name": "back",
+   "file": "sprites/1x/sky_back.png"
+  },
+  {
+   "name": "posts",
+   "file": "sprites/1x/sky_posts.png"
+  },
+  {
+   "name": "front",
+   "file": "sprites/1x/sky_front.png"
+  }
+ ],
+ "sort_layers": [
+  {
+   "name": "sort_24",
+   "file": "sprites/1x/sky_sort_24.png",
+   "sort_row_local": 24,
+   "sort_row_world": 142
+  }
+ ],
+ "layer_order_note": "ground -> back -> posts -> [entity pass: players/NPCs y-sorted with sort_layers at sort_row_world] -> front. No cutaway (keep is airborne; interiors are separate planes). Waterfall frames blit after sort_24.",
+ "gate": {
+  "frames": [
+   {
+    "file": "sprites/1x/gate/gate_00.png",
+    "ms": 220,
+    "bridge_deg": -88,
+    "portcullis_up_m": 0
+   },
+   {
+    "file": "sprites/1x/gate/gate_01.png",
+    "ms": 80,
+    "bridge_deg": -84,
+    "portcullis_up_m": 0
+   },
+   {
+    "file": "sprites/1x/gate/gate_02.png",
+    "ms": 80,
+    "bridge_deg": -74,
+    "portcullis_up_m": 0
+   },
+   {
+    "file": "sprites/1x/gate/gate_03.png",
+    "ms": 80,
+    "bridge_deg": -58,
+    "portcullis_up_m": 0
+   },
+   {
+    "file": "sprites/1x/gate/gate_04.png",
+    "ms": 80,
+    "bridge_deg": -38,
+    "portcullis_up_m": 0
+   },
+   {
+    "file": "sprites/1x/gate/gate_05.png",
+    "ms": 80,
+    "bridge_deg": -16,
+    "portcullis_up_m": 0
+   },
+   {
+    "file": "sprites/1x/gate/gate_06.png",
+    "ms": 140,
+    "bridge_deg": 0,
+    "portcullis_up_m": 0
+   },
+   {
+    "file": "sprites/1x/gate/gate_07.png",
+    "ms": 90,
+    "bridge_deg": 0,
+    "portcullis_up_m": 0.684
+   },
+   {
+    "file": "sprites/1x/gate/gate_08.png",
+    "ms": 90,
+    "bridge_deg": 0,
+    "portcullis_up_m": 1.596
+   },
+   {
+    "file": "sprites/1x/gate/gate_09.png",
+    "ms": 90,
+    "bridge_deg": 0,
+    "portcullis_up_m": 2.546
+   },
+   {
+    "file": "sprites/1x/gate/gate_10.png",
+    "ms": 90,
+    "bridge_deg": 0,
+    "portcullis_up_m": 3.306
+   },
+   {
+    "file": "sprites/1x/gate/gate_11.png",
+    "ms": 200,
+    "bridge_deg": 0,
+    "portcullis_up_m": 3.8
+   }
+  ],
+  "crop_2x": [
+   1894,
+   4068,
+   2106,
+   4826
+  ],
+  "crop_1x": [
+   947,
+   2034,
+   1053,
+   2413
+  ]
+ },
+ "waterfall": {
+  "frames": [
+   {
+    "file": "sprites/1x/waterfall/waterfall_00.png",
+    "ms": 110
+   },
+   {
+    "file": "sprites/1x/waterfall/waterfall_01.png",
+    "ms": 110
+   },
+   {
+    "file": "sprites/1x/waterfall/waterfall_02.png",
+    "ms": 110
+   },
+   {
+    "file": "sprites/1x/waterfall/waterfall_03.png",
+    "ms": 110
+   },
+   {
+    "file": "sprites/1x/waterfall/waterfall_04.png",
+    "ms": 110
+   },
+   {
+    "file": "sprites/1x/waterfall/waterfall_05.png",
+    "ms": 110
+   }
+  ],
+  "crop_2x": [
+   244,
+   1512,
+   3762,
+   3142
+  ],
+  "crop_1x": [
+   122,
+   756,
+   1881,
+   1571
+  ],
+  "loop": true,
+  "note": "ambient; blit at crop_1x offset relative to the full layer, after sort_24"
+ },
+ "triangles": {
+  "exterior": 60430,
+  "floors": {
+   "sky_f1": 4746,
+   "sky_f2": 4274,
+   "sky_f3": 4844,
+   "sky_f4": 3535
+  }
+ },
+ "camera": {
+  "type": "orthographic",
+  "azimuth_deg": 0,
+  "elevation_deg": 32,
+  "tile_locked": true,
+  "tile_m": 1.487,
+  "same_as": "castle_v2"
+ }
+}

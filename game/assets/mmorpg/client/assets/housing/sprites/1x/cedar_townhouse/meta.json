@@ -1,0 +1,21 @@
+{
+  "key": "cedar_townhouse",
+  "origin_px": [
+    40,
+    400
+  ],
+  "tile_px": 40,
+  "layers": {
+    "ground": "sprites/1x/cedar_townhouse/ground.png",
+    "body": "sprites/1x/cedar_townhouse/body.png",
+    "cutaway": "sprites/1x/cedar_townhouse/cutaway.png"
+  },
+  "size_2x": [
+    800,
+    1520
+  ],
+  "origin_2x": [
+    80,
+    800
+  ]
+}

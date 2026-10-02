@@ -1,0 +1,21 @@
+{
+  "key": "oak_villa",
+  "origin_px": [
+    40,
+    320
+  ],
+  "tile_px": 40,
+  "layers": {
+    "ground": "sprites/1x/oak_villa/ground.png",
+    "body": "sprites/1x/oak_villa/body.png",
+    "cutaway": "sprites/1x/oak_villa/cutaway.png"
+  },
+  "size_2x": [
+    880,
+    1200
+  ],
+  "origin_2x": [
+    80,
+    640
+  ]
+}
