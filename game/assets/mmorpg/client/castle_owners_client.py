@@ -67,7 +67,11 @@ def _queue_standee(client, draw_list, cam_x, cam_y, tile, seller, x, y):
     def _draw(_cx=cx, _foot=foot, _sprite=sprite, _seller=seller, _height=height):
         if _sprite is not None:
             client.screen.blit(_sprite, (_cx - _sprite.get_width() // 2, _foot - _sprite.get_height()))
-        client.blit_nameplate(_seller["display_name"], _cx, _foot - (_height + 4), (255, 220, 160))
+        name_y = _foot - (_height + 4)
+        client.blit_nameplate(_seller["display_name"], _cx, name_y, (255, 220, 160))
+        hint = getattr(client, "_hover_hint", None)
+        if hint and hint[0] == "seller" and hint[1] == _seller["npc_id"]:
+            client.blit_action_hint(hint[2], _cx, name_y - 18, hint[3])
 
     draw_list.append((foot, 3, _draw))
 

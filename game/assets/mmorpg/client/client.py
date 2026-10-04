@@ -373,7 +373,7 @@ class GameClient(CameraYaw):
         self.attack_face = {}  # entity_id -> 1 | -1 while swinging
         self.attack_anim_kind = {}  # entity_id -> "melee" | "ranged"
         self.projectiles = []  # flying arrows: {ax,ay,tx,ty,start,dur}
-        self.ATTACK_ANIM_SECS = 0.62
+        self.ATTACK_ANIM_SECS = 1.05
         self.RANGED_ANIM_SECS = 0.72
         self.level_up_until = 0.0  # gold glow / banner while celebrating a level-up
         self.level_up_label = ""
@@ -393,6 +393,7 @@ class GameClient(CameraYaw):
         self.pending_action = None  # {"type": "ATTACK"|"TALK"|..., ...}
         self._next_walk_at = 0.0
         self.combat_target_id = None  # monster id currently fighting
+        self.combat_rounds = 0
         self.fleeing_combat = False  # click-away: don't path back until re-attack
         self.combat_quick = None  # above-head heal/potion buttons while under attack
         self.combat_quick_rects = {}
@@ -599,6 +600,8 @@ class GameClient(CameraYaw):
                     "equipment": self.player.get("equipment"),
                     "gathering": self.player.get("gathering"),
                     "gender": self.player.get("gender") or "male",
+                    "player_killer": bool(self.player.get("player_killer")),
+                    "pk_kills": int(self.player.get("pk_kills") or 0),
                 }
             self._announce_new_stat_boosts(prev_boosts, self.player.get("stat_boosts") or {})
             if self.combat_quick and time.time() < float(getattr(self, "combat_quick_until", 0) or 0):
@@ -636,6 +639,9 @@ class GameClient(CameraYaw):
         elif t == "COMBAT_EVENT":
             self.handle_combat_event(msg)
         elif t == "DEATH":
+            if msg.get("entity_kind") == "monster" and msg.get("entity_id") == self.combat_target_id:
+                self.combat_target_id = None
+                self.combat_rounds = 0
             if msg["entity_kind"] == "player" and msg["entity_id"] == (self.player or {}).get("id"):
                 lost = int(msg.get("coins_lost") or 0)
                 if lost:
@@ -887,6 +893,14 @@ class GameClient(CameraYaw):
         anim_secs = self.RANGED_ANIM_SECS if ranged else self.ATTACK_ANIM_SECS
         self.attack_anims[anim_key] = now + anim_secs
         self.attack_anim_kind[anim_key] = "ranged" if ranged else "melee"
+        if "combat_rounds" in msg and kind == "player_hits_monster" and atk_id == (self.player or {}).get("id"):
+            self.combat_rounds = int(msg.get("combat_rounds") or 0)
+        # Humanoid foes swing back on the same beat so both weapons meet in the gap.
+        if kind == "player_hits_monster" and not ranged and def_id is not None:
+            foe = self._monster_by_id(def_id)
+            if foe and (MONSTERS.get(foe.get("type")) or {}).get("humanoid"):
+                self.attack_anims[def_id] = now + anim_secs
+                self.attack_anim_kind[def_id] = "melee"
         # Track current combat target for the local player
         my_id = (self.player or {}).get("id")
         if kind == "player_hits_monster" and atk_id == my_id:
@@ -2377,21 +2391,67 @@ class GameClient(CameraYaw):
         return max(1, int(mdef.get("attack_range") or mdef.get("side_gap") or 2))
 
     def side_engage_goals(self, mx, my, mtype=None):
-        """Get within attack_range of a side-fight foe, preferring its row."""
+        """Stand on the foe's row at side_gap so the weapon swings have room."""
         reach = self.side_fight_reach(mtype) if mtype else 4
+        mdef = MONSTERS.get(mtype) or {}
+        prefer = max(1, min(int(mdef.get("side_gap") or 2), reach))
         goals = set()
+        for dx in (prefer, -prefer):
+            nx, ny = mx + dx, my
+            if self.tile_walkable(nx, ny):
+                goals.add((nx, ny))
+        if goals:
+            return goals
         for dx in range(-reach, reach + 1):
-            for dy in range(-reach, reach + 1):
-                if max(abs(dx), abs(dy)) > reach or (dx == 0 and dy == 0):
-                    continue
-                nx, ny = mx + dx, my + dy
-                if not self.tile_walkable(nx, ny):
-                    continue
-                if dy == 0 and abs(dx) >= 1:
-                    goals.add((nx, ny))
+            if dx == 0:
+                continue
+            nx, ny = mx + dx, my
+            if self.tile_walkable(nx, ny):
+                goals.add((nx, ny))
         if goals:
             return goals
         return self.attack_range_goals(mx, my)
+
+    def combat_flee_locked(self):
+        """True once a fight has started, until five attack rounds have passed."""
+        rounds = int(getattr(self, "combat_rounds", 0) or 0)
+        if rounds <= 0 or rounds >= 5:
+            return False
+        if self.combat_target_id is None:
+            return False
+        m = self._monster_by_id(self.combat_target_id)
+        if not m or not m.get("alive"):
+            self.combat_rounds = 0
+            return False
+        return True
+
+    def _say_combat_lock(self):
+        now = time.time()
+        if now < getattr(self, "_combat_lock_said", 0):
+            return
+        self._combat_lock_said = now + 1.5
+        left = max(1, 5 - int(getattr(self, "combat_rounds", 0) or 0))
+        self.add_chat(
+            f"You cannot run yet. {left} round{'s' if left != 1 else ''} of fighting left.",
+            color=(255, 180, 120),
+        )
+
+    def _humanoid_lineup_ready(self, m, px, py):
+        """Same row, preferred gap, so both fighters face across open ground."""
+        mdef = MONSTERS.get(m.get("type")) or {}
+        if not mdef.get("humanoid") or not mdef.get("side_by_side"):
+            return None
+        reach = self.side_fight_reach(m.get("type"))
+        gap = abs(int(m["x"]) - int(px))
+        if int(m["y"]) != int(py) or gap < 1 or gap > reach:
+            return False
+        prefer = max(1, min(int(mdef.get("side_gap") or 2), reach))
+        if gap == prefer:
+            return True
+        for dx in (prefer, -prefer):
+            if self.tile_walkable(int(m["x"]) + dx, int(m["y"])):
+                return False
+        return True
 
     def dragon_engage_goals(self, mx, my):
         """Back-compat alias for side_engage_goals(dragon)."""
@@ -2817,6 +2877,9 @@ class GameClient(CameraYaw):
         })
 
     def try_move(self, dx, dy):
+        if self.combat_flee_locked():
+            self._say_combat_lock()
+            return
         if self.player:
             key = ("p", self.player.get("id"))
             if abs(dx) >= abs(dy) and dx != 0:
@@ -3032,6 +3095,9 @@ class GameClient(CameraYaw):
                 return False
             # Side-by-side foes: engage once nearby — server only deals damage when lined up
             if self.is_side_by_side_monster(m.get("type")) and not self.player_using_bow():
+                lined = self._humanoid_lineup_ready(m, px, py)
+                if lined is not None:
+                    return lined
                 return max(abs(m["x"] - px), abs(m["y"] - py)) <= self.side_fight_reach(m.get("type"))
             reach = self.equipped_bow_range()
             return max(abs(m["x"] - px), abs(m["y"] - py)) <= reach
@@ -3130,6 +3196,9 @@ class GameClient(CameraYaw):
         """Path to any tile in goals, then perform action (if any)."""
         # Pure walk (click away) → leave combat so flank/retaliate don't yank you back
         if action is None and self.combat_target_id is not None:
+            if self.combat_flee_locked():
+                self._say_combat_lock()
+                return
             self._clear_combat_target(notify_server=True)
         px, py = self.player_xy()
         if action and self.can_do_action(action, px, py):
@@ -3198,6 +3267,13 @@ class GameClient(CameraYaw):
 
         now = time.time()
         if now < self._next_walk_at:
+            return
+
+        if self.combat_flee_locked() and not (
+            self.pending_action and self.pending_action.get("type") == "ATTACK"
+        ):
+            self.clear_walk()
+            self._say_combat_lock()
             return
 
         nx, ny = self.walk_path[0]
@@ -3633,24 +3709,31 @@ class GameClient(CameraYaw):
         # steal flee clicks and path you back into the fight).
         best_m = None
         best_d = None
+        best_body = False
         for m in self.monsters.values():
             if not m["alive"]:
                 continue
             dist = max(abs(m["x"] - tx), abs(m["y"] - ty))
             radius = 0
+            humanoid = bool((MONSTERS.get(m["type"]) or {}).get("humanoid"))
+            if humanoid:
+                radius = 1
             if USE_LOWPOLY_DRAGONS:
                 radius = max(radius, lowpoly_dragon_sprites.click_radius_tiles(m["type"]))
             if USE_ANIM_STRIP_MONSTERS:
                 radius = max(radius, anim_strip_sprites.click_radius_tiles(m["type"]))
             if dist <= radius and (best_d is None or dist < best_d):
                 best_m, best_d = m, dist
+                best_body = humanoid and dist <= 1
             elif radius == 0 and dist == 0:
                 best_m, best_d = m, 0
+                best_body = False
                 break
         walk_away = (
             best_m is not None
             and best_d is not None
             and best_d > 0
+            and not best_body
             and self.tile_walkable(tx, ty)
             and (tx, ty) != (best_m["x"], best_m["y"])
         )
@@ -3675,12 +3758,17 @@ class GameClient(CameraYaw):
                     "type": "TALK", "npc_id": seller["npc_id"],
                 })
                 return
+        best_n = None
+        best_nd = 99
         for n in self.npcs:
-            if n["x"] == tx and n["y"] == ty:
-                self.walk_and_act(self.adjacent_goals(n["x"], n["y"]), {
-                    "type": "TALK", "npc_id": n["id"],
-                })
-                return
+            dist = max(abs(n["x"] - tx), abs(n["y"] - ty))
+            if dist <= 1 and dist < best_nd:
+                best_n, best_nd = n, dist
+        if best_n is not None:
+            self.walk_and_act(self.adjacent_goals(best_n["x"], best_n["y"]), {
+                "type": "TALK", "npc_id": best_n["id"],
+            })
+            return
         # other player -> trade request
         for p in self.players.values():
             if p["id"] != self.player["id"] and p["x"] == tx and p["y"] == ty:
@@ -4009,8 +4097,11 @@ class GameClient(CameraYaw):
                 entry = self.player["inventory"].get(str(slot)) or self.player["inventory"].get(slot)
                 if not entry:
                     return
-                item = ITEMS[entry["item_id"]]
                 item_id = entry["item_id"]
+                item = ITEMS.get(item_id)
+                if not item:
+                    self.open_drop_prompt(slot, entry)
+                    return
                 is_arrow = item.get("ammo_type") == "arrow"
                 is_tip = str(item_id).endswith("arrowtips")
                 cooked = is_cooked_fish(item_id)
@@ -5711,6 +5802,7 @@ class GameClient(CameraYaw):
         hover_tile = None
         if mx < MAP_W and my < MAP_H:
             hover_tile = self.screen_to_tile(mx, my)
+        self._hover_hint = self._resolve_hover_hint(hover_tile)
 
         for key, items in self.ground_items.items():
             if not items:
@@ -5800,6 +5892,9 @@ class GameClient(CameraYaw):
                       ny, _ = self.entity_anchor(cx, cy, "character")
                       self.blit_nameplate(n["name"], cx, ny, (255, 230, 160))
                       self._blit_npc_role_badges(n, cx, ny - 18)
+                      hint = self._hover_hint
+                      if hint and hint[0] == "npc" and hint[1] == n["id"]:
+                          self.blit_action_hint(hint[2], cx, ny - 48, hint[3])
                   draw_list.append((cy + TILE // 2, 3, _draw_npc))
 
         # Monsters
@@ -5871,7 +5966,18 @@ class GameClient(CameraYaw):
                     _vis = _mdef.get("visual") or m["type"]
                     _scale = float(_mdef.get("scale") or 1.0)
                     _ts = max(8, int(TILE * _scale))
-                    if (
+                    if _mdef.get("humanoid"):
+                        eq = _mdef.get("equipment") or {}
+                        face_h = 1 if (player_cx or cx) >= cx else -1
+                        sprites.draw_humanoid_detailed(
+                            self.screen, cx, cy, _ts,
+                            (55, 70, 95), (220, 175, 140), (35, 28, 22),
+                            weapon=weapon_style(eq.get("weapon")),
+                            shield=bool(eq.get("shield")),
+                            moving=False, t=t, facing=face_h,
+                            equipment=eq, attacking=atk, gender="male",
+                        )
+                    elif (
                         lowpoly
                         and lowpoly_dragon_sprites.draw_lowpoly_dragon(
                             self.screen, _vis, cx, cy, _ts, t,
@@ -5910,15 +6016,22 @@ class GameClient(CameraYaw):
                     if m.get("type") == "morvath":
                         import depths_v2_client
                         depths_v2_client.draw_bone_crown(self.screen, cx, cy - TILE, TILE)
-                    ny, hy = self.entity_anchor(cx, cy, "monster")
+                    anchor_kind = "character" if _mdef.get("humanoid") else "monster"
+                    ny, hy = self.entity_anchor(cx, cy, anchor_kind)
                     lvl = int(m.get("level") or 1)
                     lvl_color = self.monster_threat_color(lvl)
-                    if hurt or near or targeted or m.get("frozen"):
+                    if hurt or near or targeted or m.get("frozen") or _mdef.get("humanoid"):
+                        if _mdef.get("humanoid"):
+                            self.draw_hp_bar(cx, ny - 36, m["hp"], m["max_hp"])
                         self.blit_nameplate(m["name"], cx, ny)
-                        self.draw_hp_bar(cx, hy, m["hp"], m["max_hp"])
+                        if not _mdef.get("humanoid"):
+                            self.draw_hp_bar(cx, hy, m["hp"], m["max_hp"])
                         self.blit_combat_level(lvl, cx, ny - 16, lvl_color)
                     else:
                         self.blit_combat_level(lvl, cx, ny, lvl_color)
+                    hint = self._hover_hint
+                    if hint and hint[0] == "monster" and hint[1] == m["id"]:
+                        self.blit_action_hint(hint[2], cx, ny - 42, hint[3])
                 draw_list.append((cy + TILE // 2, 4, _draw_mon))
 
         # Pets
@@ -6017,6 +6130,11 @@ class GameClient(CameraYaw):
                         self._fish_target = (gx, gy)
                 if atk > 0:
                     mov = False  # freeze gait during the swing
+                if is_self and self.combat_target_id is not None and not self.player_using_bow():
+                    foe = self._monster_by_id(self.combat_target_id)
+                    if foe and foe.get("alive") and foe["x"] != p["x"]:
+                        face = 1 if foe["x"] > p["x"] else -1
+                        self._entity_facing[key] = face
                 now_pos[key] = (p["x"], p["y"])
 
                 def _draw_pl(cx=cx, cy=cy, body=body, skin=skin, hair=hair, eq=eq,
@@ -6037,6 +6155,14 @@ class GameClient(CameraYaw):
                     if action and gather:
                         self.draw_gather_fx(cx, cy, action, gather, t, face)
                     ny, hy = self.entity_anchor(cx, cy, "character")
+                    pk_on = bool(p.get("player_killer")) or (
+                        is_self and bool((self.player or {}).get("player_killer"))
+                    )
+                    if pk_on:
+                        kills = p.get("pk_kills")
+                        if is_self:
+                            kills = (self.player or {}).get("pk_kills", kills)
+                        self.draw_pk_mark(cx, ny - 20, int(kills or 0))
                     cmb = p.get("combat_level")
                     if is_self:
                         cmb = self.player_combat_level()
@@ -6946,7 +7072,7 @@ class GameClient(CameraYaw):
             if now >= f.get("show_at", 0):
                 expire = f.get("expire")
                 if not expire:
-                    expire = now + 1.05
+                    expire = now + 1.35
                 # Refresh position from the followed entity at release time
                 xy = self._entity_world_xy(f.get("follow_id"))
                 wx, wy = (xy if xy else (f["x"], f["y"]))
@@ -7210,6 +7336,68 @@ class GameClient(CameraYaw):
 
     def blit_label(self, text, cx, top_y):
         self.blit_nameplate(text, cx, top_y)
+
+    def draw_pk_mark(self, cx, top_y, kills):
+        """Red skull and player-kill count above a flagged player."""
+        pygame.draw.circle(self.screen, (170, 28, 28), (cx, top_y), 9)
+        pygame.draw.circle(self.screen, (255, 220, 200), (cx - 3, top_y - 2), 2)
+        pygame.draw.circle(self.screen, (255, 220, 200), (cx + 3, top_y - 2), 2)
+        pygame.draw.rect(self.screen, (40, 16, 16), (cx - 3, top_y + 3, 6, 3))
+        self.blit_nameplate(f"PK {kills}", cx, top_y - 16, (255, 80, 70))
+
+    def _resolve_hover_hint(self, tile):
+        """Action label for the person under the pointer."""
+        if tile is None or self.dialogue:
+            return None
+        hx, hy = tile
+        best = None
+        best_d = 99
+        pk = bool((self.player or {}).get("player_killer"))
+        for m in self.monsters.values():
+            if not m.get("alive"):
+                continue
+            mdef = MONSTERS.get(m.get("type")) or {}
+            if not mdef.get("requires_pk"):
+                continue
+            d = max(abs(int(m["x"]) - hx), abs(int(m["y"]) - hy))
+            if d <= 1 and d < best_d:
+                best_d = d
+                if pk:
+                    best = ("monster", m["id"], "Click to attack", (255, 150, 120))
+                else:
+                    best = ("monster", m["id"], "Click to talk", (255, 220, 140))
+        if not self.dungeon:
+            for n in self.npcs:
+                d = max(abs(int(n["x"]) - hx), abs(int(n["y"]) - hy))
+                if d <= 1 and d < best_d:
+                    best_d = d
+                    best = ("npc", n["id"], "Click to talk", (255, 220, 140))
+        if (
+            self.dungeon
+            and self.dungeon.get("id") == "castle_realm"
+            and self.dungeon.get("plane") == "realm"
+        ):
+            import castle_owners_client
+            seller = castle_owners_client.seller_at(hx, hy)
+            if seller is not None:
+                sx, sy = seller["spawn"]["tile"]
+                d = max(abs(int(sx) - hx), abs(int(sy) - hy))
+                if d < best_d:
+                    best = ("seller", seller["npc_id"], "Click to talk", (255, 220, 140))
+        return best
+
+    def blit_action_hint(self, text, cx, top_y, color=(255, 220, 140)):
+        surf = self.font_tiny.render(str(text), True, color)
+        pad_x, pad_y = 5, 2
+        box = pygame.Rect(
+            cx - surf.get_width() // 2 - pad_x,
+            top_y - surf.get_height() - pad_y,
+            surf.get_width() + pad_x * 2,
+            surf.get_height() + pad_y * 2,
+        )
+        pygame.draw.rect(self.screen, (12, 12, 16), box, border_radius=4)
+        pygame.draw.rect(self.screen, color, box, 1, border_radius=4)
+        self.screen.blit(surf, (box.x + pad_x, box.y + pad_y))
 
     def blit_nameplate(self, text, cx, top_y, color=WHITE):
         """Readable name tag with soft backdrop."""
@@ -10539,7 +10727,7 @@ class GameClient(CameraYaw):
         purse = int(self.bank.get("coins", self.player.get("coins", 0) if self.player else 0))
         vault = int(self.bank.get("bank_coins", 0))
         max_purse = int(self.bank.get("max_purse", 65000))
-        max_vault = int(self.bank.get("max_bank_coins", 10_000_000))
+        max_vault = int(self.bank.get("max_bank_coins", 500_000_000))
         slots_n = int(self.bank.get("bank_slots", 96))
         page_size = max(1, int(self.bank_page_size))
         max_page = max(0, (slots_n - 1) // page_size)

@@ -23,8 +23,6 @@ _BG_TOL = 28
 _PET_PREVIEW = {
     "pet_cat": "pet_cat",
     "cat": "pet_cat",
-    "pet_husky": "pet_husky",
-    "husky": "pet_husky",
     "pet_dragon_frost": "pet_dragon_frost",
     "dragon_frost": "pet_dragon_frost",
     "pet_dragon_mythic": "pet_dragon_mythic",
@@ -210,6 +208,8 @@ def _head_frac(sprite) -> float:
 
 def pet_top_y(sprite, cy, tile) -> int | None:
     """Screen y of the visible top of the pet, at rest."""
+    if sprite in ("pet_husky", "husky"):
+        return int(cy - tile * 1.15)
     cell = _cell_top(sprite, cy, tile)
     if cell is None:
         return None
@@ -256,6 +256,8 @@ def draw_pet(surf, sprite, cx, cy, tile, t, hurt=False, attacking=-1.0, moving=F
         )
     preview = _PET_PREVIEW.get(sprite)
     if preview:
+        if sprite in ("pet_cat", "cat") and facing in ("front", "back"):
+            return False
         return _blit_preview(surf, preview, cx, cy, tile, facing, hurt, moving=moving, t=t)
     return False
 

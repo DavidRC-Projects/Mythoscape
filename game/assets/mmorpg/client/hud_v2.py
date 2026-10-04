@@ -281,10 +281,10 @@ def _draw_left_nav(client):
     keys = ("quests", "events", "party", "guild", "map", "pvp")
     top = 52
     rects = {}
-    safe = _zone_safe(client)
     for i, (key, label) in enumerate(zip(keys, labels)):
         rect = pygame.Rect(8, top + i * 46, 52, 42)
-        active = key == "pvp" and (not safe)
+        pk_on = bool((getattr(client, "player", None) or {}).get("player_killer"))
+        active = key == "pvp" and pk_on
         border = DANGER_RED if active else GOLD
         _panel(client.screen, rect, NAVY, border, radius=8, width=2 if active else 1)
         mark = _text(client, client.font_tiny, label[:1], GOLD if not active else DANGER_RED)
@@ -528,7 +528,7 @@ def _draw_inventory(client, y, bottom, rects):
     rows = _filtered_entries(client)
     cols = 4
     gap = 4
-    size = max(40, min(48, (_body_w() - gap * (cols - 1)) // cols))
+    size = max(64, (_body_w() - gap * (cols - 1)) // cols)
     row_h = size + gap
     slots = {}
     hover = None
@@ -889,12 +889,7 @@ def _nav_click(client, key):
         client.toggle_world_map()
         return
     if key == "pvp":
-        client.hud_pvp_mode = not client.hud_pvp_mode
-        client.add_chat(
-            "PvP marker on. Other players are not attackable."
-            if client.hud_pvp_mode else
-            "PvP marker off."
-        )
+        client.net.send("SET_PK")
         return
     if key == "quests":
         client.hud_focus = None
