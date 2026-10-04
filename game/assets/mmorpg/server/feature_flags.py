@@ -82,3 +82,7 @@ USE_EMBERDEEP_V2 = _on("USE_EMBERDEEP_V2", "1")
 # First-person view inside an Emberdeep instance only.
 # Set USE_EMBERDEEP_FIRST_PERSON=0 to keep the top-down dungeon view.
 USE_EMBERDEEP_FIRST_PERSON = _on("USE_EMBERDEEP_FIRST_PERSON", "1")
+
+# Emberdeep set-piece creatures and props. Off by default.
+# Set USE_EMBERDEEP_CREATURES=1 to spawn the manifest layout.
+USE_EMBERDEEP_CREATURES = _on("USE_EMBERDEEP_CREATURES", "0")

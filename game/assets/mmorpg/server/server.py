@@ -1063,6 +1063,11 @@ class MonsterInstance:
         if not self.alive or self.is_frozen() or not self.attack_ready():
             return False
         mdef = self.def_stats() or {}
+        cones = mdef.get("cone_tiles")
+        if cones:
+            if not getattr(self, "_cone_strike", False):
+                return False
+            return (int(px), int(py)) in {(int(p[0]), int(p[1])) for p in cones}
         reach = max(1, int(mdef.get("attack_range") or 1))
         if mdef.get("side_by_side"):
             gap = abs(self.x - px)
@@ -1961,9 +1966,13 @@ def _build_dungeon_floor(session, floor: int, dungeon_id: str = None):
         tiles, dungeon_id, floor, mod.DUNGEON_SPAWN, (mod.DUNGEON_SPAWN[0], mod.DUNGEON_H - 1),
     )
     blocked = dungeon_props.cells(props)
+    reserved = set()
+    if dungeon_id == "emberdeep" and feature_flags.USE_EMBERDEEP_CREATURES and feature_flags.USE_EMBERDEEP_V2:
+        import emberdeep_creatures
+        reserved = emberdeep_creatures.reserved_tiles(tiles)
     spots = [
-        p for p in mod.pick_spawn_tiles(tiles, info["count"] + len(blocked))
-        if p not in blocked
+        p for p in mod.pick_spawn_tiles(tiles, info["count"] + len(blocked) + len(reserved))
+        if p not in blocked and p not in reserved
     ][: info["count"]]
     stats = mod.scaled_monster_stats(info["level"])
     visual = mod.visual_type_for_floor(floor)
@@ -1982,6 +1991,22 @@ def _build_dungeon_floor(session, floor: int, dungeon_id: str = None):
             min(mod.DUNGEON_H - 1, sy + leash),
         )
         monsters[mid] = m
+    if dungeon_id == "emberdeep" and feature_flags.USE_EMBERDEEP_CREATURES and feature_flags.USE_EMBERDEEP_V2:
+        import emberdeep_creatures
+        extra_props, extra_monsters = emberdeep_creatures.build(
+            tiles, next_id, MonsterInstance, emberdeep.scaled_monster_stats,
+        )
+        props = list(props) + extra_props
+        for extra in extra_monsters:
+            if not (extra.stats or {}).get("static"):
+                leash = 6
+                extra.home_room = (
+                    max(0, extra.x - leash),
+                    max(0, extra.y - leash),
+                    min(mod.DUNGEON_W - 1, extra.x + leash),
+                    min(mod.DUNGEON_H - 1, extra.y + leash),
+                )
+            monsters[extra.id] = extra
     floors_list = getattr(mod, meta["floors_attr"], None) or getattr(mod, "TIDEHOLLOW_FLOORS", [])
     prev = session.dungeon or {}
     session.dungeon = {
@@ -5127,6 +5152,36 @@ async def handler(ws):
 # ---------------------------------------------------------------------------
 # Game tick loop: combat resolution, gathering, monster AI, respawns
 # ---------------------------------------------------------------------------
+async def _ember_cones():
+    """Breath on a timer. Damage is the normal strike when someone stands in the cone."""
+    if not feature_flags.USE_EMBERDEEP_CREATURES:
+        return
+    import emberdeep_creatures
+    cones = {
+        (int(spot["x"]), int(spot["y"]))
+        for spot in (emberdeep_creatures.manifest().get("boss") or {}).get("cone_tiles") or []
+    }
+    for session in list(WORLD.sessions.values()):
+        dungeon = session.dungeon or {}
+        if dungeon.get("id") != "emberdeep":
+            continue
+        for monster in dungeon.get("monsters", {}).values():
+            stats = monster.stats or {}
+            if not monster.alive or not stats.get("static"):
+                continue
+            if not monster.attack_ready():
+                continue
+            await send(session.ws, "EMBER_CONE", tiles=stats.get("cone_tiles") or [])
+            standing = (session.x, session.y) in cones
+            monster._cone_strike = standing
+            if standing:
+                monster.target_player_id = session.player_id
+            else:
+                monster.target_player_id = None
+                monster._cone_strike = False
+                monster.mark_attacked(2.4)
+
+
 async def game_loop():
     while True:
         await asyncio.sleep(TICK_SECONDS)
@@ -5135,6 +5190,7 @@ async def game_loop():
         events = []
 
         try:
+            await _ember_cones()
             await process_combat(events)
             await process_gathering(events)
             process_monster_respawns()
@@ -5314,6 +5370,9 @@ async def process_combat(events):
             engaged_id = session.in_combat_with[1]
         attackers.sort(key=lambda m: (0 if m.id == engaged_id else 1, m.id))
         attackers = attackers[:MAX_ATTACKERS]
+        for m in pool:
+            if getattr(m, "_cone_strike", False) and m not in attackers and m.can_strike(session.x, session.y):
+                attackers.append(m)
 
         primary = None
         if session.in_combat_with and session.in_combat_with[0] == "monster":
@@ -5542,6 +5601,10 @@ async def process_combat(events):
             }
             if monster.type == "dragon":
                 hit_ev["fx"] = "dragonfire"
+            elif (monster.stats or {}).get("cone_tiles"):
+                hit_ev["fx"] = "fire_cone"
+                hit_ev["cone"] = monster.stats.get("cone_tiles")
+                monster._cone_strike = False
             if dodged:
                 hit_ev["dodged"] = True
             if thorns_dmg:
@@ -5860,6 +5923,8 @@ def process_dungeon_ai():
         eligible = []
         for m in monsters:
             if not m.alive:
+                continue
+            if (m.stats or {}).get("static"):
                 continue
             in_area = in_room(session.x, session.y, m.home_room) if m.home_room else True
             if not in_area:

@@ -1,0 +1,410 @@
+{
+  "pack": "emberdeep_creatures",
+  "style": "low-poly, flat-to-soft shade, RGBA",
+  "grid": {
+    "source": "v2/interior/emberdeep_v2_floor.txt",
+    "width": 48,
+    "height": 36,
+    "axes": "x = column from the left (west). y = row from the top of the file (north). y increases toward south. North is row 0.",
+    "loader_note": "Confirm the in-game tile origin before spawning. If the server stores y = 0 at the south, flip these rows (game_y = 35 - y).",
+    "blocked": "# wall, L lava. Do not cover S, E, K, H, or N."
+  },
+  "art_install_dir": "game/assets/mmorpg/assets/emberdeep_creatures",
+  "feature_flag": "USE_EMBERDEEP_CREATURES",
+  "flag_default": "off",
+  "creatures": [
+    {
+      "id": "ember_imp",
+      "display_name": "Ember Imp",
+      "description": "Small hunched lava imp with a single swept horn.",
+      "level": 20,
+      "room": "entry_hall",
+      "pixels": [
+        256,
+        256
+      ],
+      "files": {
+        "front": "ember_imp/front.png",
+        "back": "ember_imp/back.png",
+        "side_east": "ember_imp/side_east.png",
+        "side_west": "ember_imp/side_west.png",
+        "idle_contact": "ember_imp/idle_contact.png"
+      },
+      "spawns": [
+        {
+          "x": 16,
+          "y": 31
+        },
+        {
+          "x": 22,
+          "y": 29
+        },
+        {
+          "x": 28,
+          "y": 32
+        }
+      ]
+    },
+    {
+      "id": "bile_toad",
+      "display_name": "Bile Toad",
+      "description": "Squat spotted toad with a glowing lava belly.",
+      "level": 35,
+      "room": "lava_crossing_sides",
+      "pixels": [
+        256,
+        256
+      ],
+      "files": {
+        "front": "bile_toad/front.png",
+        "back": "bile_toad/back.png",
+        "side_east": "bile_toad/side_east.png",
+        "side_west": "bile_toad/side_west.png",
+        "idle_contact": "bile_toad/idle_contact.png"
+      },
+      "spawns": [
+        {
+          "x": 17,
+          "y": 22
+        },
+        {
+          "x": 30,
+          "y": 24
+        }
+      ]
+    },
+    {
+      "id": "cinder_bitch",
+      "display_name": "Cinder Hound",
+      "description": "Lean fire hound with a long snout and no collar.",
+      "level": 50,
+      "room": "lava_crossing_sides",
+      "pixels": [
+        256,
+        256
+      ],
+      "files": {
+        "front": "cinder_bitch/front.png",
+        "back": "cinder_bitch/back.png",
+        "side_east": "cinder_bitch/side_east.png",
+        "side_west": "cinder_bitch/side_west.png",
+        "idle_contact": "cinder_bitch/idle_contact.png"
+      },
+      "spawns": [
+        {
+          "x": 19,
+          "y": 24
+        },
+        {
+          "x": 28,
+          "y": 22
+        }
+      ]
+    },
+    {
+      "id": "ash_warlock",
+      "display_name": "Ash Warlock",
+      "description": "Robed figure in a hood with a cracked mask and a coal staff.",
+      "level": 70,
+      "room": "gallery",
+      "pixels": [
+        256,
+        256
+      ],
+      "files": {
+        "front": "ash_warlock/front.png",
+        "back": "ash_warlock/back.png",
+        "side_east": "ash_warlock/side_east.png",
+        "side_west": "ash_warlock/side_west.png",
+        "idle_contact": "ash_warlock/idle_contact.png"
+      },
+      "spawns": [
+        {
+          "x": 18,
+          "y": 10
+        }
+      ]
+    },
+    {
+      "id": "troll_cook",
+      "display_name": "Troll Cook",
+      "description": "Bulky troll in a scorched apron, holding a ladle.",
+      "level": 85,
+      "room": "treasury",
+      "pixels": [
+        256,
+        256
+      ],
+      "files": {
+        "front": "troll_cook/front.png",
+        "back": "troll_cook/back.png",
+        "side_east": "troll_cook/side_east.png",
+        "side_west": "troll_cook/side_west.png",
+        "idle_contact": "troll_cook/idle_contact.png"
+      },
+      "spawns": [
+        {
+          "x": 8,
+          "y": 22
+        }
+      ]
+    },
+    {
+      "id": "mistress_of_cinders",
+      "display_name": "Mistress of Cinders",
+      "description": "Tall hooded woman in black iron with a whip of flame.",
+      "level": 110,
+      "room": "nest",
+      "pixels": [
+        256,
+        256
+      ],
+      "files": {
+        "front": "mistress_of_cinders/front.png",
+        "back": "mistress_of_cinders/back.png",
+        "side_east": "mistress_of_cinders/side_east.png",
+        "side_west": "mistress_of_cinders/side_west.png",
+        "idle_contact": "mistress_of_cinders/idle_contact.png"
+      },
+      "spawns": [
+        {
+          "x": 38,
+          "y": 24
+        }
+      ]
+    }
+  ],
+  "props": [
+    {
+      "id": "lava_brazier",
+      "room": "entry_hall",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/lava_brazier.png",
+      "tile": {
+        "x": 31,
+        "y": 30
+      }
+    },
+    {
+      "id": "bone_pile",
+      "room": "lava_crossing",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/bone_pile.png",
+      "tile": {
+        "x": 14,
+        "y": 24
+      }
+    },
+    {
+      "id": "chained_chest",
+      "room": "treasury",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/chained_chest.png",
+      "tile": {
+        "x": 9,
+        "y": 25
+      }
+    },
+    {
+      "id": "ember_crystal",
+      "room": "gallery",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/ember_crystal.png",
+      "tile": {
+        "x": 27,
+        "y": 10
+      }
+    },
+    {
+      "id": "scorched_banner",
+      "room": "gallery",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/scorched_banner.png",
+      "tile": {
+        "x": 18,
+        "y": 16
+      }
+    },
+    {
+      "id": "anvil_ruin",
+      "room": "boss_chamber",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/anvil_ruin.png",
+      "tile": {
+        "x": 31,
+        "y": 5
+      }
+    },
+    {
+      "id": "egg_cluster",
+      "room": "nest",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/egg_cluster.png",
+      "tile": {
+        "x": 43,
+        "y": 22
+      }
+    }
+  ],
+  "boss": {
+    "id": "emberdeep_wyrm",
+    "display_name": "Emberdeep Wyrm",
+    "description": "Static raid-scale wyrm, wings half-spread and low, horns, orange throat. Faces south. Does not walk or pathfind.",
+    "level": 250,
+    "hp": 2500,
+    "static": true,
+    "pathfinds": false,
+    "facing": "south",
+    "room": "boss_chamber",
+    "scale_vs_normal_dragon": 2.5,
+    "pixels": [
+      768,
+      512
+    ],
+    "anchor": {
+      "x": 23,
+      "y": 3
+    },
+    "footprint": [
+      {
+        "x": 21,
+        "y": 2
+      },
+      {
+        "x": 22,
+        "y": 2
+      },
+      {
+        "x": 23,
+        "y": 2
+      },
+      {
+        "x": 24,
+        "y": 2
+      },
+      {
+        "x": 25,
+        "y": 2
+      },
+      {
+        "x": 21,
+        "y": 3
+      },
+      {
+        "x": 22,
+        "y": 3
+      },
+      {
+        "x": 23,
+        "y": 3
+      },
+      {
+        "x": 24,
+        "y": 3
+      },
+      {
+        "x": 25,
+        "y": 3
+      },
+      {
+        "x": 21,
+        "y": 4
+      },
+      {
+        "x": 22,
+        "y": 4
+      },
+      {
+        "x": 23,
+        "y": 4
+      },
+      {
+        "x": 24,
+        "y": 4
+      },
+      {
+        "x": 25,
+        "y": 4
+      }
+    ],
+    "cone_tiles": [
+      {
+        "x": 21,
+        "y": 5
+      },
+      {
+        "x": 22,
+        "y": 5
+      },
+      {
+        "x": 23,
+        "y": 5
+      },
+      {
+        "x": 24,
+        "y": 5
+      },
+      {
+        "x": 25,
+        "y": 5
+      },
+      {
+        "x": 21,
+        "y": 6
+      },
+      {
+        "x": 22,
+        "y": 6
+      },
+      {
+        "x": 23,
+        "y": 6
+      },
+      {
+        "x": 24,
+        "y": 6
+      },
+      {
+        "x": 25,
+        "y": 6
+      }
+    ],
+    "cone_note": "Fire cone on a timer. Damage players standing on cone_tiles, south of the mouth, toward K at (22, 7). Do not include K.",
+    "files": {
+      "idle_front": "emberdeep_wyrm/idle_front.png",
+      "idle_side": "emberdeep_wyrm/idle_side.png",
+      "fire_breath_front": "emberdeep_wyrm/fire_breath_front.png",
+      "fire_breath_side": "emberdeep_wyrm/fire_breath_side.png"
+    },
+    "fx": {
+      "id": "fire_cone",
+      "file": "fx/fire_cone.png",
+      "pixels": [
+        512,
+        256
+      ]
+    },
+    "preview": "previews/boss_sheet.png"
+  }
+}

@@ -638,6 +638,8 @@ class GameClient(CameraYaw):
                 self.add_chat(msg["text"])
         elif t == "COMBAT_EVENT":
             self.handle_combat_event(msg)
+        elif t == "EMBER_CONE":
+            self.ember_cone = {"tiles": msg.get("tiles") or [], "until": time.time() + 0.9}
         elif t == "DEATH":
             if msg.get("entity_kind") == "monster" and msg.get("entity_id") == self.combat_target_id:
                 self.combat_target_id = None
@@ -1462,6 +1464,7 @@ class GameClient(CameraYaw):
             self.net.send("LOGIN", username=u, password=p)
 
     def handle_game_event(self, event):
+        import emberdeep_v2_client
         if event.type == pygame.KEYDOWN:
             if self.chat_typing:
                 self.handle_chat_typing(event)
@@ -1668,20 +1671,34 @@ class GameClient(CameraYaw):
                     self.skills_scroll = min(max_scroll, self.skills_scroll + step * 5)
             elif event.key in (pygame.K_UP, pygame.K_KP8, pygame.K_KP_8) or event.scancode in (pygame.KSCAN_KP8, pygame.KSCAN_KP_8):
                 self.clear_walk()
-                dx, dy = self.rotate_move_delta(0, -1)
+                if emberdeep_v2_client.fp_active(self):
+                    self._ember_reverse = False
+                    dx, dy = emberdeep_v2_client.step_delta(self, 1)
+                else:
+                    dx, dy = self.rotate_move_delta(0, -1)
                 self.try_move(dx, dy)
             elif event.key in (pygame.K_DOWN, pygame.K_KP2, pygame.K_KP_2) or event.scancode in (pygame.KSCAN_KP2, pygame.KSCAN_KP_2):
                 self.clear_walk()
-                dx, dy = self.rotate_move_delta(0, 1)
+                if emberdeep_v2_client.fp_active(self):
+                    self._ember_reverse = True
+                    dx, dy = emberdeep_v2_client.step_delta(self, -1)
+                else:
+                    dx, dy = self.rotate_move_delta(0, 1)
                 self.try_move(dx, dy)
             elif event.key in (pygame.K_LEFT, pygame.K_KP4, pygame.K_KP_4) or event.scancode in (pygame.KSCAN_KP4, pygame.KSCAN_KP_4):
-                self.clear_walk()
-                dx, dy = self.rotate_move_delta(-1, 0)
-                self.try_move(dx, dy)
+                if emberdeep_v2_client.fp_active(self):
+                    emberdeep_v2_client.turn(self, -1)
+                else:
+                    self.clear_walk()
+                    dx, dy = self.rotate_move_delta(-1, 0)
+                    self.try_move(dx, dy)
             elif event.key in (pygame.K_RIGHT, pygame.K_KP6, pygame.K_KP_6) or event.scancode in (pygame.KSCAN_KP6, pygame.KSCAN_KP_6):
-                self.clear_walk()
-                dx, dy = self.rotate_move_delta(1, 0)
-                self.try_move(dx, dy)
+                if emberdeep_v2_client.fp_active(self):
+                    emberdeep_v2_client.turn(self, 1)
+                else:
+                    self.clear_walk()
+                    dx, dy = self.rotate_move_delta(1, 0)
+                    self.try_move(dx, dy)
             elif event.key == pygame.K_i:
                 self.sidebar_tab = "inventory"
                 self.show_inventory = True
@@ -2877,6 +2894,9 @@ class GameClient(CameraYaw):
         })
 
     def try_move(self, dx, dy):
+        now = time.time()
+        if now < getattr(self, "_next_walk_at", 0):
+            return
         if self.combat_flee_locked():
             self._say_combat_lock()
             return
@@ -2889,6 +2909,7 @@ class GameClient(CameraYaw):
             # Hold travel facing through inter-tile gaps so combat lock can't snap back
             self._entity_moving_until[key] = time.time() + 0.55
         self.net.send("MOVE", dx=dx, dy=dy)
+        self._next_walk_at = now + 0.45
 
     def _capture_home_map(self, force=False):
         """Keep the overworld tiles. Dungeon and Castle Realm swaps must not replace them."""
@@ -5531,16 +5552,34 @@ class GameClient(CameraYaw):
                     px0, py0 = int(prop["x"]), int(prop["y"])
                     psx, psy = self.world_to_view_offset(px0, py0, cam_x, cam_y)
                     if -2 <= psx <= vis_w + 2 and -2 <= psy <= vis_h + 2:
-                        # Center of the 2x2 pad (top-left tile is px0, py0).
-                        pcx = psx * TILE + TILE
-                        pcy = psy * TILE + TILE
+                        pack = prop.get("pack") == "emberdeep_creatures"
+                        # Pack props sit on one tile. Other dungeon props use a 2x2 pad.
+                        pcx = psx * TILE + (TILE // 2 if pack else TILE)
+                        pcy = psy * TILE + (TILE // 2 if pack else TILE)
                         pkey = prop.get("key")
 
-                        def _draw_dprop(pcx=pcx, pcy=pcy, pkey=pkey):
-                            prop_sprites.draw_prop(
-                                self.screen, pkey, pcx, pcy, TILE, yaw=self.camera_yaw,
-                            )
+                        def _draw_dprop(pcx=pcx, pcy=pcy, pkey=pkey, pack=pack):
+                            if pack:
+                                import emberdeep_creatures_client
+                                emberdeep_creatures_client.draw_prop(self.screen, pkey, pcx, pcy, TILE)
+                            else:
+                                prop_sprites.draw_prop(
+                                    self.screen, pkey, pcx, pcy, TILE, yaw=self.camera_yaw,
+                                )
                         draw_list.append((pcy + TILE // 4, 2, _draw_dprop))
+                cone = getattr(self, "ember_cone", None)
+                if isinstance(cone, dict) and time.time() < cone.get("until", 0) and cone.get("tiles"):
+                    tiles = cone["tiles"]
+                    mx = int(round(sum(int(p[0]) for p in tiles) / len(tiles)))
+                    my = max(int(p[1]) for p in tiles)
+                    csx, csy = self.world_to_view_offset(mx, my, cam_x, cam_y)
+                    ccx = csx * TILE + TILE // 2
+                    ccy = csy * TILE + TILE
+
+                    def _draw_cone(ccx=ccx, ccy=ccy):
+                        import emberdeep_creatures_client
+                        emberdeep_creatures_client.draw_cone(self.screen, ccx, ccy, TILE * 2.2)
+                    draw_list.append((ccy, 3, _draw_cone))
 
         def facing_for(key, x, y, anim_id=None):
             my_id = (self.player or {}).get("id")
@@ -5979,7 +6018,13 @@ class GameClient(CameraYaw):
                     _vis = _mdef.get("visual") or m["type"]
                     _scale = float(_mdef.get("scale") or 1.0)
                     _ts = max(8, int(TILE * _scale))
-                    if _mdef.get("humanoid"):
+                    import emberdeep_creatures_client
+                    _breathing = time.time() < (getattr(self, "ember_cone", None) or {}).get("until", 0)
+                    if emberdeep_creatures_client.draw_creature(
+                        self.screen, m["type"], cx, cy, _ts, facing=face, breathing=_breathing,
+                    ):
+                        pass
+                    elif _mdef.get("humanoid"):
                         eq = _mdef.get("equipment") or {}
                         face_h = 1 if (player_cx or cx) >= cx else -1
                         sprites.draw_humanoid_detailed(
@@ -7274,6 +7319,9 @@ class GameClient(CameraYaw):
         now = time.time()
         self.magic_fx = [fx for fx in self.magic_fx if fx.get("until", 0) > now]
         if not self.magic_fx or not self.player:
+            return
+        import emberdeep_v2_client
+        if emberdeep_v2_client.draw_magic(self):
             return
         cam_x, cam_y = self.camera_origin()
         for fx in self.magic_fx:
