@@ -263,6 +263,35 @@ def _face_from_vector(lx, ly):
     return "back" if ly < 0 else "front"
 
 
+def _draw_tile_highlight(view, ex, ey, lx, ly, rx, ry, tile_x, tile_y, rw, rh, mw, mh, color, thickness=2):
+    """Draw an outline around a floor tile at (tile_x, tile_y)."""
+    corners = [
+        (tile_x, tile_y),
+        (tile_x + 1, tile_y),
+        (tile_x + 1, tile_y + 1),
+        (tile_x, tile_y + 1),
+    ]
+    screen_pts = []
+    for cx, cy in corners:
+        vx, vy = cx - ex, cy - ey
+        along = vx * lx + vy * ly
+        if along < 0.3:
+            return
+        side = vx * rx + vy * ry
+        angle = math.atan2(side, along)
+        if abs(angle) > _FOV * 0.6:
+            return
+        sx = int((0.5 + angle / _FOV) * rw)
+        sy = _feet_y(along, rh, mh)
+        screen_pts.append((sx, sy))
+    if len(screen_pts) == 4:
+        for i in range(4):
+            p1 = screen_pts[i]
+            p2 = screen_pts[(i + 1) % 4]
+            for t in range(thickness):
+                pygame.draw.line(view, color, (p1[0], p1[1] + t), (p2[0], p2[1] + t), 1)
+
+
 def fp_active(client):
     return _in_emberdeep(client)
 
@@ -289,6 +318,19 @@ def step_delta(client, forward):
     return dx, dy
 
 
+def strafe_delta(client, right):
+    """One tile perpendicular to look direction. Right is +1, left is -1."""
+    yaw = float(getattr(client, "_ember_yaw", 0.0))
+    rx, ry = math.cos(yaw), math.sin(yaw)
+    if abs(rx) >= abs(ry):
+        dx, dy = (1 if rx > 0 else -1), 0
+    else:
+        dx, dy = 0, (1 if ry > 0 else -1)
+    if right < 0:
+        dx, dy = -dx, -dy
+    return dx, dy
+
+
 def _local_draw_args(client, t):
     """Facing and equipment for the local player. Look is the player's yaw."""
     p = client.player
@@ -300,8 +342,13 @@ def _local_draw_args(client, t):
         moving = False
     yaw = float(getattr(client, "_ember_yaw", 0.0))
     lx, ly = math.sin(yaw), -math.cos(yaw)
-    # The camera stays behind the body, so forward is always the walk-away pose.
-    face = "front" if moving and getattr(client, "_ember_reverse", False) else "back"
+    strafe_dir = getattr(client, "_ember_strafe", None)
+    if moving and strafe_dir is not None:
+        face = strafe_dir
+    elif moving and getattr(client, "_ember_reverse", False):
+        face = "front"
+    else:
+        face = "back"
     client._entity_facing[key] = face
     action = None
     gather = p.get("gathering")
@@ -366,7 +413,7 @@ def _project(ex, ey, lx, ly, rx, ry, wx, wy, depths, rw, rh, mw, mh, reveal=Fals
     if along < 0.2:
         return None
     angle = math.atan2(side, along)
-    limit = _FOV * (0.85 if reveal else 0.55)
+    limit = _FOV * (0.85 if reveal else 0.75)
     if abs(angle) > limit:
         return None
     col = int((0.5 + angle / _FOV) * rw)
@@ -993,7 +1040,12 @@ def draw_first_person(client):
             if top <= y <= bot:
                 v = (y - (horizon - wall_h / 2)) / max(1, wall_h)
                 color = _sample(wall_tex, tex_u, v)
-                color = (color.r * shade // 255, color.g * shade // 255, color.b * shade // 255)
+                gray = (color.r + color.g + color.b) // 3
+                color = (
+                    min(255, (gray * 2 + color.r) // 3 * shade // 255),
+                    min(255, (gray * 2 + color.g) // 3 * shade // 255),
+                    min(255, (gray * 2 + color.b) // 3 * shade // 255)
+                )
             elif y < horizon:
                 row = (horizon - y) / max(1, horizon)
                 current = _CAM_Z / max(0.05, row)
@@ -1006,11 +1058,30 @@ def draw_first_person(client):
                 current = _CAM_Z / max(0.05, row)
                 fx = ex + rdx * current
                 fy = ey + rdy * current
-                color = _sample(_texture(_floor_name(tiles, int(fx), int(fy))), fx, fy)
+                floor_tex = _texture(_floor_name(tiles, int(fx), int(fy)))
+                color = _sample(floor_tex, fx, fy)
+                floor_dist_fade = min(240, int(140 + 100 / max(0.5, current)))
+                color = (
+                    min(255, (color.r * 3 + 50) // 4 * floor_dist_fade // 255),
+                    min(255, (color.g * 3 + 35) // 4 * floor_dist_fade // 255),
+                    min(255, (color.b * 3 + 20) // 4 * floor_dist_fade // 255)
+                )
             pix[col, y] = color
             if y + 1 < rh:
                 pix[col, y + 1] = color
     del pix
+    for y in range(max(0, horizon - 1), min(rh, horizon + 2)):
+        pygame.draw.line(view, (18, 14, 12), (0, y), (rw - 1, y), 1)
+    px, py = int(pose["x"]), int(pose["y"])
+    _draw_tile_highlight(view, ex, ey, lx, ly, rx, ry, px, py, rw, rh, mw, mh, (180, 200, 120), 2)
+    next_dx, next_dy = 0, 0
+    if abs(lx) >= abs(ly):
+        next_dx = 1 if lx > 0 else -1
+    else:
+        next_dy = 1 if ly > 0 else -1
+    next_x, next_y = px + next_dx, py + next_dy
+    if _tile_at(tiles, next_x, next_y) == wm.FLOOR:
+        _draw_tile_highlight(view, ex, ey, lx, ly, rx, ry, next_x, next_y, rw, rh, mw, mh, (150, 170, 100), 1)
     scaled = pygame.transform.scale(view, (mw, mh))
     client.screen.blit(scaled, (0, 0))
     _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, mh)
