@@ -1,0 +1,62 @@
+{
+ "king_f1": {
+  "size_2x": [
+   1280,
+   1280
+  ],
+  "origin_2x": [
+   0,
+   160
+  ],
+  "tris": 4674,
+  "building": "keep"
+ },
+ "king_f2": {
+  "size_2x": [
+   1280,
+   1280
+  ],
+  "origin_2x": [
+   0,
+   160
+  ],
+  "tris": 4162,
+  "building": "keep"
+ },
+ "king_f3": {
+  "size_2x": [
+   1280,
+   1280
+  ],
+  "origin_2x": [
+   0,
+   160
+  ],
+  "tris": 4455,
+  "building": "keep"
+ },
+ "king_f4": {
+  "size_2x": [
+   1280,
+   1280
+  ],
+  "origin_2x": [
+   0,
+   160
+  ],
+  "tris": 3721,
+  "building": "keep"
+ },
+ "king_barracks_f1": {
+  "size_2x": [
+   560,
+   1440
+  ],
+  "origin_2x": [
+   0,
+   160
+  ],
+  "tris": 2720,
+  "building": "barracks"
+ }
+}

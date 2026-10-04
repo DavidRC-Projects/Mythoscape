@@ -1,0 +1,177 @@
+{
+  "crop_mockup": [
+    6,
+    598,
+    735,
+    1018
+  ],
+  "size_mockup": [
+    729,
+    420
+  ],
+  "anchor_live": [
+    9,
+    930
+  ],
+  "size_live": [
+    1144,
+    653
+  ],
+  "holes": {
+    "messages": {
+      "box": [
+        14,
+        48,
+        579,
+        350
+      ],
+      "note": "chat log text"
+    },
+    "input_text": {
+      "box": [
+        18,
+        368,
+        529,
+        402
+      ],
+      "note": "typed message"
+    }
+  },
+  "hitboxes": {
+    "tab_all": {
+      "box": [
+        10,
+        8,
+        135,
+        42
+      ],
+      "action": "chat_tab_all"
+    },
+    "tab_world": {
+      "box": [
+        139,
+        8,
+        264,
+        42
+      ],
+      "action": "chat_tab_world"
+    },
+    "tab_guild": {
+      "box": [
+        268,
+        8,
+        393,
+        42
+      ],
+      "action": "chat_tab_guild"
+    },
+    "tab_party": {
+      "box": [
+        397,
+        8,
+        522,
+        42
+      ],
+      "action": "chat_tab_party"
+    },
+    "tab_whisper": {
+      "box": [
+        526,
+        8,
+        651,
+        42
+      ],
+      "action": "chat_tab_whisper"
+    },
+    "settings": {
+      "box": [
+        681,
+        8,
+        717,
+        42
+      ],
+      "action": "chat_settings"
+    },
+    "quick_hello": {
+      "box": [
+        589,
+        50,
+        717,
+        94
+      ],
+      "action": "quickchat_hello"
+    },
+    "quick_need_help": {
+      "box": [
+        589,
+        98,
+        717,
+        142
+      ],
+      "action": "quickchat_need_help"
+    },
+    "quick_group_up": {
+      "box": [
+        589,
+        146,
+        717,
+        190
+      ],
+      "action": "quickchat_group_up"
+    },
+    "quick_good_fight": {
+      "box": [
+        589,
+        194,
+        717,
+        238
+      ],
+      "action": "quickchat_good_fight"
+    },
+    "quick_thanks": {
+      "box": [
+        589,
+        242,
+        717,
+        286
+      ],
+      "action": "quickchat_thanks"
+    },
+    "quick_goodbye": {
+      "box": [
+        589,
+        290,
+        717,
+        334
+      ],
+      "action": "quickchat_goodbye"
+    },
+    "input": {
+      "box": [
+        14,
+        365,
+        529,
+        406
+      ],
+      "action": "chat_focus"
+    },
+    "emoji": {
+      "box": [
+        539,
+        365,
+        574,
+        406
+      ],
+      "action": "chat_emoji"
+    },
+    "send": {
+      "box": [
+        579,
+        365,
+        614,
+        406
+      ],
+      "action": "chat_send"
+    }
+  }
+}

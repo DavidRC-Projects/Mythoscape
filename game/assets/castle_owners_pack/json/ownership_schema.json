@@ -1,0 +1,413 @@
+{
+  "id": "castle_ownership_schema",
+  "version": 1,
+  "phase": "C",
+  "flag": "USE_CASTLE_OWNERS",
+  "requires_flag": "USE_CASTLE_REALM",
+  "pattern": "Same vacant/owned pattern as housing estates: vacant plaque text 'For Sale'; owned shows owner display name.",
+  "bank": {
+    "MAX_BANK_COINS_current_main": 10000000,
+    "MAX_BANK_COINS_recommended": 200000000,
+    "purchase_source": "bank_coins_only",
+    "note": "Prompt Cursor to raise the cap. Purchases above 10M fail until raised."
+  },
+  "deed_items": [
+    {
+      "item_id": "deed_gothic",
+      "name": "Deed: Duskspire Keep",
+      "castle_id": "gothic",
+      "stackable": false,
+      "tradeable": false,
+      "examine": "A sealed deed to Duskspire Keep.",
+      "icon_hint": "scroll with purple wax moon seal"
+    },
+    {
+      "item_id": "deed_white_rose",
+      "name": "Deed: White Rose Castle",
+      "castle_id": "white_rose",
+      "stackable": false,
+      "tradeable": false,
+      "examine": "A rose-sealed deed to White Rose Castle.",
+      "icon_hint": "scroll with white-rose wax"
+    },
+    {
+      "item_id": "deed_sky_anchor",
+      "name": "Deed: Sky-Anchor Citadel",
+      "castle_id": "sky_anchor",
+      "stackable": false,
+      "tradeable": false,
+      "examine": "A chain-stamped deed to the floating citadel.",
+      "icon_hint": "scroll with sky-blue wax anchor"
+    },
+    {
+      "item_id": "deed_king",
+      "name": "Deed: King's Castle",
+      "castle_id": "king",
+      "stackable": false,
+      "tradeable": false,
+      "examine": "A royal deed granted by the king's leave.",
+      "icon_hint": "scroll with gold crown seal"
+    }
+  ],
+  "castles": [
+    {
+      "castle_id": "gothic",
+      "display_name": "Duskspire Keep",
+      "deed_item_id": "deed_gothic",
+      "deed_price": 25000000,
+      "weekly_tax": 100000,
+      "plaque": {
+        "plane": "realm",
+        "tile": [
+          47,
+          76
+        ],
+        "vacant_text": "For Sale",
+        "owned_text_template": "{owner_name}",
+        "subtitle_vacant": "Duskspire Keep",
+        "subtitle_owned": "Duskspire Keep",
+        "sprite_vacant": "sprites/plaques/plaque_gothic_for_sale.png",
+        "sprite_owned_example": "sprites/plaques/plaque_gothic_owned_example.png",
+        "reuse_legend_char": "l"
+      },
+      "seller_id": "seller_gothic",
+      "guard_posts_reserved": [
+        {
+          "id": "out_gate_w",
+          "slot": "outside",
+          "plane": "realm",
+          "tile": [
+            47,
+            75
+          ],
+          "phase": "D"
+        },
+        {
+          "id": "out_gate_e",
+          "slot": "outside",
+          "plane": "realm",
+          "tile": [
+            52,
+            75
+          ],
+          "phase": "D"
+        },
+        {
+          "id": "in_hall",
+          "slot": "inside",
+          "plane": "gothic_f1",
+          "tile": [
+            9,
+            9
+          ],
+          "phase": "D"
+        },
+        {
+          "id": "in_vault",
+          "slot": "inside",
+          "plane": "gothic_f3",
+          "tile": [
+            4,
+            4
+          ],
+          "phase": "D",
+          "note": "adjust after interiors v2"
+        }
+      ],
+      "vault_stub": {
+        "phase": "E",
+        "flag": "USE_CASTLE_VAULTS",
+        "status_values": [
+          "locked",
+          "empty",
+          "has_items"
+        ],
+        "default_status_when_flag_off": "locked"
+      }
+    },
+    {
+      "castle_id": "white_rose",
+      "display_name": "White Rose Castle",
+      "deed_item_id": "deed_white_rose",
+      "deed_price": 40000000,
+      "weekly_tax": 150000,
+      "plaque": {
+        "plane": "realm",
+        "tile": [
+          252,
+          84
+        ],
+        "vacant_text": "For Sale",
+        "owned_text_template": "{owner_name}",
+        "subtitle_vacant": "White Rose Castle",
+        "subtitle_owned": "White Rose Castle",
+        "sprite_vacant": "sprites/plaques/plaque_white_rose_for_sale.png",
+        "sprite_owned_example": "sprites/plaques/plaque_white_rose_owned_example.png",
+        "reuse_legend_char": "l"
+      },
+      "seller_id": "seller_white_rose",
+      "guard_posts_reserved": [
+        {
+          "id": "out_gate_w",
+          "slot": "outside",
+          "plane": "realm",
+          "tile": [
+            252,
+            83
+          ],
+          "phase": "D"
+        },
+        {
+          "id": "out_gate_e",
+          "slot": "outside",
+          "plane": "realm",
+          "tile": [
+            257,
+            83
+          ],
+          "phase": "D"
+        },
+        {
+          "id": "in_hall",
+          "slot": "inside",
+          "plane": "rose_f1",
+          "tile": [
+            12,
+            8
+          ],
+          "phase": "D"
+        },
+        {
+          "id": "in_vault",
+          "slot": "inside",
+          "plane": "rose_f3",
+          "tile": [
+            4,
+            4
+          ],
+          "phase": "D",
+          "note": "adjust after interiors v2"
+        }
+      ],
+      "vault_stub": {
+        "phase": "E",
+        "flag": "USE_CASTLE_VAULTS",
+        "status_values": [
+          "locked",
+          "empty",
+          "has_items"
+        ],
+        "default_status_when_flag_off": "locked"
+      }
+    },
+    {
+      "castle_id": "sky_anchor",
+      "display_name": "Sky-Anchor Citadel",
+      "deed_item_id": "deed_sky_anchor",
+      "deed_price": 55000000,
+      "weekly_tax": 200000,
+      "plaque": {
+        "plane": "realm",
+        "tile": [
+          47,
+          166
+        ],
+        "vacant_text": "For Sale",
+        "owned_text_template": "{owner_name}",
+        "subtitle_vacant": "Sky-Anchor Citadel",
+        "subtitle_owned": "Sky-Anchor Citadel",
+        "sprite_vacant": "sprites/plaques/plaque_sky_anchor_for_sale.png",
+        "sprite_owned_example": "sprites/plaques/plaque_sky_anchor_owned_example.png",
+        "reuse_legend_char": "l"
+      },
+      "seller_id": "seller_sky_anchor",
+      "guard_posts_reserved": [
+        {
+          "id": "out_gate_w",
+          "slot": "outside",
+          "plane": "realm",
+          "tile": [
+            47,
+            165
+          ],
+          "phase": "D"
+        },
+        {
+          "id": "out_gate_e",
+          "slot": "outside",
+          "plane": "realm",
+          "tile": [
+            52,
+            165
+          ],
+          "phase": "D"
+        },
+        {
+          "id": "in_hall",
+          "slot": "inside",
+          "plane": "sky_f1",
+          "tile": [
+            8,
+            11
+          ],
+          "phase": "D"
+        },
+        {
+          "id": "in_vault",
+          "slot": "inside",
+          "plane": "sky_f3",
+          "tile": [
+            4,
+            4
+          ],
+          "phase": "D",
+          "note": "adjust after interiors v2"
+        }
+      ],
+      "vault_stub": {
+        "phase": "E",
+        "flag": "USE_CASTLE_VAULTS",
+        "status_values": [
+          "locked",
+          "empty",
+          "has_items"
+        ],
+        "default_status_when_flag_off": "locked"
+      }
+    },
+    {
+      "castle_id": "king",
+      "display_name": "King's Castle",
+      "deed_item_id": "deed_king",
+      "deed_price": 80000000,
+      "weekly_tax": 300000,
+      "plaque": {
+        "plane": "realm",
+        "tile": [
+          147,
+          76
+        ],
+        "vacant_text": "For Sale",
+        "owned_text_template": "{owner_name}",
+        "subtitle_vacant": "King's Castle",
+        "subtitle_owned": "King's Castle",
+        "sprite_vacant": "sprites/plaques/plaque_king_for_sale.png",
+        "sprite_owned_example": "sprites/plaques/plaque_king_owned_example.png",
+        "reuse_legend_char": "l"
+      },
+      "seller_id": "seller_king",
+      "guard_posts_reserved": [
+        {
+          "id": "out_gate_w",
+          "slot": "outside",
+          "plane": "realm",
+          "tile": [
+            147,
+            75
+          ],
+          "phase": "D"
+        },
+        {
+          "id": "out_gate_e",
+          "slot": "outside",
+          "plane": "realm",
+          "tile": [
+            152,
+            75
+          ],
+          "phase": "D"
+        },
+        {
+          "id": "in_hall",
+          "slot": "inside",
+          "plane": "king_f1",
+          "tile": [
+            8,
+            11
+          ],
+          "phase": "D"
+        },
+        {
+          "id": "in_vault",
+          "slot": "inside",
+          "plane": "king_f3",
+          "tile": [
+            4,
+            4
+          ],
+          "phase": "D",
+          "note": "adjust after interiors v2"
+        }
+      ],
+      "vault_stub": {
+        "phase": "E",
+        "flag": "USE_CASTLE_VAULTS",
+        "status_values": [
+          "locked",
+          "empty",
+          "has_items"
+        ],
+        "default_status_when_flag_off": "locked"
+      }
+    }
+  ],
+  "persistence": {
+    "suggested_table_or_blob": "castle_ownership",
+    "fields": [
+      {
+        "name": "castle_id",
+        "type": "string",
+        "pk": true
+      },
+      {
+        "name": "owner_account_id",
+        "type": "string|null",
+        "note": "null = vacant / For Sale"
+      },
+      {
+        "name": "owner_display_name",
+        "type": "string|null"
+      },
+      {
+        "name": "purchased_at",
+        "type": "unix_ts|null"
+      },
+      {
+        "name": "last_tax_paid_at",
+        "type": "unix_ts|null"
+      },
+      {
+        "name": "tax_weeks_owed",
+        "type": "int",
+        "default": 0
+      },
+      {
+        "name": "flags",
+        "type": "object",
+        "note": "future: vault_locked_for_tax etc."
+      }
+    ],
+    "one_owner_per_castle": true,
+    "one_castle_per_player": false,
+    "note": "Allow multi-castle ownership unless David decides otherwise in Step 1."
+  },
+  "buy_flow": [
+    "Player talks to seller NPC (USE_CASTLE_OWNERS on)",
+    "Choose Buy \u2192 confirm",
+    "Server checks: castle vacant; bank_coins >= deed_price; MAX_BANK_COINS allows balance",
+    "Debit bank; set owner; grant deed_<castle_id> item (or bind deed to account if inventory full \u2014 prefer account-bound flag + optional item)",
+    "Plaque swaps vacant_text \u2192 owner_display_name",
+    "Chat: 'You are now the lord of <Castle>.'"
+  ],
+  "weekly_tax_flow": [
+    "On weekly tick (reuse housing tax timer if one exists \u2014 confirm in Step 1)",
+    "If owner bank >= weekly_tax: debit; update last_tax_paid_at",
+    "Else: increment tax_weeks_owed; optional lock vault stub; do NOT auto-evict in Phase C"
+  ],
+  "out_of_scope_phase_c": [
+    "Knight hire/fire/place combat AI (Phase D, USE_CASTLE_GUARDS) \u2014 dialogue stubs only",
+    "Vault storage / robbery (Phase E, USE_CASTLE_VAULTS) \u2014 dialogue stubs only",
+    "Interior rebuilds (Phases A/B)",
+    "Walk-cycle changes"
+  ]
+}

@@ -284,17 +284,17 @@
   "y1": 188
  },
  "overworld_portal": {
-  "x": 111,
-  "y": 43,
+  "x": 32,
+  "y": 33,
   "approach": [
-   111,
-   44
+   32,
+   34
   ],
   "return_arrival": [
-   111,
-   45
+   32,
+   34
   ],
-  "note": "grass NW of the live castle, west of the north road (x117-118). 3x3 (110-112,42-44) is grass on main ca336ee"
+  "note": "grass 11 tiles south of the wishing well (32,22), east of the village road. Ten clear tiles between them."
  },
  "roads": [
   {

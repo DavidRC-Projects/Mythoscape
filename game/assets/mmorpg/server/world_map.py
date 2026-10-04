@@ -802,6 +802,8 @@ def generate_world():
 
     castle_v2.apply_stamp(grid, sys.modules[__name__])
     buildings_v2.apply_stamp(grid, sys.modules[__name__])
+    import housing
+    housing.stamp(grid, sys.modules[__name__])
     _clear_trees_near_buildings(grid)
     _paint_void_grounds(grid)
     _lay_wayfinder_roads(grid)

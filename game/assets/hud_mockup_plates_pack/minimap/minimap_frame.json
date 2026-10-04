@@ -1,0 +1,61 @@
+{
+  "crop_mockup": [
+    855,
+    6,
+    1086,
+    248
+  ],
+  "size_mockup": [
+    231,
+    242
+  ],
+  "anchor_live": [
+    1342,
+    9
+  ],
+  "size_live": [
+    362,
+    376
+  ],
+  "holes": {
+    "map_circle": {
+      "box": [
+        45,
+        30,
+        185,
+        170
+      ],
+      "shape": "circle",
+      "note": "live minimap"
+    },
+    "location_text": {
+      "box": [
+        40,
+        194,
+        211,
+        230
+      ],
+      "note": "zone name + coords"
+    }
+  },
+  "hitboxes": {
+    "map": {
+      "box": [
+        10,
+        10,
+        221,
+        187
+      ],
+      "action": "open_map"
+    },
+    "location": {
+      "box": [
+        30,
+        190,
+        216,
+        234
+      ],
+      "action": "open_map"
+    }
+  }
+}

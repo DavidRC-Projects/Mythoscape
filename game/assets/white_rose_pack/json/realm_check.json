@@ -1,0 +1,33 @@
+{
+ "pass": true,
+ "errors": [],
+ "log": [
+  "gothic     keep exterior 10x6 tiles vs interior floors 18x12 -> mismatch 3.60x area (legacy phase-1 castle, warning only)",
+  "white_rose keep exterior 24x11 tiles vs interior floors 24x11 -> MATCH",
+  "overworld portal (111,43) -> realm spawn (150,182): BFS visited 54972 tiles over 9 planes",
+  "gothic     drawbridge   4/4 tiles reachable",
+  "gothic     portcullis   2/2 tiles reachable",
+  "gothic     gate passage 2/2 tiles reachable",
+  "gothic     bailey       196/196 tiles reachable",
+  "gothic     keep door    2/2 tiles reachable",
+  "gothic     floor 1 Hall of Shadows      walkable 131/131 reachable, rooms 4/4",
+  "gothic     floor 2 Great Hall           walkable 133/133 reachable, rooms 3/3",
+  "gothic     floor 3 Lord's Chambers      walkable 115/115 reachable, rooms 6/6",
+  "gothic     floor 4 Spire Top            walkable 63/63 reachable, rooms 3/3",
+  "white_rose drawbridge   6/6 tiles reachable",
+  "white_rose portcullis   2/2 tiles reachable",
+  "white_rose gate passage 6/6 tiles reachable",
+  "white_rose bailey       734/734 tiles reachable",
+  "white_rose keep door    2/2 tiles reachable",
+  "white_rose floor 1 Rose Hall            walkable 149/149 reachable, rooms 5/5",
+  "white_rose floor 2 Great Hall of Roses  walkable 159/159 reachable, rooms 3/3",
+  "white_rose floor 3 Royal Chambers       walkable 136/136 reachable, rooms 6/6",
+  "white_rose floor 4 Rose Terrace         walkable 149/149 reachable, rooms 3/3",
+  "spacing gothic     <-> king        58 tiles",
+  "spacing gothic     <-> white_rose 169 tiles",
+  "spacing gothic     <-> sky_anchor  52 tiles",
+  "spacing king       <-> white_rose  51 tiles",
+  "spacing king       <-> sky_anchor  55 tiles",
+  "spacing white_rose <-> sky_anchor 166 tiles"
+ ]
+}

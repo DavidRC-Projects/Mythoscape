@@ -72,6 +72,36 @@ async def grant_table(session, table, speaker="Loot"):
     return got
 
 
+async def try_blocked_step(session, nx, ny):
+    """Walking into a locked door with the key opens it. A bare bump explains the lock."""
+    import time
+    d = session.dungeon
+    spec = (d or {}).get("spec") or {}
+    if not d or not spec:
+        return None
+    if not (0 <= ny < d["height"] and 0 <= nx < d["width"]):
+        return None
+    ch = d["chars"][ny][nx]
+    doors = spec.get("doors") or {}
+    secrets = spec.get("secrets") or {}
+    is_secret = any(tuple(secret.get("wall") or ()) == (nx, ny) for secret in secrets.values())
+    if ch not in doors and not is_secret:
+        return None
+    if ch in doors and ch in d.get("opened", []):
+        return None
+    now = time.time()
+    if getattr(session, "_block_hint_tile", None) == (nx, ny) and now < getattr(session, "_block_hint_at", 0) + 2.5:
+        return "blocked"
+    session._block_hint_tile = (nx, ny)
+    session._block_hint_at = now
+    await handle_interact(session, {"x": nx, "y": ny})
+    from world_map import WALL
+    tiles = d.get("tiles") or []
+    if 0 <= ny < len(tiles) and tiles[ny][nx] != WALL:
+        return "opened"
+    return "blocked"
+
+
 async def handle_interact(session, msg):
     """Doors, secrets, pedestal, chests, caches, notes, shrine, and the shortcut lever."""
     import server as srv

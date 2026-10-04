@@ -2423,7 +2423,7 @@ class GameClient(CameraYaw):
         if not m or not m.get("alive"):
             self.combat_rounds = 0
             return False
-        return True
+        return bool((MONSTERS.get(m.get("type")) or {}).get("requires_pk"))
 
     def _say_combat_lock(self):
         now = time.time()

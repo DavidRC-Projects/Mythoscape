@@ -20,8 +20,8 @@ LEGEND = {
     "c": ("WALL", False, "castle footprint: walkability comes from the castle grid"),
     "r": ("GRASS", True, "reserved plot (castle not built yet)"), "l": ("PATH", True, "lamp / signpost tile (decor, walkable)"),
 }
-OVERWORLD_PORTAL = {"x": 111, "y": 43, "approach": [111, 44], "return_arrival": [111, 45],
-                    "note": "grass NW of the live castle, west of the north road (x117-118). 3x3 (110-112,42-44) is grass on main ca336ee"}
+OVERWORLD_PORTAL = {"x": 32, "y": 33, "approach": [32, 34], "return_arrival": [32, 34],
+                    "note": "grass 11 tiles south of the wishing well (32,22), east of the village road. Ten clear tiles between them."}
 HUB = {"x0": 138, "y0": 168, "x1": 162, "y1": 188}
 REALM_PORTAL = {"x": 150, "y": 186}
 SPAWN = {"x": 150, "y": 182}

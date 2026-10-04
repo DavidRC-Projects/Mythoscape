@@ -1,0 +1,42 @@
+{
+  "crop_mockup": [
+    8,
+    10,
+    200,
+    72
+  ],
+  "size_mockup": [
+    192,
+    62
+  ],
+  "anchor_live": [
+    12,
+    15
+  ],
+  "size_live": [
+    301,
+    96
+  ],
+  "holes": {
+    "label": {
+      "box": [
+        42,
+        8,
+        168,
+        54
+      ],
+      "note": "zone name + safe/danger"
+    }
+  },
+  "hitboxes": {
+    "chip": {
+      "box": [
+        0,
+        0,
+        192,
+        62
+      ],
+      "action": "open_zone_info"
+    }
+  }
+}

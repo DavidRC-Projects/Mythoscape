@@ -257,9 +257,9 @@ PHASE_A = {
 }
 KEY_IDS = ("void_key_amethyst", "void_key_obsidian", "void_rift_sigil")
 SEAL_HINT = {
-    "A": "It needs an Amethyst Key. The Gallery Warden carries one.",
-    "B": "It needs an Obsidian Key. The quartermaster hid one behind loose bricks.",
-    "C": "It needs a Rift Sigil. Knight-Captain Vorn will not give his up.",
+    "A": "The Amethyst Seal is locked. Defeat the Gallery Warden for the Amethyst Key, then walk into this door.",
+    "B": "The Obsidian Seal is locked. The key is behind the loose bricks on the west wall of the barracks. Walk into this door once you have it.",
+    "C": "The Rift Seal is locked. Defeat Knight-Captain Vorn for the Rift Sigil, then walk into this door.",
 }
 CHEST_LOOT = {
     "gallery_chest": [("coins", (200, 500)), ("super_attack_potion", (1, 1)), ("mithril_arrow", (15, 30))],
@@ -322,8 +322,11 @@ def _cell_tile(ch, x, y, opened, open_secrets, gate_open):
         return FLOOR if ch in opened else WALL
     if ch == "X":
         return FLOOR if gate_open else WALL
-    if ch in BLOCKED or ch == "h":
+    if ch in BLOCKED:
         return WALL
+    # Hidden floors stay walled until their secret is opened, then they become a room.
+    if ch == "h":
+        return FLOOR if _hidden_revealed(x, y, open_secrets) else WALL
     return FLOOR
 
 
@@ -493,14 +496,19 @@ def client_extra(session):
         "zones": d.get("zones") or [],
         "lore": d.get("lore") or {},
         "ground_items": ground_public(d),
+        "door_hints": SEAL_HINT,
     }
 
 
 def ground_public(d):
+    tiles = d.get("tiles") or []
     out = {}
     for (x, y), items in (d.get("ground") or {}).items():
-        if items:
-            out[f"{x},{y}"] = items
+        if not items:
+            continue
+        if 0 <= y < len(tiles) and 0 <= x < len(tiles[y]) and tiles[y][x] == WALL:
+            continue
+        out[f"{x},{y}"] = items
     return out
 
 
@@ -579,6 +587,32 @@ def _give(session, item_id, qty):
     if world and world.add_item_to_inventory(session, item_id, qty):
         return True
     return False
+
+
+async def try_blocked_step(session, nx, ny):
+    """Walking into a seal with the key opens it. Otherwise say what the door wants."""
+    import time
+    d = session.dungeon
+    if not d or not (0 <= ny < d["height"] and 0 <= nx < d["width"]):
+        return None
+    ch = d["chars"][ny][nx]
+    interesting = ch in "ABC" or ch == "S" or any(
+        tuple(spec["wall"]) == (nx, ny) for spec in SECRETS.values()
+    )
+    if not interesting:
+        return None
+    if ch in "ABC" and ch in d.get("opened", []):
+        return None
+    now = time.time()
+    if getattr(session, "_block_hint_tile", None) == (nx, ny) and now < getattr(session, "_block_hint_at", 0) + 2.5:
+        return "blocked"
+    session._block_hint_tile = (nx, ny)
+    session._block_hint_at = now
+    await handle_interact(session, {"x": nx, "y": ny})
+    tiles = d.get("tiles") or []
+    if 0 <= ny < len(tiles) and 0 <= nx < len(tiles[ny]) and tiles[ny][nx] != WALL:
+        return "opened"
+    return "blocked"
 
 
 async def handle_interact(session, msg):
@@ -725,13 +759,19 @@ async def _grant_table(session, table):
 
 
 def place_ground(session, item_id, qty):
+    import time
+    import feature_flags
     d = session.dungeon
     pile = d["ground"].setdefault((session.x, session.y), [])
-    pile.append({"item_id": item_id, "qty": qty})
+    entry = {"item_id": item_id, "qty": qty}
+    if feature_flags.USE_REALISTIC_ITEM_ICONS:
+        entry["expires_at"] = time.time() + 300
+    pile.append(entry)
 
 
 async def handle_pickup(session, msg):
     import server as srv
+    srv.expire_ground_items()
     d = session.dungeon
     pile = d["ground"].get((session.x, session.y)) or []
     if not pile:
@@ -853,7 +893,7 @@ def process_ai(session):
             continue
         eligible.append((dist, m.id, m))
     eligible.sort()
-    active = {mid for _d, mid, _m in eligible[:2]}
+    active = {mid for _d, mid, _m in eligible[:1]}
     closest = None
     for dist, mid, m in eligible:
         if mid not in active:
@@ -895,12 +935,44 @@ def _maybe_respawn(session, m):
         m.target_player_id = None
 
 
+async def _nearby_hints(session):
+    """Once, when you get close, say how a seal or a loose wall works."""
+    import server as srv
+    d = session.dungeon
+    seen = d.setdefault("hinted", [])
+    x, y = session.x, session.y
+    for sid, spec in SECRETS.items():
+        if sid in d.get("secrets") or sid in seen:
+            continue
+        wx, wy = spec["wall"]
+        if max(abs(x - wx), abs(y - wy)) <= 2:
+            seen.append(sid)
+            await srv.send(session.ws, "CHAT_MSG", **{
+                "from": "Void Sanctum",
+                "text": spec["hint"] + " Click the cracked wall, or walk into it.",
+            })
+            return
+    for ch, (dx, dy, key, name) in DOORS.items():
+        if ch in d.get("opened") or ch in seen:
+            continue
+        if max(abs(x - dx), abs(y - dy)) > 2:
+            continue
+        seen.append(ch)
+        if _has_item(session, key):
+            text = f"The {name} recognises the key in your pack. Walk into the door."
+        else:
+            text = SEAL_HINT[ch]
+        await srv.send(session.ws, "CHAT_MSG", **{"from": name, "text": text})
+        return
+
+
 async def tick_sessions():
     import server as srv
     for session in list(srv.WORLD.sessions.values()):
         d = session.dungeon
         if not d or d.get("v2") is not True:
             continue
+        await _nearby_hints(session)
         await _wind(session)
         await _boss(session)
 

@@ -1,0 +1,502 @@
+{
+  "flag": "USE_CASTLE_INTERIORS_V2",
+  "flag_default": "0",
+  "option": "B",
+  "score": {
+    "walkability": 9.0,
+    "room_count_and_size": 8.7,
+    "furniture_density": 8.4,
+    "period_detail": 8.5,
+    "queen_floral": 8.8,
+    "no_path_blockers": 9.2,
+    "overall": 8.7,
+    "notes": "Against v1 corner floors (gothic 18x12, rose 24x11, king/sky 16x14) and the redesign plan. Overall is the unweighted mean."
+  },
+  "castles": [
+    {
+      "id": "duskspire",
+      "name": "Duskspire Keep",
+      "rooms": 24,
+      "fun_rooms": [],
+      "floors": [
+        {
+          "plane": "gothic_f1",
+          "name": "Hall of Shadows",
+          "size": [
+            40,
+            23
+          ],
+          "rooms": 8,
+          "room_names": [
+            "Black Chapel",
+            "Guard Room",
+            "Kitchen",
+            "Shadow Corridor",
+            "Pantry",
+            "Entrance Hall",
+            "Crypt Stair Vestibule",
+            "Stair Hall"
+          ],
+          "checker": {
+            "pass": true,
+            "walkable": 622,
+            "reachable": 622,
+            "rooms": "8/8",
+            "blocking_props": 70,
+            "decor": 111,
+            "errors": []
+          }
+        },
+        {
+          "plane": "gothic_f2",
+          "name": "Great Hall",
+          "size": [
+            40,
+            23
+          ],
+          "rooms": 5,
+          "room_names": [
+            "Great Hall",
+            "Armoury",
+            "Lord's Solar",
+            "Solar Antechamber",
+            "Stair Hall"
+          ],
+          "checker": {
+            "pass": true,
+            "walkable": 681,
+            "reachable": 681,
+            "rooms": "5/5",
+            "blocking_props": 44,
+            "decor": 93,
+            "errors": []
+          }
+        },
+        {
+          "plane": "gothic_f3",
+          "name": "Lord's Chambers & Vault",
+          "size": [
+            40,
+            23
+          ],
+          "rooms": 7,
+          "room_names": [
+            "Lord's Bedchamber",
+            "Guest Chamber",
+            "Library",
+            "Upper Corridor",
+            "Questioning Room",
+            "Main Vault",
+            "Stair Hall"
+          ],
+          "checker": {
+            "pass": true,
+            "walkable": 623,
+            "reachable": 623,
+            "rooms": "7/7",
+            "blocking_props": 76,
+            "decor": 106,
+            "errors": []
+          }
+        },
+        {
+          "plane": "gothic_f4",
+          "name": "Spire",
+          "size": [
+            32,
+            18
+          ],
+          "rooms": 4,
+          "room_names": [
+            "Bell Chamber",
+            "Battlement Watch",
+            "Roof Walk",
+            "Stair Head"
+          ],
+          "checker": {
+            "pass": true,
+            "walkable": 328,
+            "reachable": 328,
+            "rooms": "4/4",
+            "blocking_props": 24,
+            "decor": 52,
+            "errors": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "white_rose",
+      "name": "White Rose Castle",
+      "rooms": 25,
+      "fun_rooms": [
+        "Music Room",
+        "Dressing Room",
+        "Candle Chapel",
+        "Petal Bath",
+        "Glass Conservatory"
+      ],
+      "floors": [
+        {
+          "plane": "rose_f1",
+          "name": "Rose Hall",
+          "size": [
+            44,
+            28
+          ],
+          "rooms": 8,
+          "room_names": [
+            "Kitchen",
+            "Pantry & Still-room",
+            "Servants' Hall",
+            "Nursery",
+            "Gallery Walk",
+            "Linen Stillroom",
+            "Entrance Hall",
+            "Grand Stair"
+          ],
+          "checker": {
+            "pass": true,
+            "walkable": 886,
+            "reachable": 886,
+            "rooms": "8/8",
+            "blocking_props": 85,
+            "decor": 420,
+            "errors": []
+          }
+        },
+        {
+          "plane": "rose_f2",
+          "name": "Great Hall of Roses",
+          "size": [
+            44,
+            28
+          ],
+          "rooms": 5,
+          "room_names": [
+            "Great Hall of Roses",
+            "Music Room",
+            "Solar",
+            "Rose Antechamber",
+            "Grand Stair"
+          ],
+          "checker": {
+            "pass": true,
+            "walkable": 951,
+            "reachable": 951,
+            "rooms": "5/5",
+            "blocking_props": 68,
+            "decor": 356,
+            "errors": []
+          }
+        },
+        {
+          "plane": "rose_f3",
+          "name": "Queen's Chambers",
+          "size": [
+            44,
+            28
+          ],
+          "rooms": 9,
+          "room_names": [
+            "Queen's Bedchamber",
+            "Dressing Room",
+            "Guest Suite",
+            "Candle Chapel",
+            "Long Corridor",
+            "Grand Stair",
+            "Rose Gallery",
+            "Petal Vault",
+            "Petal Bath"
+          ],
+          "checker": {
+            "pass": true,
+            "walkable": 868,
+            "reachable": 868,
+            "rooms": "9/9",
+            "blocking_props": 99,
+            "decor": 457,
+            "errors": []
+          }
+        },
+        {
+          "plane": "rose_f4",
+          "name": "Glass Conservatory",
+          "size": [
+            44,
+            28
+          ],
+          "rooms": 3,
+          "room_names": [
+            "Roof Terrace",
+            "Glass Conservatory",
+            "Stair Head"
+          ],
+          "checker": {
+            "pass": true,
+            "walkable": 953,
+            "reachable": 953,
+            "rooms": "3/3",
+            "blocking_props": 43,
+            "decor": 316,
+            "errors": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "king",
+      "name": "King's Castle",
+      "rooms": 28,
+      "fun_rooms": [
+        "Feast Gallery",
+        "Trophy Hall",
+        "Royal Bath",
+        "War Room",
+        "Crown Room",
+        "Captain's Room"
+      ],
+      "floors": [
+        {
+          "plane": "king_f1",
+          "name": "Great Hall",
+          "size": [
+            48,
+            32
+          ],
+          "rooms": 8,
+          "room_names": [
+            "Royal Kitchen",
+            "Buttery",
+            "Service Passage",
+            "Feast Gallery",
+            "Guard Post",
+            "Great Hall",
+            "Grand Stair",
+            "Vestibule"
+          ],
+          "checker": {
+            "pass": true,
+            "walkable": 1065,
+            "reachable": 1065,
+            "rooms": "8/8",
+            "blocking_props": 115,
+            "decor": 237,
+            "errors": []
+          }
+        },
+        {
+          "plane": "king_f2",
+          "name": "Throne Room",
+          "size": [
+            48,
+            32
+          ],
+          "rooms": 5,
+          "room_names": [
+            "Throne Room",
+            "Trophy Hall",
+            "Council Chamber",
+            "Antechamber",
+            "Grand Stair"
+          ],
+          "checker": {
+            "pass": true,
+            "walkable": 1228,
+            "reachable": 1228,
+            "rooms": "5/5",
+            "blocking_props": 70,
+            "decor": 163,
+            "errors": []
+          }
+        },
+        {
+          "plane": "king_f3",
+          "name": "Royal Apartments",
+          "size": [
+            48,
+            32
+          ],
+          "rooms": 8,
+          "room_names": [
+            "King's Bedchamber",
+            "Queen's Bedchamber",
+            "Royal Bath",
+            "War Room",
+            "King's Study",
+            "Private Chapel",
+            "Royal Treasury",
+            "Grand Stair"
+          ],
+          "checker": {
+            "pass": true,
+            "walkable": 1114,
+            "reachable": 1114,
+            "rooms": "8/8",
+            "blocking_props": 109,
+            "decor": 227,
+            "errors": []
+          }
+        },
+        {
+          "plane": "king_f4",
+          "name": "Battlements & Crown Room",
+          "size": [
+            48,
+            32
+          ],
+          "rooms": 3,
+          "room_names": [
+            "Keep Battlements",
+            "Crown Room",
+            "Stair Head"
+          ],
+          "checker": {
+            "pass": true,
+            "walkable": 1241,
+            "reachable": 1241,
+            "rooms": "3/3",
+            "blocking_props": 33,
+            "decor": 94,
+            "errors": []
+          }
+        },
+        {
+          "plane": "king_barracks_f1",
+          "name": "Royal Guard Barracks",
+          "size": [
+            20,
+            28
+          ],
+          "rooms": 4,
+          "room_names": [
+            "Armoury",
+            "Dormitory",
+            "Mess Hall",
+            "Captain's Room"
+          ],
+          "checker": {
+            "pass": true,
+            "walkable": 358,
+            "reachable": 358,
+            "rooms": "4/4",
+            "blocking_props": 53,
+            "decor": 102,
+            "errors": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "sky_anchor",
+      "name": "Sky-Anchor Citadel",
+      "rooms": 20,
+      "fun_rooms": [
+        "Observatory",
+        "Meditation Chamber"
+      ],
+      "floors": [
+        {
+          "plane": "sky_f1",
+          "name": "Hall of Chains",
+          "size": [
+            40,
+            26
+          ],
+          "rooms": 6,
+          "room_names": [
+            "Gearworks",
+            "Anchor Shrine",
+            "Sky Kitchen",
+            "Hall of Chains",
+            "Crystal Stair",
+            "Lift Landing"
+          ],
+          "checker": {
+            "pass": true,
+            "walkable": 663,
+            "reachable": 663,
+            "rooms": "6/6",
+            "blocking_props": 81,
+            "decor": 126,
+            "errors": []
+          }
+        },
+        {
+          "plane": "sky_f2",
+          "name": "Hall of Winds",
+          "size": [
+            40,
+            26
+          ],
+          "rooms": 5,
+          "room_names": [
+            "Hall of Winds",
+            "Observatory",
+            "Crystal Workshop",
+            "Wind Antechamber",
+            "Crystal Stair"
+          ],
+          "checker": {
+            "pass": true,
+            "walkable": 781,
+            "reachable": 781,
+            "rooms": "5/5",
+            "blocking_props": 65,
+            "decor": 138,
+            "errors": []
+          }
+        },
+        {
+          "plane": "sky_f3",
+          "name": "Stormwarden's Quarters",
+          "size": [
+            40,
+            26
+          ],
+          "rooms": 6,
+          "room_names": [
+            "Stormwarden's Bedchamber",
+            "Meditation Chamber",
+            "Guest Cell",
+            "Crystal Vault",
+            "Wind Gallery",
+            "Crystal Stair"
+          ],
+          "checker": {
+            "pass": true,
+            "walkable": 756,
+            "reachable": 756,
+            "rooms": "6/6",
+            "blocking_props": 79,
+            "decor": 139,
+            "errors": []
+          }
+        },
+        {
+          "plane": "sky_f4",
+          "name": "The Crystal Crown",
+          "size": [
+            36,
+            22
+          ],
+          "rooms": 3,
+          "room_names": [
+            "Sky Terrace",
+            "Heart-Crystal Chamber",
+            "Stair Head"
+          ],
+          "checker": {
+            "pass": true,
+            "walkable": 579,
+            "reachable": 579,
+            "rooms": "3/3",
+            "blocking_props": 21,
+            "decor": 72,
+            "errors": []
+          }
+        }
+      ]
+    }
+  ]
+}

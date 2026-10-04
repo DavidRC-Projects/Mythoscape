@@ -1,0 +1,815 @@
+{
+  "id": "castle_sellers",
+  "version": 1,
+  "phase": "C",
+  "flag": "USE_CASTLE_OWNERS",
+  "requires_flag": "USE_CASTLE_REALM",
+  "default": "off",
+  "bank_note": "MAX_BANK_COINS is 10,000,000 on main. Cursor MUST raise it (recommend 200,000,000) or purchases of 25M\u201380M cannot succeed. Do not silently assume it is already raised.",
+  "style": "low-poly OSRS / Mythoscape; quality bar \u22658/10 vs OSRS shop NPCs",
+  "sellers": [
+    {
+      "id": "seller_gothic",
+      "castle_id": "gothic",
+      "castle_name": "Duskspire Keep",
+      "npc_id": "marcelline_shade_broker",
+      "display_name": "Marcelline the Shade Broker",
+      "examine": "A hooded broker who sells keys to the dusk.",
+      "pitch": "Keys to the dusk\u2026 Duskspire Keep awaits a shadow-minded lord.",
+      "deed_price": 25000000,
+      "weekly_tax": 100000,
+      "spawn": {
+        "plane": "realm",
+        "tile": [
+          52,
+          77
+        ],
+        "facing": "S",
+        "note": "Grass just east of gate_apron [[49,76],[50,76]]; does not block road '=' or apron.",
+        "source": "phase4/work/json/castle_realm_map.json gate_apron + legend '.' walkable"
+      },
+      "interact_radius_tiles": 1,
+      "sprite": {
+        "1x": "sprites/standees/marcelline_1x.png",
+        "2x": "sprites/standees/marcelline_2x.png",
+        "sheet_index": 0,
+        "anchor": "feet",
+        "art_note": "Concept standee (PIL). Replace with final OSRS-style sprite \u22658/10 before ship."
+      },
+      "dialogue": {
+        "root": {
+          "npc_text": "Keys to the dusk\u2026 Duskspire Keep awaits a shadow-minded lord.",
+          "options": [
+            {
+              "id": "buy",
+              "label": "Buy Duskspire Keep (25,000,000 coins from bank)",
+              "goto": "buy_confirm"
+            },
+            {
+              "id": "hire",
+              "label": "Hire / fire knights",
+              "goto": "hire_placeholder",
+              "requires_owner": true,
+              "disabled_if_flag_off": "USE_CASTLE_GUARDS"
+            },
+            {
+              "id": "place",
+              "label": "Place knight (outside / inside)",
+              "goto": "place_placeholder",
+              "requires_owner": true,
+              "disabled_if_flag_off": "USE_CASTLE_GUARDS"
+            },
+            {
+              "id": "vault",
+              "label": "View vault status",
+              "goto": "vault_placeholder",
+              "requires_owner": true,
+              "disabled_if_flag_off": "USE_CASTLE_VAULTS"
+            },
+            {
+              "id": "info",
+              "label": "Ask about upkeep / deeds",
+              "goto": "info"
+            },
+            {
+              "id": "bye",
+              "label": "Goodbye",
+              "goto": "goodbye"
+            }
+          ]
+        },
+        "buy_confirm": {
+          "npc_text": "The deed for Duskspire Keep is 25,000,000 coins, drawn from your bank. Weekly realm tax is 100,000. Once yours, the gate plaque bears your name. Proceed?",
+          "options": [
+            {
+              "id": "buy_yes",
+              "label": "Yes \u2014 purchase from bank",
+              "action": "BUY_CASTLE",
+              "params": {
+                "castle_id": "gothic",
+                "price": 25000000,
+                "currency": "bank_coins"
+              }
+            },
+            {
+              "id": "buy_no",
+              "label": "Not today",
+              "goto": "root"
+            }
+          ]
+        },
+        "buy_success": {
+          "npc_text": "It is done. The deed is yours \u2014 may Duskspire Keep remember your name.",
+          "options": [
+            {
+              "id": "ok",
+              "label": "Thank you",
+              "goto": "root"
+            }
+          ]
+        },
+        "buy_fail_funds": {
+          "npc_text": "Your bank lacks the 25,000,000 coins. Return when the vaults are fuller.",
+          "options": [
+            {
+              "id": "ok",
+              "label": "I understand",
+              "goto": "root"
+            }
+          ]
+        },
+        "buy_fail_owned": {
+          "npc_text": "This castle already has a lord. I deal only in vacant deeds.",
+          "options": [
+            {
+              "id": "ok",
+              "label": "Farewell",
+              "goto": "goodbye"
+            }
+          ]
+        },
+        "buy_fail_already_yours": {
+          "npc_text": "You already hold this deed. Shall we speak of guards or the vault instead?",
+          "options": [
+            {
+              "id": "back",
+              "label": "Back",
+              "goto": "root"
+            }
+          ]
+        },
+        "hire_placeholder": {
+          "npc_text": "Knight contracts will open with the guard charter \u2014 coming with guards (Phase D, flag USE_CASTLE_GUARDS). Tiers from Squire to Lord Protector.",
+          "options": [
+            {
+              "id": "back",
+              "label": "Back",
+              "goto": "root"
+            }
+          ],
+          "placeholder_for": "Phase D / USE_CASTLE_GUARDS"
+        },
+        "place_placeholder": {
+          "npc_text": "Posting knights outside the gate or within the halls comes with the guard charter (Phase D). Placement posts are already reserved in the ownership schema.",
+          "options": [
+            {
+              "id": "back",
+              "label": "Back",
+              "goto": "root"
+            }
+          ],
+          "placeholder_for": "Phase D / USE_CASTLE_GUARDS"
+        },
+        "vault_placeholder": {
+          "npc_text": "Vault ledgers are sealed for now. Status will read Locked / Empty / N items once USE_CASTLE_VAULTS ships (Phase E). Robbery hooks stay offline.",
+          "options": [
+            {
+              "id": "back",
+              "label": "Back",
+              "goto": "root"
+            }
+          ],
+          "placeholder_for": "Phase E / USE_CASTLE_VAULTS"
+        },
+        "info": {
+          "npc_text": "Deed price 25,000,000 from bank. Weekly tax 100,000 (auto-debit from bank when due). Failing tax may lock the vault and idle the plaque \u2014 exact penalty TBD. NOTE: bank cap MAX_BANK_COINS must be raised (recommend 200,000,000) or purchases above 10M fail.",
+          "options": [
+            {
+              "id": "back",
+              "label": "Back",
+              "goto": "root"
+            }
+          ]
+        },
+        "goodbye": {
+          "npc_text": "Shade keep you.",
+          "options": [],
+          "end": true
+        }
+      }
+    },
+    {
+      "id": "seller_white_rose",
+      "castle_id": "white_rose",
+      "castle_name": "White Rose Castle",
+      "npc_id": "seraphine_rose_seneschal",
+      "display_name": "Seraphine, Rose Seneschal",
+      "examine": "The Rose Seneschal, keeper of petals and deeds.",
+      "pitch": "A palace of petals\u2026 White Rose Castle seeks a steward of grace.",
+      "deed_price": 40000000,
+      "weekly_tax": 150000,
+      "spawn": {
+        "plane": "realm",
+        "tile": [
+          257,
+          85
+        ],
+        "facing": "S",
+        "note": "Grass east of gate_apron [[254,84],[255,84]].",
+        "source": "phase4/work/json/castle_realm_map.json"
+      },
+      "interact_radius_tiles": 1,
+      "sprite": {
+        "1x": "sprites/standees/seraphine_1x.png",
+        "2x": "sprites/standees/seraphine_2x.png",
+        "sheet_index": 1,
+        "anchor": "feet",
+        "art_note": "Concept standee (PIL)."
+      },
+      "dialogue": {
+        "root": {
+          "npc_text": "A palace of petals\u2026 White Rose Castle seeks a steward of grace.",
+          "options": [
+            {
+              "id": "buy",
+              "label": "Buy White Rose Castle (40,000,000 coins from bank)",
+              "goto": "buy_confirm"
+            },
+            {
+              "id": "hire",
+              "label": "Hire / fire knights",
+              "goto": "hire_placeholder",
+              "requires_owner": true,
+              "disabled_if_flag_off": "USE_CASTLE_GUARDS"
+            },
+            {
+              "id": "place",
+              "label": "Place knight (outside / inside)",
+              "goto": "place_placeholder",
+              "requires_owner": true,
+              "disabled_if_flag_off": "USE_CASTLE_GUARDS"
+            },
+            {
+              "id": "vault",
+              "label": "View vault status",
+              "goto": "vault_placeholder",
+              "requires_owner": true,
+              "disabled_if_flag_off": "USE_CASTLE_VAULTS"
+            },
+            {
+              "id": "info",
+              "label": "Ask about upkeep / deeds",
+              "goto": "info"
+            },
+            {
+              "id": "bye",
+              "label": "Goodbye",
+              "goto": "goodbye"
+            }
+          ]
+        },
+        "buy_confirm": {
+          "npc_text": "The deed for White Rose Castle is 40,000,000 coins, drawn from your bank. Weekly realm tax is 150,000. Once yours, the gate plaque bears your name. Proceed?",
+          "options": [
+            {
+              "id": "buy_yes",
+              "label": "Yes \u2014 purchase from bank",
+              "action": "BUY_CASTLE",
+              "params": {
+                "castle_id": "white_rose",
+                "price": 40000000,
+                "currency": "bank_coins"
+              }
+            },
+            {
+              "id": "buy_no",
+              "label": "Not today",
+              "goto": "root"
+            }
+          ]
+        },
+        "buy_success": {
+          "npc_text": "It is done. The deed is yours \u2014 may White Rose Castle remember your name.",
+          "options": [
+            {
+              "id": "ok",
+              "label": "Thank you",
+              "goto": "root"
+            }
+          ]
+        },
+        "buy_fail_funds": {
+          "npc_text": "Your bank lacks the 40,000,000 coins. Return when the vaults are fuller.",
+          "options": [
+            {
+              "id": "ok",
+              "label": "I understand",
+              "goto": "root"
+            }
+          ]
+        },
+        "buy_fail_owned": {
+          "npc_text": "This castle already has a lord. I deal only in vacant deeds.",
+          "options": [
+            {
+              "id": "ok",
+              "label": "Farewell",
+              "goto": "goodbye"
+            }
+          ]
+        },
+        "buy_fail_already_yours": {
+          "npc_text": "You already hold this deed. Shall we speak of guards or the vault instead?",
+          "options": [
+            {
+              "id": "back",
+              "label": "Back",
+              "goto": "root"
+            }
+          ]
+        },
+        "hire_placeholder": {
+          "npc_text": "Knight contracts will open with the guard charter \u2014 coming with guards (Phase D, flag USE_CASTLE_GUARDS). Tiers from Squire to Lord Protector.",
+          "options": [
+            {
+              "id": "back",
+              "label": "Back",
+              "goto": "root"
+            }
+          ],
+          "placeholder_for": "Phase D / USE_CASTLE_GUARDS"
+        },
+        "place_placeholder": {
+          "npc_text": "Posting knights outside the gate or within the halls comes with the guard charter (Phase D). Placement posts are already reserved in the ownership schema.",
+          "options": [
+            {
+              "id": "back",
+              "label": "Back",
+              "goto": "root"
+            }
+          ],
+          "placeholder_for": "Phase D / USE_CASTLE_GUARDS"
+        },
+        "vault_placeholder": {
+          "npc_text": "Vault ledgers are sealed for now. Status will read Locked / Empty / N items once USE_CASTLE_VAULTS ships (Phase E). Robbery hooks stay offline.",
+          "options": [
+            {
+              "id": "back",
+              "label": "Back",
+              "goto": "root"
+            }
+          ],
+          "placeholder_for": "Phase E / USE_CASTLE_VAULTS"
+        },
+        "info": {
+          "npc_text": "Deed price 40,000,000 from bank. Weekly tax 150,000 (auto-debit from bank when due). Failing tax may lock the vault and idle the plaque \u2014 exact penalty TBD. NOTE: bank cap MAX_BANK_COINS must be raised (recommend 200,000,000) or purchases above 10M fail.",
+          "options": [
+            {
+              "id": "back",
+              "label": "Back",
+              "goto": "root"
+            }
+          ]
+        },
+        "goodbye": {
+          "npc_text": "May the petals favour you.",
+          "options": [],
+          "end": true
+        }
+      }
+    },
+    {
+      "id": "seller_sky_anchor",
+      "castle_id": "sky_anchor",
+      "castle_name": "Sky-Anchor Citadel",
+      "npc_id": "veyra_skychain",
+      "display_name": "Dockmaster Veyra Skychain",
+      "examine": "Dockmaster of the floating citadel's chain-pier.",
+      "pitch": "The lift remembers its master\u2026 Sky-Anchor Citadel can be yours.",
+      "deed_price": 55000000,
+      "weekly_tax": 200000,
+      "spawn": {
+        "plane": "realm",
+        "tile": [
+          52,
+          167
+        ],
+        "facing": "S",
+        "note": "Grass east of gate_apron [[49,166],[50,166]] (pier approach).",
+        "source": "phase4/work/json/castle_realm_map.json"
+      },
+      "interact_radius_tiles": 1,
+      "sprite": {
+        "1x": "sprites/standees/veyra_1x.png",
+        "2x": "sprites/standees/veyra_2x.png",
+        "sheet_index": 2,
+        "anchor": "feet",
+        "art_note": "Concept standee (PIL)."
+      },
+      "dialogue": {
+        "root": {
+          "npc_text": "The lift remembers its master\u2026 Sky-Anchor Citadel can be yours.",
+          "options": [
+            {
+              "id": "buy",
+              "label": "Buy Sky-Anchor Citadel (55,000,000 coins from bank)",
+              "goto": "buy_confirm"
+            },
+            {
+              "id": "hire",
+              "label": "Hire / fire knights",
+              "goto": "hire_placeholder",
+              "requires_owner": true,
+              "disabled_if_flag_off": "USE_CASTLE_GUARDS"
+            },
+            {
+              "id": "place",
+              "label": "Place knight (outside / inside)",
+              "goto": "place_placeholder",
+              "requires_owner": true,
+              "disabled_if_flag_off": "USE_CASTLE_GUARDS"
+            },
+            {
+              "id": "vault",
+              "label": "View vault status",
+              "goto": "vault_placeholder",
+              "requires_owner": true,
+              "disabled_if_flag_off": "USE_CASTLE_VAULTS"
+            },
+            {
+              "id": "info",
+              "label": "Ask about upkeep / deeds",
+              "goto": "info"
+            },
+            {
+              "id": "bye",
+              "label": "Goodbye",
+              "goto": "goodbye"
+            }
+          ]
+        },
+        "buy_confirm": {
+          "npc_text": "The deed for Sky-Anchor Citadel is 55,000,000 coins, drawn from your bank. Weekly realm tax is 200,000. Once yours, the gate plaque bears your name. Proceed?",
+          "options": [
+            {
+              "id": "buy_yes",
+              "label": "Yes \u2014 purchase from bank",
+              "action": "BUY_CASTLE",
+              "params": {
+                "castle_id": "sky_anchor",
+                "price": 55000000,
+                "currency": "bank_coins"
+              }
+            },
+            {
+              "id": "buy_no",
+              "label": "Not today",
+              "goto": "root"
+            }
+          ]
+        },
+        "buy_success": {
+          "npc_text": "It is done. The deed is yours \u2014 may Sky-Anchor Citadel remember your name.",
+          "options": [
+            {
+              "id": "ok",
+              "label": "Thank you",
+              "goto": "root"
+            }
+          ]
+        },
+        "buy_fail_funds": {
+          "npc_text": "Your bank lacks the 55,000,000 coins. Return when the vaults are fuller.",
+          "options": [
+            {
+              "id": "ok",
+              "label": "I understand",
+              "goto": "root"
+            }
+          ]
+        },
+        "buy_fail_owned": {
+          "npc_text": "This castle already has a lord. I deal only in vacant deeds.",
+          "options": [
+            {
+              "id": "ok",
+              "label": "Farewell",
+              "goto": "goodbye"
+            }
+          ]
+        },
+        "buy_fail_already_yours": {
+          "npc_text": "You already hold this deed. Shall we speak of guards or the vault instead?",
+          "options": [
+            {
+              "id": "back",
+              "label": "Back",
+              "goto": "root"
+            }
+          ]
+        },
+        "hire_placeholder": {
+          "npc_text": "Knight contracts will open with the guard charter \u2014 coming with guards (Phase D, flag USE_CASTLE_GUARDS). Tiers from Squire to Lord Protector.",
+          "options": [
+            {
+              "id": "back",
+              "label": "Back",
+              "goto": "root"
+            }
+          ],
+          "placeholder_for": "Phase D / USE_CASTLE_GUARDS"
+        },
+        "place_placeholder": {
+          "npc_text": "Posting knights outside the gate or within the halls comes with the guard charter (Phase D). Placement posts are already reserved in the ownership schema.",
+          "options": [
+            {
+              "id": "back",
+              "label": "Back",
+              "goto": "root"
+            }
+          ],
+          "placeholder_for": "Phase D / USE_CASTLE_GUARDS"
+        },
+        "vault_placeholder": {
+          "npc_text": "Vault ledgers are sealed for now. Status will read Locked / Empty / N items once USE_CASTLE_VAULTS ships (Phase E). Robbery hooks stay offline.",
+          "options": [
+            {
+              "id": "back",
+              "label": "Back",
+              "goto": "root"
+            }
+          ],
+          "placeholder_for": "Phase E / USE_CASTLE_VAULTS"
+        },
+        "info": {
+          "npc_text": "Deed price 55,000,000 from bank. Weekly tax 200,000 (auto-debit from bank when due). Failing tax may lock the vault and idle the plaque \u2014 exact penalty TBD. NOTE: bank cap MAX_BANK_COINS must be raised (recommend 200,000,000) or purchases above 10M fail.",
+          "options": [
+            {
+              "id": "back",
+              "label": "Back",
+              "goto": "root"
+            }
+          ]
+        },
+        "goodbye": {
+          "npc_text": "Fair winds to the lift.",
+          "options": [],
+          "end": true
+        }
+      }
+    },
+    {
+      "id": "seller_king",
+      "castle_id": "king",
+      "castle_name": "King's Castle",
+      "npc_id": "aldric_crownvale",
+      "display_name": "Herald Aldric Crownvale",
+      "examine": "Royal herald empowered to transfer the king's leave.",
+      "pitch": "By the king's leave\u2026 King's Castle stands ready for a worthy deed-holder.",
+      "deed_price": 80000000,
+      "weekly_tax": 300000,
+      "spawn": {
+        "plane": "realm",
+        "tile": [
+          152,
+          77
+        ],
+        "facing": "S",
+        "note": "Grass east of gate_apron [[149,76],[150,76]].",
+        "source": "phase4/work/json/castle_realm_map.json"
+      },
+      "interact_radius_tiles": 1,
+      "sprite": {
+        "1x": "sprites/standees/aldric_1x.png",
+        "2x": "sprites/standees/aldric_2x.png",
+        "sheet_index": 3,
+        "anchor": "feet",
+        "art_note": "Concept standee (PIL)."
+      },
+      "dialogue": {
+        "root": {
+          "npc_text": "By the king's leave\u2026 King's Castle stands ready for a worthy deed-holder.",
+          "options": [
+            {
+              "id": "buy",
+              "label": "Buy King's Castle (80,000,000 coins from bank)",
+              "goto": "buy_confirm"
+            },
+            {
+              "id": "hire",
+              "label": "Hire / fire knights",
+              "goto": "hire_placeholder",
+              "requires_owner": true,
+              "disabled_if_flag_off": "USE_CASTLE_GUARDS"
+            },
+            {
+              "id": "place",
+              "label": "Place knight (outside / inside)",
+              "goto": "place_placeholder",
+              "requires_owner": true,
+              "disabled_if_flag_off": "USE_CASTLE_GUARDS"
+            },
+            {
+              "id": "vault",
+              "label": "View vault status",
+              "goto": "vault_placeholder",
+              "requires_owner": true,
+              "disabled_if_flag_off": "USE_CASTLE_VAULTS"
+            },
+            {
+              "id": "info",
+              "label": "Ask about upkeep / deeds",
+              "goto": "info"
+            },
+            {
+              "id": "bye",
+              "label": "Goodbye",
+              "goto": "goodbye"
+            }
+          ]
+        },
+        "buy_confirm": {
+          "npc_text": "The deed for King's Castle is 80,000,000 coins, drawn from your bank. Weekly realm tax is 300,000. Once yours, the gate plaque bears your name. Proceed?",
+          "options": [
+            {
+              "id": "buy_yes",
+              "label": "Yes \u2014 purchase from bank",
+              "action": "BUY_CASTLE",
+              "params": {
+                "castle_id": "king",
+                "price": 80000000,
+                "currency": "bank_coins"
+              }
+            },
+            {
+              "id": "buy_no",
+              "label": "Not today",
+              "goto": "root"
+            }
+          ]
+        },
+        "buy_success": {
+          "npc_text": "It is done. The deed is yours \u2014 may King's Castle remember your name.",
+          "options": [
+            {
+              "id": "ok",
+              "label": "Thank you",
+              "goto": "root"
+            }
+          ]
+        },
+        "buy_fail_funds": {
+          "npc_text": "Your bank lacks the 80,000,000 coins. Return when the vaults are fuller.",
+          "options": [
+            {
+              "id": "ok",
+              "label": "I understand",
+              "goto": "root"
+            }
+          ]
+        },
+        "buy_fail_owned": {
+          "npc_text": "This castle already has a lord. I deal only in vacant deeds.",
+          "options": [
+            {
+              "id": "ok",
+              "label": "Farewell",
+              "goto": "goodbye"
+            }
+          ]
+        },
+        "buy_fail_already_yours": {
+          "npc_text": "You already hold this deed. Shall we speak of guards or the vault instead?",
+          "options": [
+            {
+              "id": "back",
+              "label": "Back",
+              "goto": "root"
+            }
+          ]
+        },
+        "hire_placeholder": {
+          "npc_text": "Knight contracts will open with the guard charter \u2014 coming with guards (Phase D, flag USE_CASTLE_GUARDS). Tiers from Squire to Lord Protector.",
+          "options": [
+            {
+              "id": "back",
+              "label": "Back",
+              "goto": "root"
+            }
+          ],
+          "placeholder_for": "Phase D / USE_CASTLE_GUARDS"
+        },
+        "place_placeholder": {
+          "npc_text": "Posting knights outside the gate or within the halls comes with the guard charter (Phase D). Placement posts are already reserved in the ownership schema.",
+          "options": [
+            {
+              "id": "back",
+              "label": "Back",
+              "goto": "root"
+            }
+          ],
+          "placeholder_for": "Phase D / USE_CASTLE_GUARDS"
+        },
+        "vault_placeholder": {
+          "npc_text": "Vault ledgers are sealed for now. Status will read Locked / Empty / N items once USE_CASTLE_VAULTS ships (Phase E). Robbery hooks stay offline.",
+          "options": [
+            {
+              "id": "back",
+              "label": "Back",
+              "goto": "root"
+            }
+          ],
+          "placeholder_for": "Phase E / USE_CASTLE_VAULTS"
+        },
+        "info": {
+          "npc_text": "Deed price 80,000,000 from bank. Weekly tax 300,000 (auto-debit from bank when due). Failing tax may lock the vault and idle the plaque \u2014 exact penalty TBD. NOTE: bank cap MAX_BANK_COINS must be raised (recommend 200,000,000) or purchases above 10M fail.",
+          "options": [
+            {
+              "id": "back",
+              "label": "Back",
+              "goto": "root"
+            }
+          ]
+        },
+        "goodbye": {
+          "npc_text": "By the realm's leave.",
+          "options": [],
+          "end": true
+        }
+      }
+    }
+  ],
+  "spawn_summary": {
+    "gothic": {
+      "seller": [
+        52,
+        77
+      ],
+      "plaque": [
+        47,
+        76
+      ],
+      "gate_apron": [
+        [
+          49,
+          76
+        ],
+        [
+          50,
+          76
+        ]
+      ]
+    },
+    "white_rose": {
+      "seller": [
+        257,
+        85
+      ],
+      "plaque": [
+        252,
+        84
+      ],
+      "gate_apron": [
+        [
+          254,
+          84
+        ],
+        [
+          255,
+          84
+        ]
+      ]
+    },
+    "sky_anchor": {
+      "seller": [
+        52,
+        167
+      ],
+      "plaque": [
+        47,
+        166
+      ],
+      "gate_apron": [
+        [
+          49,
+          166
+        ],
+        [
+          50,
+          166
+        ]
+      ]
+    },
+    "king": {
+      "seller": [
+        152,
+        77
+      ],
+      "plaque": [
+        147,
+        76
+      ],
+      "gate_apron": [
+        [
+          149,
+          76
+        ],
+        [
+          150,
+          76
+        ]
+      ]
+    }
+  },
+  "plaque_tiles_note": "Plaque tiles reuse existing realm legend 'l' (lamp/signpost) immediately west of each gate_apron \u2014 already walkable PATH decor. Confirm in Step 1 that housing-style plaque blit can target these tiles without adding collision."
+}

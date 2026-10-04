@@ -1,0 +1,138 @@
+{
+  "crop_mockup": [
+    540,
+    868,
+    1068,
+    1005
+  ],
+  "size_mockup": [
+    528,
+    137
+  ],
+  "anchor_live": [
+    848,
+    1350
+  ],
+  "size_live": [
+    829,
+    213
+  ],
+  "holes": {
+    "slot_1": {
+      "box": [
+        24,
+        24,
+        88,
+        111
+      ],
+      "note": "ability/consumable icon"
+    },
+    "slot_2": {
+      "box": [
+        106,
+        24,
+        170,
+        111
+      ],
+      "note": "ability/consumable icon"
+    },
+    "slot_3": {
+      "box": [
+        188,
+        24,
+        252,
+        111
+      ],
+      "note": "ability/consumable icon"
+    },
+    "slot_4": {
+      "box": [
+        270,
+        24,
+        334,
+        111
+      ],
+      "note": "ability/consumable icon"
+    },
+    "slot_5": {
+      "box": [
+        352,
+        24,
+        416,
+        111
+      ],
+      "note": "ability/consumable icon"
+    },
+    "slot_6": {
+      "box": [
+        434,
+        24,
+        498,
+        111
+      ],
+      "note": "ability/consumable icon"
+    }
+  },
+  "hitboxes": {
+    "slot_1": {
+      "box": [
+        18,
+        18,
+        94,
+        125
+      ],
+      "action": "action_slot",
+      "index": 0
+    },
+    "slot_2": {
+      "box": [
+        100,
+        18,
+        176,
+        125
+      ],
+      "action": "action_slot",
+      "index": 1
+    },
+    "slot_3": {
+      "box": [
+        182,
+        18,
+        258,
+        125
+      ],
+      "action": "action_slot",
+      "index": 2
+    },
+    "slot_4": {
+      "box": [
+        264,
+        18,
+        340,
+        125
+      ],
+      "action": "action_slot",
+      "index": 3
+    },
+    "slot_5": {
+      "box": [
+        346,
+        18,
+        422,
+        125
+      ],
+      "action": "action_slot",
+      "index": 4
+    },
+    "slot_6": {
+      "box": [
+        428,
+        18,
+        504,
+        125
+      ],
+      "action": "action_slot",
+      "index": 5
+    }
+  }
+}

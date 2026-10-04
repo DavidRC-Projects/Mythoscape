@@ -1,0 +1,87 @@
+{
+  "crop_mockup": [
+    4,
+    108,
+    108,
+    575
+  ],
+  "size_mockup": [
+    104,
+    467
+  ],
+  "anchor_live": [
+    6,
+    168
+  ],
+  "size_live": [
+    163,
+    726
+  ],
+  "holes": {
+    "panel": {
+      "box": [
+        4,
+        4,
+        100,
+        463
+      ],
+      "note": "icons baked; optional live badges"
+    }
+  },
+  "hitboxes": {
+    "quests": {
+      "box": [
+        8,
+        8,
+        96,
+        81
+      ],
+      "action": "nav_quests"
+    },
+    "events": {
+      "box": [
+        8,
+        85,
+        96,
+        158
+      ],
+      "action": "nav_events"
+    },
+    "party": {
+      "box": [
+        8,
+        162,
+        96,
+        235
+      ],
+      "action": "nav_party"
+    },
+    "guild": {
+      "box": [
+        8,
+        239,
+        96,
+        312
+      ],
+      "action": "nav_guild"
+    },
+    "pvp": {
+      "box": [
+        8,
+        316,
+        96,
+        389
+      ],
+      "action": "nav_pvp"
+    },
+    "map": {
+      "box": [
+        8,
+        393,
+        96,
+        466
+      ],
+      "action": "nav_map"
+    }
+  }
+}

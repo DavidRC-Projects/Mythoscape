@@ -1774,6 +1774,14 @@ USE_NEW_ITEM_ICONS = False  # client sets this from USE_NEW_CHARACTERS
 
 
 def draw_item_icon(surf, rect, item_id, items_db):
+    try:
+        import feature_flags
+        if feature_flags.USE_REALISTIC_ITEM_ICONS:
+            import realistic_item_icons
+            if realistic_item_icons.draw_icon(surf, rect, item_id):
+                return
+    except Exception:
+        pass
     if USE_NEW_ITEM_ICONS:
         import gear_v2
         if gear_v2.draw_icon(surf, rect, item_id, items_db):
@@ -4189,8 +4197,110 @@ def draw_dragon(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1):
     ], deep, 1)
 
 
+def _vert_paw(surf, x, body_y, ground, phase, gait, moving, s, color, deep, thick):
+    """A leg stepping toward or away from the camera."""
+    swing = math.sin(gait + phase)
+    lift = max(0.0, swing) if moving else 0.0
+    foot_x = x + (swing * 0.7 * s if moving else 0.0)
+    foot_y = ground - lift * 2.5 * s
+    knee_y = (body_y + foot_y) * 0.55
+    rs.draw_volume_limb(surf, x, body_y, foot_x, knee_y, thick, color, deep, taper=0.75, bulge=0.03)
+    rs.draw_volume_limb(surf, foot_x, knee_y, foot_x, foot_y, thick * 0.82, color, deep, taper=0.7, bulge=0.0)
+    pygame.draw.ellipse(surf, deep, (foot_x - 1.4 * s, foot_y - 0.55 * s, 2.8 * s, 1.3 * s))
+
+
+def draw_pet_cat_vertical(surf, cx, cy, tile, t, hurt=False, attacking=0.0, moving=False, away=False):
+    """Tabby walking toward or away from the camera."""
+    s = _s(tile, "pet") * 0.98
+    fur = (200, 90, 70) if hurt else (218, 138, 68)
+    hi, mid, sh, deep = rs.material(fur)
+    cream = (242, 210, 170)
+    ground = cy + 1.0 * s
+    gait = (t * 9.0) if moving else (t * 2.0)
+    bob = abs(math.sin(gait)) * (1.15 if moving else 0.25) * s
+    by = ground - 6.4 * s - bob
+    rs.draw_contact_shadow(surf, cx, ground + 0.3 * s, 7.5 * s, 2.2 * s, 120)
+    sway = math.sin(gait * 0.5) * (2.2 if moving else 0.8) * s
+    if away:
+        _vert_paw(surf, cx - 2.6 * s, by + 1.2 * s, ground, math.pi, gait, moving, s, sh, deep, 0.95 * s)
+        _vert_paw(surf, cx + 2.6 * s, by + 1.2 * s, ground, 0.0, gait, moving, s, sh, deep, 0.95 * s)
+        rs.draw_volume(surf, fur, [
+            (cx - 4.2 * s, by + 2.4 * s), (cx - 3.6 * s, by - 2.8 * s),
+            (cx + 3.6 * s, by - 2.8 * s), (cx + 4.2 * s, by + 2.4 * s),
+            (cx + 2.4 * s, by + 3.2 * s), (cx - 2.4 * s, by + 3.2 * s),
+        ], deep, 1)
+        for i, yy in enumerate((-1.6, 0.2, 1.8)):
+            pygame.draw.line(surf, sh, (cx - 3.2 * s, by + yy * s), (cx + 3.2 * s, by + yy * s), max(1, int(s * 0.45)))
+        _vert_paw(surf, cx - 1.7 * s, by + 1.6 * s, ground, 0.0, gait, moving, s, fur, deep, 1.05 * s)
+        _vert_paw(surf, cx + 1.7 * s, by + 1.6 * s, ground, math.pi, gait, moving, s, fur, deep, 1.05 * s)
+        pygame.draw.lines(surf, sh, False, [
+            (cx, by - 1.5 * s),
+            (cx + sway * 0.4, by - 5.2 * s),
+            (cx + sway, by - 2.4 * s),
+        ], max(2, int(1.7 * s)))
+        hy = by - 5.2 * s
+        rs.draw_volume(surf, fur, [
+            (cx - 3.2 * s, hy + 2 * s), (cx - 2.6 * s, hy - 1.6 * s),
+            (cx + 2.6 * s, hy - 1.6 * s), (cx + 3.2 * s, hy + 2 * s),
+        ], deep, 1)
+        for side in (-1, 1):
+            rs.draw_poly(surf, mid, [
+                (cx + side * 1.4 * s, hy - 1.2 * s),
+                (cx + side * 2.4 * s, hy - 4.6 * s),
+                (cx + side * 0.2 * s, hy - 1.4 * s),
+            ], deep, 1)
+        return
+    _vert_paw(surf, cx - 1.6 * s, by + 0.8 * s, ground, 0.0, gait, moving, s, sh, deep, 0.9 * s)
+    _vert_paw(surf, cx + 1.6 * s, by + 0.8 * s, ground, math.pi, gait, moving, s, sh, deep, 0.9 * s)
+    rs.draw_volume(surf, fur, [
+        (cx - 4.4 * s, by + 2.2 * s), (cx - 3.8 * s, by - 2.2 * s),
+        (cx + 3.8 * s, by - 2.2 * s), (cx + 4.4 * s, by + 2.2 * s),
+        (cx + 2.6 * s, by + 3.4 * s), (cx - 2.6 * s, by + 3.4 * s),
+    ], deep, 1)
+    rs.draw_poly(surf, cream, [
+        (cx - 2.2 * s, by + 0.2 * s), (cx + 2.2 * s, by + 0.2 * s),
+        (cx + 1.6 * s, by + 2.8 * s), (cx - 1.6 * s, by + 2.8 * s),
+    ], None, 0)
+    _vert_paw(surf, cx - 3.2 * s, by + 1.4 * s, ground, math.pi, gait, moving, s, fur, deep, 1.05 * s)
+    _vert_paw(surf, cx + 3.2 * s, by + 1.4 * s, ground, 0.0, gait, moving, s, fur, deep, 1.05 * s)
+    pygame.draw.lines(surf, sh, False, [
+        (cx - 1.2 * s, by + 1.2 * s),
+        (cx - 3.4 * s + sway * 0.3, by - 2.5 * s),
+        (cx - 2.2 * s + sway, by + 0.4 * s),
+    ], max(2, int(1.6 * s)))
+    hy = by - 5.4 * s + math.sin(gait) * (0.3 if moving else 0.1) * s
+    rs.draw_volume(surf, fur, [
+        (cx - 3.6 * s, hy + 2.2 * s), (cx - 3.2 * s, hy - 1.8 * s),
+        (cx + 3.2 * s, hy - 1.8 * s), (cx + 3.6 * s, hy + 2.2 * s),
+        (cx + 2.2 * s, hy + 3.2 * s), (cx - 2.2 * s, hy + 3.2 * s),
+    ], deep, 1)
+    for side in (-1, 1):
+        rs.draw_poly(surf, mid, [
+            (cx + side * 1.6 * s, hy - 1.4 * s),
+            (cx + side * 2.8 * s, hy - 5.2 * s),
+            (cx + side * 0.3 * s, hy - 1.5 * s),
+        ], deep, 1)
+        rs.draw_poly(surf, (255, 170, 155), [
+            (cx + side * 1.2 * s, hy - 1.6 * s),
+            (cx + side * 2.2 * s, hy - 3.6 * s),
+            (cx + side * 0.5 * s, hy - 1.6 * s),
+        ], None, 0)
+        ex = cx + side * 1.35 * s
+        pygame.draw.ellipse(surf, (55, 210, 90), (ex - 1.05 * s, hy - 0.2 * s, 2.1 * s, 2.4 * s))
+        pygame.draw.circle(surf, (18, 18, 16), (int(ex), int(hy + 0.7 * s)), max(1, int(0.5 * s)))
+    pygame.draw.circle(surf, (70, 48, 40), (int(cx), int(hy + 2.2 * s)), max(1, int(0.55 * s)))
+    for side in (-1, 1):
+        pygame.draw.line(surf, deep, (cx + side * 0.6 * s, hy + 2.3 * s), (cx + side * 3.4 * s, hy + 1.4 * s), 1)
+
+
 def draw_pet_cat(surf, cx, cy, tile, t, hurt=False, attacking=0.0, moving=False, facing=1):
     """Orange tabby — volumetric body, walk gait, arched attack pounce."""
+    if facing == "front":
+        draw_pet_cat_vertical(surf, cx, cy, tile, t, hurt, attacking, moving, away=False)
+        return
+    if facing == "back":
+        draw_pet_cat_vertical(surf, cx, cy, tile, t, hurt, attacking, moving, away=True)
+        return
     facing = 1 if facing >= 0 else -1
     s = _s(tile, "pet") * 0.98
     fur = (200, 90, 70) if hurt else (218, 138, 68)
@@ -4282,107 +4392,236 @@ def draw_pet_cat(surf, cx, cy, tile, t, hurt=False, attacking=0.0, moving=False,
     pygame.draw.circle(surf, mid, (int(bx - 11 * s * facing + sway), int(cy_base - 1 * s)), max(2, int(1.5 * s)))
 
 
-def draw_pet_husky(surf, cx, cy, tile, t, hurt=False, attacking=0.0, moving=False, facing=1):
-    """White husky — thick fur volumes, trotting gait, lunging bite."""
-    facing = 1 if facing >= 0 else -1
-    s = _s(tile, "pet") * 1.05
-    fur = (200, 155, 155) if hurt else (242, 244, 248)
-    hi, mid, sh, deep = rs.material(fur)
-    grey = (155, 160, 170)
-    atk = max(0.0, min(1.0, float(attacking or 0)))
-    gait = (t * 10.0) if moving else (t * 2.0)
-    bob = abs(math.sin(gait)) * (1.5 if moving else 0.4) * s
-    lunge_w, crouch, strike = rs.attack_impulse(atk)
-    lunge = lunge_w * 7 * s * facing
-    cy_base = cy + bob + crouch * 1.15 * s
-    rs.draw_contact_shadow(surf, cx, cy + 10 * s, 13 * s, 3.4 * s, 140)
-    rs.draw_cast_shadow(surf, cx + 2 * s * facing, cy + 10.5 * s, 14 * s, 3.6 * s, 95)
+def _husky_leg(surf, hipx, hipy, ground, phase, gait, moving, s, facing, hind, color, deep):
+    """One trot step. Diagonal pairs share a phase; the paw lifts on the way forward."""
+    swing = math.sin(gait + phase)
+    lift = max(0.0, swing) if moving else 0.0
+    stride = swing * (3.4 if moving else 0.35) * s * facing
+    up = lift * 2.8 * s
+    knee_x = hipx + ((-1.15 if hind else 0.85) * s * facing) + stride * 0.28
+    knee_y = hipy + 3.15 * s - up * 0.15
+    foot = (hipx + stride, ground - up)
+    rs.draw_volume_limb(surf, hipx, hipy, knee_x, knee_y, 1.15 * s, color, deep, taper=0.72, bulge=0.04)
+    rs.draw_volume_limb(surf, knee_x, knee_y, foot[0], foot[1], 0.95 * s, color, deep, taper=0.7, bulge=0.02)
+    pygame.draw.ellipse(
+        surf, deep,
+        (foot[0] - 1.5 * s, foot[1] - 0.7 * s, 3.1 * s, 1.5 * s),
+    )
 
-    lifts = [math.sin(gait + i * 1.55) for i in range(4)]
-    for i, ox in enumerate((-6.5, -1.5, 3.5, 8.0)):
-        lift = max(0.0, lifts[i]) * (2.4 * s if moving else 0.25 * s)
-        fx = cx + ox * s * facing + lunge * 0.12
-        fy = cy_base + 5 * s - lift
-        rs.draw_volume_limb(surf, fx, fy, fx + 0.5 * s * facing, fy + 5.5 * s + lift * 0.25,
-                            1.35 * s, grey, deep, taper=0.7, bulge=0.06)
-        pygame.draw.circle(surf, deep, (int(fx + 0.6 * s * facing), int(fy + 5.7 * s)), max(2, int(1.3 * s)))
 
-    bx = cx + lunge * 0.2
-    # Solid bushy plume (filled curl) drawn under the body, then sealed over the rear outline
-    sway = math.sin(t * 3.2 + (1.0 if moving else 0)) * 0.8 * s
-    tail_chain = [
-        (bx - 8.0 * s * facing, cy_base + 1.2 * s, 3.4 * s),
-        (bx - 9.0 * s * facing + sway * 0.1, cy_base - 1.5 * s, 3.3 * s),
-        (bx - 9.2 * s * facing + sway * 0.2, cy_base - 4.0 * s, 3.2 * s),
-        (bx - 8.0 * s * facing + sway * 0.35, cy_base - 6.2 * s, 3.1 * s),
-        (bx - 6.0 * s * facing + sway * 0.45, cy_base - 7.5 * s, 3.0 * s),
-        (bx - 4.0 * s * facing + sway * 0.4, cy_base - 7.0 * s, 2.9 * s),
-        (bx - 3.0 * s * facing + sway * 0.3, cy_base - 5.2 * s, 2.8 * s),
-        (bx - 4.0 * s * facing + sway * 0.2, cy_base - 3.2 * s, 2.7 * s),
-        (bx - 5.5 * s * facing + sway * 0.15, cy_base - 2.0 * s, 2.8 * s),
-        (bx - 6.5 * s * facing + sway * 0.1, cy_base - 0.5 * s, 2.6 * s),
-    ]
-    for tx, ty, rad in tail_chain:
-        pygame.draw.circle(surf, mid, (int(tx), int(ty)), max(2, int(rad)))
-        pygame.draw.circle(surf, hi, (int(tx - 0.3 * s), int(ty - 0.4 * s)), max(1, int(rad * 0.32)))
-
-    rs.draw_volume(surf, fur, [
-        (bx - 10 * s * facing, cy_base + 2 * s),
-        (bx - 8 * s * facing, cy_base - 4 * s),
-        (bx + 7 * s * facing, cy_base - 5 * s),
-        (bx + 10 * s * facing, cy_base + 1.5 * s),
-        (bx + 6 * s * facing, cy_base + 6.5 * s),
-        (bx - 6 * s * facing, cy_base + 6.5 * s),
+def draw_pet_husky_vertical(surf, cx, cy, tile, t, hurt=False, attacking=0.0, moving=False, away=False):
+    """Husky walking toward or away from the camera."""
+    s = _s(tile, "pet") * 1.08
+    white = (214, 150, 150) if hurt else (246, 244, 240)
+    hi, mid, sh, deep = rs.material(white)
+    saddle = (176, 120, 120) if hurt else (154, 160, 170)
+    mask = (48, 32, 32) if hurt else (32, 34, 42)
+    ground = cy + 1.2 * s
+    gait = (t * 7.2) if moving else (t * 1.6)
+    bob = abs(math.sin(gait)) * (1.2 if moving else 0.25) * s
+    by = ground - 6.6 * s - bob
+    rs.draw_contact_shadow(surf, cx, ground + 0.35 * s, 8.5 * s, 2.4 * s, 120)
+    sway = math.sin(gait * 0.5) * (1.1 if moving else 0.45) * s
+    if away:
+        _vert_paw(surf, cx - 3.0 * s, by + 1.0 * s, ground, math.pi, gait, moving, s, sh, deep, 1.05 * s)
+        _vert_paw(surf, cx + 3.0 * s, by + 1.0 * s, ground, 0.0, gait, moving, s, sh, deep, 1.05 * s)
+        rs.draw_volume(surf, white, [
+            (cx - 4.6 * s, by + 2.6 * s), (cx - 4.0 * s, by - 3.0 * s),
+            (cx + 4.0 * s, by - 3.0 * s), (cx + 4.6 * s, by + 2.6 * s),
+            (cx + 2.8 * s, by + 3.6 * s), (cx - 2.8 * s, by + 3.6 * s),
+        ], deep, 1)
+        rs.draw_poly(surf, saddle, [
+            (cx - 3.2 * s, by - 2.6 * s), (cx + 3.2 * s, by - 2.6 * s),
+            (cx + 2.6 * s, by + 0.6 * s), (cx - 2.6 * s, by + 0.6 * s),
+        ], None, 0)
+        _vert_paw(surf, cx - 2.0 * s, by + 1.5 * s, ground, 0.0, gait, moving, s, white, deep, 1.15 * s)
+        _vert_paw(surf, cx + 2.0 * s, by + 1.5 * s, ground, math.pi, gait, moving, s, white, deep, 1.15 * s)
+        for ox, oy, rad in ((0.2, -4.6, 2.1), (sway / s * 0.4, -6.2, 1.8), (-0.4, -5.0, 1.6)):
+            pygame.draw.circle(surf, mid, (int(cx + ox * s), int(by + oy * s)), max(2, int(rad * s)))
+        hy = by - 5.4 * s
+        rs.draw_volume(surf, white, [
+            (cx - 3.4 * s, hy + 2.2 * s), (cx - 2.8 * s, hy - 1.4 * s),
+            (cx + 2.8 * s, hy - 1.4 * s), (cx + 3.4 * s, hy + 2.2 * s),
+        ], deep, 1)
+        for side in (-1, 1):
+            rs.draw_poly(surf, white, [
+                (cx + side * 1.5 * s, hy - 1.0 * s),
+                (cx + side * 2.6 * s, hy - 4.8 * s),
+                (cx + side * 0.2 * s, hy - 1.2 * s),
+            ], deep, 1)
+        return
+    _vert_paw(surf, cx - 1.8 * s, by + 0.6 * s, ground, 0.0, gait, moving, s, sh, deep, 1.0 * s)
+    _vert_paw(surf, cx + 1.8 * s, by + 0.6 * s, ground, math.pi, gait, moving, s, sh, deep, 1.0 * s)
+    rs.draw_volume(surf, white, [
+        (cx - 4.8 * s, by + 2.4 * s), (cx - 4.2 * s, by - 2.4 * s),
+        (cx + 4.2 * s, by - 2.4 * s), (cx + 4.8 * s, by + 2.4 * s),
+        (cx + 3.0 * s, by + 3.8 * s), (cx - 3.0 * s, by + 3.8 * s),
     ], deep, 1)
-    rs.draw_poly(surf, grey, [
-        (bx - 4 * s * facing, cy_base + 1 * s),
-        (bx + 5 * s * facing, cy_base + 0.8 * s),
-        (bx + 4 * s * facing, cy_base + 5 * s),
-        (bx - 3 * s * facing, cy_base + 5 * s),
+    rs.draw_poly(surf, hi, [
+        (cx - 2.4 * s, by - 0.2 * s), (cx + 2.4 * s, by - 0.2 * s),
+        (cx + 1.8 * s, by + 2.8 * s), (cx - 1.8 * s, by + 2.8 * s),
     ], None, 0)
-    # Seal rear outline into the plume
-    for ox, oy, rad in (
-        (-10.2, 2.0, 3.0), (-9.5, 0.0, 2.9), (-9.0, -2.0, 2.8),
-        (-8.5, -4.0, 2.7), (-7.5, -5.5, 2.6), (-6.0, -6.0, 2.5),
-    ):
+    _vert_paw(surf, cx - 3.6 * s, by + 1.4 * s, ground, math.pi, gait, moving, s, white, deep, 1.15 * s)
+    _vert_paw(surf, cx + 3.6 * s, by + 1.4 * s, ground, 0.0, gait, moving, s, white, deep, 1.15 * s)
+    hy = by - 5.8 * s + math.sin(gait) * (0.25 if moving else 0.08) * s
+    rs.draw_volume(surf, white, [
+        (cx - 4.0 * s, hy + 2.4 * s), (cx - 3.4 * s, hy - 2.0 * s),
+        (cx + 3.4 * s, hy - 2.0 * s), (cx + 4.0 * s, hy + 2.4 * s),
+        (cx + 2.4 * s, hy + 3.4 * s), (cx - 2.4 * s, hy + 3.4 * s),
+    ], deep, 1)
+    for side in (-1, 1):
+        rs.draw_poly(surf, white, [
+            (cx + side * 1.8 * s, hy - 1.6 * s),
+            (cx + side * 3.0 * s, hy - 5.6 * s),
+            (cx + side * 0.3 * s, hy - 1.6 * s),
+        ], deep, 1)
+        rs.draw_poly(surf, mask, [
+            (cx + side * 2.2 * s, hy - 0.6 * s),
+            (cx + side * 0.4 * s, hy - 1.2 * s),
+            (cx + side * 0.5 * s, hy + 1.0 * s),
+            (cx + side * 2.4 * s, hy + 0.6 * s),
+        ], None, 0)
+        ex = cx + side * 1.45 * s
+        pygame.draw.circle(surf, (110, 196, 255), (int(ex), int(hy + 0.1 * s)), max(2, int(1.05 * s)))
+        pygame.draw.circle(surf, (18, 24, 36), (int(ex), int(hy + 0.25 * s)), max(1, int(0.42 * s)))
+    pygame.draw.circle(surf, (22, 20, 18), (int(cx), int(hy + 2.3 * s)), max(2, int(0.85 * s)))
+    pygame.draw.circle(surf, (214, 176, 78), (int(cx + sway * 0.15), int(by + 3.2 * s)), max(1, int(0.65 * s)))
+
+
+def draw_pet_husky(surf, cx, cy, tile, t, hurt=False, attacking=0.0, moving=False, facing=1):
+    """White husky in profile: grey saddle, black mask, curled plume, diagonal trot."""
+    if facing == "front":
+        draw_pet_husky_vertical(surf, cx, cy, tile, t, hurt, attacking, moving, away=False)
+        return
+    if facing == "back":
+        draw_pet_husky_vertical(surf, cx, cy, tile, t, hurt, attacking, moving, away=True)
+        return
+    facing = 1 if facing >= 0 else -1
+    s = _s(tile, "pet") * 1.08
+    white = (214, 150, 150) if hurt else (246, 244, 240)
+    hi, mid, sh, deep = rs.material(white)
+    saddle = (176, 120, 120) if hurt else (154, 160, 170)
+    mask = (48, 32, 32) if hurt else (32, 34, 42)
+    ground = cy + 1.2 * s
+    atk = max(0.0, min(1.0, float(attacking or 0)))
+    gait = (t * 7.2) if moving else (t * 1.6)
+    # Two bounces per trot cycle, a small breath when standing.
+    bob = abs(math.sin(gait)) * (1.35 if moving else 0.28) * s
+    lunge_w, crouch, _strike = rs.attack_impulse(atk)
+    lunge = lunge_w * 6 * s * facing
+    cy_base = ground - 7.2 * s - bob + crouch * s
+    rs.draw_contact_shadow(surf, cx + lunge * 0.15, ground + 0.4 * s, 12 * s, 2.6 * s, 120)
+
+    # Far pair first: far hind with near front, far front with near hind.
+    far = ((-6.4, 0.0, True), (5.2, math.pi, False))
+    near = ((-5.5, math.pi, True), (6.3, 0.0, False))
+    for ox, phase, hind in far:
+        _husky_leg(
+            surf, cx + ox * s * facing + lunge * 0.08, cy_base + 1.2 * s,
+            ground, phase, gait, moving, s, facing, hind, sh, deep,
+        )
+
+    bx = cx + lunge * 0.22
+    sway = math.sin(gait * 0.5) * (1.3 if moving else 0.7) * s
+    # Plume curls over the rump and wags with the step.
+    tail = [
+        (bx - 7.2 * s * facing, cy_base + 1.4 * s, 2.5),
+        (bx - 8.6 * s * facing + sway * 0.15, cy_base - 0.6 * s, 2.35),
+        (bx - 8.2 * s * facing + sway * 0.35, cy_base - 3.2 * s, 2.2),
+        (bx - 6.4 * s * facing + sway * 0.55, cy_base - 5.2 * s, 2.05),
+        (bx - 4.2 * s * facing + sway * 0.45, cy_base - 5.6 * s, 1.9),
+        (bx - 2.8 * s * facing + sway * 0.25, cy_base - 4.2 * s, 1.7),
+    ]
+    for tx, ty, rad in tail:
+        pygame.draw.circle(surf, mid, (int(tx), int(ty)), max(2, int(rad * s)))
+        pygame.draw.circle(surf, hi, (int(tx - 0.25 * s), int(ty - 0.35 * s)), max(1, int(rad * 0.35 * s)))
+
+    rs.draw_volume(surf, white, [
+        (bx - 8.2 * s * facing, cy_base + 2.2 * s),
+        (bx - 7.4 * s * facing, cy_base - 2.6 * s),
+        (bx - 2 * s * facing, cy_base - 3.6 * s),
+        (bx + 6.4 * s * facing, cy_base - 4.2 * s),
+        (bx + 8.6 * s * facing, cy_base - 1.2 * s),
+        (bx + 7.2 * s * facing, cy_base + 2.8 * s),
+        (bx + 2 * s * facing, cy_base + 3.6 * s),
+        (bx - 5.5 * s * facing, cy_base + 3.4 * s),
+    ], deep, 1)
+    # Grey saddle and pale chest.
+    rs.draw_poly(surf, saddle, [
+        (bx - 5.2 * s * facing, cy_base - 2.8 * s),
+        (bx - 1.2 * s * facing, cy_base - 3.5 * s),
+        (bx + 4.2 * s * facing, cy_base - 3.2 * s),
+        (bx + 3.4 * s * facing, cy_base - 0.4 * s),
+        (bx - 3.6 * s * facing, cy_base - 0.2 * s),
+    ], None, 0)
+    for ox, oy, rad in ((5.6, 0.4, 1.7), (4.2, 1.6, 1.45), (6.6, 1.8, 1.35)):
         pygame.draw.circle(
-            surf, mid,
-            (int(bx + ox * s * facing + sway * 0.1), int(cy_base + oy * s)),
+            surf, hi,
+            (int(bx + ox * s * facing), int(cy_base + oy * s)),
             max(2, int(rad * s)),
         )
 
-    hx = bx + 8.5 * s * facing + lunge * 0.4
-    hy = cy_base - 4.5 * s
-    rs.draw_volume(surf, fur, [
-        (hx - 5 * s, hy + 2 * s), (hx - 4 * s, hy - 4 * s),
-        (hx + 2 * s * facing, hy - 5.5 * s), (hx + 5.5 * s * facing, hy - 2 * s),
-        (hx + 5.2 * s * facing, hy + 2.5 * s), (hx, hy + 4 * s),
+    for ox, phase, hind in near:
+        _husky_leg(
+            surf, bx + ox * s * facing, cy_base + 1.2 * s,
+            ground, phase, gait, moving, s, facing, hind, white, deep,
+        )
+
+    nod = math.sin(gait + 0.6) * (0.45 if moving else 0.15) * s
+    hx = bx + 8.8 * s * facing + lunge * 0.35
+    hy = cy_base - 4.6 * s + nod
+    rs.draw_volume_limb(
+        surf, bx + 6.2 * s * facing, cy_base - 2.2 * s, hx - 1.2 * s * facing, hy + 1.4 * s,
+        1.7 * s, white, deep, taper=0.8, bulge=0.08,
+    )
+    rs.draw_volume(surf, white, [
+        (hx - 3.2 * s * facing, hy + 2.2 * s),
+        (hx - 2.6 * s * facing, hy - 2.4 * s),
+        (hx + 1.2 * s * facing, hy - 3.2 * s),
+        (hx + 4.6 * s * facing, hy - 1.4 * s),
+        (hx + 5.2 * s * facing, hy + 1.2 * s),
+        (hx + 1.4 * s * facing, hy + 2.8 * s),
+        (hx - 2.2 * s * facing, hy + 2.6 * s),
     ], deep, 1)
-    # Pointed ears
-    for ox, tip in ((-3.5, -3.5), (2.5, 4.5)):
-        rs.draw_poly(surf, grey, [
-            (hx + ox * s * facing, hy - 2 * s),
-            (hx + (ox + tip * 0.15) * s * facing, hy - 10 * s),
-            (hx + (ox + 2.2) * s * facing, hy - 2.5 * s),
+    # Upright ears, far then near.
+    for ox, tip, col in ((-1.6, -1.2, sh), (1.4, 1.6, white)):
+        rs.draw_poly(surf, col, [
+            (hx + ox * s * facing, hy - 2.2 * s),
+            (hx + (ox * 0.35 + tip * 0.2) * s * facing, hy - 6.4 * s),
+            (hx + (ox + 1.8) * s * facing, hy - 2.0 * s),
         ], deep, 1)
-    # Face mask + ice-blue eyes
-    rs.draw_poly(surf, (32, 34, 40), [
-        (hx - 1.5 * s * facing, hy - 1 * s),
-        (hx + 4.5 * s * facing, hy - 1.5 * s),
-        (hx + 4 * s * facing, hy + 2.5 * s),
-        (hx - 0.5 * s * facing, hy + 2.8 * s),
+    # Black mask, pale muzzle, one ice-blue eye in profile.
+    rs.draw_poly(surf, mask, [
+        (hx - 0.4 * s * facing, hy - 1.6 * s),
+        (hx + 2.6 * s * facing, hy - 2.0 * s),
+        (hx + 3.4 * s * facing, hy + 0.4 * s),
+        (hx + 0.2 * s * facing, hy + 0.8 * s),
     ], None, 0)
-    for ox in (-0.3, 2.8):
-        ex = hx + ox * s * facing
-        pygame.draw.circle(surf, (90, 185, 255), (int(ex), int(hy - 0.2 * s)), max(2, int(1.35 * s)))
-        pygame.draw.circle(surf, (20, 28, 40), (int(ex + 0.2 * s * facing), int(hy - 0.1 * s)), max(1, int(0.5 * s)))
-        pygame.draw.circle(surf, (255, 255, 255), (int(ex - 0.35 * s), int(hy - 0.5 * s)), max(1, int(0.3 * s)))
-    # Tongue / open mouth on attack
+    rs.draw_poly(surf, hi, [
+        (hx + 2.2 * s * facing, hy - 0.2 * s),
+        (hx + 5.6 * s * facing, hy + 0.2 * s),
+        (hx + 5.2 * s * facing, hy + 1.8 * s),
+        (hx + 2.0 * s * facing, hy + 1.6 * s),
+    ], None, 0)
+    eye = (hx + 1.5 * s * facing, hy - 0.7 * s)
+    pygame.draw.circle(surf, (110, 196, 255), (int(eye[0]), int(eye[1])), max(2, int(1.15 * s)))
+    pygame.draw.circle(surf, (18, 24, 36), (int(eye[0] + 0.25 * s * facing), int(eye[1])), max(1, int(0.48 * s)))
+    pygame.draw.circle(surf, (255, 255, 255), (int(eye[0] - 0.3 * s), int(eye[1] - 0.35 * s)), max(1, int(0.28 * s)))
+    nose = (hx + 5.5 * s * facing, hy + 0.55 * s)
+    pygame.draw.circle(surf, (22, 20, 18), (int(nose[0]), int(nose[1])), max(2, int(0.85 * s)))
+    # Slim collar.
+    pygame.draw.line(
+        surf, (122, 74, 48),
+        (hx - 2.4 * s * facing, hy + 2.5 * s),
+        (hx + 0.6 * s * facing, hy + 2.9 * s),
+        max(2, int(1.3 * s)),
+    )
+    pygame.draw.circle(surf, (214, 176, 78), (int(hx - 0.4 * s * facing), int(hy + 3.3 * s)), max(1, int(0.7 * s)))
     if atk > 0.3:
-        rs.draw_poly(surf, (220, 90, 100), [
-            (hx + 3 * s * facing, hy + 2.2 * s),
-            (hx + 6.5 * s * facing, hy + 2.8 * s),
-            (hx + 3.2 * s * facing, hy + 3.8 * s),
+        rs.draw_poly(surf, (214, 86, 96), [
+            (hx + 3.4 * s * facing, hy + 1.6 * s),
+            (hx + 6.2 * s * facing, hy + 2.3 * s),
+            (hx + 3.6 * s * facing, hy + 3.0 * s),
         ], None, 0)
 
 

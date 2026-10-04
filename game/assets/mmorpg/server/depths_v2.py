@@ -13,9 +13,9 @@ from world_map import FLOOR, WALL
 _MAP = None
 
 DOOR_HINTS = {
-    "A": "Unlock Bone Gate: Locked. A Bone Key fits here; the Ossuary Keeper carries one.",
-    "B": "Unlock Drowned Gate: Locked. A Tide Key fits here; the skulls hide it.",
-    "C": "Unlock Knights' Seal: Locked. A Knights' Seal fits here; Sir Aldric carries one.",
+    "A": "The Bone Gate is locked. The Ossuary Keeper drops a Bone Key. Walk into the gate once you have it.",
+    "B": "The Drowned Gate is locked. Search the skulls for a Tide Key, then walk into the gate.",
+    "C": "The Knights' Seal is locked. Sir Aldric carries a Knights' Seal. Walk into the door once you have it.",
 }
 
 CHEST_LOOT = {
@@ -328,11 +328,21 @@ def client_extra(session):
 
 
 def _ground_public(d):
+    from world_map import WALL
+    tiles = d.get("tiles") or []
     out = {}
     for (x, y), items in (d.get("ground") or {}).items():
-        if items:
-            out[f"{x},{y}"] = items
+        if not items:
+            continue
+        if 0 <= y < len(tiles) and 0 <= x < len(tiles[y]) and tiles[y][x] == WALL:
+            continue
+        out[f"{x},{y}"] = items
     return out
+
+
+async def try_blocked_step(session, nx, ny):
+    import dungeon_v2_common as common
+    return await common.try_blocked_step(session, nx, ny)
 
 
 async def handle_interact(session, msg):

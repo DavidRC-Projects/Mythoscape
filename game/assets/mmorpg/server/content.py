@@ -447,6 +447,27 @@ ITEMS = {
         "gem_color": (90, 40, 160),
     },
 
+    "deed_gothic": {
+        "name": "Deed: Duskspire Keep", "type": "quest", "stackable": False, "value": 0,
+        "equip_slot": None, "tradeable": False, "bankable": True,
+        "desc": "A sealed deed to Duskspire Keep.",
+    },
+    "deed_white_rose": {
+        "name": "Deed: White Rose Castle", "type": "quest", "stackable": False, "value": 0,
+        "equip_slot": None, "tradeable": False, "bankable": True,
+        "desc": "A rose-sealed deed to White Rose Castle.",
+    },
+    "deed_sky_anchor": {
+        "name": "Deed: Sky-Anchor Citadel", "type": "quest", "stackable": False, "value": 0,
+        "equip_slot": None, "tradeable": False, "bankable": True,
+        "desc": "A chain-stamped deed to the floating citadel.",
+    },
+    "deed_king": {
+        "name": "Deed: King's Castle", "type": "quest", "stackable": False, "value": 0,
+        "equip_slot": None, "tradeable": False, "bankable": True,
+        "desc": "A royal deed granted by the king's leave.",
+    },
+
     # --- Amulets ---
     "bronze_amulet": {
         "name": "Bronze Amulet", "type": "jewelry", "stackable": False, "value": 35,
@@ -802,7 +823,8 @@ MONSTERS = {
             ("emerald_ring", 0.025, (1, 1)),
         ],
         "wander_radius": 4, "aggro_range": 6,
-    
+        # Drop the chase once the player leaves the mountain pass.
+        "leash_area": (138, 1, 162, 42),
         "force_retaliate": True,
         "attack_range": 2,
         "side_by_side": True,
@@ -851,6 +873,45 @@ MONSTERS = {
         "wander_radius": 4, "wander_ticks": 8, "wander_chance": 0.5,
         "patrol_steps": (2, 4),  # walk a short leg around the keep, then idle
         "aggro_range": 0,  # peaceful unless you attack
+    },
+    # Village training stand-in. Stays on his tile and strikes back while fought.
+    "adamant_duelist": {
+        "name": "Adamant Duelist", "level": 76, "hp": 160,
+        "attack": 68, "strength": 72, "defence": 66,
+        "def_bonus": 80, "xp": 420, "respawn_ticks": 5,
+        "drops": [
+            ("bones", 1.0, (1, 1)),
+            ("coins", 1.0, (40, 90)),
+        ],
+        "wander_radius": 0,
+        "aggro_range": 0,
+        "force_retaliate": False,
+        "passive": True,
+        "strikes_in_place": True,
+        "attack_cooldown": 1.2,
+        "requires_pk": True,
+        "side_by_side": True,
+        "side_gap": 2,
+        "attack_range": 2,
+        "pk_tutorial": [
+            "I only fight while you are a player killer.",
+            "Use the PvP button. A red skull shows your kill count.",
+            "Turning it on or off locks it for 10 minutes.",
+            "Click me while it is on. I strike back, and I do not chase.",
+            "We stand apart so you can see the strikes.",
+            "You cannot run until 5 rounds have passed.",
+            "Beating me counts as one player kill.",
+            "Turn it off, and I refuse the fight.",
+        ],
+        "training_dummy": True,
+        "humanoid": True,
+        "equipment": {
+            "weapon": "adamant_sword",
+            "shield": "adamant_shield",
+            "helmet": "adamant_helmet",
+            "body": "adamant_body",
+            "legs": "adamant_legs",
+        },
     },
     "mythos_champion": {
         "name": "Mythos Champion", "level": 90, "hp": 280, "attack": 95, "strength": 100, "defence": 98,
@@ -1153,7 +1214,7 @@ MONSTERS = {
             ("health_potion", 0.15, (1, 1)),
         ],
         "wander_radius": 4, "aggro_range": 6,
-    
+        "leash_area": (138, 1, 162, 42),
         "force_retaliate": True,
         "attack_range": 2,
         "side_by_side": True,
@@ -1193,6 +1254,46 @@ MONSTERS = {
     },
 }
 
+# Monsters under this combat level drop coins, and only rarely bones.
+LOW_LEVEL_DROP_CAP = 50
+RARE_BONE_CHANCE = 0.15
+# Quest pieces keep the chance and quantity written on the creature.
+QUEST_DROP_IDS = {"rat_tail", "goblin_mail", "spider_silk"}
+
+
+def drops_for_kill(monster_type):
+    """Drop table for one kill. Under level 50 this is coins plus a rare bone."""
+    spec = MONSTERS.get(monster_type) or {}
+    drops = list(spec.get("drops") or [])
+    level = int(spec.get("level") or 1)
+    if level >= LOW_LEVEL_DROP_CAP:
+        return drops
+    coin = None
+    bone = ("bones", RARE_BONE_CHANCE, (1, 1))
+    quest = []
+    keys = []
+    for item_id, chance, bounds in drops:
+        if isinstance(item_id, (list, tuple)):
+            continue
+        meta = ITEMS.get(item_id) or {}
+        if meta.get("type") == "key" or meta.get("dungeon_bound"):
+            keys.append((item_id, chance, bounds))
+            continue
+        if item_id == "coins":
+            lo, hi = bounds
+            lo = max(int(lo), max(1, level))
+            hi = max(int(hi), lo)
+            coin = ("coins", 1.0, (lo, hi))
+        elif item_id in ("bones", "big_bones"):
+            bone = (item_id, RARE_BONE_CHANCE, (1, 1))
+        elif item_id in QUEST_DROP_IDS:
+            quest.append((item_id, chance, bounds))
+    if coin is None:
+        lo = max(1, level)
+        coin = ("coins", 1.0, (lo, max(lo + 1, level * 4)))
+    return [coin, bone, *quest, *keys]
+
+
 # Fixed monster spawn points: (monster_type, x, y)
 MONSTER_SPAWNS = [
     ("giant_rat", 10, 60), ("giant_rat", 18, 64), ("giant_rat", 8, 68),
@@ -1224,6 +1325,8 @@ MONSTER_SPAWNS = [
     ("wolf", 143, 16), ("wolf", 147, 13), ("wolf", 149, 16),
     ("wolf", 153, 16), ("wolf", 155, 18), ("wolf", 151, 15),
     ("wolf", 145, 17), ("wolf", 157, 16),
+    # East of the wishing well — combat practice. Only a player killer can attack him.
+    ("adamant_duelist", 37, 27),
     # Stonehaven City — guards on the streets, knights by the castle
     ("guard", 110, 72), ("guard", 116, 76), ("guard", 122, 72),
     ("guard", 106, 66), ("guard", 114, 80), ("guard", 132, 78),
@@ -1297,8 +1400,35 @@ RESOURCE_YIELDS = {
 # ---------------------------------------------------------------------------
 # NPCS
 # ---------------------------------------------------------------------------
+# Wizard Elowen stands on grass just northwest of the village crossroads.
+WIZARD_ID = "wizard_elowen"
+WIZARD_TILE = (23, 20)
+
+# Instant travel. where=overworld leaves any dungeon; where=castle enters the realm.
+TELEPORT_DESTINATIONS = [
+    {"id": "village", "label": "Village", "blurb": "The crossroads", "where": "overworld", "x": 28, "y": 24},
+    {"id": "bank", "label": "Village Bank", "blurb": "Store coins and items", "where": "overworld", "x": 64, "y": 23},
+    {"id": "stonehaven", "label": "Stonehaven", "blurb": "The city square", "where": "overworld", "x": 118, "y": 74},
+    {"id": "keep", "label": "Stonehaven Castle", "blurb": "The overworld keep", "where": "overworld", "x": 128, "y": 66},
+    {"id": "harbour", "label": "Harbourreach", "blurb": "The docks", "where": "overworld", "x": 176, "y": 18},
+    {"id": "estate", "label": "Estate Agent", "blurb": "Outside the King's Row office", "where": "overworld", "x": 6, "y": 99},
+    {"id": "realm", "label": "Castle Realm", "blurb": "The plaza", "where": "castle", "x": 150, "y": 183},
+    {"id": "gothic", "label": "Gothic Castle", "blurb": "Outside the gate", "where": "castle", "x": 52, "y": 78},
+    {"id": "king", "label": "King's Castle", "blurb": "Outside the gate", "where": "castle", "x": 152, "y": 78},
+    {"id": "rose", "label": "White Rose Castle", "blurb": "Outside the gate", "where": "castle", "x": 257, "y": 86},
+    {"id": "sky", "label": "Sky-Anchor", "blurb": "Outside the gate", "where": "castle", "x": 52, "y": 168},
+]
+
 NPCS = [
     # Village
+    {"id": WIZARD_ID, "name": "Wizard Elowen", "x": WIZARD_TILE[0], "y": WIZARD_TILE[1],
+     "lines": [
+         "I am Elowen. The violet ring will carry you anywhere I have marked.",
+         "Press T, or the Teleport button on the left, and choose a place.",
+         "The village, the city, the harbour, the estate agent, and every castle are one spell away.",
+     ],
+     "teleport_teacher": True},
+
     {"id": "shopkeeper_joe", "name": "Shopkeeper Joe", "x": 45, "y": 7,
      "lines": ["Welcome to my general store!", "Take a look at my stock."], "shop_id": "general_store"},
 
@@ -2103,7 +2233,7 @@ PETS = {
 
 # Economy / inventory caps
 MAX_PURSE_COINS = 65000
-MAX_BANK_COINS = 10_000_000
+MAX_BANK_COINS = 500_000_000
 MAX_ORES = 100
 ORE_ITEM_IDS = frozenset({
     "copper_ore", "tin_ore", "iron_ore", "coal", "mithril_ore", "adamantite_ore",
@@ -2451,6 +2581,9 @@ INTERACTABLES = [
 
     # Village wishing well (east of crossroads, south of the road)
     {"id": "wishing_well", "kind": "wishing_well", "name": "Wishing Well", "x": 32, "y": 22},
+    {"id": "sign_duelist", "kind": "signpost", "name": "Duelist",
+     "x": 36, "y": 27, "facing": "e",
+     "lines": ["Fight me on PK mode", "if you dare."]},
 
     # Stonehaven City doors
     {"id": "city_house_nw_door", "kind": "door", "name": "Door", "x": 106, "y": 68,
@@ -3350,3 +3483,31 @@ def _apply_buildings_v2():
 
 
 _apply_buildings_v2()
+
+
+def _castle_realm_portal():
+    """One overworld mouth. Absent unless USE_CASTLE_REALM is on."""
+    import feature_flags
+    if not feature_flags.USE_CASTLE_REALM:
+        return
+    INTERACTABLES.append({
+        "id": "castle_realm_portal",
+        "kind": "dungeon_entrance",
+        "name": "Castle Realm",
+        "x": 32,
+        "y": 33,
+        "dungeon_id": "castle_realm",
+        "action": {"type": "ENTER_DUNGEON", "dungeon_id": "castle_realm"},
+    })
+    TRAVEL_DESTINATIONS.append({
+        "id": "castle_realm",
+        "kind": "place",
+        "label": "Castle Realm",
+        "x": 32,
+        "y": 33,
+        "blurb": "Gold portal south of the Wishing Well",
+        "action": {"type": "ENTER_DUNGEON", "dungeon_id": "castle_realm"},
+    })
+
+
+_castle_realm_portal()

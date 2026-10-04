@@ -1,0 +1,922 @@
+{
+ "id": "gothic",
+ "name": "Duskspire Keep",
+ "realm": "castle_realm",
+ "flag": "USE_CASTLE_REALM",
+ "version": 1,
+ "footprint": {
+  "x0": 38,
+  "y0": 52,
+  "x1": 61,
+  "y1": 75,
+  "w": 24,
+  "h": 24,
+  "plane": "realm"
+ },
+ "keep_rect_local": [
+  7,
+  4,
+  16,
+  9
+ ],
+ "building_rects_local": {
+  "keep": [
+   7,
+   4,
+   16,
+   9
+  ]
+ },
+ "grid_legend": {
+  "M": "moat (blocked)",
+  "W": "wall/tower (blocked)",
+  "K": "keep (blocked, sprite)",
+  "F": "bailey floor",
+  "A": "wall-walk (NPC only, not player-reachable)",
+  "P": "gate passage",
+  "G": "portcullis (walkable when open)",
+  "B": "drawbridge (walkable when down)",
+  "D": "keep door -> interior floor 1 (transition)"
+ },
+ "walkability": [
+  "MMMMMMMMMMMMMMMMMMMMMMMM",
+  "MMMMMMMMMMMMMMMMMMMMMMMM",
+  "MMWWWWWWWWWWWWWWWWWWWWMM",
+  "MMWWWWWWWWWWWWWWWWWWWWMM",
+  "MMWWFFFKKKKKKKKKKFFFWWMM",
+  "MMWWFFFKKKKKKKKKKFFFWWMM",
+  "MMWWFFFKKKKKKKKKKFFFWWMM",
+  "MMWWFFFKKKKKKKKKKFFFWWMM",
+  "MMWWFFFKKKKKKKKKKFFFWWMM",
+  "MMWWFFFKKKKDDKKKKFFFWWMM",
+  "MMWWFFFFFFFFFFFFFFFFWWMM",
+  "MMWWFFFFFFFFFFFFFFFFWWMM",
+  "MMWWFFFFFFFFFFFFFFFFWWMM",
+  "MMWWFFFFFFFFFFFFFFFFWWMM",
+  "MMWWFFFFFFFFFFFFFFFFWWMM",
+  "MMWWFFFFFFFFFFFFFFFFWWMM",
+  "MMWWFFFFFFFFFFFFFFFFWWMM",
+  "MMWWFFFFFFFFFFFFFFFFWWMM",
+  "MMWWFFFFFFFFFFFFFFFFWWMM",
+  "MMWWFFFFFFFFFFFFFFFFWWMM",
+  "MMWWWAAAWWWPPWWWAAAWWWMM",
+  "MMWWWWWWWWWGGWWWWWWWWWMM",
+  "MMMMMMMMMMMBBMMMMMMMMMMM",
+  "MMMMMMMMMMMBBMMMMMMMMMMM"
+ ],
+ "walkable_chars": [
+  "B",
+  "D",
+  "F",
+  "G",
+  "P"
+ ],
+ "keep_doors": [
+  {
+   "tile_local": [
+    11,
+    9
+   ],
+   "tile": [
+    49,
+    61
+   ],
+   "to_plane": "gothic_f1",
+   "arrive": [
+    8,
+    10
+   ],
+   "building": "keep"
+  },
+  {
+   "tile_local": [
+    12,
+    9
+   ],
+   "tile": [
+    50,
+    61
+   ],
+   "to_plane": "gothic_f1",
+   "arrive": [
+    9,
+    10
+   ],
+   "building": "keep"
+  }
+ ],
+ "trigger_tiles": {
+  "outer": [
+   [
+    48,
+    76
+   ],
+   [
+    49,
+    76
+   ],
+   [
+    50,
+    76
+   ],
+   [
+    51,
+    76
+   ]
+  ],
+  "hold": [
+   [
+    49,
+    72
+   ],
+   [
+    50,
+    72
+   ],
+   [
+    49,
+    73
+   ],
+   [
+    50,
+    73
+   ],
+   [
+    49,
+    74
+   ],
+   [
+    50,
+    74
+   ],
+   [
+    49,
+    75
+   ],
+   [
+    50,
+    75
+   ]
+  ],
+  "inner": [
+   [
+    49,
+    70
+   ],
+   [
+    50,
+    70
+   ],
+   [
+    49,
+    71
+   ],
+   [
+    50,
+    71
+   ]
+  ],
+  "rule": "same as castle_v2: gate opens while the local player stands on outer/inner/hold; closes when none"
+ },
+ "floor_legend": {
+  "#": "wall (blocked)",
+  ".": "floor",
+  "D": "door (walkable, between rooms)",
+  "U": "stairs up (transition)",
+  "V": "stairs down (transition)",
+  "E": "exit to bailey (transition)",
+  "x": "furniture (blocked, see furniture list)"
+ },
+ "floor_walkable_chars": [
+  ".",
+  "D",
+  "E",
+  "U",
+  "V"
+ ],
+ "floors": [
+  {
+   "plane": "gothic_f1",
+   "building": "keep",
+   "level": 1,
+   "name": "Hall of Shadows",
+   "width": 18,
+   "height": 12,
+   "height_m": 0.0,
+   "rows": [
+    "##################",
+    "#..xx..#x...#.xx.#",
+    "#......#..x.#....#",
+    "#.x..x.D....D.x..#",
+    "#......#....#....#",
+    "####D#####D#######",
+    "#................#",
+    "#................#",
+    "#...x.......x....#",
+    "#...............U#",
+    "#................#",
+    "########EE########"
+   ],
+   "sprite_2x": "floors/gothic_f1.png",
+   "sprite_1x": "floors/1x/gothic_f1.png",
+   "rooms": [
+    {
+     "kind": "chapel",
+     "name": "Black Chapel",
+     "rect": [
+      1,
+      1,
+      6,
+      4
+     ]
+    },
+    {
+     "kind": "guard",
+     "name": "Guard Room",
+     "rect": [
+      8,
+      1,
+      11,
+      4
+     ]
+    },
+    {
+     "kind": "kitchen",
+     "name": "Kitchen",
+     "rect": [
+      13,
+      1,
+      16,
+      4
+     ]
+    },
+    {
+     "kind": "hall",
+     "name": "Entrance Hall",
+     "rect": [
+      1,
+      6,
+      16,
+      10
+     ]
+    }
+   ],
+   "doors": [
+    {
+     "tile": [
+      7,
+      3
+     ]
+    },
+    {
+     "tile": [
+      12,
+      3
+     ]
+    },
+    {
+     "tile": [
+      4,
+      5
+     ]
+    },
+    {
+     "tile": [
+      10,
+      5
+     ]
+    }
+   ],
+   "stairs": [
+    {
+     "tile": [
+      16,
+      9
+     ],
+     "dir": "up",
+     "to_plane": "gothic_f2",
+     "arrive": [
+      15,
+      10
+     ]
+    }
+   ],
+   "exits": [
+    {
+     "tile": [
+      8,
+      11
+     ],
+     "to_plane": "realm",
+     "arrive": [
+      49,
+      62
+     ]
+    },
+    {
+     "tile": [
+      9,
+      11
+     ],
+     "to_plane": "realm",
+     "arrive": [
+      50,
+      62
+     ]
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "altar",
+     "tile": [
+      3,
+      1
+     ]
+    },
+    {
+     "kind": "altar",
+     "tile": [
+      4,
+      1
+     ]
+    },
+    {
+     "kind": "pew",
+     "tile": [
+      2,
+      3
+     ]
+    },
+    {
+     "kind": "pew",
+     "tile": [
+      5,
+      3
+     ]
+    },
+    {
+     "kind": "weapon_rack",
+     "tile": [
+      8,
+      1
+     ]
+    },
+    {
+     "kind": "table",
+     "tile": [
+      10,
+      2
+     ]
+    },
+    {
+     "kind": "hearth",
+     "tile": [
+      14,
+      1
+     ]
+    },
+    {
+     "kind": "hearth",
+     "tile": [
+      15,
+      1
+     ]
+    },
+    {
+     "kind": "table",
+     "tile": [
+      14,
+      3
+     ]
+    },
+    {
+     "kind": "pillar",
+     "tile": [
+      4,
+      8
+     ]
+    },
+    {
+     "kind": "pillar",
+     "tile": [
+      12,
+      8
+     ]
+    }
+   ]
+  },
+  {
+   "plane": "gothic_f2",
+   "building": "keep",
+   "level": 2,
+   "name": "Great Hall",
+   "width": 18,
+   "height": 12,
+   "height_m": 4.2,
+   "rows": [
+    "##################",
+    "#....x.....#xxxx.#",
+    "#..........#.....#",
+    "#..........#..x..#",
+    "#..x...x...D.....#",
+    "#..x...x...#.....#",
+    "#..x...x...#######",
+    "#..........#.....#",
+    "#..........D.....#",
+    "#..........#....U#",
+    "#x........x#....V#",
+    "##################"
+   ],
+   "sprite_2x": "floors/gothic_f2.png",
+   "sprite_1x": "floors/1x/gothic_f2.png",
+   "rooms": [
+    {
+     "kind": "great_hall",
+     "name": "Great Hall",
+     "rect": [
+      1,
+      1,
+      10,
+      10
+     ]
+    },
+    {
+     "kind": "library",
+     "name": "Library",
+     "rect": [
+      12,
+      1,
+      16,
+      5
+     ]
+    },
+    {
+     "kind": "lobby",
+     "name": "Stair Lobby",
+     "rect": [
+      12,
+      7,
+      16,
+      10
+     ]
+    }
+   ],
+   "doors": [
+    {
+     "tile": [
+      11,
+      4
+     ]
+    },
+    {
+     "tile": [
+      11,
+      8
+     ]
+    }
+   ],
+   "stairs": [
+    {
+     "tile": [
+      16,
+      9
+     ],
+     "dir": "up",
+     "to_plane": "gothic_f3",
+     "arrive": [
+      15,
+      10
+     ]
+    },
+    {
+     "tile": [
+      16,
+      10
+     ],
+     "dir": "down",
+     "to_plane": "gothic_f1",
+     "arrive": [
+      15,
+      9
+     ]
+    }
+   ],
+   "exits": [],
+   "furniture": [
+    {
+     "kind": "throne",
+     "tile": [
+      5,
+      1
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      3,
+      4
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      3,
+      5
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      3,
+      6
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      7,
+      4
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      7,
+      5
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      7,
+      6
+     ]
+    },
+    {
+     "kind": "brazier",
+     "tile": [
+      1,
+      10
+     ]
+    },
+    {
+     "kind": "brazier",
+     "tile": [
+      10,
+      10
+     ]
+    },
+    {
+     "kind": "bookshelf",
+     "tile": [
+      12,
+      1
+     ]
+    },
+    {
+     "kind": "bookshelf",
+     "tile": [
+      13,
+      1
+     ]
+    },
+    {
+     "kind": "bookshelf",
+     "tile": [
+      14,
+      1
+     ]
+    },
+    {
+     "kind": "bookshelf",
+     "tile": [
+      15,
+      1
+     ]
+    },
+    {
+     "kind": "desk",
+     "tile": [
+      14,
+      3
+     ]
+    }
+   ]
+  },
+  {
+   "plane": "gothic_f3",
+   "building": "keep",
+   "level": 3,
+   "name": "Lord's Chambers",
+   "width": 18,
+   "height": 12,
+   "height_m": 8.4,
+   "rows": [
+    "##################",
+    "#xx..x#x.x.x#...x#",
+    "#.....#.....#.x..#",
+    "#.....#.....#....#",
+    "#.....#.....#....#",
+    "###D#####D####D###",
+    "#................#",
+    "#................#",
+    "####D########....#",
+    "#.x...x..x..#...U#",
+    "#...........#...V#",
+    "##################"
+   ],
+   "sprite_2x": "floors/gothic_f3.png",
+   "sprite_1x": "floors/1x/gothic_f3.png",
+   "rooms": [
+    {
+     "kind": "bedchamber",
+     "name": "Bedchamber",
+     "rect": [
+      1,
+      1,
+      5,
+      4
+     ]
+    },
+    {
+     "kind": "armoury",
+     "name": "Armoury",
+     "rect": [
+      7,
+      1,
+      11,
+      4
+     ]
+    },
+    {
+     "kind": "alchemist",
+     "name": "Alchemist's Den",
+     "rect": [
+      13,
+      1,
+      16,
+      4
+     ]
+    },
+    {
+     "kind": "corridor",
+     "name": "Corridor & Stair Lobby",
+     "rect": [
+      1,
+      6,
+      16,
+      7
+     ]
+    },
+    {
+     "kind": "lobby",
+     "name": "Stair Lobby",
+     "rect": [
+      13,
+      8,
+      16,
+      10
+     ]
+    },
+    {
+     "kind": "treasury",
+     "name": "Treasury",
+     "rect": [
+      1,
+      9,
+      11,
+      10
+     ]
+    }
+   ],
+   "doors": [
+    {
+     "tile": [
+      3,
+      5
+     ]
+    },
+    {
+     "tile": [
+      9,
+      5
+     ]
+    },
+    {
+     "tile": [
+      14,
+      5
+     ]
+    },
+    {
+     "tile": [
+      4,
+      8
+     ]
+    }
+   ],
+   "stairs": [
+    {
+     "tile": [
+      16,
+      9
+     ],
+     "dir": "up",
+     "to_plane": "gothic_f4",
+     "arrive": [
+      15,
+      10
+     ]
+    },
+    {
+     "tile": [
+      16,
+      10
+     ],
+     "dir": "down",
+     "to_plane": "gothic_f2",
+     "arrive": [
+      15,
+      9
+     ]
+    }
+   ],
+   "exits": [],
+   "furniture": [
+    {
+     "kind": "bed",
+     "tile": [
+      1,
+      1
+     ]
+    },
+    {
+     "kind": "bed",
+     "tile": [
+      2,
+      1
+     ]
+    },
+    {
+     "kind": "wardrobe",
+     "tile": [
+      5,
+      1
+     ]
+    },
+    {
+     "kind": "weapon_rack",
+     "tile": [
+      7,
+      1
+     ]
+    },
+    {
+     "kind": "weapon_rack",
+     "tile": [
+      11,
+      1
+     ]
+    },
+    {
+     "kind": "armour_stand",
+     "tile": [
+      9,
+      1
+     ]
+    },
+    {
+     "kind": "cauldron",
+     "tile": [
+      14,
+      2
+     ]
+    },
+    {
+     "kind": "bookshelf",
+     "tile": [
+      16,
+      1
+     ]
+    },
+    {
+     "kind": "chest",
+     "tile": [
+      2,
+      9
+     ]
+    },
+    {
+     "kind": "chest",
+     "tile": [
+      6,
+      9
+     ]
+    },
+    {
+     "kind": "chest",
+     "tile": [
+      9,
+      9
+     ]
+    }
+   ]
+  },
+  {
+   "plane": "gothic_f4",
+   "building": "keep",
+   "level": 4,
+   "name": "Spire Top",
+   "width": 18,
+   "height": 12,
+   "height_m": 12.6,
+   "rows": [
+    "##################",
+    "##################",
+    "###............###",
+    "###.##########.###",
+    "###.#........#.###",
+    "###.#...xx...#.###",
+    "###.#........#.###",
+    "###.####D#####.###",
+    "###............###",
+    "##############...#",
+    "##############..V#",
+    "##################"
+   ],
+   "sprite_2x": "floors/gothic_f4.png",
+   "sprite_1x": "floors/1x/gothic_f4.png",
+   "rooms": [
+    {
+     "kind": "roof_walk",
+     "name": "Roof Walk",
+     "rect": [
+      3,
+      2,
+      14,
+      8
+     ]
+    },
+    {
+     "kind": "bell",
+     "name": "Bell Chamber",
+     "rect": [
+      5,
+      4,
+      12,
+      6
+     ]
+    },
+    {
+     "kind": "stair_head",
+     "name": "Stair Head",
+     "rect": [
+      14,
+      9,
+      16,
+      10
+     ]
+    }
+   ],
+   "doors": [
+    {
+     "tile": [
+      8,
+      7
+     ]
+    }
+   ],
+   "stairs": [
+    {
+     "tile": [
+      16,
+      10
+     ],
+     "dir": "down",
+     "to_plane": "gothic_f3",
+     "arrive": [
+      15,
+      9
+     ]
+    }
+   ],
+   "exits": [],
+   "furniture": [
+    {
+     "kind": "bell",
+     "tile": [
+      8,
+      5
+     ]
+    },
+    {
+     "kind": "bell",
+     "tile": [
+      9,
+      5
+     ]
+    }
+   ]
+  }
+ ]
+}

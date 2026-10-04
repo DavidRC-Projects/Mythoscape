@@ -1,0 +1,320 @@
+{
+  "note": "origin_px is the front-foot pixel. Blit it onto the south edge of the anchor tile (cy + TILE/2), not the tile centre.",
+  "props": {
+    "prop_arming_dummy": {
+      "blocks": true,
+      "hug": "wall",
+      "rooms": "armoury, guard room",
+      "tiles": "1x1",
+      "file": "props/prop_arming_dummy.png",
+      "origin_px": [
+        88,
+        332
+      ],
+      "png_size": [
+        158,
+        339
+      ]
+    },
+    "prop_cauldron": {
+      "blocks": true,
+      "hug": "wall",
+      "rooms": "kitchen, great hall corner by the hearth",
+      "tiles": "1x1",
+      "file": "props/prop_cauldron.png",
+      "origin_px": [
+        114,
+        366
+      ],
+      "png_size": [
+        226,
+        374
+      ]
+    },
+    "prop_chapel_altar": {
+      "blocks": true,
+      "hug": "wall",
+      "rooms": "Black Chapel, Candle Chapel, Private Chapel \u2014 one altar",
+      "tiles": "2x1",
+      "file": "props/prop_chapel_altar.png",
+      "origin_px": [
+        253,
+        373
+      ],
+      "png_size": [
+        374,
+        380
+      ]
+    },
+    "prop_cheval_mirror": {
+      "blocks": true,
+      "hug": "wall",
+      "rooms": "dressing room, bedchamber",
+      "tiles": "1x1",
+      "file": "props/prop_cheval_mirror.png",
+      "origin_px": [
+        146,
+        354
+      ],
+      "png_size": [
+        166,
+        361
+      ]
+    },
+    "prop_cradle": {
+      "blocks": true,
+      "hug": "wall",
+      "rooms": "nursery only (rose_f1), not every bedroom",
+      "tiles": "1x1",
+      "file": "props/prop_cradle.png",
+      "origin_px": [
+        164,
+        439
+      ],
+      "png_size": [
+        324,
+        446
+      ]
+    },
+    "prop_dining_chair": {
+      "blocks": true,
+      "hug": "pair",
+      "rooms": "great hall, feast gallery, mess \u2014 exactly one pair",
+      "tiles": "1x1",
+      "file": "props/prop_dining_chair.png",
+      "origin_px": [
+        81,
+        368
+      ],
+      "png_size": [
+        158,
+        375
+      ]
+    },
+    "prop_heater_shield": {
+      "blocks": false,
+      "hug": "decor-wall",
+      "rooms": "armoury, trophy hall, guard room",
+      "tiles": "0",
+      "file": "props/prop_heater_shield.png",
+      "origin_px": [
+        75,
+        312
+      ],
+      "png_size": [
+        161,
+        319
+      ]
+    },
+    "prop_lectern": {
+      "blocks": true,
+      "hug": "wall",
+      "rooms": "chapel, library",
+      "tiles": "1x1",
+      "file": "props/prop_lectern.png",
+      "origin_px": [
+        106,
+        360
+      ],
+      "png_size": [
+        186,
+        367
+      ]
+    },
+    "prop_linen_press": {
+      "blocks": true,
+      "hug": "wall",
+      "rooms": "bedchamber, dressing room, linen stillroom",
+      "tiles": "1x1",
+      "file": "props/prop_linen_press.png",
+      "origin_px": [
+        134,
+        377
+      ],
+      "png_size": [
+        195,
+        384
+      ]
+    },
+    "prop_portrait": {
+      "blocks": false,
+      "hug": "decor-wall",
+      "rooms": "bedchamber, hall, chapel \u2014 wall art, sort in front of that wall",
+      "tiles": "0",
+      "file": "props/prop_portrait.png",
+      "origin_px": [
+        176,
+        381
+      ],
+      "png_size": [
+        196,
+        388
+      ]
+    },
+    "prop_prayer_kneeler": {
+      "blocks": true,
+      "hug": "pair",
+      "rooms": "chapel \u2014 exactly one pair, aisle between",
+      "tiles": "1x1",
+      "file": "props/prop_prayer_kneeler.png",
+      "origin_px": [
+        149,
+        399
+      ],
+      "png_size": [
+        247,
+        406
+      ]
+    },
+    "prop_relic_rack": {
+      "blocks": true,
+      "hug": "wall",
+      "rooms": "vault side wall \u2014 once",
+      "tiles": "1x2",
+      "file": "props/prop_relic_rack.png",
+      "origin_px": [
+        134,
+        378
+      ],
+      "png_size": [
+        186,
+        385
+      ]
+    },
+    "prop_serving_cart": {
+      "blocks": true,
+      "hug": "wall",
+      "rooms": "great hall, kitchen, feast gallery",
+      "tiles": "1x1",
+      "file": "props/prop_serving_cart.png",
+      "origin_px": [
+        238,
+        400
+      ],
+      "png_size": [
+        364,
+        407
+      ]
+    },
+    "prop_spear_stand": {
+      "blocks": true,
+      "hug": "wall",
+      "rooms": "armoury, guard room",
+      "tiles": "1x1",
+      "file": "props/prop_spear_stand.png",
+      "origin_px": [
+        54,
+        326
+      ],
+      "png_size": [
+        150,
+        333
+      ]
+    },
+    "prop_spinning_wheel": {
+      "blocks": true,
+      "hug": "wall",
+      "rooms": "solar, linen stillroom \u2014 once",
+      "tiles": "1x1",
+      "file": "props/prop_spinning_wheel.png",
+      "origin_px": [
+        208,
+        375
+      ],
+      "png_size": [
+        294,
+        382
+      ]
+    },
+    "prop_washstand": {
+      "blocks": true,
+      "hug": "wall",
+      "rooms": "bedchamber, bath, dressing room",
+      "tiles": "1x1",
+      "file": "props/prop_washstand.png",
+      "origin_px": [
+        157,
+        344
+      ],
+      "png_size": [
+        264,
+        351
+      ]
+    },
+    "prop_wine_rack": {
+      "blocks": true,
+      "hug": "wall",
+      "rooms": "buttery, pantry, great hall",
+      "tiles": "1x2",
+      "file": "props/prop_wine_rack.png",
+      "origin_px": [
+        162,
+        393
+      ],
+      "png_size": [
+        221,
+        400
+      ]
+    },
+    "vault_gothic_iron": {
+      "blocks": true,
+      "hug": "wall",
+      "rooms": "gothic_f3 Main Vault",
+      "tiles": "3x2",
+      "file": "vaults/vault_gothic_iron.png",
+      "origin_px": [
+        215,
+        393
+      ],
+      "png_size": [
+        256,
+        400
+      ]
+    },
+    "vault_king_gold": {
+      "blocks": true,
+      "hug": "wall",
+      "rooms": "king_f3 Royal Treasury",
+      "tiles": "3x2",
+      "file": "vaults/vault_king_gold.png",
+      "origin_px": [
+        214,
+        393
+      ],
+      "png_size": [
+        255,
+        400
+      ]
+    },
+    "vault_rose_marble": {
+      "blocks": true,
+      "hug": "wall",
+      "rooms": "rose_f3 Petal Vault",
+      "tiles": "3x2",
+      "file": "vaults/vault_rose_marble.png",
+      "origin_px": [
+        215,
+        393
+      ],
+      "png_size": [
+        256,
+        400
+      ]
+    },
+    "vault_sky_crystal": {
+      "blocks": true,
+      "hug": "wall",
+      "rooms": "sky_f3 Crystal Vault",
+      "tiles": "3x2",
+      "file": "vaults/vault_sky_crystal.png",
+      "origin_px": [
+        196,
+        371
+      ],
+      "png_size": [
+        234,
+        378
+      ]
+    }
+  }
+}

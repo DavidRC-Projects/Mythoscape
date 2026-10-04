@@ -1,0 +1,1564 @@
+{
+ "id": "king",
+ "name": "King's Castle",
+ "realm": "castle_realm",
+ "flag": "USE_CASTLE_REALM",
+ "version": 1,
+ "footprint": {
+  "x0": 120,
+  "y0": 16,
+  "x1": 179,
+  "y1": 75,
+  "w": 60,
+  "h": 60,
+  "plane": "realm"
+ },
+ "keep_rect_local": [
+  22,
+  17,
+  37,
+  30
+ ],
+ "building_rects_local": {
+  "keep": [
+   22,
+   17,
+   37,
+   30
+  ],
+  "barracks": [
+   48,
+   18,
+   54,
+   33
+  ]
+ },
+ "grid_legend": {
+  "M": "moat (blocked)",
+  "W": "wall/tower (blocked)",
+  "K": "keep / barracks / stables / towers (blocked, sprite)",
+  "F": "bailey floor",
+  "A": "wall-walk (NPC only, not player-reachable)",
+  "P": "gate passage",
+  "G": "portcullis (walkable when open)",
+  "B": "drawbridge (walkable when down)",
+  "D": "door -> building interior (keep or barracks, see doors[])",
+  "N": "statue of the king (blocked)",
+  "H": "garden bed, market stall, tilt barrier, tree or well (blocked)"
+ },
+ "walkability": [
+  "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM",
+  "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM",
+  "MMWWWWMMMMMMMMMMWWMMMMMMMMMMMWWMMMMMMMMMMMWWMMMMMMMMMMWWWWMM",
+  "MMWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWMM",
+  "MMWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWMM",
+  "MMWWWWFFFFFFFFFFWWFFFFFFFFFFFWWFFFFFFFFFFFWWFFFFFFFFFFWWWWMM",
+  "MMMWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWMMM",
+  "MMMWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWMMM",
+  "MMMWWFFFFHFFFFFFFFFHFFFFFFFFFFFFFFFFFFFFFHFFFFFFFFFHFFFWWMMM",
+  "MMMWWFFFFFFFFFHFFFFFFFFFHFFFFFFFFFFFHFFFFFFFFFHFFFFFFFFWWMMM",
+  "MMMWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWMMM",
+  "MMMWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWMMM",
+  "MMMWWFFFHHFFWWWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWWWFFFFFFFWWMMM",
+  "MMMWWFFFFFFFWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWFFFFFFFWWMMM",
+  "MMMWWFFFFFFFWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWFFFFFFFWWMMM",
+  "MMMWWFFFFFFFWWWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWWWFFFFFFFWWMMM",
+  "MMWWWWFFFFFFFWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWFFFFFFFWWWWMM",
+  "MMWWWWFFFFFFFWWFFFFFFFKKKKKKKKKKKKKKKKFFFFFFFWWFFFFFFFWWWWMM",
+  "MMMWWKKKKKKFFWWFHHHHFFKKKKKKKKKKKKKKKKFFHHHHFWWFKKKKKKKWWMMM",
+  "MMMWWKKKKKKFFWWFHHHHFFKKKKKKKKKKKKKKKKFFHHHHFWWFKKKKKKKWWMMM",
+  "MMMWWKKKKKKFFWWFHHHHFFKKKKKKKKKKKKKKKKFFHHHHFWWFKKKKKKKWWMMM",
+  "MMMWWKKKKKKFFWWFHHHHFFKKKKKKKKKKKKKKKKFFHHHHFWWFKKKKKKKWWMMM",
+  "MMMWWKKKKKKFFWWFHHHHFFKKKKKKKKKKKKKKKKFFHHHHFWWFKKKKKKKWWMMM",
+  "MMMWWKKKKKKFFWWFHHHHFFKKKKKKKKKKKKKKKKFFHHHHFWWFKKKKKKKWWMMM",
+  "MMMWWKKKKKKFFWWFHHHHFFKKKKKKKKKKKKKKKKFFHHHHFWWFKKKKKKKWWMMM",
+  "MMMWWKKKKKKFFWWFHHHHFFKKKKKKKKKKKKKKKKFFHHHHFWWFKKKKKKKWWMMM",
+  "MMMWWKKKKKKFFWWFHHHHFFKKKKKKKKKKKKKKKKFFHHHHFWWFKKKKKKKWWMMM",
+  "MMMWWKKKKKKFFWWFHHHHFFKKKKKKKKKKKKKKKKFFHHHHFWWFKKKKKKKWWMMM",
+  "MMMWWKKKKKKFFWWFFFFFFFKKKKKKKKKKKKKKKKFFFFFFFWWFKKKKKKKWWMMM",
+  "MMWWWKKKKKKFFWWFFFFFFFKKKKKKKKKKKKKKKKFFFFFFFWWFKKKKKKKWWWMM",
+  "MMWWWKKKKKKFFWWFFFFFFFKKKKKKKDDKKKKKKKFFFFFFFWWFKKKKKKKWWWMM",
+  "MMMWWKKKKKKFFWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWFKKKKKKKWWMMM",
+  "MMMWWKKKKKKFFWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWFKKKKKKKWWMMM",
+  "MMMWWKKKKKKFFWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWFKKKDKKKWWMMM",
+  "MMMWWFFFFFFFFWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWFFFFFFFFWWMMM",
+  "MMMWWFFFFFFFFWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWFFFFFFFFWWMMM",
+  "MMMWWFFFFFFFFWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWFFFFFFFFWWMMM",
+  "MMMWWFFFFFFFFWWFFFFFFFFFFFFFFNNFFFFFFFFFFFFFFWWFFFFFFFFWWMMM",
+  "MMMWWFFFFFFFFWWFFFFFFFFFFFFFFNNFFFFFFFFFFFFFFWWFFFFFFFFWWMMM",
+  "MMMWWFFFFFFFFWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWFFFFFFFFWWMMM",
+  "MMMWWFFFHFFFFWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWFFFFHFFFWWMMM",
+  "MMMWWFFFFFFFFWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWFFFFFFFFWWMMM",
+  "MMWWWWFFFFFFFWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWFFFFFFFWWWWMM",
+  "MMWWWWFFFFFFFWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWFFFFFFFWWWWMM",
+  "MMMWWFFFHFFFWWWWFFFFFFFFFFWWWPPWWWFFFFFFFFFFWWWWFFFHFFFWWMMM",
+  "MMMWWFFFFFFFWWWWWWWWWWWWWWWWWPPWWWWWWWWWWWWWWWWWFFFFFFFWWMMM",
+  "MMMWWFFFFFFFWWWWWWWWWWWWWWWWWPPWWWWWWWWWWWWWWWWWFFFFFFFWWMMM",
+  "MMMWWFFFFFFFWWWWFFFFFFFFFWWWFFFFWWWFFFFFFFFFWWWWFFFFFFFWWMMM",
+  "MMMWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFHHHHHHHHHHHHHFFFFFWWMMM",
+  "MMMWWFFFHHFFHHFFHHFFHHFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWMMM",
+  "MMMWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWMMM",
+  "MMMWWFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFWWMMM",
+  "MMMWWFFFFFFFFFFFFFFFFFFFWWWWWPPWWWWWFFFFFFFFFFFFFFFFFFFWWMMM",
+  "MMMWWFFFFFFFFFFFFFFFFFFFWWWWWPPWWWWWFFFFFFFFFFFFFFFFFFFWWMMM",
+  "MMWWWWFFFFFFFFFFFFFFFFFWWWWWWPPWWWWWWFFFFFFFFFFFFFFFFFWWWWMM",
+  "MMWWWWWWWWWWWWWWWWWWWWWWWWWWWPPWWWWWWWWWWWWWWWWWWWWWWWWWWWMM",
+  "MMWWWWWWWWWWWWWWWWWWWWWWWWWWWGGWWWWWWWWWWWWWWWWWWWWWWWWWWWMM",
+  "MMWWWWMMMMMMMMMMMMMMMMWWWWWMMBBMMWWWWWMMMMMMMMMMMMMMMMWWWWMM",
+  "MMMMMMMMMMMMMMMMMMMMMMMWWWMMMBBMMMWWWMMMMMMMMMMMMMMMMMMMMMMM",
+  "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMBBMMMMMMMMMMMMMMMMMMMMMMMMMMMMM"
+ ],
+ "walkable_chars": [
+  "B",
+  "D",
+  "F",
+  "G",
+  "P"
+ ],
+ "keep_doors": [
+  {
+   "tile_local": [
+    29,
+    30
+   ],
+   "tile": [
+    149,
+    46
+   ],
+   "to_plane": "king_f1",
+   "arrive": [
+    7,
+    12
+   ],
+   "building": "keep"
+  },
+  {
+   "tile_local": [
+    30,
+    30
+   ],
+   "tile": [
+    150,
+    46
+   ],
+   "to_plane": "king_f1",
+   "arrive": [
+    8,
+    12
+   ],
+   "building": "keep"
+  },
+  {
+   "tile_local": [
+    51,
+    33
+   ],
+   "tile": [
+    171,
+    49
+   ],
+   "to_plane": "king_barracks_f1",
+   "arrive": [
+    3,
+    14
+   ],
+   "building": "barracks"
+  }
+ ],
+ "trigger_tiles": {
+  "outer": [
+   [
+    148,
+    76
+   ],
+   [
+    149,
+    76
+   ],
+   [
+    150,
+    76
+   ],
+   [
+    151,
+    76
+   ]
+  ],
+  "hold": [
+   [
+    149,
+    60
+   ],
+   [
+    150,
+    60
+   ],
+   [
+    149,
+    61
+   ],
+   [
+    150,
+    61
+   ],
+   [
+    149,
+    62
+   ],
+   [
+    150,
+    62
+   ],
+   [
+    149,
+    68
+   ],
+   [
+    150,
+    68
+   ],
+   [
+    149,
+    69
+   ],
+   [
+    150,
+    69
+   ],
+   [
+    149,
+    70
+   ],
+   [
+    150,
+    70
+   ],
+   [
+    149,
+    71
+   ],
+   [
+    150,
+    71
+   ],
+   [
+    149,
+    72
+   ],
+   [
+    150,
+    72
+   ],
+   [
+    149,
+    73
+   ],
+   [
+    150,
+    73
+   ],
+   [
+    149,
+    74
+   ],
+   [
+    150,
+    74
+   ],
+   [
+    149,
+    75
+   ],
+   [
+    150,
+    75
+   ]
+  ],
+  "inner": [
+   [
+    149,
+    58
+   ],
+   [
+    150,
+    58
+   ],
+   [
+    149,
+    59
+   ],
+   [
+    150,
+    59
+   ]
+  ],
+  "rule": "same as castle_v2: gate opens while the local player stands on outer/inner/hold; closes when none"
+ },
+ "floor_legend": {
+  "#": "wall (blocked)",
+  ".": "floor",
+  "D": "door (walkable, between rooms)",
+  "U": "stairs up (transition)",
+  "V": "stairs down (transition)",
+  "E": "exit to bailey (transition)",
+  "x": "furniture (blocked, see furniture list)"
+ },
+ "floor_walkable_chars": [
+  ".",
+  "D",
+  "E",
+  "U",
+  "V"
+ ],
+ "floors": [
+  {
+   "plane": "king_f1",
+   "building": "keep",
+   "level": 1,
+   "name": "Great Hall",
+   "width": 16,
+   "height": 14,
+   "height_m": 0.0,
+   "rows": [
+    "################",
+    "#x.....xx.....x#",
+    "#..............#",
+    "#..xxx....xxx..#",
+    "#..............#",
+    "#..xxx....xxx..#",
+    "#..............#",
+    "#x............x#",
+    "##D#####D#######",
+    "#x..x#x...x#...#",
+    "#....D.....D.U.#",
+    "#..x.#.....#...#",
+    "#x..x#x...x#x..#",
+    "#######EE#######"
+   ],
+   "sprite_2x": "floors/king_f1.png",
+   "sprite_1x": "floors/1x/king_f1.png",
+   "rooms": [
+    {
+     "kind": "great_hall",
+     "name": "Great Hall",
+     "rect": [
+      1,
+      1,
+      14,
+      7
+     ]
+    },
+    {
+     "kind": "kitchen",
+     "name": "Royal Kitchen",
+     "rect": [
+      1,
+      9,
+      4,
+      12
+     ]
+    },
+    {
+     "kind": "vestibule",
+     "name": "Vestibule",
+     "rect": [
+      6,
+      9,
+      10,
+      12
+     ]
+    },
+    {
+     "kind": "stair_hall",
+     "name": "Grand Stair",
+     "rect": [
+      12,
+      9,
+      14,
+      12
+     ]
+    }
+   ],
+   "doors": [
+    {
+     "tile": [
+      8,
+      8
+     ]
+    },
+    {
+     "tile": [
+      5,
+      10
+     ]
+    },
+    {
+     "tile": [
+      11,
+      10
+     ]
+    },
+    {
+     "tile": [
+      2,
+      8
+     ]
+    }
+   ],
+   "stairs": [
+    {
+     "tile": [
+      13,
+      10
+     ],
+     "dir": "up",
+     "to_plane": "king_f2",
+     "arrive": [
+      14,
+      11
+     ]
+    }
+   ],
+   "exits": [
+    {
+     "tile": [
+      7,
+      13
+     ],
+     "to_plane": "realm",
+     "arrive": [
+      149,
+      47
+     ]
+    },
+    {
+     "tile": [
+      8,
+      13
+     ],
+     "to_plane": "realm",
+     "arrive": [
+      150,
+      47
+     ]
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "hearth",
+     "tile": [
+      7,
+      1
+     ]
+    },
+    {
+     "kind": "hearth",
+     "tile": [
+      8,
+      1
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      3,
+      3
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      4,
+      3
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      5,
+      3
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      10,
+      3
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      11,
+      3
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      12,
+      3
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      3,
+      5
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      4,
+      5
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      5,
+      5
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      10,
+      5
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      11,
+      5
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      12,
+      5
+     ]
+    },
+    {
+     "kind": "brazier",
+     "tile": [
+      1,
+      1
+     ]
+    },
+    {
+     "kind": "brazier",
+     "tile": [
+      14,
+      1
+     ]
+    },
+    {
+     "kind": "armour_stand",
+     "tile": [
+      1,
+      7
+     ]
+    },
+    {
+     "kind": "armour_stand",
+     "tile": [
+      14,
+      7
+     ]
+    },
+    {
+     "kind": "hearth",
+     "tile": [
+      1,
+      9
+     ]
+    },
+    {
+     "kind": "table",
+     "tile": [
+      3,
+      11
+     ]
+    },
+    {
+     "kind": "barrel",
+     "tile": [
+      4,
+      12
+     ]
+    },
+    {
+     "kind": "barrel",
+     "tile": [
+      1,
+      12
+     ]
+    },
+    {
+     "kind": "shelf",
+     "tile": [
+      4,
+      9
+     ]
+    },
+    {
+     "kind": "statue",
+     "tile": [
+      6,
+      9
+     ]
+    },
+    {
+     "kind": "statue",
+     "tile": [
+      10,
+      9
+     ]
+    },
+    {
+     "kind": "planter",
+     "tile": [
+      6,
+      12
+     ]
+    },
+    {
+     "kind": "planter",
+     "tile": [
+      10,
+      12
+     ]
+    },
+    {
+     "kind": "planter",
+     "tile": [
+      12,
+      12
+     ]
+    }
+   ]
+  },
+  {
+   "plane": "king_f2",
+   "building": "keep",
+   "level": 2,
+   "name": "Throne Room",
+   "width": 16,
+   "height": 14,
+   "height_m": 4.5,
+   "rows": [
+    "################",
+    "#x.x.xx.x.x#x.x#",
+    "#..........#...#",
+    "#..........#.x.#",
+    "#..........#.x.#",
+    "#..x....x..#...#",
+    "#..........#...#",
+    "#..........#x.x#",
+    "#..........##D##",
+    "#..x....x..#...#",
+    "#..........D.UV#",
+    "#..........#...#",
+    "#x........x#x..#",
+    "################"
+   ],
+   "sprite_2x": "floors/king_f2.png",
+   "sprite_1x": "floors/1x/king_f2.png",
+   "rooms": [
+    {
+     "kind": "throne_room",
+     "name": "Throne Room",
+     "rect": [
+      1,
+      1,
+      10,
+      12
+     ]
+    },
+    {
+     "kind": "council",
+     "name": "Council Chamber",
+     "rect": [
+      12,
+      1,
+      14,
+      7
+     ]
+    },
+    {
+     "kind": "stair_hall",
+     "name": "Grand Stair",
+     "rect": [
+      12,
+      9,
+      14,
+      12
+     ]
+    }
+   ],
+   "doors": [
+    {
+     "tile": [
+      11,
+      10
+     ]
+    },
+    {
+     "tile": [
+      13,
+      8
+     ]
+    }
+   ],
+   "stairs": [
+    {
+     "tile": [
+      13,
+      10
+     ],
+     "dir": "up",
+     "to_plane": "king_f3",
+     "arrive": [
+      14,
+      11
+     ]
+    },
+    {
+     "tile": [
+      14,
+      10
+     ],
+     "dir": "down",
+     "to_plane": "king_f1",
+     "arrive": [
+      13,
+      11
+     ]
+    }
+   ],
+   "exits": [],
+   "furniture": [
+    {
+     "kind": "throne",
+     "tile": [
+      5,
+      1
+     ]
+    },
+    {
+     "kind": "throne",
+     "tile": [
+      6,
+      1
+     ]
+    },
+    {
+     "kind": "armour_stand",
+     "tile": [
+      3,
+      1
+     ]
+    },
+    {
+     "kind": "armour_stand",
+     "tile": [
+      8,
+      1
+     ]
+    },
+    {
+     "kind": "brazier",
+     "tile": [
+      1,
+      1
+     ]
+    },
+    {
+     "kind": "brazier",
+     "tile": [
+      10,
+      1
+     ]
+    },
+    {
+     "kind": "pillar",
+     "tile": [
+      3,
+      5
+     ]
+    },
+    {
+     "kind": "pillar",
+     "tile": [
+      8,
+      5
+     ]
+    },
+    {
+     "kind": "pillar",
+     "tile": [
+      3,
+      9
+     ]
+    },
+    {
+     "kind": "pillar",
+     "tile": [
+      8,
+      9
+     ]
+    },
+    {
+     "kind": "statue",
+     "tile": [
+      1,
+      12
+     ]
+    },
+    {
+     "kind": "statue",
+     "tile": [
+      10,
+      12
+     ]
+    },
+    {
+     "kind": "table",
+     "tile": [
+      13,
+      3
+     ]
+    },
+    {
+     "kind": "table",
+     "tile": [
+      13,
+      4
+     ]
+    },
+    {
+     "kind": "bookshelf",
+     "tile": [
+      12,
+      1
+     ]
+    },
+    {
+     "kind": "bookshelf",
+     "tile": [
+      14,
+      1
+     ]
+    },
+    {
+     "kind": "armchair",
+     "tile": [
+      12,
+      7
+     ]
+    },
+    {
+     "kind": "armchair",
+     "tile": [
+      14,
+      7
+     ]
+    },
+    {
+     "kind": "planter",
+     "tile": [
+      12,
+      12
+     ]
+    }
+   ]
+  },
+  {
+   "plane": "king_f3",
+   "building": "keep",
+   "level": 3,
+   "name": "Royal Apartments",
+   "width": 16,
+   "height": 14,
+   "height_m": 9.0,
+   "rows": [
+    "################",
+    "#.xx..x#x.xx..x#",
+    "#......#.......#",
+    "#......#.......#",
+    "#....x.#.....x.#",
+    "#......#.......#",
+    "###D#######D####",
+    "#..............#",
+    "###D####D####D##",
+    "#x...x#x.xx#...#",
+    "#.....#....#.UV#",
+    "#.....#..xx#...#",
+    "#x.x.x#....#...#",
+    "################"
+   ],
+   "sprite_2x": "floors/king_f3.png",
+   "sprite_1x": "floors/1x/king_f3.png",
+   "rooms": [
+    {
+     "kind": "bedchamber",
+     "name": "King's Bedchamber",
+     "rect": [
+      1,
+      1,
+      6,
+      5
+     ]
+    },
+    {
+     "kind": "chamber",
+     "name": "Queen's Chamber",
+     "rect": [
+      8,
+      1,
+      14,
+      5
+     ]
+    },
+    {
+     "kind": "corridor",
+     "name": "Royal Corridor",
+     "rect": [
+      1,
+      7,
+      14,
+      7
+     ]
+    },
+    {
+     "kind": "treasury",
+     "name": "Treasury",
+     "rect": [
+      1,
+      9,
+      5,
+      12
+     ]
+    },
+    {
+     "kind": "chapel",
+     "name": "Royal Chapel",
+     "rect": [
+      7,
+      9,
+      10,
+      12
+     ]
+    },
+    {
+     "kind": "stair_hall",
+     "name": "Grand Stair",
+     "rect": [
+      12,
+      9,
+      14,
+      12
+     ]
+    }
+   ],
+   "doors": [
+    {
+     "tile": [
+      3,
+      6
+     ]
+    },
+    {
+     "tile": [
+      11,
+      6
+     ]
+    },
+    {
+     "tile": [
+      3,
+      8
+     ]
+    },
+    {
+     "tile": [
+      8,
+      8
+     ]
+    },
+    {
+     "tile": [
+      13,
+      8
+     ]
+    }
+   ],
+   "stairs": [
+    {
+     "tile": [
+      13,
+      10
+     ],
+     "dir": "up",
+     "to_plane": "king_f4",
+     "arrive": [
+      14,
+      11
+     ]
+    },
+    {
+     "tile": [
+      14,
+      10
+     ],
+     "dir": "down",
+     "to_plane": "king_f2",
+     "arrive": [
+      13,
+      11
+     ]
+    }
+   ],
+   "exits": [],
+   "furniture": [
+    {
+     "kind": "bed_big",
+     "tile": [
+      2,
+      1
+     ]
+    },
+    {
+     "kind": "bed_big",
+     "tile": [
+      3,
+      1
+     ]
+    },
+    {
+     "kind": "wardrobe",
+     "tile": [
+      6,
+      1
+     ]
+    },
+    {
+     "kind": "armchair",
+     "tile": [
+      5,
+      4
+     ]
+    },
+    {
+     "kind": "bed_big",
+     "tile": [
+      10,
+      1
+     ]
+    },
+    {
+     "kind": "bed_big",
+     "tile": [
+      11,
+      1
+     ]
+    },
+    {
+     "kind": "dresser",
+     "tile": [
+      14,
+      1
+     ]
+    },
+    {
+     "kind": "harp",
+     "tile": [
+      8,
+      1
+     ]
+    },
+    {
+     "kind": "armchair",
+     "tile": [
+      13,
+      4
+     ]
+    },
+    {
+     "kind": "chest",
+     "tile": [
+      1,
+      9
+     ]
+    },
+    {
+     "kind": "chest",
+     "tile": [
+      5,
+      9
+     ]
+    },
+    {
+     "kind": "chest",
+     "tile": [
+      3,
+      12
+     ]
+    },
+    {
+     "kind": "gold_pile",
+     "tile": [
+      1,
+      12
+     ]
+    },
+    {
+     "kind": "gold_pile",
+     "tile": [
+      5,
+      12
+     ]
+    },
+    {
+     "kind": "altar",
+     "tile": [
+      9,
+      9
+     ]
+    },
+    {
+     "kind": "altar",
+     "tile": [
+      10,
+      9
+     ]
+    },
+    {
+     "kind": "pew",
+     "tile": [
+      9,
+      11
+     ]
+    },
+    {
+     "kind": "pew",
+     "tile": [
+      10,
+      11
+     ]
+    },
+    {
+     "kind": "candelabra",
+     "tile": [
+      7,
+      9
+     ]
+    }
+   ]
+  },
+  {
+   "plane": "king_f4",
+   "building": "keep",
+   "level": 4,
+   "name": "Battlements & Crown Room",
+   "width": 16,
+   "height": 14,
+   "height_m": 13.5,
+   "rows": [
+    "################",
+    "#x.x........x.x#",
+    "#..............#",
+    "#...########...#",
+    "#...#xx..xx#...#",
+    "#...#......#...#",
+    "#x..#..xx..#...#",
+    "#...#......#...#",
+    "#...#......#...#",
+    "#...#......#...#",
+    "#...###D####..V#",
+    "#..............#",
+    "#x.............#",
+    "################"
+   ],
+   "sprite_2x": "floors/king_f4.png",
+   "sprite_1x": "floors/1x/king_f4.png",
+   "rooms": [
+    {
+     "kind": "terrace",
+     "name": "Keep Battlements",
+     "rect": [
+      1,
+      1,
+      14,
+      12
+     ]
+    },
+    {
+     "kind": "crown_room",
+     "name": "Crown Room (Great Tower)",
+     "rect": [
+      5,
+      4,
+      10,
+      9
+     ]
+    },
+    {
+     "kind": "stair_head",
+     "name": "Stair Head",
+     "rect": [
+      12,
+      9,
+      14,
+      12
+     ]
+    }
+   ],
+   "doors": [
+    {
+     "tile": [
+      7,
+      10
+     ]
+    }
+   ],
+   "stairs": [
+    {
+     "tile": [
+      14,
+      10
+     ],
+     "dir": "down",
+     "to_plane": "king_f3",
+     "arrive": [
+      13,
+      11
+     ]
+    }
+   ],
+   "exits": [],
+   "furniture": [
+    {
+     "kind": "crown",
+     "tile": [
+      7,
+      6
+     ]
+    },
+    {
+     "kind": "crown",
+     "tile": [
+      8,
+      6
+     ]
+    },
+    {
+     "kind": "armour_stand",
+     "tile": [
+      5,
+      4
+     ]
+    },
+    {
+     "kind": "armour_stand",
+     "tile": [
+      10,
+      4
+     ]
+    },
+    {
+     "kind": "bookshelf",
+     "tile": [
+      6,
+      4
+     ]
+    },
+    {
+     "kind": "bookshelf",
+     "tile": [
+      9,
+      4
+     ]
+    },
+    {
+     "kind": "telescope",
+     "tile": [
+      1,
+      1
+     ]
+    },
+    {
+     "kind": "brazier",
+     "tile": [
+      14,
+      1
+     ]
+    },
+    {
+     "kind": "brazier",
+     "tile": [
+      1,
+      12
+     ]
+    },
+    {
+     "kind": "cannon",
+     "tile": [
+      3,
+      1
+     ]
+    },
+    {
+     "kind": "cannon",
+     "tile": [
+      12,
+      1
+     ]
+    },
+    {
+     "kind": "banner_pole",
+     "tile": [
+      1,
+      6
+     ]
+    }
+   ],
+   "roof_open": true
+  },
+  {
+   "plane": "king_barracks_f1",
+   "building": "barracks",
+   "level": 1,
+   "name": "Royal Guard Barracks",
+   "width": 7,
+   "height": 16,
+   "height_m": 0.0,
+   "rows": [
+    "#######",
+    "#xx.xx#",
+    "#....x#",
+    "###D###",
+    "#xx..x#",
+    "#.....#",
+    "#x...x#",
+    "#.....#",
+    "#x..xx#",
+    "###D###",
+    "#....x#",
+    "#.x.x.#",
+    "#.x.x.#",
+    "#.....#",
+    "#x...x#",
+    "###E###"
+   ],
+   "sprite_2x": "floors/king_barracks_f1.png",
+   "sprite_1x": "floors/1x/king_barracks_f1.png",
+   "rooms": [
+    {
+     "kind": "armoury",
+     "name": "Armoury",
+     "rect": [
+      1,
+      1,
+      5,
+      2
+     ]
+    },
+    {
+     "kind": "dormitory",
+     "name": "Dormitory",
+     "rect": [
+      1,
+      4,
+      5,
+      8
+     ]
+    },
+    {
+     "kind": "mess_hall",
+     "name": "Mess Hall",
+     "rect": [
+      1,
+      10,
+      5,
+      14
+     ]
+    }
+   ],
+   "doors": [
+    {
+     "tile": [
+      3,
+      3
+     ]
+    },
+    {
+     "tile": [
+      3,
+      9
+     ]
+    }
+   ],
+   "stairs": [],
+   "exits": [
+    {
+     "tile": [
+      3,
+      15
+     ],
+     "to_plane": "realm",
+     "arrive": [
+      171,
+      50
+     ]
+    }
+   ],
+   "furniture": [
+    {
+     "kind": "weapon_rack",
+     "tile": [
+      1,
+      1
+     ]
+    },
+    {
+     "kind": "weapon_rack",
+     "tile": [
+      2,
+      1
+     ]
+    },
+    {
+     "kind": "weapon_rack",
+     "tile": [
+      4,
+      1
+     ]
+    },
+    {
+     "kind": "weapon_rack",
+     "tile": [
+      5,
+      1
+     ]
+    },
+    {
+     "kind": "armour_stand",
+     "tile": [
+      5,
+      2
+     ]
+    },
+    {
+     "kind": "bunk",
+     "tile": [
+      1,
+      4
+     ]
+    },
+    {
+     "kind": "bunk",
+     "tile": [
+      1,
+      6
+     ]
+    },
+    {
+     "kind": "bunk",
+     "tile": [
+      1,
+      8
+     ]
+    },
+    {
+     "kind": "bunk",
+     "tile": [
+      5,
+      4
+     ]
+    },
+    {
+     "kind": "bunk",
+     "tile": [
+      5,
+      6
+     ]
+    },
+    {
+     "kind": "bunk",
+     "tile": [
+      5,
+      8
+     ]
+    },
+    {
+     "kind": "chest",
+     "tile": [
+      2,
+      4
+     ]
+    },
+    {
+     "kind": "chest",
+     "tile": [
+      4,
+      8
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      2,
+      11
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      2,
+      12
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      4,
+      11
+     ]
+    },
+    {
+     "kind": "long_table",
+     "tile": [
+      4,
+      12
+     ]
+    },
+    {
+     "kind": "hearth",
+     "tile": [
+      5,
+      10
+     ]
+    },
+    {
+     "kind": "barrel",
+     "tile": [
+      1,
+      14
+     ]
+    },
+    {
+     "kind": "barrel",
+     "tile": [
+      5,
+      14
+     ]
+    }
+   ]
+  }
+ ]
+}

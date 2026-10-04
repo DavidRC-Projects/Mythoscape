@@ -1,0 +1,37 @@
+{
+  "key": "castle_realm_portal",
+  "name": "Castle Realm Portal",
+  "ppt_2x": 80,
+  "size_2x": [
+    227,
+    265
+  ],
+  "origin_2x": [
+    114,
+    147
+  ],
+  "tiles_frame": {
+    "u0": -2.109454607963562,
+    "u1": 2.109454607963562,
+    "v0": -2.200000023841858,
+    "v1": 2.7347147637513305
+  },
+  "sprite_z_exaggeration": 1.25,
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 0.0,
+    "elevation_deg": 32.0
+  },
+  "anim_frames": 6,
+  "footprint_tiles_approx": 3,
+  "overworld_site": {
+    "x": 111,
+    "y": 43
+  },
+  "realm_return_site": {
+    "x": 150,
+    "y": 186
+  },
+  "style": "OSRS low-poly flat-shaded stone ring + carved runes + magical glow (matches wishing well / castles)",
+  "tris": 1362
+}

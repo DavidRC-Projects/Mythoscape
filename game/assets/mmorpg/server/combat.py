@@ -1,7 +1,8 @@
 """
-Combat resolution using the classic RuneScape (2001-era) combat formulas:
-attack roll vs defence roll decides whether a hit lands, and a max-hit
-based on the effective strength level decides how big it can be.
+Combat resolution using the classic RuneScape (2001-era) combat formulas.
+Strength and strength gear set the highest hit. Attack versus defence
+decides how often the roll reaches those higher numbers. A weak attack
+mostly lands on 0 instead of missing.
 
 These are standard, publicly documented tabletop-style combat mechanics
 (comparable to a dice-game's rules) -- just arithmetic, reimplemented here
@@ -39,16 +40,23 @@ def resolve_hit(attacker_stats, defender_stats):
     attacker_stats / defender_stats: dict with keys
         attack, strength, defence, attack_bonus, strength_bonus, defence_bonus
     Returns (damage:int, did_hit:bool)
+
+    Every swing connects. Strength and strength gear set the highest number.
+    Attack versus defence decides where the roll lands inside that range:
+    a low attack mostly rolls 0, a high attack reaches the higher numbers.
     """
+    top = max_hit(attacker_stats["strength"], attacker_stats.get("strength_bonus", 0))
     chance = hit_chance(
         attacker_stats["attack"], attacker_stats.get("attack_bonus", 0),
         defender_stats["defence"], defender_stats.get("defence_bonus", 0),
     )
-    if random.random() > chance:
-        return 0, False
-    top = max_hit(attacker_stats["strength"], attacker_stats.get("strength_bonus", 0))
-    dmg = random.randint(0, top)
-    return dmg, True
+    # Above 1 crowds the roll near 0. Below 1 crowds it near the strength max.
+    exponent = (1.0 - chance) / max(0.08, chance)
+    roll = random.random() ** exponent
+    dmg = int(math.floor(roll * (top + 1)))
+    if dmg > top:
+        dmg = top
+    return max(0, dmg), True
 
 
 # --- Skill XP / leveling -----------------------------------------------------

@@ -200,6 +200,22 @@ class Database:
             self.conn.execute(
                 "ALTER TABLE players ADD COLUMN gem_bag_contents TEXT NOT NULL DEFAULT '{}'"
             )
+        if "knows_teleport" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN knows_teleport INTEGER NOT NULL DEFAULT 0"
+            )
+        if "player_killer" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN player_killer INTEGER NOT NULL DEFAULT 0"
+            )
+        if "pk_kills" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN pk_kills INTEGER NOT NULL DEFAULT 0"
+            )
+        if "pk_locked_until" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN pk_locked_until REAL NOT NULL DEFAULT 0"
+            )
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS bank ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"

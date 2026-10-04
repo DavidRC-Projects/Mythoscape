@@ -1,0 +1,740 @@
+{
+  "state": "inventory",
+  "source": "chatgpt_mockup_crop",
+  "crop_mockup": [
+    1088,
+    2,
+    1530,
+    1024
+  ],
+  "size_mockup": [
+    442,
+    1022
+  ],
+  "anchor_live": [
+    1708,
+    3
+  ],
+  "size_live": [
+    694,
+    1589
+  ],
+  "anchor_1x": [
+    854,
+    1
+  ],
+  "holes": {
+    "portrait": {
+      "box": [
+        16,
+        22,
+        88,
+        94
+      ],
+      "shape": "circle",
+      "note": "player avatar"
+    },
+    "player_name": {
+      "box": [
+        95,
+        22,
+        340,
+        55
+      ],
+      "note": "display name"
+    },
+    "player_level": {
+      "box": [
+        95,
+        55,
+        200,
+        78
+      ],
+      "note": "Lv N"
+    },
+    "xp_bar": {
+      "box": [
+        95,
+        80,
+        340,
+        98
+      ],
+      "note": "xp fill"
+    },
+    "title": {
+      "box": [
+        95,
+        105,
+        280,
+        130
+      ],
+      "note": "title badge text"
+    },
+    "guild": {
+      "box": [
+        40,
+        138,
+        280,
+        158
+      ],
+      "note": "guild line"
+    },
+    "gold": {
+      "box": [
+        55,
+        168,
+        175,
+        195
+      ],
+      "note": "gold amount"
+    },
+    "gems": {
+      "box": [
+        210,
+        168,
+        300,
+        195
+      ],
+      "note": "gem amount"
+    },
+    "quest_text": {
+      "box": [
+        40,
+        220,
+        400,
+        290
+      ],
+      "note": "quest title + progress"
+    },
+    "inv_capacity": {
+      "box": [
+        280,
+        365,
+        400,
+        390
+      ],
+      "note": "weight/slots"
+    },
+    "slot_0_0": {
+      "box": [
+        32,
+        434,
+        92,
+        494
+      ],
+      "note": "item icon"
+    },
+    "slot_0_1": {
+      "box": [
+        108,
+        434,
+        168,
+        494
+      ],
+      "note": "item icon"
+    },
+    "slot_0_2": {
+      "box": [
+        184,
+        434,
+        244,
+        494
+      ],
+      "note": "item icon"
+    },
+    "slot_0_3": {
+      "box": [
+        260,
+        434,
+        320,
+        494
+      ],
+      "note": "item icon"
+    },
+    "slot_0_4": {
+      "box": [
+        336,
+        434,
+        396,
+        494
+      ],
+      "note": "item icon"
+    },
+    "slot_1_0": {
+      "box": [
+        32,
+        510,
+        92,
+        570
+      ],
+      "note": "item icon"
+    },
+    "slot_1_1": {
+      "box": [
+        108,
+        510,
+        168,
+        570
+      ],
+      "note": "item icon"
+    },
+    "slot_1_2": {
+      "box": [
+        184,
+        510,
+        244,
+        570
+      ],
+      "note": "item icon"
+    },
+    "slot_1_3": {
+      "box": [
+        260,
+        510,
+        320,
+        570
+      ],
+      "note": "item icon"
+    },
+    "slot_1_4": {
+      "box": [
+        336,
+        510,
+        396,
+        570
+      ],
+      "note": "item icon"
+    },
+    "slot_2_0": {
+      "box": [
+        32,
+        586,
+        92,
+        646
+      ],
+      "note": "item icon"
+    },
+    "slot_2_1": {
+      "box": [
+        108,
+        586,
+        168,
+        646
+      ],
+      "note": "item icon"
+    },
+    "slot_2_2": {
+      "box": [
+        184,
+        586,
+        244,
+        646
+      ],
+      "note": "item icon"
+    },
+    "slot_2_3": {
+      "box": [
+        260,
+        586,
+        320,
+        646
+      ],
+      "note": "item icon"
+    },
+    "slot_2_4": {
+      "box": [
+        336,
+        586,
+        396,
+        646
+      ],
+      "note": "item icon"
+    },
+    "slot_3_0": {
+      "box": [
+        32,
+        662,
+        92,
+        722
+      ],
+      "note": "item icon"
+    },
+    "slot_3_1": {
+      "box": [
+        108,
+        662,
+        168,
+        722
+      ],
+      "note": "item icon"
+    },
+    "slot_3_2": {
+      "box": [
+        184,
+        662,
+        244,
+        722
+      ],
+      "note": "item icon"
+    },
+    "slot_3_3": {
+      "box": [
+        260,
+        662,
+        320,
+        722
+      ],
+      "note": "item icon"
+    },
+    "slot_3_4": {
+      "box": [
+        336,
+        662,
+        396,
+        722
+      ],
+      "note": "item icon"
+    },
+    "slot_4_0": {
+      "box": [
+        32,
+        738,
+        92,
+        798
+      ],
+      "note": "item icon"
+    },
+    "slot_4_1": {
+      "box": [
+        108,
+        738,
+        168,
+        798
+      ],
+      "note": "item icon"
+    },
+    "slot_4_2": {
+      "box": [
+        184,
+        738,
+        244,
+        798
+      ],
+      "note": "item icon"
+    },
+    "slot_4_3": {
+      "box": [
+        260,
+        738,
+        320,
+        798
+      ],
+      "note": "item icon"
+    },
+    "slot_4_4": {
+      "box": [
+        336,
+        738,
+        396,
+        798
+      ],
+      "note": "item icon"
+    }
+  },
+  "hitboxes": {
+    "portrait": {
+      "box": [
+        16,
+        22,
+        88,
+        94
+      ],
+      "action": "open_equipment"
+    },
+    "settings": {
+      "box": [
+        402,
+        16,
+        430,
+        44
+      ],
+      "action": "open_settings"
+    },
+    "quest_card": {
+      "box": [
+        20,
+        210,
+        422,
+        300
+      ],
+      "action": "open_quests"
+    },
+    "tab_inventory": {
+      "box": [
+        24,
+        310,
+        110,
+        370
+      ],
+      "action": "sys_inventory"
+    },
+    "tab_crafting": {
+      "box": [
+        120,
+        310,
+        206,
+        370
+      ],
+      "action": "sys_crafting"
+    },
+    "tab_gathering": {
+      "box": [
+        216,
+        310,
+        302,
+        370
+      ],
+      "action": "sys_gathering"
+    },
+    "tab_bags": {
+      "box": [
+        312,
+        310,
+        398,
+        370
+      ],
+      "action": "sys_bags"
+    },
+    "btn_equip": {
+      "box": [
+        16,
+        862,
+        110,
+        922
+      ],
+      "action": "inv_equip"
+    },
+    "btn_use": {
+      "box": [
+        116,
+        862,
+        210,
+        922
+      ],
+      "action": "inv_use"
+    },
+    "btn_split": {
+      "box": [
+        216,
+        862,
+        310,
+        922
+      ],
+      "action": "inv_split"
+    },
+    "btn_drop": {
+      "box": [
+        316,
+        862,
+        410,
+        922
+      ],
+      "action": "inv_drop"
+    },
+    "nav_mounts": {
+      "box": [
+        30,
+        952,
+        90,
+        1007
+      ],
+      "action": "open_mounts"
+    },
+    "nav_pets": {
+      "box": [
+        100,
+        952,
+        160,
+        1007
+      ],
+      "action": "open_pets"
+    },
+    "nav_lore": {
+      "box": [
+        170,
+        952,
+        230,
+        1007
+      ],
+      "action": "open_lore"
+    },
+    "nav_achievements": {
+      "box": [
+        240,
+        952,
+        300,
+        1007
+      ],
+      "action": "open_achievements"
+    },
+    "nav_menu": {
+      "box": [
+        310,
+        952,
+        370,
+        1007
+      ],
+      "action": "open_menu"
+    },
+    "slot_0_0": {
+      "box": [
+        28,
+        430,
+        96,
+        498
+      ],
+      "action": "inv_slot",
+      "index": 0
+    },
+    "slot_0_1": {
+      "box": [
+        104,
+        430,
+        172,
+        498
+      ],
+      "action": "inv_slot",
+      "index": 1
+    },
+    "slot_0_2": {
+      "box": [
+        180,
+        430,
+        248,
+        498
+      ],
+      "action": "inv_slot",
+      "index": 2
+    },
+    "slot_0_3": {
+      "box": [
+        256,
+        430,
+        324,
+        498
+      ],
+      "action": "inv_slot",
+      "index": 3
+    },
+    "slot_0_4": {
+      "box": [
+        332,
+        430,
+        400,
+        498
+      ],
+      "action": "inv_slot",
+      "index": 4
+    },
+    "slot_1_0": {
+      "box": [
+        28,
+        506,
+        96,
+        574
+      ],
+      "action": "inv_slot",
+      "index": 5
+    },
+    "slot_1_1": {
+      "box": [
+        104,
+        506,
+        172,
+        574
+      ],
+      "action": "inv_slot",
+      "index": 6
+    },
+    "slot_1_2": {
+      "box": [
+        180,
+        506,
+        248,
+        574
+      ],
+      "action": "inv_slot",
+      "index": 7
+    },
+    "slot_1_3": {
+      "box": [
+        256,
+        506,
+        324,
+        574
+      ],
+      "action": "inv_slot",
+      "index": 8
+    },
+    "slot_1_4": {
+      "box": [
+        332,
+        506,
+        400,
+        574
+      ],
+      "action": "inv_slot",
+      "index": 9
+    },
+    "slot_2_0": {
+      "box": [
+        28,
+        582,
+        96,
+        650
+      ],
+      "action": "inv_slot",
+      "index": 10
+    },
+    "slot_2_1": {
+      "box": [
+        104,
+        582,
+        172,
+        650
+      ],
+      "action": "inv_slot",
+      "index": 11
+    },
+    "slot_2_2": {
+      "box": [
+        180,
+        582,
+        248,
+        650
+      ],
+      "action": "inv_slot",
+      "index": 12
+    },
+    "slot_2_3": {
+      "box": [
+        256,
+        582,
+        324,
+        650
+      ],
+      "action": "inv_slot",
+      "index": 13
+    },
+    "slot_2_4": {
+      "box": [
+        332,
+        582,
+        400,
+        650
+      ],
+      "action": "inv_slot",
+      "index": 14
+    },
+    "slot_3_0": {
+      "box": [
+        28,
+        658,
+        96,
+        726
+      ],
+      "action": "inv_slot",
+      "index": 15
+    },
+    "slot_3_1": {
+      "box": [
+        104,
+        658,
+        172,
+        726
+      ],
+      "action": "inv_slot",
+      "index": 16
+    },
+    "slot_3_2": {
+      "box": [
+        180,
+        658,
+        248,
+        726
+      ],
+      "action": "inv_slot",
+      "index": 17
+    },
+    "slot_3_3": {
+      "box": [
+        256,
+        658,
+        324,
+        726
+      ],
+      "action": "inv_slot",
+      "index": 18
+    },
+    "slot_3_4": {
+      "box": [
+        332,
+        658,
+        400,
+        726
+      ],
+      "action": "inv_slot",
+      "index": 19
+    },
+    "slot_4_0": {
+      "box": [
+        28,
+        734,
+        96,
+        802
+      ],
+      "action": "inv_slot",
+      "index": 20
+    },
+    "slot_4_1": {
+      "box": [
+        104,
+        734,
+        172,
+        802
+      ],
+      "action": "inv_slot",
+      "index": 21
+    },
+    "slot_4_2": {
+      "box": [
+        180,
+        734,
+        248,
+        802
+      ],
+      "action": "inv_slot",
+      "index": 22
+    },
+    "slot_4_3": {
+      "box": [
+        256,
+        734,
+        324,
+        802
+      ],
+      "action": "inv_slot",
+      "index": 23
+    },
+    "slot_4_4": {
+      "box": [
+        332,
+        734,
+        400,
+        802
+      ],
+      "action": "inv_slot",
+      "index": 24
+    }
+  }
+}

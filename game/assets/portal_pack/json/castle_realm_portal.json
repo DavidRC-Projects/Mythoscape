@@ -1,0 +1,63 @@
+{
+  "key": "castle_realm_portal",
+  "name": "Castle Realm Portal",
+  "flag": "USE_NEW_CASTLE_PORTAL",
+  "also_gate": "USE_CASTLE_REALM",
+  "camera": {
+    "projection": "orthographic",
+    "azimuth_deg": 0.0,
+    "elevation_deg": 32.0
+  },
+  "tile_px": 40,
+  "px_per_m": 26.9,
+  "images": {
+    "castle_realm_portal_1x.png": {
+      "file": "castle_realm_portal_1x.png",
+      "w": 113,
+      "h": 132,
+      "px_per_m": 26.9,
+      "metres_per_px": 0.0372,
+      "origin_px": [
+        57,
+        73
+      ]
+    },
+    "castle_realm_portal_2x.png": {
+      "file": "castle_realm_portal_2x.png",
+      "w": 227,
+      "h": 265,
+      "px_per_m": 53.8,
+      "metres_per_px": 0.0186,
+      "origin_px": [
+        114,
+        147
+      ]
+    }
+  },
+  "anim": {
+    "glow": [
+      "glow_00.png",
+      "glow_01.png",
+      "glow_02.png",
+      "glow_03.png",
+      "glow_04.png",
+      "glow_05.png"
+    ],
+    "fps": 8
+  },
+  "sites": {
+    "overworld": {
+      "x": 111,
+      "y": 43,
+      "name": "Castle Realm portal"
+    },
+    "realm_return": {
+      "x": 150,
+      "y": 186,
+      "name": "Return portal"
+    }
+  },
+  "old_placeholder": "flat 2D purple circle / ellipse on tile",
+  "match": "wishing_well stone ring + castle gold accents + void purple glow",
+  "tris": 1362
+}

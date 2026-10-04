@@ -1,0 +1,7342 @@
+{
+  "id": "sky_anchor",
+  "name": "Sky-Anchor Citadel",
+  "flag": "USE_CASTLE_INTERIORS_V2",
+  "flag_default": "0",
+  "option": "B",
+  "exterior_policy": "Do not rewrite exterior sprites, footprints, gates, or the walk cycle. Interior planes are larger than the keep silhouette.",
+  "source": "phase4/work/json/sky_anchor_castle.json",
+  "replaces_planes_when_flag_on": [
+    "sky_f1",
+    "sky_f2",
+    "sky_f3",
+    "sky_f4"
+  ],
+  "floor_legend": {
+    "#": "wall (blocked)",
+    ".": "floor (walkable)",
+    "D": "door (walkable)",
+    "U": "stairs up (walkable transition)",
+    "V": "stairs down (walkable transition)",
+    "E": "exit to bailey (walkable transition)",
+    "x": "wall-hugging furniture (blocked). Never on doors, stairs, exits, or the 2-tile approach."
+  },
+  "floor_walkable_chars": [
+    ".",
+    "D",
+    "E",
+    "U",
+    "V"
+  ],
+  "collision_rules": [
+    "Blocked: # and x only.",
+    "x is wall-hugging (manhattan <= 2 from a wall) and never in the room aisle.",
+    "No pillars, cones, columns, or fountain basins.",
+    "Door, stair and exit tiles, a 2-tile straight pad, and the side tiles of the first step are clear.",
+    "Room centers stay open. Great halls and the throne room are wider than 2 tiles."
+  ],
+  "integration": {
+    "note": "Flag on: load these rows instead of the v1 floor rows. Exterior door world tiles stay. Only the interior arrive tile changes.",
+    "keep_doors_world_tiles_unchanged": [
+      [
+        49,
+        142
+      ],
+      [
+        50,
+        142
+      ]
+    ],
+    "new_interior_arrive": [
+      [
+        18,
+        24
+      ],
+      [
+        19,
+        24
+      ]
+    ],
+    "exit_to_realm_unchanged": [
+      {
+        "tile": [
+          18,
+          25
+        ],
+        "to_plane": "realm",
+        "arrive": [
+          49,
+          143
+        ]
+      },
+      {
+        "tile": [
+          19,
+          25
+        ],
+        "to_plane": "realm",
+        "arrive": [
+          50,
+          143
+        ]
+      }
+    ],
+    "fountain_courtyard": null
+  },
+  "theme": "sky",
+  "fun_rooms": [
+    "Observatory",
+    "Meditation Chamber"
+  ],
+  "room_count": 20,
+  "floors": [
+    {
+      "plane": "sky_f1",
+      "building": "keep",
+      "level": 1,
+      "name": "Hall of Chains",
+      "width": 40,
+      "height": 26,
+      "screen_note": "Full-screen interior plane (option B). Larger than the keep silhouette. Not a corner panel.",
+      "rows": [
+        "########################################",
+        "#xx.x.x.x.x.x#x.x.x.xx.x.x.#x.x.xx.x.x.#",
+        "#x...........#x............#x..........#",
+        "#x...........#x............#x..........#",
+        "#x...........#.............#..........x#",
+        "#............D.............D...........#",
+        "#x...........#.............#..........x#",
+        "#...........x#x............#..........x#",
+        "#...........x#x............#..........x#",
+        "#...........x#x............#..........x#",
+        "#............#x............#x.........x#",
+        "######D#############D############D######",
+        "#x.x....x.x.x.x.x.x....x.x.#x.x....x.x.#",
+        "#x.........................#x..........#",
+        "#x.........................#..........x#",
+        "#x.........................D.....U.....#",
+        "#..........................#..........x#",
+        "#x........................x#..........x#",
+        "#..........................#....x.x.x.x#",
+        "#################D###########D##########",
+        "########x.x.x.x....x.x.x.x.x...#########",
+        "########......................x#########",
+        "########......................x#########",
+        "########......................x#########",
+        "########.......................#########",
+        "##################EE####################"
+      ],
+      "rooms": [
+        {
+          "kind": "gearworks",
+          "name": "Gearworks",
+          "rect": [
+            1,
+            1,
+            12,
+            10
+          ],
+          "fun": false,
+          "role": "gearworks"
+        },
+        {
+          "kind": "shrine",
+          "name": "Anchor Shrine",
+          "rect": [
+            14,
+            1,
+            26,
+            10
+          ],
+          "fun": false,
+          "role": "shrine"
+        },
+        {
+          "kind": "kitchen",
+          "name": "Sky Kitchen",
+          "rect": [
+            28,
+            1,
+            38,
+            10
+          ],
+          "fun": false,
+          "role": "kitchen"
+        },
+        {
+          "kind": "chains",
+          "name": "Hall of Chains",
+          "rect": [
+            1,
+            12,
+            26,
+            18
+          ],
+          "fun": false,
+          "role": "chains"
+        },
+        {
+          "kind": "stair",
+          "name": "Crystal Stair",
+          "rect": [
+            28,
+            12,
+            38,
+            18
+          ],
+          "fun": false,
+          "role": "stair"
+        },
+        {
+          "kind": "lobby",
+          "name": "Lift Landing",
+          "rect": [
+            8,
+            20,
+            30,
+            24
+          ],
+          "fun": false,
+          "role": "lobby"
+        }
+      ],
+      "doors": [
+        {
+          "tile": [
+            13,
+            5
+          ]
+        },
+        {
+          "tile": [
+            27,
+            5
+          ]
+        },
+        {
+          "tile": [
+            6,
+            11
+          ]
+        },
+        {
+          "tile": [
+            20,
+            11
+          ]
+        },
+        {
+          "tile": [
+            33,
+            11
+          ]
+        },
+        {
+          "tile": [
+            27,
+            15
+          ]
+        },
+        {
+          "tile": [
+            17,
+            19
+          ]
+        },
+        {
+          "tile": [
+            29,
+            19
+          ]
+        }
+      ],
+      "stairs": [
+        {
+          "tile": [
+            33,
+            15
+          ],
+          "dir": "up",
+          "to_plane": "sky_f2",
+          "arrive": [
+            35,
+            20
+          ]
+        }
+      ],
+      "exits": [
+        {
+          "tile": [
+            18,
+            25
+          ],
+          "to_plane": "realm",
+          "arrive": [
+            49,
+            143
+          ]
+        },
+        {
+          "tile": [
+            19,
+            25
+          ],
+          "to_plane": "realm",
+          "arrive": [
+            50,
+            143
+          ]
+        }
+      ],
+      "furniture": [
+        {
+          "kind": "gear",
+          "tile": [
+            1,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "chain_winch",
+          "tile": [
+            12,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "barrel",
+          "tile": [
+            2,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "barrel",
+          "tile": [
+            4,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "barrel",
+          "tile": [
+            6,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "barrel",
+          "tile": [
+            8,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "barrel",
+          "tile": [
+            10,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "barrel",
+          "tile": [
+            1,
+            2
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "barrel",
+          "tile": [
+            1,
+            3
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "barrel",
+          "tile": [
+            1,
+            4
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "barrel",
+          "tile": [
+            1,
+            6
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "barrel",
+          "tile": [
+            12,
+            7
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "barrel",
+          "tile": [
+            12,
+            8
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "barrel",
+          "tile": [
+            12,
+            9
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal_altar",
+          "tile": [
+            20,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            14,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            16,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            18,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            21,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            23,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            25,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            14,
+            2
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            14,
+            3
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            14,
+            7
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            14,
+            8
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            14,
+            9
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            14,
+            10
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "hearth",
+          "tile": [
+            33,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "prep_table",
+          "tile": [
+            28,
+            10
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "water_barrel",
+          "tile": [
+            38,
+            10
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "shelf",
+          "tile": [
+            28,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "sack",
+          "tile": [
+            30,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "barrel",
+          "tile": [
+            32,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "shelf",
+          "tile": [
+            35,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "sack",
+          "tile": [
+            37,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "barrel",
+          "tile": [
+            28,
+            2
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "shelf",
+          "tile": [
+            28,
+            3
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "sack",
+          "tile": [
+            38,
+            4
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "barrel",
+          "tile": [
+            38,
+            6
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "shelf",
+          "tile": [
+            38,
+            7
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "sack",
+          "tile": [
+            38,
+            8
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "barrel",
+          "tile": [
+            38,
+            9
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "long_table",
+          "tile": [
+            1,
+            14
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "long_table",
+          "tile": [
+            1,
+            17
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "long_table",
+          "tile": [
+            26,
+            17
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "brazier",
+          "tile": [
+            1,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            3,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "brazier",
+          "tile": [
+            8,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            10,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "brazier",
+          "tile": [
+            12,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            14,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "brazier",
+          "tile": [
+            16,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            18,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "brazier",
+          "tile": [
+            23,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            25,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "brazier",
+          "tile": [
+            1,
+            13
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            1,
+            15
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            28,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            30,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            35,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            37,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            28,
+            13
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            38,
+            14
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            38,
+            16
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            38,
+            17
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            32,
+            18
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            34,
+            18
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            36,
+            18
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            38,
+            18
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            8,
+            20
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            10,
+            20
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "armour_stand",
+          "tile": [
+            12,
+            20
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            14,
+            20
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            19,
+            20
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "armour_stand",
+          "tile": [
+            21,
+            20
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            23,
+            20
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            25,
+            20
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "armour_stand",
+          "tile": [
+            27,
+            20
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            30,
+            21
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            30,
+            22
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "armour_stand",
+          "tile": [
+            30,
+            23
+          ],
+          "blocks": true,
+          "hug": "wall"
+        }
+      ],
+      "decor": [
+        {
+          "kind": "rug",
+          "tile": [
+            4,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            5,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            6,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            7,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            8,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            4,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            5,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            6,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            7,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            8,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            4,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            5,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            6,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            7,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            8,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            18,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            19,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            20,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            21,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            22,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            18,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            19,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            20,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            21,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            22,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            18,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            19,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            20,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            21,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            22,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            31,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            32,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            33,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            34,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            35,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            31,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            32,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            33,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            34,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            35,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            31,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            32,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            33,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            34,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            35,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            11,
+            14
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            12,
+            14
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            13,
+            14
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            14,
+            14
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            15,
+            14
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            11,
+            15
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            12,
+            15
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            13,
+            15
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            14,
+            15
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            15,
+            15
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            11,
+            16
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            12,
+            16
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            13,
+            16
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            14,
+            16
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            15,
+            16
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            3,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            6,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            9,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            12,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            15,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            18,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            21,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            24,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            30,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            33,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            36,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            13,
+            2
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            0,
+            3
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            27,
+            3
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            39,
+            3
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            0,
+            6
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            27,
+            6
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            39,
+            6
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            13,
+            8
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            0,
+            9
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            27,
+            9
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            39,
+            9
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            1,
+            11
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            4,
+            11
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            7,
+            11
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            10,
+            11
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            13,
+            11
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            16,
+            11
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            19,
+            11
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            22,
+            11
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            25,
+            11
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            28,
+            11
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            31,
+            11
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            34,
+            11
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            37,
+            11
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            0,
+            12
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            27,
+            12
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            39,
+            12
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            0,
+            15
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            39,
+            15
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            0,
+            18
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            27,
+            18
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            39,
+            18
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            2,
+            19
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            5,
+            19
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            8,
+            19
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            11,
+            19
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            14,
+            19
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            20,
+            19
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            23,
+            19
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            26,
+            19
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            32,
+            19
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            35,
+            19
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            38,
+            19
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            7,
+            20
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            31,
+            20
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            7,
+            23
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            31,
+            23
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            8,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            11,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            14,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            17,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            20,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            23,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            26,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            29,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        }
+      ],
+      "guard_posts": [
+        {
+          "id": "sky_f1_stairs_0",
+          "tile": [
+            29,
+            12
+          ],
+          "slot": "inside",
+          "role": "stairs"
+        },
+        {
+          "id": "sky_f1_hall_1",
+          "tile": [
+            9,
+            20
+          ],
+          "slot": "inside",
+          "role": "hall"
+        }
+      ],
+      "checker": {
+        "pass": true,
+        "walkable": 663,
+        "reachable": 663,
+        "rooms": "6/6",
+        "blocking_props": 81,
+        "decor": 126,
+        "errors": []
+      }
+    },
+    {
+      "plane": "sky_f2",
+      "building": "keep",
+      "level": 2,
+      "name": "Hall of Winds",
+      "width": 40,
+      "height": 26,
+      "screen_note": "Full-screen interior plane (option B). Larger than the keep silhouette. Not a corner panel.",
+      "rows": [
+        "########################################",
+        "#x.x.x.x.x.x.x.x.x.x.x.x...#x.x.x.x.x.x#",
+        "#..........................#x..........#",
+        "#x........................x#x..........#",
+        "#..........................#..........x#",
+        "#..........................D...........#",
+        "#x.........................#..........x#",
+        "#..........................#..........x#",
+        "#..........................#..........x#",
+        "#x........................x#..........x#",
+        "#..........................#...........#",
+        "#..........................######D######",
+        "#x........................x#x.x....x...#",
+        "#..........................#...........#",
+        "#..........................D...........#",
+        "#x.........................#..........x#",
+        "#..........................#.x.x....x.x#",
+        "#############D###################D######",
+        "#x.x.x.x.x.x....x.x.x.x.x.x#x.x....x.x.#",
+        "#..........................#x..........#",
+        "#..........................#..........x#",
+        "#..........................D.....U.V...#",
+        "#..........................#..........x#",
+        "#..........................#..........x#",
+        "#..........................#.x.x.x.x...#",
+        "########################################"
+      ],
+      "rooms": [
+        {
+          "kind": "great_hall",
+          "name": "Hall of Winds",
+          "rect": [
+            1,
+            1,
+            26,
+            16
+          ],
+          "fun": false,
+          "role": "great_hall"
+        },
+        {
+          "kind": "observatory",
+          "name": "Observatory",
+          "rect": [
+            28,
+            1,
+            38,
+            10
+          ],
+          "fun": true,
+          "role": "observatory"
+        },
+        {
+          "kind": "workshop",
+          "name": "Crystal Workshop",
+          "rect": [
+            28,
+            12,
+            38,
+            16
+          ],
+          "fun": false,
+          "role": "workshop"
+        },
+        {
+          "kind": "ante",
+          "name": "Wind Antechamber",
+          "rect": [
+            1,
+            18,
+            26,
+            24
+          ],
+          "fun": false,
+          "role": "ante"
+        },
+        {
+          "kind": "stair",
+          "name": "Crystal Stair",
+          "rect": [
+            28,
+            18,
+            38,
+            24
+          ],
+          "fun": false,
+          "role": "stair"
+        }
+      ],
+      "doors": [
+        {
+          "tile": [
+            27,
+            5
+          ]
+        },
+        {
+          "tile": [
+            27,
+            14
+          ]
+        },
+        {
+          "tile": [
+            33,
+            11
+          ]
+        },
+        {
+          "tile": [
+            13,
+            17
+          ]
+        },
+        {
+          "tile": [
+            33,
+            17
+          ]
+        },
+        {
+          "tile": [
+            27,
+            21
+          ]
+        }
+      ],
+      "stairs": [
+        {
+          "tile": [
+            33,
+            21
+          ],
+          "dir": "up",
+          "to_plane": "sky_f3",
+          "arrive": [
+            35,
+            17
+          ]
+        },
+        {
+          "tile": [
+            35,
+            21
+          ],
+          "dir": "down",
+          "to_plane": "sky_f1",
+          "arrive": [
+            33,
+            14
+          ]
+        }
+      ],
+      "exits": [],
+      "furniture": [
+        {
+          "kind": "long_table",
+          "tile": [
+            1,
+            3
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "long_table",
+          "tile": [
+            26,
+            3
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "long_table",
+          "tile": [
+            1,
+            6
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "long_table",
+          "tile": [
+            1,
+            9
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "long_table",
+          "tile": [
+            26,
+            9
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "long_table",
+          "tile": [
+            1,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "long_table",
+          "tile": [
+            26,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "long_table",
+          "tile": [
+            1,
+            15
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            1,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candelabra",
+          "tile": [
+            3,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            5,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candelabra",
+          "tile": [
+            7,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            9,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candelabra",
+          "tile": [
+            11,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            13,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candelabra",
+          "tile": [
+            15,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            17,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candelabra",
+          "tile": [
+            19,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            21,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candelabra",
+          "tile": [
+            23,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "telescope",
+          "tile": [
+            38,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "chair",
+          "tile": [
+            28,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            30,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "chair",
+          "tile": [
+            32,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            34,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "chair",
+          "tile": [
+            36,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            28,
+            2
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "chair",
+          "tile": [
+            28,
+            3
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            38,
+            4
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "chair",
+          "tile": [
+            38,
+            6
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            38,
+            7
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "chair",
+          "tile": [
+            38,
+            8
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            38,
+            9
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "shelf",
+          "tile": [
+            28,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "stool",
+          "tile": [
+            30,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            35,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            38,
+            15
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "shelf",
+          "tile": [
+            29,
+            16
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "stool",
+          "tile": [
+            31,
+            16
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            36,
+            16
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "shelf",
+          "tile": [
+            38,
+            16
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            1,
+            18
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            3,
+            18
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "armour_stand",
+          "tile": [
+            5,
+            18
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            7,
+            18
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            9,
+            18
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "armour_stand",
+          "tile": [
+            11,
+            18
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            16,
+            18
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            18,
+            18
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "armour_stand",
+          "tile": [
+            20,
+            18
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            22,
+            18
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            24,
+            18
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "armour_stand",
+          "tile": [
+            26,
+            18
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            28,
+            18
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            30,
+            18
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            35,
+            18
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            37,
+            18
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            28,
+            19
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            38,
+            20
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            38,
+            22
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            38,
+            23
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            29,
+            24
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            31,
+            24
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            33,
+            24
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            35,
+            24
+          ],
+          "blocks": true,
+          "hug": "wall"
+        }
+      ],
+      "decor": [
+        {
+          "kind": "dance_floor",
+          "tile": [
+            9,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            10,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            11,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            12,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            13,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            14,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            15,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            16,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            17,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            9,
+            7
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            10,
+            7
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            11,
+            7
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            12,
+            7
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            13,
+            7
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            14,
+            7
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            15,
+            7
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            16,
+            7
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            17,
+            7
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            9,
+            8
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            10,
+            8
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            11,
+            8
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            12,
+            8
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            13,
+            8
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            14,
+            8
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            15,
+            8
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            16,
+            8
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            17,
+            8
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            9,
+            9
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            10,
+            9
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            11,
+            9
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            12,
+            9
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            13,
+            9
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            14,
+            9
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            15,
+            9
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            16,
+            9
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            17,
+            9
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            9,
+            10
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            10,
+            10
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            11,
+            10
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            12,
+            10
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            13,
+            10
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            14,
+            10
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            15,
+            10
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            16,
+            10
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "dance_floor",
+          "tile": [
+            17,
+            10
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            31,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            32,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            33,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            34,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            35,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            31,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            32,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            33,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            34,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            35,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            31,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            32,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            33,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            34,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            35,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            11,
+            20
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            12,
+            20
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            13,
+            20
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            14,
+            20
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            15,
+            20
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            11,
+            21
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            12,
+            21
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            13,
+            21
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            14,
+            21
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            15,
+            21
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            11,
+            22
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            12,
+            22
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            13,
+            22
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            14,
+            22
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            15,
+            22
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            3,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            6,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            9,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            12,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            15,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            18,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            21,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            24,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            30,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            33,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            36,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            0,
+            3
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            27,
+            3
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            39,
+            3
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            0,
+            6
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            27,
+            6
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            39,
+            6
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            0,
+            9
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            27,
+            9
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            39,
+            9
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            28,
+            11
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            31,
+            11
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            34,
+            11
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            37,
+            11
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            0,
+            12
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            27,
+            12
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            39,
+            12
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            0,
+            15
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            27,
+            15
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            39,
+            15
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            1,
+            17
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            4,
+            17
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            7,
+            17
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            10,
+            17
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            16,
+            17
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            19,
+            17
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            22,
+            17
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            25,
+            17
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            28,
+            17
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            31,
+            17
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            34,
+            17
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            37,
+            17
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            0,
+            18
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            27,
+            18
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            39,
+            18
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            0,
+            21
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            39,
+            21
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            0,
+            24
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            27,
+            24
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            39,
+            24
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            2,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            5,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            8,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            11,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            14,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            17,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            20,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            23,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            26,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            29,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            32,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            35,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            38,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        }
+      ],
+      "guard_posts": [
+        {
+          "id": "sky_f2_stairs_0",
+          "tile": [
+            29,
+            18
+          ],
+          "slot": "inside",
+          "role": "stairs"
+        }
+      ],
+      "checker": {
+        "pass": true,
+        "walkable": 781,
+        "reachable": 781,
+        "rooms": "5/5",
+        "blocking_props": 65,
+        "decor": 138,
+        "errors": []
+      }
+    },
+    {
+      "plane": "sky_f3",
+      "building": "keep",
+      "level": 3,
+      "name": "Stormwarden's Quarters",
+      "width": 40,
+      "height": 26,
+      "screen_note": "Full-screen interior plane (option B). Larger than the keep silhouette. Not a corner panel.",
+      "rows": [
+        "########################################",
+        "#xx.x.x.x.x.x.x.x#x.x.x.x.x#xx.x.x.x.x.#",
+        "#x...............#........x#x..........#",
+        "#x...............#........x#x..........#",
+        "#x...............#.........#..........x#",
+        "#x...............#.........D...........#",
+        "#................D.........#..........x#",
+        "#x...............#........x#..........x#",
+        "#................#........x#..........x#",
+        "#................#........x#..........x#",
+        "#................#........x#..........x#",
+        "#................#........x######D######",
+        "#...............x#.........#x.x....x.x.#",
+        "########D#############D#####x..........#",
+        "#x.x.x....x.x.x.x#x.x....x.#x..........#",
+        "#...............x#x........#x..........#",
+        "#...............x#x........#x..........#",
+        "#...............x#x........#x..........#",
+        "#................#.........#.....U.V..x#",
+        "#x...............D.........D...........#",
+        "#................#.........#..........x#",
+        "#x...............#x........#..........x#",
+        "#................#x........#...........#",
+        "#................#x........#...........#",
+        "#x..............x#x.x.x....#...........#",
+        "########################################"
+      ],
+      "rooms": [
+        {
+          "kind": "storm",
+          "name": "Stormwarden's Bedchamber",
+          "rect": [
+            1,
+            1,
+            16,
+            12
+          ],
+          "fun": false,
+          "role": "storm"
+        },
+        {
+          "kind": "meditation",
+          "name": "Meditation Chamber",
+          "rect": [
+            18,
+            1,
+            26,
+            12
+          ],
+          "fun": true,
+          "role": "meditation"
+        },
+        {
+          "kind": "guest_cell",
+          "name": "Guest Cell",
+          "rect": [
+            28,
+            1,
+            38,
+            10
+          ],
+          "fun": false,
+          "role": "guest_cell"
+        },
+        {
+          "kind": "vault",
+          "name": "Crystal Vault",
+          "rect": [
+            1,
+            14,
+            16,
+            24
+          ],
+          "fun": false,
+          "role": "vault"
+        },
+        {
+          "kind": "wind_gallery",
+          "name": "Wind Gallery",
+          "rect": [
+            18,
+            14,
+            26,
+            24
+          ],
+          "fun": false,
+          "role": "wind_gallery"
+        },
+        {
+          "kind": "stair",
+          "name": "Crystal Stair",
+          "rect": [
+            28,
+            12,
+            38,
+            24
+          ],
+          "fun": false,
+          "role": "stair"
+        }
+      ],
+      "doors": [
+        {
+          "tile": [
+            17,
+            6
+          ]
+        },
+        {
+          "tile": [
+            27,
+            5
+          ]
+        },
+        {
+          "tile": [
+            33,
+            11
+          ]
+        },
+        {
+          "tile": [
+            8,
+            13
+          ]
+        },
+        {
+          "tile": [
+            22,
+            13
+          ]
+        },
+        {
+          "tile": [
+            17,
+            19
+          ]
+        },
+        {
+          "tile": [
+            27,
+            19
+          ]
+        }
+      ],
+      "stairs": [
+        {
+          "tile": [
+            33,
+            18
+          ],
+          "dir": "up",
+          "to_plane": "sky_f4",
+          "arrive": [
+            30,
+            16
+          ]
+        },
+        {
+          "tile": [
+            35,
+            18
+          ],
+          "dir": "down",
+          "to_plane": "sky_f2",
+          "arrive": [
+            33,
+            20
+          ]
+        }
+      ],
+      "exits": [],
+      "furniture": [
+        {
+          "kind": "four_poster",
+          "tile": [
+            1,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "wardrobe",
+          "tile": [
+            16,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "chest",
+          "tile": [
+            16,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            2,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            4,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            6,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            8,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            10,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            12,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            14,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            1,
+            2
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            1,
+            3
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            1,
+            4
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            1,
+            5
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            1,
+            7
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "cushion",
+          "tile": [
+            18,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            20,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            22,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "cushion",
+          "tile": [
+            24,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            26,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            26,
+            2
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "cushion",
+          "tile": [
+            26,
+            3
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            26,
+            7
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            26,
+            8
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "cushion",
+          "tile": [
+            26,
+            9
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            26,
+            10
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            26,
+            11
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "bed",
+          "tile": [
+            28,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "decoy_chest",
+          "tile": [
+            38,
+            10
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "stool",
+          "tile": [
+            29,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "stool",
+          "tile": [
+            31,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "stool",
+          "tile": [
+            33,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "stool",
+          "tile": [
+            35,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "stool",
+          "tile": [
+            37,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "stool",
+          "tile": [
+            28,
+            2
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "stool",
+          "tile": [
+            28,
+            3
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "stool",
+          "tile": [
+            38,
+            4
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "stool",
+          "tile": [
+            38,
+            6
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "stool",
+          "tile": [
+            38,
+            7
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "stool",
+          "tile": [
+            38,
+            8
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "stool",
+          "tile": [
+            38,
+            9
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "gold_pile",
+          "tile": [
+            1,
+            24
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "chest",
+          "tile": [
+            16,
+            24
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "shelf",
+          "tile": [
+            1,
+            14
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "shelf",
+          "tile": [
+            3,
+            14
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "shelf",
+          "tile": [
+            5,
+            14
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "shelf",
+          "tile": [
+            10,
+            14
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "shelf",
+          "tile": [
+            12,
+            14
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "shelf",
+          "tile": [
+            14,
+            14
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "shelf",
+          "tile": [
+            16,
+            14
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "shelf",
+          "tile": [
+            16,
+            15
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "shelf",
+          "tile": [
+            16,
+            16
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "shelf",
+          "tile": [
+            16,
+            17
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "shelf",
+          "tile": [
+            1,
+            19
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "shelf",
+          "tile": [
+            1,
+            21
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            18,
+            14
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            20,
+            14
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            25,
+            14
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            18,
+            15
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            18,
+            16
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            18,
+            17
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            18,
+            21
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            18,
+            22
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            18,
+            23
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            18,
+            24
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            20,
+            24
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            22,
+            24
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            28,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            30,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            35,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            37,
+            12
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            28,
+            13
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            28,
+            14
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            28,
+            15
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            28,
+            16
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            28,
+            17
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            38,
+            18
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candle",
+          "tile": [
+            38,
+            20
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "banner",
+          "tile": [
+            38,
+            21
+          ],
+          "blocks": true,
+          "hug": "wall"
+        }
+      ],
+      "decor": [
+        {
+          "kind": "rug",
+          "tile": [
+            6,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            7,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            8,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            9,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            10,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            6,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            7,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            8,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            9,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            10,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            6,
+            7
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            7,
+            7
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            8,
+            7
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            9,
+            7
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            10,
+            7
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            20,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            21,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            22,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            23,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            24,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            20,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            21,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            22,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            23,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            24,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            20,
+            7
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            21,
+            7
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            22,
+            7
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            23,
+            7
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            24,
+            7
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            31,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            32,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            33,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            34,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            35,
+            4
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            31,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            32,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            33,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            34,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            35,
+            5
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            31,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            32,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            33,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            34,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            35,
+            6
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            6,
+            18
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            7,
+            18
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            8,
+            18
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            9,
+            18
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            10,
+            18
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            6,
+            19
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            7,
+            19
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            8,
+            19
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            9,
+            19
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            10,
+            19
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            6,
+            20
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            7,
+            20
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            8,
+            20
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            9,
+            20
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            10,
+            20
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            20,
+            18
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            21,
+            18
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            22,
+            18
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            23,
+            18
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            24,
+            18
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            20,
+            19
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            21,
+            19
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            22,
+            19
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            23,
+            19
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            24,
+            19
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            20,
+            20
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            21,
+            20
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            22,
+            20
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            23,
+            20
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            24,
+            20
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            3,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            6,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            9,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            12,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            15,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            18,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            21,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            24,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            30,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            33,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            36,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            17,
+            1
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            0,
+            3
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            27,
+            3
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            39,
+            3
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            17,
+            4
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            0,
+            6
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            27,
+            6
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            39,
+            6
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            17,
+            7
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            0,
+            9
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            27,
+            9
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            39,
+            9
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            17,
+            10
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            28,
+            11
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            31,
+            11
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            34,
+            11
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            37,
+            11
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            0,
+            12
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            27,
+            12
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            39,
+            12
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            2,
+            13
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            5,
+            13
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            11,
+            13
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            14,
+            13
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            20,
+            13
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            23,
+            13
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            26,
+            13
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            0,
+            15
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            27,
+            15
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            39,
+            15
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            17,
+            16
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            0,
+            18
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            27,
+            18
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            39,
+            18
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            0,
+            21
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            27,
+            21
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            39,
+            21
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            17,
+            22
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            0,
+            24
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            27,
+            24
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            39,
+            24
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            2,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            5,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            8,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            11,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            14,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            20,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            23,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            26,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            29,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            32,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            35,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            38,
+            25
+          ],
+          "blocks": false,
+          "mount": "wall"
+        }
+      ],
+      "guard_posts": [
+        {
+          "id": "sky_f3_vault_0",
+          "tile": [
+            2,
+            14
+          ],
+          "slot": "inside",
+          "role": "vault"
+        },
+        {
+          "id": "sky_f3_stairs_1",
+          "tile": [
+            29,
+            12
+          ],
+          "slot": "inside",
+          "role": "stairs"
+        }
+      ],
+      "checker": {
+        "pass": true,
+        "walkable": 756,
+        "reachable": 756,
+        "rooms": "6/6",
+        "blocking_props": 79,
+        "decor": 139,
+        "errors": []
+      }
+    },
+    {
+      "plane": "sky_f4",
+      "building": "keep",
+      "level": 4,
+      "name": "The Crystal Crown",
+      "width": 36,
+      "height": 22,
+      "screen_note": "Full-screen interior plane (option B). Larger than the keep silhouette. Not a corner panel.",
+      "rows": [
+        "####################################",
+        "#x.x.x.x.x.x.x.x...................#",
+        "#..................................#",
+        "#.......#################..........#",
+        "#.......#x.x.x.xx.x.x.x.#..........#",
+        "#.......#x..............#..........#",
+        "#.......#x..............#..........#",
+        "#.......#x..............#..........#",
+        "#.......#x..............#..........#",
+        "#.......#x..............#..........#",
+        "#.......#...............#..........#",
+        "#.......#...............#..........#",
+        "#.......#...............#..........#",
+        "#.......#...............#..........#",
+        "#.......#...............#..........#",
+        "#.......########D########.##########",
+        "#.........................#.......##",
+        "#.........................D...V...##",
+        "#.........................#.......##",
+        "#.........................#.......##",
+        "#.........................##########",
+        "####################################"
+      ],
+      "rooms": [
+        {
+          "kind": "terrace",
+          "name": "Sky Terrace",
+          "rect": [
+            1,
+            1,
+            34,
+            20
+          ],
+          "fun": false,
+          "role": "terrace"
+        },
+        {
+          "kind": "heart",
+          "name": "Heart-Crystal Chamber",
+          "rect": [
+            9,
+            4,
+            23,
+            14
+          ],
+          "fun": false,
+          "role": "heart"
+        },
+        {
+          "kind": "stair",
+          "name": "Stair Head",
+          "rect": [
+            27,
+            16,
+            33,
+            19
+          ],
+          "fun": false,
+          "role": "stair"
+        }
+      ],
+      "doors": [
+        {
+          "tile": [
+            16,
+            15
+          ]
+        },
+        {
+          "tile": [
+            26,
+            17
+          ]
+        }
+      ],
+      "stairs": [
+        {
+          "tile": [
+            30,
+            17
+          ],
+          "dir": "down",
+          "to_plane": "sky_f3",
+          "arrive": [
+            33,
+            17
+          ]
+        }
+      ],
+      "exits": [],
+      "furniture": [
+        {
+          "kind": "planter",
+          "tile": [
+            1,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "bench",
+          "tile": [
+            3,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "planter",
+          "tile": [
+            5,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "bench",
+          "tile": [
+            7,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "planter",
+          "tile": [
+            9,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "bench",
+          "tile": [
+            11,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "planter",
+          "tile": [
+            13,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "bench",
+          "tile": [
+            15,
+            1
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal_throne",
+          "tile": [
+            16,
+            4
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            9,
+            4
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candelabra",
+          "tile": [
+            11,
+            4
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            13,
+            4
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candelabra",
+          "tile": [
+            15,
+            4
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            18,
+            4
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candelabra",
+          "tile": [
+            20,
+            4
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            22,
+            4
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candelabra",
+          "tile": [
+            9,
+            5
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            9,
+            6
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candelabra",
+          "tile": [
+            9,
+            7
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "crystal",
+          "tile": [
+            9,
+            8
+          ],
+          "blocks": true,
+          "hug": "wall"
+        },
+        {
+          "kind": "candelabra",
+          "tile": [
+            9,
+            9
+          ],
+          "blocks": true,
+          "hug": "wall"
+        }
+      ],
+      "decor": [
+        {
+          "kind": "rug",
+          "tile": [
+            14,
+            8
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            15,
+            8
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            16,
+            8
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            17,
+            8
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            18,
+            8
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            14,
+            9
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            15,
+            9
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            16,
+            9
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            17,
+            9
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            18,
+            9
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            14,
+            10
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            15,
+            10
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            16,
+            10
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            17,
+            10
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "rug",
+          "tile": [
+            18,
+            10
+          ],
+          "blocks": false,
+          "layer": "floor"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            3,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            6,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            9,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            12,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            15,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            18,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            21,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            24,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            27,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            30,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            33,
+            0
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            35,
+            1
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            0,
+            3
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            9,
+            3
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            12,
+            3
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            15,
+            3
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            18,
+            3
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            21,
+            3
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            24,
+            3
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            8,
+            4
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            35,
+            4
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            0,
+            6
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            24,
+            6
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            8,
+            7
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            35,
+            7
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            0,
+            9
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            24,
+            9
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            8,
+            10
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            35,
+            10
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            0,
+            12
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            24,
+            12
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            8,
+            13
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            35,
+            13
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            0,
+            15
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            9,
+            15
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            12,
+            15
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            15,
+            15
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            18,
+            15
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            21,
+            15
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            24,
+            15
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            27,
+            15
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            30,
+            15
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            33,
+            15
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            26,
+            16
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            34,
+            17
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            0,
+            18
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            26,
+            19
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            28,
+            20
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            31,
+            20
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            3,
+            21
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            6,
+            21
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            9,
+            21
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            12,
+            21
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            15,
+            21
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            18,
+            21
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "wind_chime",
+          "tile": [
+            21,
+            21
+          ],
+          "blocks": false,
+          "mount": "wall"
+        },
+        {
+          "kind": "crystal_sconce",
+          "tile": [
+            24,
+            21
+          ],
+          "blocks": false,
+          "mount": "wall"
+        }
+      ],
+      "guard_posts": [
+        {
+          "id": "sky_f4_stairs_0",
+          "tile": [
+            27,
+            16
+          ],
+          "slot": "inside",
+          "role": "stairs"
+        }
+      ],
+      "checker": {
+        "pass": true,
+        "walkable": 579,
+        "reachable": 579,
+        "rooms": "3/3",
+        "blocking_props": 21,
+        "decor": 72,
+        "errors": []
+      }
+    }
+  ]
+}

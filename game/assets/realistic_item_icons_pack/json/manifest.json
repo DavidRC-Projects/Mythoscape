@@ -1,0 +1,1250 @@
+[
+  {
+    "id": "coins",
+    "name": "Coins",
+    "category": "currency",
+    "file": "icons/coins.png"
+  },
+  {
+    "id": "void_key_amethyst",
+    "name": "Amethyst Key",
+    "category": "key",
+    "file": "icons/void_key_amethyst.png"
+  },
+  {
+    "id": "void_key_obsidian",
+    "name": "Obsidian Key",
+    "category": "key",
+    "file": "icons/void_key_obsidian.png"
+  },
+  {
+    "id": "void_rift_sigil",
+    "name": "Rift Sigil",
+    "category": "key",
+    "file": "icons/void_rift_sigil.png"
+  },
+  {
+    "id": "depths_bone_key",
+    "name": "Bone Key",
+    "category": "key",
+    "file": "icons/depths_bone_key.png"
+  },
+  {
+    "id": "depths_tide_key",
+    "name": "Tide Key",
+    "category": "key",
+    "file": "icons/depths_tide_key.png"
+  },
+  {
+    "id": "depths_knight_seal",
+    "name": "Knights' Seal",
+    "category": "key",
+    "file": "icons/depths_knight_seal.png"
+  },
+  {
+    "id": "bone_crown",
+    "name": "Bone Crown",
+    "category": "armor",
+    "file": "icons/bone_crown.png"
+  },
+  {
+    "id": "bronze_sword",
+    "name": "Bronze Sword",
+    "category": "weapon",
+    "file": "icons/bronze_sword.png"
+  },
+  {
+    "id": "iron_sword",
+    "name": "Iron Sword",
+    "category": "weapon",
+    "file": "icons/iron_sword.png"
+  },
+  {
+    "id": "steel_longsword",
+    "name": "Steel Longsword",
+    "category": "weapon",
+    "file": "icons/steel_longsword.png"
+  },
+  {
+    "id": "iron_dagger",
+    "name": "Iron Dagger",
+    "category": "weapon",
+    "file": "icons/iron_dagger.png"
+  },
+  {
+    "id": "bronze_dagger",
+    "name": "Bronze Dagger",
+    "category": "weapon",
+    "file": "icons/bronze_dagger.png"
+  },
+  {
+    "id": "steel_dagger",
+    "name": "Steel Dagger",
+    "category": "weapon",
+    "file": "icons/steel_dagger.png"
+  },
+  {
+    "id": "bronze_battleaxe",
+    "name": "Bronze Battleaxe",
+    "category": "weapon",
+    "file": "icons/bronze_battleaxe.png"
+  },
+  {
+    "id": "iron_battleaxe",
+    "name": "Iron Battleaxe",
+    "category": "weapon",
+    "file": "icons/iron_battleaxe.png"
+  },
+  {
+    "id": "steel_battleaxe",
+    "name": "Steel Battleaxe",
+    "category": "weapon",
+    "file": "icons/steel_battleaxe.png"
+  },
+  {
+    "id": "mithril_dagger",
+    "name": "Mithril Dagger",
+    "category": "weapon",
+    "file": "icons/mithril_dagger.png"
+  },
+  {
+    "id": "mithril_sword",
+    "name": "Mithril Sword",
+    "category": "weapon",
+    "file": "icons/mithril_sword.png"
+  },
+  {
+    "id": "mithril_battleaxe",
+    "name": "Mithril Battleaxe",
+    "category": "weapon",
+    "file": "icons/mithril_battleaxe.png"
+  },
+  {
+    "id": "adamant_dagger",
+    "name": "Adamantite Dagger",
+    "category": "weapon",
+    "file": "icons/adamant_dagger.png"
+  },
+  {
+    "id": "adamant_sword",
+    "name": "Adamantite Sword",
+    "category": "weapon",
+    "file": "icons/adamant_sword.png"
+  },
+  {
+    "id": "adamant_battleaxe",
+    "name": "Adamantite Battleaxe",
+    "category": "weapon",
+    "file": "icons/adamant_battleaxe.png"
+  },
+  {
+    "id": "mythos_dagger",
+    "name": "Mythos Dagger",
+    "category": "weapon",
+    "file": "icons/mythos_dagger.png"
+  },
+  {
+    "id": "mythos_longsword",
+    "name": "Mythos Longsword",
+    "category": "weapon",
+    "file": "icons/mythos_longsword.png"
+  },
+  {
+    "id": "mythos_body",
+    "name": "Mythos Armour",
+    "category": "armor",
+    "file": "icons/mythos_body.png"
+  },
+  {
+    "id": "mythos_helmet",
+    "name": "Mythos Dragon Helm",
+    "category": "armor",
+    "file": "icons/mythos_helmet.png"
+  },
+  {
+    "id": "mythos_legs",
+    "name": "Mythos Platelegs",
+    "category": "armor",
+    "file": "icons/mythos_legs.png"
+  },
+  {
+    "id": "mythos_shield",
+    "name": "Mythos Kiteshield",
+    "category": "armor",
+    "file": "icons/mythos_shield.png"
+  },
+  {
+    "id": "tidehollow_amulet",
+    "name": "Tidehollow Medal",
+    "category": "armor",
+    "file": "icons/tidehollow_amulet.png"
+  },
+  {
+    "id": "emberdeep_amulet",
+    "name": "Emberdeep Medal",
+    "category": "armor",
+    "file": "icons/emberdeep_amulet.png"
+  },
+  {
+    "id": "eclipse_cleaver",
+    "name": "Eclipse Cleaver",
+    "category": "weapon",
+    "file": "icons/eclipse_cleaver.png"
+  },
+  {
+    "id": "eclipse_shield",
+    "name": "Eclipse Aegis",
+    "category": "armor",
+    "file": "icons/eclipse_shield.png"
+  },
+  {
+    "id": "eclipse_body",
+    "name": "Eclipse Platebody",
+    "category": "armor",
+    "file": "icons/eclipse_body.png"
+  },
+  {
+    "id": "eclipse_legs",
+    "name": "Eclipse Platelegs",
+    "category": "armor",
+    "file": "icons/eclipse_legs.png"
+  },
+  {
+    "id": "eclipse_helmet",
+    "name": "Eclipse Grillhelm",
+    "category": "armor",
+    "file": "icons/eclipse_helmet.png"
+  },
+  {
+    "id": "bronze_axe",
+    "name": "Bronze Axe",
+    "category": "tool",
+    "file": "icons/bronze_axe.png"
+  },
+  {
+    "id": "bronze_pickaxe",
+    "name": "Bronze Pickaxe",
+    "category": "tool",
+    "file": "icons/bronze_pickaxe.png"
+  },
+  {
+    "id": "small_fishing_net",
+    "name": "Small Fishing Net",
+    "category": "tool",
+    "file": "icons/small_fishing_net.png"
+  },
+  {
+    "id": "fishing_rod",
+    "name": "Fishing Rod",
+    "category": "tool",
+    "file": "icons/fishing_rod.png"
+  },
+  {
+    "id": "fly_fishing_rod",
+    "name": "Fly Fishing Rod",
+    "category": "tool",
+    "file": "icons/fly_fishing_rod.png"
+  },
+  {
+    "id": "lobster_pot",
+    "name": "Lobster Pot",
+    "category": "tool",
+    "file": "icons/lobster_pot.png"
+  },
+  {
+    "id": "harpoon",
+    "name": "Harpoon",
+    "category": "tool",
+    "file": "icons/harpoon.png"
+  },
+  {
+    "id": "wooden_shield",
+    "name": "Wooden Shield",
+    "category": "armor",
+    "file": "icons/wooden_shield.png"
+  },
+  {
+    "id": "bronze_sq_shield",
+    "name": "Bronze Square Shield",
+    "category": "armor",
+    "file": "icons/bronze_sq_shield.png"
+  },
+  {
+    "id": "bronze_shield",
+    "name": "Bronze Kiteshield",
+    "category": "armor",
+    "file": "icons/bronze_shield.png"
+  },
+  {
+    "id": "iron_sq_shield",
+    "name": "Iron Square Shield",
+    "category": "armor",
+    "file": "icons/iron_sq_shield.png"
+  },
+  {
+    "id": "iron_shield",
+    "name": "Iron Kiteshield",
+    "category": "armor",
+    "file": "icons/iron_shield.png"
+  },
+  {
+    "id": "steel_sq_shield",
+    "name": "Steel Square Shield",
+    "category": "armor",
+    "file": "icons/steel_sq_shield.png"
+  },
+  {
+    "id": "steel_shield",
+    "name": "Steel Kiteshield",
+    "category": "armor",
+    "file": "icons/steel_shield.png"
+  },
+  {
+    "id": "mithril_sq_shield",
+    "name": "Mithril Square Shield",
+    "category": "armor",
+    "file": "icons/mithril_sq_shield.png"
+  },
+  {
+    "id": "mithril_shield",
+    "name": "Mithril Kiteshield",
+    "category": "armor",
+    "file": "icons/mithril_shield.png"
+  },
+  {
+    "id": "adamant_sq_shield",
+    "name": "Adamantite Square Shield",
+    "category": "armor",
+    "file": "icons/adamant_sq_shield.png"
+  },
+  {
+    "id": "adamant_shield",
+    "name": "Adamantite Kiteshield",
+    "category": "armor",
+    "file": "icons/adamant_shield.png"
+  },
+  {
+    "id": "leather_cowl",
+    "name": "Leather Cowl",
+    "category": "armor",
+    "file": "icons/leather_cowl.png"
+  },
+  {
+    "id": "bronze_helmet",
+    "name": "Bronze Helmet",
+    "category": "armor",
+    "file": "icons/bronze_helmet.png"
+  },
+  {
+    "id": "iron_helmet",
+    "name": "Iron Helmet",
+    "category": "armor",
+    "file": "icons/iron_helmet.png"
+  },
+  {
+    "id": "steel_helmet",
+    "name": "Steel Helmet",
+    "category": "armor",
+    "file": "icons/steel_helmet.png"
+  },
+  {
+    "id": "mithril_helmet",
+    "name": "Mithril Helmet",
+    "category": "armor",
+    "file": "icons/mithril_helmet.png"
+  },
+  {
+    "id": "adamant_helmet",
+    "name": "Adamantite Helmet",
+    "category": "armor",
+    "file": "icons/adamant_helmet.png"
+  },
+  {
+    "id": "leather_body",
+    "name": "Leather Body",
+    "category": "armor",
+    "file": "icons/leather_body.png"
+  },
+  {
+    "id": "bronze_chainbody",
+    "name": "Bronze Chainbody",
+    "category": "armor",
+    "file": "icons/bronze_chainbody.png"
+  },
+  {
+    "id": "bronze_body",
+    "name": "Bronze Platebody",
+    "category": "armor",
+    "file": "icons/bronze_body.png"
+  },
+  {
+    "id": "iron_chainbody",
+    "name": "Iron Chainbody",
+    "category": "armor",
+    "file": "icons/iron_chainbody.png"
+  },
+  {
+    "id": "iron_body",
+    "name": "Iron Platebody",
+    "category": "armor",
+    "file": "icons/iron_body.png"
+  },
+  {
+    "id": "steel_chainbody",
+    "name": "Steel Chainbody",
+    "category": "armor",
+    "file": "icons/steel_chainbody.png"
+  },
+  {
+    "id": "steel_body",
+    "name": "Steel Platebody",
+    "category": "armor",
+    "file": "icons/steel_body.png"
+  },
+  {
+    "id": "mithril_chainbody",
+    "name": "Mithril Chainbody",
+    "category": "armor",
+    "file": "icons/mithril_chainbody.png"
+  },
+  {
+    "id": "mithril_body",
+    "name": "Mithril Platebody",
+    "category": "armor",
+    "file": "icons/mithril_body.png"
+  },
+  {
+    "id": "adamant_chainbody",
+    "name": "Adamantite Chainbody",
+    "category": "armor",
+    "file": "icons/adamant_chainbody.png"
+  },
+  {
+    "id": "adamant_body",
+    "name": "Adamantite Platebody",
+    "category": "armor",
+    "file": "icons/adamant_body.png"
+  },
+  {
+    "id": "goblin_mail",
+    "name": "Goblin Mail",
+    "category": "armor",
+    "file": "icons/goblin_mail.png"
+  },
+  {
+    "id": "leather_chaps",
+    "name": "Leather Chaps",
+    "category": "armor",
+    "file": "icons/leather_chaps.png"
+  },
+  {
+    "id": "bronze_chainlegs",
+    "name": "Bronze Chainlegs",
+    "category": "armor",
+    "file": "icons/bronze_chainlegs.png"
+  },
+  {
+    "id": "bronze_legs",
+    "name": "Bronze Platelegs",
+    "category": "armor",
+    "file": "icons/bronze_legs.png"
+  },
+  {
+    "id": "iron_chainlegs",
+    "name": "Iron Chainlegs",
+    "category": "armor",
+    "file": "icons/iron_chainlegs.png"
+  },
+  {
+    "id": "iron_legs",
+    "name": "Iron Platelegs",
+    "category": "armor",
+    "file": "icons/iron_legs.png"
+  },
+  {
+    "id": "steel_chainlegs",
+    "name": "Steel Chainlegs",
+    "category": "armor",
+    "file": "icons/steel_chainlegs.png"
+  },
+  {
+    "id": "steel_legs",
+    "name": "Steel Platelegs",
+    "category": "armor",
+    "file": "icons/steel_legs.png"
+  },
+  {
+    "id": "mithril_chainlegs",
+    "name": "Mithril Chainlegs",
+    "category": "armor",
+    "file": "icons/mithril_chainlegs.png"
+  },
+  {
+    "id": "mithril_legs",
+    "name": "Mithril Platelegs",
+    "category": "armor",
+    "file": "icons/mithril_legs.png"
+  },
+  {
+    "id": "adamant_chainlegs",
+    "name": "Adamantite Chainlegs",
+    "category": "armor",
+    "file": "icons/adamant_chainlegs.png"
+  },
+  {
+    "id": "adamant_legs",
+    "name": "Adamantite Platelegs",
+    "category": "armor",
+    "file": "icons/adamant_legs.png"
+  },
+  {
+    "id": "logs",
+    "name": "Logs",
+    "category": "resource",
+    "file": "icons/logs.png"
+  },
+  {
+    "id": "oak_logs",
+    "name": "Oak Logs",
+    "category": "resource",
+    "file": "icons/oak_logs.png"
+  },
+  {
+    "id": "willow_logs",
+    "name": "Willow Logs",
+    "category": "resource",
+    "file": "icons/willow_logs.png"
+  },
+  {
+    "id": "maple_logs",
+    "name": "Maple Logs",
+    "category": "resource",
+    "file": "icons/maple_logs.png"
+  },
+  {
+    "id": "yew_logs",
+    "name": "Yew Logs",
+    "category": "resource",
+    "file": "icons/yew_logs.png"
+  },
+  {
+    "id": "magic_logs",
+    "name": "Magic Logs",
+    "category": "resource",
+    "file": "icons/magic_logs.png"
+  },
+  {
+    "id": "tinderbox",
+    "name": "Tinderbox",
+    "category": "tool",
+    "file": "icons/tinderbox.png"
+  },
+  {
+    "id": "knife",
+    "name": "Knife",
+    "category": "tool",
+    "file": "icons/knife.png"
+  },
+  {
+    "id": "bow_string",
+    "name": "Bowstring",
+    "category": "resource",
+    "file": "icons/bow_string.png"
+  },
+  {
+    "id": "feather",
+    "name": "Feather",
+    "category": "resource",
+    "file": "icons/feather.png"
+  },
+  {
+    "id": "arrow_shaft",
+    "name": "Arrow Shaft",
+    "category": "resource",
+    "file": "icons/arrow_shaft.png"
+  },
+  {
+    "id": "headless_arrow",
+    "name": "Headless Arrow",
+    "category": "resource",
+    "file": "icons/headless_arrow.png"
+  },
+  {
+    "id": "bronze_arrowtips",
+    "name": "Bronze Arrowtips",
+    "category": "resource",
+    "file": "icons/bronze_arrowtips.png"
+  },
+  {
+    "id": "iron_arrowtips",
+    "name": "Iron Arrowtips",
+    "category": "resource",
+    "file": "icons/iron_arrowtips.png"
+  },
+  {
+    "id": "steel_arrowtips",
+    "name": "Steel Arrowtips",
+    "category": "resource",
+    "file": "icons/steel_arrowtips.png"
+  },
+  {
+    "id": "mithril_arrowtips",
+    "name": "Mithril Arrowtips",
+    "category": "resource",
+    "file": "icons/mithril_arrowtips.png"
+  },
+  {
+    "id": "adamant_arrowtips",
+    "name": "Adamantite Arrowtips",
+    "category": "resource",
+    "file": "icons/adamant_arrowtips.png"
+  },
+  {
+    "id": "bronze_arrow",
+    "name": "Bronze Arrow",
+    "category": "ammo",
+    "file": "icons/bronze_arrow.png"
+  },
+  {
+    "id": "iron_arrow",
+    "name": "Iron Arrow",
+    "category": "ammo",
+    "file": "icons/iron_arrow.png"
+  },
+  {
+    "id": "steel_arrow",
+    "name": "Steel Arrow",
+    "category": "ammo",
+    "file": "icons/steel_arrow.png"
+  },
+  {
+    "id": "mithril_arrow",
+    "name": "Mithril Arrow",
+    "category": "ammo",
+    "file": "icons/mithril_arrow.png"
+  },
+  {
+    "id": "adamant_arrow",
+    "name": "Adamantite Arrow",
+    "category": "ammo",
+    "file": "icons/adamant_arrow.png"
+  },
+  {
+    "id": "arrow_quiver",
+    "name": "Arrow Quiver",
+    "category": "armor",
+    "file": "icons/arrow_quiver.png"
+  },
+  {
+    "id": "arrowtip_box",
+    "name": "Arrowtip Box",
+    "category": "tool",
+    "file": "icons/arrowtip_box.png"
+  },
+  {
+    "id": "food_bag",
+    "name": "Food Bag",
+    "category": "tool",
+    "file": "icons/food_bag.png"
+  },
+  {
+    "id": "raw_food_bag",
+    "name": "Raw Food Bag",
+    "category": "tool",
+    "file": "icons/raw_food_bag.png"
+  },
+  {
+    "id": "mining_bag",
+    "name": "Mining Bag",
+    "category": "tool",
+    "file": "icons/mining_bag.png"
+  },
+  {
+    "id": "log_bag",
+    "name": "Log Bag",
+    "category": "tool",
+    "file": "icons/log_bag.png"
+  },
+  {
+    "id": "fletch_pouch",
+    "name": "Fletching Pouch",
+    "category": "tool",
+    "file": "icons/fletch_pouch.png"
+  },
+  {
+    "id": "potion_pouch",
+    "name": "Potion Pouch",
+    "category": "tool",
+    "file": "icons/potion_pouch.png"
+  },
+  {
+    "id": "gem_bag",
+    "name": "Gem Bag",
+    "category": "tool",
+    "file": "icons/gem_bag.png"
+  },
+  {
+    "id": "shortbow",
+    "name": "Shortbow",
+    "category": "weapon",
+    "file": "icons/shortbow.png"
+  },
+  {
+    "id": "oak_shortbow",
+    "name": "Oak Shortbow",
+    "category": "weapon",
+    "file": "icons/oak_shortbow.png"
+  },
+  {
+    "id": "willow_shortbow",
+    "name": "Willow Shortbow",
+    "category": "weapon",
+    "file": "icons/willow_shortbow.png"
+  },
+  {
+    "id": "maple_shortbow",
+    "name": "Maple Shortbow",
+    "category": "weapon",
+    "file": "icons/maple_shortbow.png"
+  },
+  {
+    "id": "yew_shortbow",
+    "name": "Yew Shortbow",
+    "category": "weapon",
+    "file": "icons/yew_shortbow.png"
+  },
+  {
+    "id": "magic_shortbow",
+    "name": "Magic Shortbow",
+    "category": "weapon",
+    "file": "icons/magic_shortbow.png"
+  },
+  {
+    "id": "unstrung_shortbow",
+    "name": "Unstrung Shortbow",
+    "category": "resource",
+    "file": "icons/unstrung_shortbow.png"
+  },
+  {
+    "id": "unstrung_oak_shortbow",
+    "name": "Unstrung Oak Shortbow",
+    "category": "resource",
+    "file": "icons/unstrung_oak_shortbow.png"
+  },
+  {
+    "id": "unstrung_willow_shortbow",
+    "name": "Unstrung Willow Shortbow",
+    "category": "resource",
+    "file": "icons/unstrung_willow_shortbow.png"
+  },
+  {
+    "id": "unstrung_maple_shortbow",
+    "name": "Unstrung Maple Shortbow",
+    "category": "resource",
+    "file": "icons/unstrung_maple_shortbow.png"
+  },
+  {
+    "id": "unstrung_yew_shortbow",
+    "name": "Unstrung Yew Shortbow",
+    "category": "resource",
+    "file": "icons/unstrung_yew_shortbow.png"
+  },
+  {
+    "id": "unstrung_magic_shortbow",
+    "name": "Unstrung Magic Shortbow",
+    "category": "resource",
+    "file": "icons/unstrung_magic_shortbow.png"
+  },
+  {
+    "id": "copper_ore",
+    "name": "Copper Ore",
+    "category": "resource",
+    "file": "icons/copper_ore.png"
+  },
+  {
+    "id": "tin_ore",
+    "name": "Tin Ore",
+    "category": "resource",
+    "file": "icons/tin_ore.png"
+  },
+  {
+    "id": "iron_ore",
+    "name": "Iron Ore",
+    "category": "resource",
+    "file": "icons/iron_ore.png"
+  },
+  {
+    "id": "coal",
+    "name": "Coal",
+    "category": "resource",
+    "file": "icons/coal.png"
+  },
+  {
+    "id": "mithril_ore",
+    "name": "Mithril Ore",
+    "category": "resource",
+    "file": "icons/mithril_ore.png"
+  },
+  {
+    "id": "adamantite_ore",
+    "name": "Adamantite Ore",
+    "category": "resource",
+    "file": "icons/adamantite_ore.png"
+  },
+  {
+    "id": "bronze_bar",
+    "name": "Bronze Bar",
+    "category": "resource",
+    "file": "icons/bronze_bar.png"
+  },
+  {
+    "id": "iron_bar",
+    "name": "Iron Bar",
+    "category": "resource",
+    "file": "icons/iron_bar.png"
+  },
+  {
+    "id": "steel_bar",
+    "name": "Steel Bar",
+    "category": "resource",
+    "file": "icons/steel_bar.png"
+  },
+  {
+    "id": "mithril_bar",
+    "name": "Mithril Bar",
+    "category": "resource",
+    "file": "icons/mithril_bar.png"
+  },
+  {
+    "id": "adamantite_bar",
+    "name": "Adamantite Bar",
+    "category": "resource",
+    "file": "icons/adamantite_bar.png"
+  },
+  {
+    "id": "raw_shrimp",
+    "name": "Raw Shrimp",
+    "category": "resource",
+    "file": "icons/raw_shrimp.png"
+  },
+  {
+    "id": "raw_sardine",
+    "name": "Raw Sardine",
+    "category": "resource",
+    "file": "icons/raw_sardine.png"
+  },
+  {
+    "id": "raw_trout",
+    "name": "Raw Trout",
+    "category": "resource",
+    "file": "icons/raw_trout.png"
+  },
+  {
+    "id": "raw_salmon",
+    "name": "Raw Salmon",
+    "category": "resource",
+    "file": "icons/raw_salmon.png"
+  },
+  {
+    "id": "raw_lobster",
+    "name": "Raw Lobster",
+    "category": "resource",
+    "file": "icons/raw_lobster.png"
+  },
+  {
+    "id": "raw_tuna",
+    "name": "Raw Tuna",
+    "category": "resource",
+    "file": "icons/raw_tuna.png"
+  },
+  {
+    "id": "raw_swordfish",
+    "name": "Raw Swordfish",
+    "category": "resource",
+    "file": "icons/raw_swordfish.png"
+  },
+  {
+    "id": "cooked_shrimp",
+    "name": "Cooked Shrimp",
+    "category": "food",
+    "file": "icons/cooked_shrimp.png"
+  },
+  {
+    "id": "cooked_sardine",
+    "name": "Cooked Sardine",
+    "category": "food",
+    "file": "icons/cooked_sardine.png"
+  },
+  {
+    "id": "cooked_trout",
+    "name": "Cooked Trout",
+    "category": "food",
+    "file": "icons/cooked_trout.png"
+  },
+  {
+    "id": "cooked_salmon",
+    "name": "Cooked Salmon",
+    "category": "food",
+    "file": "icons/cooked_salmon.png"
+  },
+  {
+    "id": "cooked_lobster",
+    "name": "Cooked Lobster",
+    "category": "food",
+    "file": "icons/cooked_lobster.png"
+  },
+  {
+    "id": "cooked_tuna",
+    "name": "Cooked Tuna",
+    "category": "food",
+    "file": "icons/cooked_tuna.png"
+  },
+  {
+    "id": "cooked_swordfish",
+    "name": "Cooked Swordfish",
+    "category": "food",
+    "file": "icons/cooked_swordfish.png"
+  },
+  {
+    "id": "burnt_shrimp",
+    "name": "Burnt Shrimp",
+    "category": "food",
+    "file": "icons/burnt_shrimp.png"
+  },
+  {
+    "id": "burnt_sardine",
+    "name": "Burnt Sardine",
+    "category": "food",
+    "file": "icons/burnt_sardine.png"
+  },
+  {
+    "id": "burnt_trout",
+    "name": "Burnt Trout",
+    "category": "food",
+    "file": "icons/burnt_trout.png"
+  },
+  {
+    "id": "burnt_salmon",
+    "name": "Burnt Salmon",
+    "category": "food",
+    "file": "icons/burnt_salmon.png"
+  },
+  {
+    "id": "burnt_lobster",
+    "name": "Burnt Lobster",
+    "category": "food",
+    "file": "icons/burnt_lobster.png"
+  },
+  {
+    "id": "burnt_tuna",
+    "name": "Burnt Tuna",
+    "category": "food",
+    "file": "icons/burnt_tuna.png"
+  },
+  {
+    "id": "burnt_swordfish",
+    "name": "Burnt Swordfish",
+    "category": "food",
+    "file": "icons/burnt_swordfish.png"
+  },
+  {
+    "id": "bread",
+    "name": "Bread",
+    "category": "food",
+    "file": "icons/bread.png"
+  },
+  {
+    "id": "health_potion",
+    "name": "Health Potion",
+    "category": "food",
+    "file": "icons/health_potion.png"
+  },
+  {
+    "id": "attack_potion",
+    "name": "Attack Potion",
+    "category": "potion",
+    "file": "icons/attack_potion.png"
+  },
+  {
+    "id": "strength_potion",
+    "name": "Strength Potion",
+    "category": "potion",
+    "file": "icons/strength_potion.png"
+  },
+  {
+    "id": "defence_potion",
+    "name": "Defence Potion",
+    "category": "potion",
+    "file": "icons/defence_potion.png"
+  },
+  {
+    "id": "super_attack_potion",
+    "name": "Super Attack Potion",
+    "category": "potion",
+    "file": "icons/super_attack_potion.png"
+  },
+  {
+    "id": "super_strength_potion",
+    "name": "Super Strength Potion",
+    "category": "potion",
+    "file": "icons/super_strength_potion.png"
+  },
+  {
+    "id": "super_defence_potion",
+    "name": "Super Defence Potion",
+    "category": "potion",
+    "file": "icons/super_defence_potion.png"
+  },
+  {
+    "id": "rat_tail",
+    "name": "Giant Rat Tail",
+    "category": "quest",
+    "file": "icons/rat_tail.png"
+  },
+  {
+    "id": "spider_silk",
+    "name": "Spider Silk",
+    "category": "misc",
+    "file": "icons/spider_silk.png"
+  },
+  {
+    "id": "bones",
+    "name": "Bones",
+    "category": "misc",
+    "file": "icons/bones.png"
+  },
+  {
+    "id": "big_bones",
+    "name": "Big Bones",
+    "category": "misc",
+    "file": "icons/big_bones.png"
+  },
+  {
+    "id": "dragon_bones",
+    "name": "Dragon Bones",
+    "category": "misc",
+    "file": "icons/dragon_bones.png"
+  },
+  {
+    "id": "opal",
+    "name": "Opal",
+    "category": "gem",
+    "file": "icons/opal.png"
+  },
+  {
+    "id": "jade",
+    "name": "Jade",
+    "category": "gem",
+    "file": "icons/jade.png"
+  },
+  {
+    "id": "topaz",
+    "name": "Topaz",
+    "category": "gem",
+    "file": "icons/topaz.png"
+  },
+  {
+    "id": "sapphire",
+    "name": "Sapphire",
+    "category": "gem",
+    "file": "icons/sapphire.png"
+  },
+  {
+    "id": "emerald",
+    "name": "Emerald",
+    "category": "gem",
+    "file": "icons/emerald.png"
+  },
+  {
+    "id": "ruby",
+    "name": "Ruby",
+    "category": "gem",
+    "file": "icons/ruby.png"
+  },
+  {
+    "id": "diamond",
+    "name": "Diamond",
+    "category": "gem",
+    "file": "icons/diamond.png"
+  },
+  {
+    "id": "onyx",
+    "name": "Onyx",
+    "category": "gem",
+    "file": "icons/onyx.png"
+  },
+  {
+    "id": "gold_ring",
+    "name": "Gold Ring",
+    "category": "jewelry",
+    "file": "icons/gold_ring.png"
+  },
+  {
+    "id": "opal_ring",
+    "name": "Opal Ring",
+    "category": "jewelry",
+    "file": "icons/opal_ring.png"
+  },
+  {
+    "id": "jade_ring",
+    "name": "Jade Ring",
+    "category": "jewelry",
+    "file": "icons/jade_ring.png"
+  },
+  {
+    "id": "topaz_ring",
+    "name": "Topaz Ring",
+    "category": "jewelry",
+    "file": "icons/topaz_ring.png"
+  },
+  {
+    "id": "sapphire_ring",
+    "name": "Sapphire Ring",
+    "category": "jewelry",
+    "file": "icons/sapphire_ring.png"
+  },
+  {
+    "id": "emerald_ring",
+    "name": "Emerald Ring",
+    "category": "jewelry",
+    "file": "icons/emerald_ring.png"
+  },
+  {
+    "id": "ruby_ring",
+    "name": "Ruby Ring",
+    "category": "jewelry",
+    "file": "icons/ruby_ring.png"
+  },
+  {
+    "id": "diamond_ring",
+    "name": "Diamond Ring",
+    "category": "jewelry",
+    "file": "icons/diamond_ring.png"
+  },
+  {
+    "id": "onyx_ring",
+    "name": "Onyx Ring",
+    "category": "jewelry",
+    "file": "icons/onyx_ring.png"
+  },
+  {
+    "id": "void_ring",
+    "name": "Void Ring",
+    "category": "jewelry",
+    "file": "icons/void_ring.png"
+  },
+  {
+    "id": "bronze_amulet",
+    "name": "Bronze Amulet",
+    "category": "jewelry",
+    "file": "icons/bronze_amulet.png"
+  },
+  {
+    "id": "opal_amulet",
+    "name": "Opal Amulet",
+    "category": "jewelry",
+    "file": "icons/opal_amulet.png"
+  },
+  {
+    "id": "jade_amulet",
+    "name": "Jade Amulet",
+    "category": "jewelry",
+    "file": "icons/jade_amulet.png"
+  },
+  {
+    "id": "topaz_amulet",
+    "name": "Topaz Amulet",
+    "category": "jewelry",
+    "file": "icons/topaz_amulet.png"
+  },
+  {
+    "id": "sapphire_amulet",
+    "name": "Sapphire Amulet",
+    "category": "jewelry",
+    "file": "icons/sapphire_amulet.png"
+  },
+  {
+    "id": "emerald_amulet",
+    "name": "Emerald Amulet",
+    "category": "jewelry",
+    "file": "icons/emerald_amulet.png"
+  },
+  {
+    "id": "ruby_amulet",
+    "name": "Ruby Amulet",
+    "category": "jewelry",
+    "file": "icons/ruby_amulet.png"
+  },
+  {
+    "id": "diamond_amulet",
+    "name": "Diamond Amulet",
+    "category": "jewelry",
+    "file": "icons/diamond_amulet.png"
+  },
+  {
+    "id": "onyx_amulet",
+    "name": "Onyx Amulet",
+    "category": "jewelry",
+    "file": "icons/onyx_amulet.png"
+  },
+  {
+    "id": "void_amulet",
+    "name": "Void Amulet",
+    "category": "jewelry",
+    "file": "icons/void_amulet.png"
+  },
+  {
+    "id": "lost_locket",
+    "name": "Lost Locket",
+    "category": "quest",
+    "file": "icons/lost_locket.png"
+  },
+  {
+    "id": "pet_cat",
+    "name": "Cat (Lv 1)",
+    "category": "pet",
+    "file": "icons/pet_cat.png"
+  },
+  {
+    "id": "pet_husky",
+    "name": "White Husky (Lv 10)",
+    "category": "pet",
+    "file": "icons/pet_husky.png"
+  },
+  {
+    "id": "pet_skeleton",
+    "name": "Skeleton Pet (Lv 25)",
+    "category": "pet",
+    "file": "icons/pet_skeleton.png"
+  },
+  {
+    "id": "pet_dragon",
+    "name": "Green Dragon (Lv 50)",
+    "category": "pet",
+    "file": "icons/pet_dragon.png"
+  },
+  {
+    "id": "pet_dragon_crimson",
+    "name": "Crimson Dragon (Lv 65)",
+    "category": "pet",
+    "file": "icons/pet_dragon_crimson.png"
+  },
+  {
+    "id": "pet_dragon_frost",
+    "name": "Frost Dragon (Lv 75)",
+    "category": "pet",
+    "file": "icons/pet_dragon_frost.png"
+  },
+  {
+    "id": "pet_dragon_shadow",
+    "name": "Shadow Dragon (Lv 85)",
+    "category": "pet",
+    "file": "icons/pet_dragon_shadow.png"
+  },
+  {
+    "id": "pet_dragon_mythic",
+    "name": "Mythic Dragon (Lv 99)",
+    "category": "pet",
+    "file": "icons/pet_dragon_mythic.png"
+  }
+]
