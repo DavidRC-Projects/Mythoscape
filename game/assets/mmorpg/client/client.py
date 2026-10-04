@@ -1465,6 +1465,7 @@ class GameClient(CameraYaw):
 
     def handle_game_event(self, event):
         import emberdeep_v2_client
+        import castle_interior_follow
         if event.type == pygame.KEYDOWN:
             if self.chat_typing:
                 self.handle_chat_typing(event)
@@ -1674,6 +1675,8 @@ class GameClient(CameraYaw):
                 if emberdeep_v2_client.fp_active(self):
                     self._ember_reverse = False
                     dx, dy = emberdeep_v2_client.step_delta(self, 1)
+                elif castle_interior_follow.active(self):
+                    dx, dy = castle_interior_follow.arrow_delta(self, 0, -1)
                 else:
                     dx, dy = self.rotate_move_delta(0, -1)
                 self.try_move(dx, dy)
@@ -1682,6 +1685,8 @@ class GameClient(CameraYaw):
                 if emberdeep_v2_client.fp_active(self):
                     self._ember_reverse = True
                     dx, dy = emberdeep_v2_client.step_delta(self, -1)
+                elif castle_interior_follow.active(self):
+                    dx, dy = castle_interior_follow.arrow_delta(self, 0, 1)
                 else:
                     dx, dy = self.rotate_move_delta(0, 1)
                 self.try_move(dx, dy)
@@ -1690,14 +1695,20 @@ class GameClient(CameraYaw):
                     emberdeep_v2_client.turn(self, -1)
                 else:
                     self.clear_walk()
-                    dx, dy = self.rotate_move_delta(-1, 0)
+                    if castle_interior_follow.active(self):
+                        dx, dy = castle_interior_follow.arrow_delta(self, -1, 0)
+                    else:
+                        dx, dy = self.rotate_move_delta(-1, 0)
                     self.try_move(dx, dy)
             elif event.key in (pygame.K_RIGHT, pygame.K_KP6, pygame.K_KP_6) or event.scancode in (pygame.KSCAN_KP6, pygame.KSCAN_KP_6):
                 if emberdeep_v2_client.fp_active(self):
                     emberdeep_v2_client.turn(self, 1)
                 else:
                     self.clear_walk()
-                    dx, dy = self.rotate_move_delta(1, 0)
+                    if castle_interior_follow.active(self):
+                        dx, dy = castle_interior_follow.arrow_delta(self, 1, 0)
+                    else:
+                        dx, dy = self.rotate_move_delta(1, 0)
                     self.try_move(dx, dy)
             elif event.key == pygame.K_i:
                 self.sidebar_tab = "inventory"
@@ -2911,10 +2922,14 @@ class GameClient(CameraYaw):
             return
         if self.player:
             key = ("p", self.player.get("id"))
-            if abs(dx) >= abs(dy) and dx != 0:
-                self._entity_facing[key] = 1 if dx > 0 else -1
-            elif dy != 0:
-                self._entity_facing[key] = "back" if dy < 0 else "front"
+            import castle_interior_follow
+            # Inside a castle room the camera keeps its own look. A blocked
+            # step must not turn the view before the server accepts the move.
+            if not castle_interior_follow.active(self):
+                if abs(dx) >= abs(dy) and dx != 0:
+                    self._entity_facing[key] = 1 if dx > 0 else -1
+                elif dy != 0:
+                    self._entity_facing[key] = "back" if dy < 0 else "front"
             # Hold travel facing through inter-tile gaps so combat lock can't snap back
             self._entity_moving_until[key] = time.time() + 0.55
         self.net.send("MOVE", dx=dx, dy=dy)
@@ -3347,6 +3362,10 @@ class GameClient(CameraYaw):
             return None
         import emberdeep_v2_client
         picked = emberdeep_v2_client.pick_tile(self, mx, my)
+        if picked is not None:
+            return picked
+        import castle_interior_follow
+        picked = castle_interior_follow.pick_tile(self, mx, my)
         if picked is not None:
             return picked
         if mx < 0 or my < 0 or mx >= MAP_W or my >= MAP_H:
@@ -5504,6 +5523,9 @@ class GameClient(CameraYaw):
     def draw_map(self):
         import emberdeep_v2_client
         if emberdeep_v2_client.draw_first_person(self):
+            return
+        import castle_interior_follow
+        if castle_interior_follow.draw(self):
             return
         cam_x, cam_y = self.camera_origin()
         vis_w, vis_h = MAP_W // TILE, MAP_H // TILE

@@ -86,3 +86,7 @@ USE_EMBERDEEP_FIRST_PERSON = _on("USE_EMBERDEEP_FIRST_PERSON", "1")
 # Emberdeep set-piece creatures and props. Off by default.
 # Set USE_EMBERDEEP_CREATURES=1 to spawn the manifest layout.
 USE_EMBERDEEP_CREATURES = _on("USE_EMBERDEEP_CREATURES", "0")
+
+# Behind-the-player view inside a castle room. On by default.
+# Set USE_CASTLE_INTERIOR_FOLLOW=0 to keep the top-down room.
+USE_CASTLE_INTERIOR_FOLLOW = _on("USE_CASTLE_INTERIOR_FOLLOW", "1")

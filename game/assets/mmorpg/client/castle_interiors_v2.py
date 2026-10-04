@@ -584,3 +584,76 @@ def draw(client, plane, cam_x, cam_y, tile):
             text = font.render(room.get("name") or "", True, (255, 248, 230))
             screen.blit(text, (sx * tile + tile // 2 - text.get_width() // 2, sy * tile))
     return True
+
+
+def follow_markers(plane, tile=32):
+    """Sprites already placed by the room layout, at their floor tiles.
+
+    Same furniture, rugs, and stairs as the top-down room. Nothing is moved.
+    """
+    floor = _floors().get(plane)
+    if floor is None:
+        return [], set()
+    import castle_room_layouts
+    tile = int(tile)
+    placed = castle_room_layouts.plan(plane, floor)
+    hide = placed["hide"]
+    rects = placed["rects"]
+    rows = floor.get("rows") or []
+    hero = _hero_spots(floor, rows)
+    furn_keep = _furniture_keep(floor, plane, hide)
+    decor_keep = _decor_keep(floor)
+    markers = []
+    rugs = {
+        (int(item["tile"][0]), int(item["tile"][1]))
+        for item in (floor.get("decor") or [])
+        if item.get("kind") in ("rug", "dance_floor", "marble_pool")
+    }
+    rugs.update((x, y) for x, y in placed["rugs"])
+
+    def _in_layout(x, y):
+        return any(x0 <= x <= x1 and y0 <= y <= y1 for x0, y0, x1, y1 in rects)
+
+    for item in floor.get("decor") or []:
+        x, y = int(item["tile"][0]), int(item["tile"][1])
+        if _in_layout(x, y) or (x, y) not in decor_keep:
+            continue
+        kind = item.get("kind")
+        if kind in ("rug", "dance_floor", "marble_pool"):
+            continue
+        path, scale = _lookup(kind)
+        image = _image(path, tile, scale) if path is not None else None
+        if image is not None:
+            markers.append((x, y, image))
+    for item in floor.get("furniture") or []:
+        x, y = int(item["tile"][0]), int(item["tile"][1])
+        if (x, y) in hero or (x, y) in hide or (x, y) not in furn_keep:
+            continue
+        path, scale = _lookup(item.get("kind") or "")
+        image = _image(path, tile, scale) if path is not None else None
+        if image is not None:
+            markers.append((x, y, image))
+    for (x, y), relative in hero.items():
+        if _in_layout(x, y):
+            continue
+        image = _image(_PROPS / relative, tile, 3.2)
+        if image is not None:
+            markers.append((x, y, image))
+    for key, x, y in placed["props"]:
+        packed = castle_room_layouts._image(key, tile)
+        if packed is not None:
+            markers.append((x, y, packed[0]))
+    cluster = stair_tiles(plane)
+    if cluster:
+        art = _PROPS / _STAIR_ART[_theme_key(plane)]
+        cx = sum(tile_x for tile_x, _tile_y in cluster) / len(cluster)
+        cy = sum(tile_y for _tile_x, tile_y in cluster) / len(cluster)
+        span = max(
+            max(tile_x for tile_x, _tile_y in cluster) - min(tile_x for tile_x, _tile_y in cluster),
+            max(tile_y for _tile_x, tile_y in cluster) - min(tile_y for _tile_x, tile_y in cluster),
+            2,
+        )
+        image = _image(art, tile, span + 2.2)
+        if image is not None:
+            markers.append((int(round(cx)), int(round(cy)), image))
+    return markers, rugs
