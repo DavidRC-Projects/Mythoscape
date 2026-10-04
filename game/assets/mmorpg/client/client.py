@@ -1701,24 +1701,22 @@ class GameClient(CameraYaw):
                     self.clear_walk()
                     dx, dy = self.rotate_move_delta(1, 0)
                     self.try_move(dx, dy)
-            elif event.key == pygame.K_a:
-                if emberdeep_v2_client.fp_active(self):
-                    self.clear_walk()
-                    dx, dy = emberdeep_v2_client.strafe_delta(self, -1)
-                    if abs(dx) > abs(dy):
-                        self._ember_strafe = 1 if dx > 0 else -1
-                    else:
-                        self._ember_strafe = "front" if dy > 0 else "back"
-                    self.try_move(dx, dy)
-            elif event.key == pygame.K_d:
-                if emberdeep_v2_client.fp_active(self):
-                    self.clear_walk()
-                    dx, dy = emberdeep_v2_client.strafe_delta(self, 1)
-                    if abs(dx) > abs(dy):
-                        self._ember_strafe = 1 if dx > 0 else -1
-                    else:
-                        self._ember_strafe = "front" if dy > 0 else "back"
-                    self.try_move(dx, dy)
+            elif event.key == pygame.K_a and emberdeep_v2_client.fp_active(self):
+                self.clear_walk()
+                dx, dy = emberdeep_v2_client.strafe_delta(self, -1)
+                if abs(dx) > abs(dy):
+                    self._ember_strafe = 1 if dx > 0 else -1
+                else:
+                    self._ember_strafe = "front" if dy > 0 else "back"
+                self.try_move(dx, dy)
+            elif event.key == pygame.K_d and emberdeep_v2_client.fp_active(self):
+                self.clear_walk()
+                dx, dy = emberdeep_v2_client.strafe_delta(self, 1)
+                if abs(dx) > abs(dy):
+                    self._ember_strafe = 1 if dx > 0 else -1
+                else:
+                    self._ember_strafe = "front" if dy > 0 else "back"
+                self.try_move(dx, dy)
             elif event.key == pygame.K_i:
                 self.sidebar_tab = "inventory"
                 self.show_inventory = True
