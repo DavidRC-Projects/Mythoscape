@@ -1673,6 +1673,7 @@ class GameClient(CameraYaw):
                 self.clear_walk()
                 if emberdeep_v2_client.fp_active(self):
                     self._ember_reverse = False
+                    self._ember_strafe = None
                     dx, dy = emberdeep_v2_client.step_delta(self, 1)
                 else:
                     dx, dy = self.rotate_move_delta(0, -1)
@@ -1681,6 +1682,7 @@ class GameClient(CameraYaw):
                 self.clear_walk()
                 if emberdeep_v2_client.fp_active(self):
                     self._ember_reverse = True
+                    self._ember_strafe = None
                     dx, dy = emberdeep_v2_client.step_delta(self, -1)
                 else:
                     dx, dy = self.rotate_move_delta(0, 1)
@@ -1698,6 +1700,22 @@ class GameClient(CameraYaw):
                 else:
                     self.clear_walk()
                     dx, dy = self.rotate_move_delta(1, 0)
+                    self.try_move(dx, dy)
+            elif event.key == pygame.K_a:
+                if emberdeep_v2_client.fp_active(self):
+                    self.clear_walk()
+                    yaw = getattr(self, "_ember_yaw", 0.0)
+                    rx, ry = -math.cos(yaw), -math.sin(yaw)
+                    self._ember_strafe = -1 if abs(rx) >= abs(ry) and rx < 0 else 1 if abs(rx) >= abs(ry) else "back"
+                    dx, dy = emberdeep_v2_client.strafe_delta(self, -1)
+                    self.try_move(dx, dy)
+            elif event.key == pygame.K_d:
+                if emberdeep_v2_client.fp_active(self):
+                    self.clear_walk()
+                    yaw = getattr(self, "_ember_yaw", 0.0)
+                    rx, ry = -math.cos(yaw), -math.sin(yaw)
+                    self._ember_strafe = 1 if abs(rx) >= abs(ry) and rx > 0 else -1 if abs(rx) >= abs(ry) else "front"
+                    dx, dy = emberdeep_v2_client.strafe_delta(self, 1)
                     self.try_move(dx, dy)
             elif event.key == pygame.K_i:
                 self.sidebar_tab = "inventory"
