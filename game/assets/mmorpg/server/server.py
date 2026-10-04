@@ -1579,6 +1579,7 @@ async def handle_login(ws, msg, is_register):
         return
 
     session = PlayerSession(ws, row)
+    resume = _read_dungeon_resume(row)
     # Clamp / reset position if the world layout changed since last save.
     if not is_walkable(WORLD.grid, session.x, session.y):
         session.x, session.y = SPAWN_POINT
@@ -1589,7 +1590,9 @@ async def handle_login(ws, msg, is_register):
     WORLD.sessions[session.player_id] = session
     enforce_bound_items(session)
     import void_v2
-    void_v2.strip_keys(session)
+    # Keys stay in the bag when the visit itself is still going.
+    if not resume:
+        void_v2.strip_keys(session)
     WORLD.rearrange_bags_tab(session)
     # Persist owned-pets list (includes migrated active_pet)
     WORLD.db.save_player_stats(session.player_id, owned_pets=json.dumps(session.owned_pets))
@@ -1609,6 +1612,8 @@ async def handle_login(ws, msg, is_register):
         return
 
     await send_world_join(session)
+    if resume:
+        await _resume_dungeon(session, resume)
     log.info("%s logged in as %s (id=%s)", username, session.char_name, session.player_id)
 
 
@@ -1905,6 +1910,7 @@ async def handle_move(session, msg):
         if ex is not None and (session.x, session.y) == (int(ex), int(ey)):
             await handle_leave_dungeon(session)
             return
+        _save_dungeon_resume(session)
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
         return
     if not is_walkable(WORLD.grid, nx, ny):
@@ -1991,6 +1997,10 @@ def _build_dungeon_floor(session, floor: int, dungeon_id: str = None):
         "return_y": prev.get("return_y", mod.CAVE_RETURN[1]),
         "props": props,
     }
+    if dungeon_id == "emberdeep" and feature_flags.USE_EMBERDEEP_V2:
+        boss = emberdeep.v2_marks().get("boss")
+        if boss:
+            session.dungeon["boss_door"] = [int(boss[0]), int(boss[1])]
     session.x, session.y = mod.DUNGEON_SPAWN
     session.in_combat_with = None
     session.gathering_node = None
@@ -2031,6 +2041,7 @@ def _dungeon_payload(session):
         "monsters": alive,
         "remaining": _dungeon_remaining(d),
         "player_x": session.x,
+        "boss_door": d.get("boss_door"),
         "player_y": session.y,
         "exit_x": exit_x,
         "exit_y": exit_y,
@@ -2172,6 +2183,149 @@ def _find_dungeon_entrance(session, preferred_id=None):
     return None, None
 
 
+def _read_dungeon_resume(row):
+    if row is None or "dungeon_resume" not in row.keys():
+        return None
+    raw = row["dungeon_resume"] or ""
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(data, dict) or not data.get("id"):
+        return None
+    return data
+
+
+def _resume_payload(session):
+    d = session.dungeon
+    if not d or d.get("id") == "castle_realm":
+        return None
+    return {
+        "id": d.get("id") or "tidehollow",
+        "x": int(session.x),
+        "y": int(session.y),
+        "return_x": d.get("return_x"),
+        "return_y": d.get("return_y"),
+        "opened": list(d.get("opened") or []),
+        "floor": int(d.get("floor") or 1),
+    }
+
+
+def _save_dungeon_resume(session):
+    blob = _resume_payload(session)
+    if blob is None:
+        return
+    WORLD.db.save_player_stats(session.player_id, dungeon_resume=json.dumps(blob))
+
+
+def _clear_dungeon_resume(session):
+    WORLD.db.save_player_stats(session.player_id, dungeon_resume="")
+
+
+def _apply_opened_doors(session, opened):
+    d = session.dungeon
+    if not d:
+        return
+    clean = []
+    for ch in opened or []:
+        if isinstance(ch, str) and len(ch) == 1 and ch not in clean:
+            clean.append(ch)
+    d["opened"] = clean
+    if d.get("v2") == "depths":
+        import depths_v2
+        depths_v2.refresh(d)
+    elif d.get("v2"):
+        import void_v2
+        void_v2._refresh(d)
+
+
+def _stand_in_dungeon(session, x, y):
+    tiles = session.dungeon.get("tiles") or []
+    mod = _dungeon_mod(session)
+
+    def walkable(nx, ny):
+        if mod is None:
+            return False
+        return mod.dungeon_walkable(tiles, nx, ny)
+
+    if not walkable(x, y):
+        found = None
+        for radius in range(1, 8):
+            for dy in range(-radius, radius + 1):
+                for dx in range(-radius, radius + 1):
+                    if walkable(x + dx, y + dy):
+                        found = (x + dx, y + dy)
+                        break
+                if found:
+                    break
+            if found:
+                break
+        if found:
+            x, y = found
+        else:
+            x, y = session.x, session.y
+    session.x, session.y = int(x), int(y)
+    if session.pet_id:
+        session.pet_x, session.pet_y = session.x, session.y
+        session.pet_target_id = None
+
+
+async def _relock_dungeon_doors(session):
+    """Death puts every opened seal back to locked."""
+    d = session.dungeon
+    if not d:
+        return
+    before = [row[:] for row in (d.get("tiles") or [])]
+    had = list(d.get("opened") or [])
+    d["opened"] = []
+    if d.get("v2") == "depths":
+        import depths_v2
+        depths_v2.refresh(d)
+    elif d.get("v2"):
+        import void_v2
+        void_v2._refresh(d)
+    if not had:
+        return
+    import void_v2
+    changes = void_v2._changes_from(before, d.get("tiles") or [])
+    await send(session.ws, "DUNGEON_TILES", changes=changes, decor=d.get("decor") or {})
+    await send(session.ws, "CHAT_MSG", **{
+        "from": "Dungeon",
+        "text": "The seals grind shut.",
+    })
+
+
+async def _resume_dungeon(session, resume):
+    dungeon_id = resume.get("id")
+    if not explore_dungeons.is_explore(dungeon_id) and dungeon_id not in DUNGEON_MODS:
+        _clear_dungeon_resume(session)
+        return
+    meta = _dungeon_meta(dungeon_id)
+    if explore_dungeons.is_explore(dungeon_id):
+        explore_dungeons.build(session, dungeon_id, next_id, MonsterInstance, MONSTER_SPAWNS)
+    else:
+        _build_dungeon_floor(session, int(resume.get("floor") or 1), dungeon_id=dungeon_id)
+    if not session.dungeon:
+        _clear_dungeon_resume(session)
+        return
+    rx, ry = resume.get("return_x"), resume.get("return_y")
+    session.dungeon["return_x"] = rx
+    session.dungeon["return_y"] = ry
+    if rx is not None and ry is not None:
+        session._dungeon_return = (int(rx), int(ry))
+    _apply_opened_doors(session, resume.get("opened") or [])
+    _stand_in_dungeon(session, int(resume.get("x") or session.x), int(resume.get("y") or session.y))
+    _save_dungeon_resume(session)
+    await send(session.ws, "DUNGEON_ENTER", **_dungeon_payload(session))
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    await send(session.ws, "CHAT_MSG", **{
+        "from": meta["chat_from"],
+        "text": f"You wake in {meta['name']}, where you left off.",
+    })
+
+
 async def handle_enter_dungeon(session, msg):
     if session.dungeon:
         meta = _dungeon_meta(session.dungeon.get("id") or "tidehollow")
@@ -2205,6 +2359,9 @@ async def handle_enter_dungeon(session, msg):
     if (rx, ry) in entrance_mouth_tiles(spot["x"], spot["y"]):
         rx, ry = spot["x"], spot["y"] + 1
     session._dungeon_return = (rx, ry)
+    # Keep the overworld tile. A later logout must not store the dungeon coordinates.
+    WORLD.db.save_player_position(session.player_id, rx, ry)
+    _clear_dungeon_resume(session)
     if explore_dungeons.is_explore(dungeon_id):
         explore_dungeons.build(session, dungeon_id, next_id, MonsterInstance, MONSTER_SPAWNS)
         session.dungeon["return_x"] = rx
@@ -2248,6 +2405,7 @@ async def handle_leave_dungeon(session, msg=None, silent=False):
     if session.dungeon.get("v2"):
         import void_v2
         void_v2.strip_keys(session)
+    _clear_dungeon_resume(session)
     dungeon_id = session.dungeon.get("id") or "tidehollow"
     mod = DUNGEON_MODS.get(dungeon_id, tidehollow)
     meta = _dungeon_meta(dungeon_id)
@@ -4953,9 +5111,14 @@ async def handler(ws):
                 session.x = int(session.dungeon.get("return_x", session.x))
                 session.y = int(session.dungeon.get("return_y", session.y))
                 session.dungeon = None
+                WORLD.db.save_player_position(session.player_id, session.x, session.y)
+                _clear_dungeon_resume(session)
             elif session.dungeon:
+                _save_dungeon_resume(session)
                 session.dungeon = None
-            WORLD.db.save_player_position(session.player_id, session.x, session.y)
+            else:
+                WORLD.db.save_player_position(session.player_id, session.x, session.y)
+                _clear_dungeon_resume(session)
             WORLD.db.save_player_stats(session.player_id, hp=session.hp)
             del WORLD.sessions[session.player_id]
             log.info("%s disconnected", session.char_name)
@@ -5403,10 +5566,14 @@ async def process_combat(events):
                 v2_kind = session.dungeon.get("v2")
                 realm_death = session.dungeon.get("id") == "castle_realm"
                 v2_death = bool(v2_kind)
+                stayed = False
                 if v2_death and session.dungeon.get("checkpoint"):
                     import void_v2
-                    await void_v2.on_death(session)
-                else:
+                    stayed = await void_v2.on_death(session)
+                    if stayed:
+                        await _relock_dungeon_doors(session)
+                        _save_dungeon_resume(session)
+                if not stayed:
                     if v2_death:
                         import void_v2
                         void_v2.strip_keys(session)
@@ -5429,7 +5596,8 @@ async def process_combat(events):
                     if mon.target_player_id == session.player_id:
                         mon.target_player_id = None
             WORLD.db.save_player_stats(session.player_id, coins=session.coins)
-            WORLD.db.save_player_position(session.player_id, session.x, session.y)
+            if not session.dungeon:
+                WORLD.db.save_player_position(session.player_id, session.x, session.y)
             death_data = {
                 "entity_id": session.player_id, "entity_kind": "player",
                 "coins_lost": lost,

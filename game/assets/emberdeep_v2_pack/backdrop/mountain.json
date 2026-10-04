@@ -1,0 +1,26 @@
+{
+  "topdown": {
+    "file": "mountain_topdown.png",
+    "width": 1536,
+    "height": 1024
+  },
+  "front": {
+    "file": "mountain_front.png",
+    "width": 1024,
+    "height": 768
+  },
+  "anchor": "south_center",
+  "anchor_px": [768, 1024],
+  "covers_tiles": {
+    "x_min": 154,
+    "x_max": 190,
+    "y_min": 58,
+    "y_max": 94
+  },
+  "mouth_tile": {
+    "x": 164,
+    "y": 84,
+    "sprite": "dragon_lair"
+  },
+  "note": "mountain_topdown.png covers the flat volcano apron from tile x 154-190, y 58-94. Anchor is the south center of that image (bottom edge, halfway across) so the south edge of the picture sits on the south edge of the apron. The existing dragon_lair mouth sprite stays on top at (164, 84). This mesh has no second cave mouth. mountain_front.png is the same mesh from the south, for use if the camera yaws."
+}

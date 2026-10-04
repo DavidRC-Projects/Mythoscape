@@ -7,7 +7,10 @@ from __future__ import annotations
 
 import random
 
+import os
+
 from world_map import WALL, FLOOR, WATER, widen_single_file_passages, is_walkable as _world_walkable
+import feature_flags
 
 EMBERDEEP_FLOORS = [
     {"floor": 1, "level": 22, "count": 10, "label": "Ash Approach"},
@@ -93,8 +96,58 @@ def scaled_monster_stats(level: int) -> dict:
     }
 
 
+_V2_MARKS = {}
+_V2_BASE_W, _V2_BASE_H = DUNGEON_W, DUNGEON_H
+_V2_BASE_SPAWN = DUNGEON_SPAWN
+
+
+def v2_marks():
+    """Hoard, nest, boss door, spawn, and exit from the hand grid. Empty if unused."""
+    return dict(_V2_MARKS)
+
+
+def _v2_floor_path():
+    here = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(here, "..", "..", "emberdeep_v2_pack", "interior", "emberdeep_v2_floor.txt")
+
+
+def _load_v2_floor():
+    """Map the authored grid onto WALL / FLOOR / WATER. All eight floors share it."""
+    global DUNGEON_W, DUNGEON_H, DUNGEON_SPAWN, _V2_MARKS
+    text = open(_v2_floor_path(), encoding="utf-8").read().splitlines()
+    rows = [line.rstrip("\n") for line in text if line.strip("\n")]
+    width = max(len(row) for row in rows)
+    tiles = []
+    marks = {}
+    names = {"S": "spawn", "E": "exit", "H": "hoard", "N": "nest", "K": "boss"}
+    for y, row in enumerate(rows):
+        row = row.ljust(width, "#")
+        out = []
+        for x, ch in enumerate(row):
+            if ch == "L":
+                out.append(WATER)
+            elif ch == "#":
+                out.append(WALL)
+            else:
+                out.append(FLOOR)
+                if ch in names:
+                    marks[names[ch]] = (x, y)
+        tiles.append(out)
+    DUNGEON_W = width
+    DUNGEON_H = len(tiles)
+    DUNGEON_SPAWN = marks.get("spawn", (width // 2, len(tiles) - 3))
+    _V2_MARKS = marks
+    return tiles
+
+
 def generate_floor_tiles(floor: int, rng=None):
     """Mountain chamber — irregular walls, lava rivers, basalt pillars, exit mouth south."""
+    if feature_flags.USE_EMBERDEEP_V2:
+        return _load_v2_floor()
+    global DUNGEON_W, DUNGEON_H, DUNGEON_SPAWN, _V2_MARKS
+    DUNGEON_W, DUNGEON_H = _V2_BASE_W, _V2_BASE_H
+    DUNGEON_SPAWN = _V2_BASE_SPAWN
+    _V2_MARKS = {}
     rng = rng or random.Random(floor * 9133 + 41)
     w, h = DUNGEON_W, DUNGEON_H
     tiles = [[WALL for _ in range(w)] for _ in range(h)]

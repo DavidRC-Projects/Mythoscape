@@ -638,6 +638,7 @@ async def handle_interact(session, msg):
             return
         _take_one(session, key)
         d["opened"].append(ch)
+        srv._save_dungeon_resume(session)
         before = [row[:] for row in d["tiles"]]
         _refresh(d)
         changes = _changes_from(before, d["tiles"])

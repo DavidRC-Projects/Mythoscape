@@ -47,6 +47,17 @@ def install(tiles, dungeon_id: str, floor: int, spawn, exit_xy, avoid=()):
     keys = keys_for(dungeon_id, floor)
     if not keys or not tiles:
         return []
+    if dungeon_id == "emberdeep":
+        import feature_flags
+        if feature_flags.USE_EMBERDEEP_V2:
+            import emberdeep
+            marks = emberdeep.v2_marks()
+            props = []
+            for key, mark in (("dragon_hoard", "hoard"), ("dragon_egg_nest", "nest")):
+                spot = marks.get(mark)
+                if spot:
+                    props.append({"key": key, "x": int(spot[0]), "y": int(spot[1])})
+            return props
     avoid = set(avoid or ())
     spots = _pads_near_spawn(tiles, spawn, exit_xy, avoid)
     props = []

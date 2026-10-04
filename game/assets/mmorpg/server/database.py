@@ -216,6 +216,8 @@ class Database:
             self.conn.execute(
                 "ALTER TABLE players ADD COLUMN pk_locked_until REAL NOT NULL DEFAULT 0"
             )
+        if "dungeon_resume" not in cols:
+            self.conn.execute("ALTER TABLE players ADD COLUMN dungeon_resume TEXT NOT NULL DEFAULT ''")
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS bank ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"

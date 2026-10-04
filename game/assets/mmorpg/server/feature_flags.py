@@ -74,3 +74,11 @@ USE_CASTLE_INTERIORS_V2 = _on("USE_CASTLE_INTERIORS_V2", "1")
 # Low-poly item icons for inventory and ground drops.
 # Set USE_REALISTIC_ITEM_ICONS=0 to keep the old inventory and ground art.
 USE_REALISTIC_ITEM_ICONS = _on("USE_REALISTIC_ITEM_ICONS", "1")
+
+# Hand-authored Emberdeep floor and the mountain backdrop behind the crater.
+# Set USE_EMBERDEEP_V2=0 to keep today's oval floors.
+USE_EMBERDEEP_V2 = _on("USE_EMBERDEEP_V2", "1")
+
+# First-person view inside an Emberdeep instance only.
+# Set USE_EMBERDEEP_FIRST_PERSON=0 to keep the top-down dungeon view.
+USE_EMBERDEEP_FIRST_PERSON = _on("USE_EMBERDEEP_FIRST_PERSON", "1")

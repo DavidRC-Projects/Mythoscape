@@ -2927,6 +2927,7 @@ class GameClient(CameraYaw):
             "props": msg.get("props") or [],
             "plane": msg.get("plane") or "",
             "realm": bool(msg.get("realm")),
+            "boss_door": msg.get("boss_door"),
         }
         self.monsters = {m["id"]: m for m in (msg.get("monsters") or [])}
         self.resources = {}
@@ -3312,6 +3313,10 @@ class GameClient(CameraYaw):
         """Map pixel → world tile (accounts for camera yaw)."""
         if not self.player:
             return None
+        import emberdeep_v2_client
+        picked = emberdeep_v2_client.pick_tile(self, mx, my)
+        if picked is not None:
+            return picked
         if mx < 0 or my < 0 or mx >= MAP_W or my >= MAP_H:
             return None
         cam_x, cam_y = self.camera_origin()
@@ -5462,6 +5467,9 @@ class GameClient(CameraYaw):
         self.draw_teleport_fx()
 
     def draw_map(self):
+        import emberdeep_v2_client
+        if emberdeep_v2_client.draw_first_person(self):
+            return
         cam_x, cam_y = self.camera_origin()
         vis_w, vis_h = MAP_W // TILE, MAP_H // TILE
         t = time.time()
@@ -5476,12 +5484,17 @@ class GameClient(CameraYaw):
                     wx, wy = self.view_to_world(vx, vy)
                     if 0 <= wx < self.world_w and 0 <= wy < len(self.tiles) and wy < self.world_h:
                         tile_id = self.tiles[wy][wx]
-                        self.draw_terrain_tile(rect, tile_id, wx, wy, t)
+                        if emberdeep_v2_client.skip_apron_tile(self, wx, wy):
+                            pygame.draw.rect(self.screen, (28, 18, 16), rect)
+                        else:
+                            self.draw_terrain_tile(rect, tile_id, wx, wy, t)
                     else:
                         pygame.draw.rect(self.screen, (8, 6, 10), rect)
                 else:
                     # Outside view map: void
                     pygame.draw.rect(self.screen, (8, 6, 10), rect)
+
+        emberdeep_v2_client.blit_backdrop(self)
 
         # Click-walk destination + path crumbs
         self.draw_walk_markers(cam_x, cam_y, vis_w, vis_h, t)
