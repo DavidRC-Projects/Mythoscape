@@ -292,7 +292,7 @@ def step_delta(client, forward):
 def strafe_delta(client, right):
     """One tile perpendicular to look direction. Right is +1, left is -1."""
     yaw = float(getattr(client, "_ember_yaw", 0.0))
-    rx, ry = -math.cos(yaw), -math.sin(yaw)
+    rx, ry = math.cos(yaw), math.sin(yaw)
     if abs(rx) >= abs(ry):
         dx, dy = (1 if rx > 0 else -1), 0
     else:
