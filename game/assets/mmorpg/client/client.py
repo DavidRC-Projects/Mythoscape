@@ -40,6 +40,7 @@ from content import (
     is_raw_fish, is_cooked_fish, is_mining_bag_item, is_log_item,
     is_fletch_pouch_item, is_potion_item, is_gem_item,
     INVENTORY_TABS, INVENTORY_TAB_SIZE, INVENTORY_SIZE,
+    TELEPORT_DESTINATIONS, WIZARD_TILE,
 )  # noqa: E402
 import world_map as wm  # noqa: E402
 import combat  # noqa: E402
@@ -48,6 +49,7 @@ import dungeon_interior_3d  # noqa: E402 — 3D dungeon interior props
 import building_volume as bvol  # noqa: E402 — iso cottage shells (Panda look)
 import lowpoly_dragon_sprites  # noqa: E402 — offline-baked OSRS dragon sheets
 import anim_strip_sprites  # noqa: E402 — anim_strips for other monsters
+import legacy_creature_sprites  # noqa: E402 — pets and leftover low-poly sheets
 import dungeon_entrances  # noqa: E402 — pack sprites for entrance exteriors
 import prop_sprites  # noqa: E402 — pack sprites for interior props
 import castle_sprites  # noqa: E402 — pre-rendered castle layers
@@ -56,7 +58,9 @@ import house_sprites  # noqa: E402 — pre-rendered unique houses
 import buildings_v2  # noqa: E402 — house footprints shifted onto live doors
 from feature_flags import (  # noqa: E402
     USE_NEW_CASTLE, USE_NEW_BUILDINGS, USE_NEW_CHARACTERS, USE_NEW_EQUIPMENT_UI,
-    USE_NEW_HUD, USE_NEW_CASTLE_PORTAL, USE_PLAYER_HOUSING,
+    USE_NEW_HUD, USE_HUD_MOCKUP_PLATES, USE_HUD_DRAWN_PANELS, USE_NEW_CASTLE_PORTAL,
+    USE_PLAYER_HOUSING, USE_CASTLE_OWNERS, USE_NEW_PETS_AND_MONSTERS,
+    USE_REALISTIC_ITEM_ICONS,
 )
 import rs_humanoid as _rs_humanoid  # noqa: E402
 _rs_humanoid.USE_NEW_CHARACTERS = USE_NEW_CHARACTERS
@@ -125,7 +129,7 @@ ROCK_LOOK = {
 }
 ROBED_NPC_IDS = {
     "elder_miriam", "priest_cedric", "monk_healer", "mysterious_traveler",
-    "mad_scientist", "herald_rowan",
+    "mad_scientist", "herald_rowan", "wizard_elowen",
 }
 ORE_LABEL_COLORS = {
     "copper_rock": (255, 170, 90),
@@ -216,11 +220,13 @@ class GameClient(CameraYaw):
         self.chat_log = []
         self.chat_typing = False
         self.chat_text = ""
+        self.speech = {}  # player id -> {text, until} shown above the head
 
         self.dialogue = None       # {"npc_id","npc_name","lines","shop_id","quest":{...}}
         self.housing_open = False
         self.housing_lots = []
         self.housing_owners = {}
+        self.castle_plaques = []
         self.housing_rects = []
         self.dialogue_btn_rects = {}  # action -> pygame.Rect
         self.shop = None           # {"shop_id","name","stock","your_coins","buys"}
@@ -289,6 +295,9 @@ class GameClient(CameraYaw):
         self._overworld_tiles = None
         self._overworld_size = None
         self._overworld_npcs = None
+        self._home_tiles = None
+        self._home_size = None
+        self._home_npcs = None
         self.show_skills = False
         self.skills_scroll = 0  # pixel offset into the skills list
         self.skills_drag = None  # scrollbar drag state
@@ -303,6 +312,12 @@ class GameClient(CameraYaw):
         self.pet_switch_rects = []
         self.show_travel = False
         self.travel_btn_rects = []
+        self.show_teleport = False
+        self.teleport_btn_rect = None
+        self.teleport_row_rects = []
+        self.teleport_fx = None
+        self.stair_prompt = None
+        self.stair_choice_rects = []
         self.travel_scroll = 0  # pixel offset into the travel destination lists
         self.travel_drag = None  # scrollbar drag state
         self.travel_scroll_meta = None  # set while drawing travel modal
@@ -475,7 +490,15 @@ class GameClient(CameraYaw):
             self.state = "GAME"
             self.stat_alloc_error = ""
             self._minimap_base = None  # rebuild when world loads
+            self._capture_home_map(force=True)
         elif t == "STATE_UPDATE":
+            incoming_dungeon = msg.get("dungeon")
+            if self.dungeon and not incoming_dungeon:
+                self._exit_dungeon_view()
+            elif incoming_dungeon and not self.dungeon:
+                # A castle-realm tick can arrive after the return teleport.
+                # Its coordinates belong to the other map, so ignore them.
+                return
             self.players = {p["id"]: p for p in msg["players"]}
             self.monsters = {m["id"]: m for m in msg["monsters"]}
             self.pets = msg.get("pets") or []
@@ -526,8 +549,12 @@ class GameClient(CameraYaw):
             self._enter_dungeon_view(msg, advance=True)
         elif t == "REALM_PLANE":
             self._apply_realm_plane(msg)
+            self.stair_prompt = None
+        elif t == "STAIR_PROMPT":
+            self.stair_prompt = {"tiles": [tuple(tile) for tile in (msg.get("tiles") or [])]}
         elif t == "DUNGEON_EXIT":
             self._exit_dungeon_view()
+            self.stair_prompt = None
             if self.player:
                 self.player["x"] = msg.get("x", self.player["x"])
                 self.player["y"] = msg.get("y", self.player["y"])
@@ -544,9 +571,19 @@ class GameClient(CameraYaw):
                     color=(255, 215, 90),
                     highlight=True,
                 )
+        elif t == "HOUSE_LEVEL":
+            if self.player:
+                self.player["house_level"] = int(msg.get("level") or 0)
+                self.player["house_floor_name"] = msg.get("floor") or ""
         elif t == "PLAYER_UPDATE":
             prev_boosts = (self.player or {}).get("stat_boosts") or {}
             self.player = msg["player"]
+            prompt = self.stair_prompt
+            if prompt and self.player:
+                px, py = int(self.player.get("x", 0)), int(self.player.get("y", 0))
+                tiles = prompt.get("tiles") or []
+                if not any(max(abs(px - tx), abs(py - ty)) <= 1 for tx, ty in tiles):
+                    self.stair_prompt = None
             if self.player.get("combat_style"):
                 self.combat_style = self.player["combat_style"]
             # Mirror into the shared players dict so sprites stay consistent.
@@ -573,6 +610,8 @@ class GameClient(CameraYaw):
                 self.add_chat(text, color=(255, 215, 90), highlight=True)
             else:
                 self.add_chat(text)
+            if msg.get("speech"):
+                self._show_player_speech(msg)
             body = (msg.get("text") or "").lower()
             if "arrow" in body or "too far" in body or "equip" in body:
                 self._maybe_combat_floater(msg.get("text") or "")
@@ -688,7 +727,23 @@ class GameClient(CameraYaw):
                 "shop_id": msg.get("shop_id"), "quest": msg.get("quest"),
                 "forge": msg.get("forge"), "bank": msg.get("bank"),
                 "housing": msg.get("housing"),
+                "castle": msg.get("castle"),
+                "teleport": msg.get("teleport"),
             }
+            if msg.get("teleport") and self.player is not None:
+                self.player["knows_teleport"] = True
+        elif t == "TELEPORT":
+            if msg.get("map") != "castle":
+                self._exit_dungeon_view()
+            if self.player:
+                self.player["x"] = msg.get("x", self.player["x"])
+                self.player["y"] = msg.get("y", self.player["y"])
+                live = self.players.get(self.player["id"])
+                if live:
+                    live["x"] = self.player["x"]
+                    live["y"] = self.player["y"]
+            self.clear_walk()
+            self._start_teleport_fx(msg.get("label") or "")
             self.show_shop_panel = False
         elif t == "SHOP_STATE":
             self.shop = msg
@@ -699,6 +754,8 @@ class GameClient(CameraYaw):
             self.dialogue = None
         elif t == "HOUSING_OWNERS":
             self.housing_owners = msg.get("owners") or {}
+        elif t == "CASTLE_OWNERS":
+            self.castle_plaques = msg.get("plaques") or []
         elif t == "BANK_STATE":
             self.bank = msg
             self.show_bank = True
@@ -1431,6 +1488,14 @@ class GameClient(CameraYaw):
             if self.dialogue:
                 self.handle_dialogue_key(event)
                 return
+            if self.show_teleport:
+                if event.key in (pygame.K_ESCAPE, pygame.K_t):
+                    self.show_teleport = False
+                return
+            if self.stair_prompt:
+                if event.key == pygame.K_ESCAPE:
+                    self.stair_prompt = None
+                return
             if self.show_bank:
                 if event.key == pygame.K_ESCAPE:
                     self.show_bank = False
@@ -1698,6 +1763,8 @@ class GameClient(CameraYaw):
                     self.net.send("PICKUP")
             elif event.key == pygame.K_r:
                 self.try_eat_food()
+            elif event.key == pygame.K_t:
+                self.toggle_teleport_modal()
             elif event.key == pygame.K_SPACE:
                 self.try_attack_nearest()
             elif event.key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5):
@@ -1732,6 +1799,7 @@ class GameClient(CameraYaw):
                 self.show_skills = False
                 self.show_pets = False
                 self.show_travel = False
+                self.show_teleport = False
                 self.show_world_map = False
                 self.show_cook = False
                 self.fire_prompt = None
@@ -1818,6 +1886,13 @@ class GameClient(CameraYaw):
                         self.bank_page = max(0, self.bank_page - event.y)
             elif self.state == "GAME":
                 mx, my = pygame.mouse.get_pos()
+                if mx >= SIDEBAR_X and getattr(self, "hud_system", "inventory") == "inventory":
+                    cap = int(getattr(self, "hud_inv_max_scroll", 0) or 0)
+                    step = -1 if event.y > 0 else (1 if event.y < 0 else 0)
+                    if step:
+                        self.hud_inv_scroll = max(
+                            0, min(cap, int(getattr(self, "hud_inv_scroll", 0) or 0) + step),
+                        )
                 chat_box = pygame.Rect(0, MAP_H, MAP_W, SCREEN_H - MAP_H)
                 if chat_box.collidepoint(mx, my):
                     max_off = max(0, len(self.chat_log) - self.CHAT_VISIBLE)
@@ -1845,6 +1920,13 @@ class GameClient(CameraYaw):
                 max_scroll = float(meta.get("max_scroll", 9999))
                 delta = -48 if event.button == 4 else 48
                 self.travel_scroll = max(0, min(max_scroll, self.travel_scroll + delta))
+            elif (
+                self.state == "GAME" and event.button in (4, 5) and event.pos[0] >= SIDEBAR_X
+                and not self.show_shop_panel
+            ):
+                cap = int(getattr(self, "hud_inv_max_scroll", 0) or 0)
+                step = -1 if event.button == 4 else 1
+                self.hud_inv_scroll = max(0, min(cap, int(getattr(self, "hud_inv_scroll", 0) or 0) + step))
             elif self.state == "GAME" and self.show_shop_panel and self.shop and event.button in (4, 5):
                 mx, my = event.pos
                 box = pygame.Rect(160, 70, 700, 520)
@@ -2590,6 +2672,10 @@ class GameClient(CameraYaw):
             self.dialogue = None
 
     def handle_dialogue_click(self, mx, my):
+        if self.dialogue and self.dialogue.get("castle"):
+            import castle_owners_client
+            castle_owners_client.click_dialogue(self, mx, my)
+            return
         box = pygame.Rect(150, 450, MAP_W - 300, 230)
         if not box.collidepoint(mx, my):
             self.dialogue = None
@@ -2609,6 +2695,11 @@ class GameClient(CameraYaw):
                 self.shop_buy_scroll = 0
                 self.shop_sell_scroll = 0
                 self.dialogue = None
+            elif action == "teleport":
+                self.dialogue = None
+                if self.player is not None:
+                    self.player["knows_teleport"] = True
+                self.show_teleport = True
             elif action == "housing" and self.dialogue.get("housing"):
                 self.net.send("HOUSING_OPEN")
             elif action == "bank" and self.dialogue.get("bank"):
@@ -2736,9 +2827,23 @@ class GameClient(CameraYaw):
             self._entity_moving_until[key] = time.time() + 0.55
         self.net.send("MOVE", dx=dx, dy=dy)
 
+    def _capture_home_map(self, force=False):
+        """Keep the overworld tiles. Dungeon and Castle Realm swaps must not replace them."""
+        if self.dungeon and not force:
+            return
+        if self._home_tiles is not None and not force:
+            return
+        if not self.tiles:
+            return
+        self._home_tiles = [row[:] for row in self.tiles]
+        self._home_size = (int(self.world_w), int(self.world_h))
+        self._home_npcs = list(self.npcs)
+
     def _enter_dungeon_view(self, msg, advance=False):
         """Swap client map to the private Tidehollow floor tiles."""
-        if not advance or self._overworld_tiles is None:
+        if not self.dungeon:
+            self._capture_home_map()
+        if self._overworld_tiles is None and self._home_tiles is None:
             self._overworld_tiles = [row[:] for row in self.tiles]
             self._overworld_size = (self.world_w, self.world_h)
             self._overworld_npcs = list(self.npcs)
@@ -2777,15 +2882,18 @@ class GameClient(CameraYaw):
             self._realm_fade_until = time.time() + 0.45
 
     def _exit_dungeon_view(self):
-        if self._overworld_tiles is not None:
-            self.tiles = self._overworld_tiles
-            if self._overworld_size:
-                self.world_w, self.world_h = self._overworld_size
-            self._overworld_tiles = None
-            self._overworld_size = None
-        if self._overworld_npcs is not None:
-            self.npcs = self._overworld_npcs
-            self._overworld_npcs = None
+        tiles = self._home_tiles if self._home_tiles is not None else self._overworld_tiles
+        size = self._home_size if self._home_tiles is not None else self._overworld_size
+        npcs = self._home_npcs if self._home_tiles is not None else self._overworld_npcs
+        if tiles is not None:
+            self.tiles = [row[:] for row in tiles]
+            if size:
+                self.world_w, self.world_h = size
+        if npcs is not None:
+            self.npcs = list(npcs)
+        self._overworld_tiles = None
+        self._overworld_size = None
+        self._overworld_npcs = None
         self.dungeon = None
         self.clear_walk()
         self._minimap_base = None
@@ -2799,9 +2907,12 @@ class GameClient(CameraYaw):
         if self.dungeon is not None:
             self.dungeon["plane"] = msg.get("plane") or "realm"
             self.dungeon["realm"] = True
+            self.dungeon["floor"] = msg.get("floor", self.dungeon.get("floor", 0))
+            self.dungeon["floors"] = msg.get("floors", self.dungeon.get("floors", 1))
+            self.dungeon["name"] = msg.get("name") or self.dungeon.get("name")
+            self.dungeon["label"] = msg.get("label") or self.dungeon.get("label")
             self.dungeon["exit_x"] = int(msg.get("exit_x", -1))
             self.dungeon["exit_y"] = int(msg.get("exit_y", -1))
-            self.dungeon["label"] = msg.get("label") or self.dungeon.get("label")
         if self.player:
             self.player["x"] = msg.get("player_x", self.player.get("x", 0))
             self.player["y"] = msg.get("player_y", self.player.get("y", 0))
@@ -2925,6 +3036,16 @@ class GameClient(CameraYaw):
             reach = self.equipped_bow_range()
             return max(abs(m["x"] - px), abs(m["y"] - py)) <= reach
         if kind == "TALK":
+            if (
+                USE_CASTLE_OWNERS
+                and self.dungeon
+                and self.dungeon.get("id") == "castle_realm"
+            ):
+                import castle_owners
+                seller = castle_owners.seller_by_npc(action.get("npc_id"))
+                if seller:
+                    sx, sy = seller["spawn"]["tile"]
+                    return max(abs(int(sx) - px), abs(int(sy) - py)) <= 1
             for n in self.npcs:
                 if n["id"] == action["npc_id"]:
                     return max(abs(n["x"] - px), abs(n["y"] - py)) <= 1
@@ -2950,6 +3071,8 @@ class GameClient(CameraYaw):
             ex = int(self.dungeon.get("exit_x", self.world_w // 2))
             ey = int(self.dungeon.get("exit_y", self.world_h - 1))
             return max(abs(ex - px), abs(ey - py)) <= 1
+        if kind == "STAIR":
+            return max(abs(action["x"] - px), abs(action["y"] - py)) <= 1
         if kind == "PICKUP":
             # Standing on the loot tile, or adjacent if the tile itself is blocked
             ax, ay = action["x"], action["y"]
@@ -2991,6 +3114,8 @@ class GameClient(CameraYaw):
         elif kind == "LEAVE_DUNGEON":
             self.clear_walk()
             self.net.send("LEAVE_DUNGEON")
+        elif kind == "STAIR":
+            self.net.send("STAIR", action="ask")
         elif kind == "PICKUP":
             kwargs = {}
             if action.get("all"):
@@ -3238,6 +3363,8 @@ class GameClient(CameraYaw):
                 self.clear_walk()
                 self.net.send("LEAVE_DUNGEON")
                 return
+        if self.stair_prompt and self._click_stair_prompt(mx, my):
+            return
         if self.dungeon_prompt:
             self.handle_dungeon_prompt_click(mx, my)
             return
@@ -3336,19 +3463,33 @@ class GameClient(CameraYaw):
         if self.dialogue:
             self.handle_dialogue_click(mx, my)
             return
+        if self.show_teleport:
+            self.handle_teleport_click(mx, my)
+            return
+        if self.teleport_btn_rect and self.teleport_btn_rect.collidepoint(mx, my):
+            self.toggle_teleport_modal()
+            return
         if self.show_help:
             box = pygame.Rect(120, 30, 580, 640)
             if not box.collidepoint(mx, my):
                 self.show_help = False
             return
-        if self.minimap_rect and self.minimap_rect.collidepoint(mx, my):
+        if USE_HUD_DRAWN_PANELS and USE_NEW_HUD:
+            import hud_drawn
+            if hud_drawn.handle_click(self, mx, my, event.button):
+                return
+        elif USE_HUD_MOCKUP_PLATES and USE_NEW_HUD:
+            import hud_plates
+            if hud_plates.handle_click(self, mx, my, event.button):
+                return
+        if self.minimap_rect and self.minimap_rect.collidepoint(mx, my) and not (USE_HUD_MOCKUP_PLATES and USE_NEW_HUD and not USE_HUD_DRAWN_PANELS):
             # Left-click hides the corner map. Right-click still opens the big map.
             if event.button == 3 and not self.minimap_collapsed:
                 self.toggle_world_map()
             else:
                 self.minimap_collapsed = not self.minimap_collapsed
             return
-        if USE_NEW_HUD:
+        if USE_NEW_HUD and (USE_HUD_DRAWN_PANELS or not USE_HUD_MOCKUP_PLATES):
             import hud_v2
             if hud_v2.handle_world_chrome_click(self, mx, my, event.button):
                 return
@@ -3366,6 +3507,18 @@ class GameClient(CameraYaw):
 
         # smithy stations / doors / dungeon / bank — walk then act
         if self.dungeon:
+            if self.dungeon.get("id") == "castle_realm" and self.dungeon.get("plane") not in (None, "", "realm"):
+                import castle_interiors_v2
+                pad = castle_interiors_v2.stair_pad(self.dungeon.get("plane"), tx, ty)
+                if pad is not None:
+                    px, py = self.player_xy()
+                    if max(abs(pad[0] - px), abs(pad[1] - py)) <= 1:
+                        self.net.send("STAIR", action="ask")
+                    else:
+                        goals = self.adjacent_goals(pad[0], pad[1])
+                        goals.add(pad)
+                        self.walk_and_act(goals, {"type": "STAIR", "x": pad[0], "y": pad[1]})
+                    return
             # Exit mouth on the south wall — click to leave
             ex = int((self.dungeon or {}).get("exit_x", self.world_w // 2))
             ey = int((self.dungeon or {}).get("exit_y", self.world_h - 1))
@@ -3508,6 +3661,20 @@ class GameClient(CameraYaw):
             })
             return
         # npc?
+        if (
+            USE_CASTLE_OWNERS
+            and self.dungeon
+            and self.dungeon.get("id") == "castle_realm"
+            and self.dungeon.get("plane") == "realm"
+        ):
+            import castle_owners_client
+            seller = castle_owners_client.seller_at(tx, ty)
+            if seller:
+                tile = seller["spawn"]["tile"]
+                self.walk_and_act(self.adjacent_goals(int(tile[0]), int(tile[1])), {
+                    "type": "TALK", "npc_id": seller["npc_id"],
+                })
+                return
         for n in self.npcs:
             if n["x"] == tx and n["y"] == ty:
                 self.walk_and_act(self.adjacent_goals(n["x"], n["y"]), {
@@ -3607,6 +3774,14 @@ class GameClient(CameraYaw):
         return None
 
     def handle_sidebar_click(self, mx, my, button):
+        if USE_HUD_DRAWN_PANELS and USE_NEW_HUD:
+            import hud_v2
+            hud_v2.handle_sidebar_click(self, mx, my, button)
+            return
+        if USE_HUD_MOCKUP_PLATES and USE_NEW_HUD:
+            import hud_plates
+            hud_plates.handle_click(self, mx, my, button)
+            return
         if USE_NEW_HUD:
             import hud_v2
             hud_v2.handle_sidebar_click(self, mx, my, button)
@@ -3783,7 +3958,13 @@ class GameClient(CameraYaw):
             self.net.send("ATTACK", target_id=tid)
 
     def inventory_slot_rects(self):
-        """Visible skill-tab slots (24). Keys are global slot indices."""
+        """Visible inventory cells. Keys are the real inventory slot indexes."""
+        # The drawn sidebar paints its own cells. Clicks, drags, and hover must
+        # use those rectangles, or a click lands on a different item.
+        if USE_HUD_DRAWN_PANELS and USE_NEW_HUD:
+            drawn = (getattr(self, "hud_rects", None) or {}).get("slots")
+            if drawn:
+                return drawn
         rects = {}
         cols, rows = 4, 6  # INVENTORY_TAB_SIZE
         tab = max(0, min(len(INVENTORY_TABS) - 1, int(getattr(self, "inv_tab", 0) or 0)))
@@ -3901,6 +4082,10 @@ class GameClient(CameraYaw):
                         self.open_fire_prompt(slot, entry["item_id"])
                 elif entry["item_id"] == "tinderbox":
                     self.open_fire_prompt_from_tinderbox()
+                elif item.get("type") == "key":
+                    self.net.send("USE_ITEM", slot_index=slot)
+                else:
+                    self.open_drop_prompt(slot, entry)
                 return
 
     def open_drop_prompt(self, slot, entry):
@@ -5085,7 +5270,10 @@ class GameClient(CameraYaw):
         if not self.player:
             return
         self.draw_map()
-        if USE_NEW_HUD:
+        if USE_NEW_HUD and USE_HUD_DRAWN_PANELS:
+            import hud_drawn
+            hud_drawn.draw_world(self)
+        elif USE_NEW_HUD and not USE_HUD_MOCKUP_PLATES:
             import hud_v2
             hud_v2.draw_world_chrome(self)
         self.draw_magic_fx()
@@ -5110,6 +5298,7 @@ class GameClient(CameraYaw):
                 else:
                     import void_v2_client
                     void_v2_client.draw_overlay(self, now)
+        self.draw_teleport_button()
         if self.dialogue:
             self.draw_dialogue()
         if self.housing_open:
@@ -5175,6 +5364,11 @@ class GameClient(CameraYaw):
             self.draw_wish_stat_modal()
         if self.show_help:
             self.draw_help_modal()
+        if self.show_teleport:
+            self.draw_teleport_modal()
+        if self.stair_prompt:
+            self.draw_stair_prompt()
+        self.draw_teleport_fx()
 
     def draw_map(self):
         cam_x, cam_y = self.camera_origin()
@@ -5529,17 +5723,26 @@ class GameClient(CameraYaw):
                 near_loot = px is not None and max(abs(x - px), abs(y - py)) <= 1
                 hovered = hover_tile == (x, y)
 
-                def _draw_loot(r=r, items=items, top=top, near_loot=near_loot, hovered=hovered):
-                    if top.get("item_id") == "coins":
+                def _draw_loot(r=r, items=items, top=top, near_loot=near_loot, hovered=hovered, sx=sx, sy=sy):
+                    tile_rect = pygame.Rect(sx * TILE, sy * TILE, TILE, TILE)
+                    realistic = False
+                    if USE_REALISTIC_ITEM_ICONS:
+                        import realistic_item_icons
+                        realistic = realistic_item_icons.draw_ground(
+                            self.screen, tile_rect, top.get("item_id"),
+                        )
+                    if realistic:
+                        pass
+                    elif top.get("item_id") == "coins":
                         sprites.draw_ground_item(self.screen, r, t)
                     else:
                         icon_r = sprites.draw_ground_loot_pad(self.screen, r, t)
                         sprites.draw_item_icon(self.screen, icon_r, top["item_id"], ITEMS)
-                        if len(items) > 1:
-                            n = self.font_tiny.render(f"+{len(items) - 1}", True, YELLOW)
-                            badge = pygame.Rect(r.right - n.get_width() - 2, r.y - 2, n.get_width() + 4, 12)
-                            pygame.draw.rect(self.screen, (20, 18, 14), badge, border_radius=3)
-                            self.screen.blit(n, (badge.x + 2, badge.y))
+                    if len(items) > 1 and (realistic or top.get("item_id") != "coins"):
+                        n = self.font_tiny.render(f"+{len(items) - 1}", True, YELLOW)
+                        badge = pygame.Rect(r.right - n.get_width() - 2, r.y - 2, n.get_width() + 4, 12)
+                        pygame.draw.rect(self.screen, (20, 18, 14), badge, border_radius=3)
+                        self.screen.blit(n, (badge.x + 2, badge.y))
                     if near_loot or hovered:
                         item = ITEMS.get(top.get("item_id"), {})
                         name = item.get("name", top.get("item_id", "?"))
@@ -5586,6 +5789,10 @@ class GameClient(CameraYaw):
                           body, skin, hair = (148, 36, 48), (235, 195, 150), (70, 50, 40)
                       elif n["id"] == "city_vendor_mira":
                           body, skin, hair = (70, 110, 150), (230, 185, 145), (90, 55, 35)
+                      elif n["id"] == "wizard_elowen":
+                          body, skin, hair = (92, 48, 150), (232, 210, 190), (230, 230, 245)
+                          pulse = 2 + int(2 * (0.5 + 0.5 * math.sin(t * 3)))
+                          pygame.draw.circle(self.screen, (170, 110, 255), (cx, cy + 4), TILE // 2 + pulse, 2)
                       sprites.draw_humanoid_detailed(
                           self.screen, cx, cy, TILE, body, skin, hair,
                           robe=n["id"] in ROBED_NPC_IDS, t=t, facing=face, moving=mov,
@@ -5643,7 +5850,13 @@ class GameClient(CameraYaw):
                         # Ice rim while frost-bound
                         pygame.draw.circle(self.screen, (140, 210, 255), (cx, cy), TILE // 2 + 4, 2)
                     # Skip the red target ellipse for sheet/strip sprites (looked like a red box).
-                    if targeted and not lowpoly and not strip:
+                    legacy_sheet = (
+                        USE_NEW_PETS_AND_MONSTERS
+                        and legacy_creature_sprites.handles_monster(
+                            (MONSTERS.get(m["type"]) or {}).get("visual") or m["type"]
+                        )
+                    )
+                    if targeted and not lowpoly and not strip and not legacy_sheet:
                         ring = pygame.Surface((TILE + 12, TILE + 12), pygame.SRCALPHA)
                         pygame.draw.ellipse(ring, (255, 90, 70, 90), (2, TILE // 2 + 2, TILE + 8, TILE // 2))
                         pygame.draw.ellipse(ring, (255, 160, 80, 180), (2, TILE // 2 + 2, TILE + 8, TILE // 2), 2)
@@ -5678,6 +5891,14 @@ class GameClient(CameraYaw):
                         )
                     ):
                         pass  # anim strip drawn
+                    elif (
+                        USE_NEW_PETS_AND_MONSTERS
+                        and legacy_creature_sprites.draw_monster(
+                            self.screen, _vis, cx, cy, _ts, t,
+                            hurt=hurt, attacking=atk_arg, facing=face, moving=draw_moving,
+                        )
+                    ):
+                        pass  # low-poly preview drawn
                     else:
                         sprites.draw_monster(
                             self.screen, _vis, cx, cy, _ts, t,
@@ -5720,14 +5941,28 @@ class GameClient(CameraYaw):
                 now_pos[pkey] = (pet["x"], pet["y"])
 
                 def _draw_pet(cx=cx, cy=cy, pet=pet, hurt=hurt, atk=atk, mine=mine, mov=mov, face=face):
-                    sprites.draw_pet(
-                        self.screen, pet.get("sprite") or pet["pet_id"], cx, cy, TILE, t,
-                        hurt=hurt, attacking=atk, moving=mov, facing=face,
+                    pet_key = f"pet:{pet.get('owner_id')}"
+                    swinging = pet_key in self.attack_anims
+                    atk_arg = atk if swinging else -1.0
+                    sprite_id = pet.get("sprite") or pet["pet_id"]
+                    drawn = USE_NEW_PETS_AND_MONSTERS and legacy_creature_sprites.draw_pet(
+                        self.screen, sprite_id, cx, cy, TILE, t,
+                        hurt=hurt, attacking=atk_arg, moving=mov and not swinging, facing=face,
                     )
+                    if not drawn:
+                        sprites.draw_pet(
+                            self.screen, sprite_id, cx, cy, TILE, t,
+                            hurt=hurt, attacking=atk, moving=mov, facing=face,
+                        )
+                    top = legacy_creature_sprites.pet_top_y(sprite_id, cy, TILE)
+                    if top is None:
+                        top = cy - int(TILE * 1.7)
+                    # Nameplate hangs a few pixels below the y we pass.
                     if mine or hurt:
-                        ny, hy = self.entity_anchor(cx, cy, "pet")
-                        self.blit_nameplate(pet["name"], cx, ny, (180, 220, 255))
-                        self.draw_hp_bar(cx, hy, pet["hp"], pet["max_hp"])
+                        self.draw_hp_bar(cx, top - 8, pet["hp"], pet["max_hp"])
+                        self.blit_nameplate(pet["name"], cx, top - 22, (180, 220, 255))
+                    else:
+                        self.blit_nameplate(pet["name"], cx, top - 12, (180, 220, 255))
                 draw_list.append((cy + TILE // 3, 5, _draw_pet))
 
         # Players
@@ -5809,6 +6044,9 @@ class GameClient(CameraYaw):
                     self.blit_nameplate(label, cx, ny,
                                         (180, 255, 180) if is_self else WHITE)
                     self.draw_hp_bar(cx, hy, p["hp"], p["max_hp"])
+                    said = (self.speech or {}).get(p["id"])
+                    if said and time.time() < said.get("until", 0):
+                        self.draw_speech_bubble(cx, ny, said.get("text") or "")
                     if is_self and time.time() < self.level_up_until:
                         self.draw_level_up_banner(cx, ny - 18, time.time())
                     if is_self:
@@ -5829,6 +6067,9 @@ class GameClient(CameraYaw):
             import castle_realm_renderer
             castle_realm_renderer.draw_floor_plane(self, cam_x, cam_y, TILE)
             castle_realm_renderer.queue(self, draw_list, cam_x, cam_y, TILE)
+            if USE_CASTLE_OWNERS and self.dungeon.get("plane") == "realm":
+                import castle_owners_client
+                castle_owners_client.queue(self, draw_list, cam_x, cam_y, TILE)
             if USE_NEW_CASTLE_PORTAL:
                 import castle_portal
                 rx, ry = castle_realm_renderer.return_portal_xy()
@@ -6255,6 +6496,11 @@ class GameClient(CameraYaw):
 
     def _queue_volcano_cliffs(self, draw_list, cam_x, cam_y, vis_w, vis_h, t):
         """Queue tall cliff sprites for volcano rock faces and dungeon corridor walls."""
+        if self.dungeon and self.dungeon.get("id") == "castle_realm" and self.dungeon.get("plane") not in (None, "", "realm"):
+            import castle_interiors_v2
+            castle_interiors_v2.queue_walls(self, draw_list, cam_x, cam_y, TILE)
+            castle_interiors_v2.queue_props(self, draw_list, cam_x, cam_y, TILE)
+            return
         if self.dungeon and self.dungeon.get("v2") == "depths":
             import depths_v2_client
             depths_v2_client.queue_wall_faces(self, draw_list, cam_x, cam_y, vis_w, vis_h, t)
@@ -6919,6 +7165,49 @@ class GameClient(CameraYaw):
                 dmg = self.font_small.render(str(fx["damage"]), True, YELLOW)
                 self.screen.blit(dmg, (sx - dmg.get_width() // 2, sy - 40 - int(u * 12)))
 
+    def _show_player_speech(self, msg):
+        """Remember a spoken line so it can sit above that player's head."""
+        pid = msg.get("player_id")
+        text = (msg.get("text") or "").strip()
+        if pid is None or not text:
+            return
+        if not hasattr(self, "speech"):
+            self.speech = {}
+        self.speech[pid] = {"text": text, "until": time.time() + 6.0}
+
+    def draw_speech_bubble(self, cx, name_y, text):
+        """Short spoken line above the nameplate."""
+        words = str(text).split()
+        if not words:
+            return
+        lines = []
+        cur = ""
+        for word in words:
+            trial = word if not cur else f"{cur} {word}"
+            if len(trial) > 28 and cur:
+                lines.append(cur)
+                cur = word
+                if len(lines) == 2:
+                    break
+            else:
+                cur = trial
+        if len(lines) < 3 and cur:
+            lines.append(cur if len(cur) <= 32 else cur[:29] + "…")
+        lines = lines[:3]
+        surfs = [self.font_small.render(line, True, (255, 248, 230)) for line in lines]
+        width = max(surf.get_width() for surf in surfs) + 16
+        height = sum(surf.get_height() for surf in surfs) + 10 + (len(surfs) - 1) * 2
+        box = pygame.Rect(cx - width // 2, name_y - height - 22, width, height)
+        pygame.draw.rect(self.screen, (16, 18, 28), box, border_radius=6)
+        pygame.draw.rect(self.screen, (212, 175, 90), box, 1, border_radius=6)
+        pygame.draw.polygon(self.screen, (16, 18, 28), [
+            (cx - 5, box.bottom - 1), (cx + 5, box.bottom - 1), (cx, box.bottom + 6),
+        ])
+        y = box.y + 5
+        for surf in surfs:
+            self.screen.blit(surf, (box.centerx - surf.get_width() // 2, y))
+            y += surf.get_height() + 2
+
     def blit_label(self, text, cx, top_y):
         self.blit_nameplate(text, cx, top_y)
 
@@ -7138,11 +7427,18 @@ class GameClient(CameraYaw):
         pygame.draw.rect(self.screen, gold, plate, 1, border_radius=3)
         self.screen.blit(label, (lx, ly))
 
-    def draw_minimap(self):
+    def draw_minimap(self, plate_rect=None):
+        if USE_HUD_MOCKUP_PLATES and USE_NEW_HUD and not USE_HUD_DRAWN_PANELS and plate_rect is None:
+            self.minimap_rect = None
+            return
         if not self.player or self.world_w <= 0:
             self.minimap_rect = None
             return
-        if self.minimap_collapsed:
+        if plate_rect is not None:
+            self.minimap_rect = plate_rect
+            self._blit_round_minimap(plate_rect)
+            rect = plate_rect
+        elif self.minimap_collapsed:
             label = self.font_tiny.render("Map", True, (220, 230, 245))
             chip = pygame.Rect(MAP_W - label.get_width() - 28, 10, label.get_width() + 18, 22)
             self.minimap_rect = chip
@@ -7150,23 +7446,24 @@ class GameClient(CameraYaw):
             pygame.draw.rect(self.screen, (90, 120, 160), chip, 2, border_radius=6)
             self.screen.blit(label, (chip.x + 9, chip.y + 4))
             return
-        mm_w, mm_h = self.minimap_dims()
-        yaw = int(self.camera_yaw) % 4
-        if (
-            self._minimap_base is None
-            or self._minimap_size != (mm_w, mm_h)
-            or getattr(self, "_minimap_yaw", None) != yaw
-        ):
-            self.rebuild_minimap_base()
-        pad = 10
-        rect = pygame.Rect(MAP_W - mm_w - pad, pad, mm_w, mm_h)
-        self.minimap_rect = rect
-        frame = rect.inflate(6, 6)
-        pygame.draw.rect(self.screen, (12, 14, 20), frame, border_radius=6)
-        pygame.draw.rect(self.screen, (90, 120, 160), frame, 2, border_radius=6)
-        self.screen.blit(self._minimap_base, rect.topleft)
+        else:
+            mm_w, mm_h = self.minimap_dims()
+            yaw = int(self.camera_yaw) % 4
+            if (
+                self._minimap_base is None
+                or self._minimap_size != (mm_w, mm_h)
+                or getattr(self, "_minimap_yaw", None) != yaw
+            ):
+                self.rebuild_minimap_base()
+            pad = 10
+            rect = pygame.Rect(MAP_W - mm_w - pad, pad, mm_w, mm_h)
+            self.minimap_rect = rect
+            frame = rect.inflate(6, 6)
+            pygame.draw.rect(self.screen, (12, 14, 20), frame, border_radius=6)
+            pygame.draw.rect(self.screen, (90, 120, 160), frame, 2, border_radius=6)
+            self.screen.blit(self._minimap_base, rect.topleft)
 
-        # Destination markers
+        # Destination markers (shared with the mockup-plate minimap)
         for dest in TRAVEL_DESTINATIONS:
             dx, dy = self.world_to_minimap(dest["x"], dest["y"], rect)
             if dest.get("id") == "castle_realm":
@@ -7210,8 +7507,30 @@ class GameClient(CameraYaw):
         pygame.draw.circle(self.screen, (40, 40, 40), (mx, my), 4)
         pygame.draw.circle(self.screen, (255, 80, 70), (mx, my), 3)
 
-        hint = self.font_tiny.render("Click hide · Right map · M travel", True, (200, 210, 230))
-        self.screen.blit(hint, (rect.x + 4, rect.bottom - 14))
+        if plate_rect is None:
+            hint = self.font_tiny.render("Click hide · Right map · M travel", True, (200, 210, 230))
+            self.screen.blit(hint, (rect.x + 4, rect.bottom - 14))
+
+    def _blit_round_minimap(self, rect):
+        """Scale the live minimap into a circular hole."""
+        mm_w, mm_h = self.minimap_dims()
+        yaw = int(self.camera_yaw) % 4
+        if (
+            self._minimap_base is None
+            or self._minimap_size != (mm_w, mm_h)
+            or getattr(self, "_minimap_yaw", None) != yaw
+        ):
+            self.rebuild_minimap_base()
+        base = self._minimap_base
+        if base is None or rect.w < 4 or rect.h < 4:
+            return
+        scaled = pygame.transform.smoothscale(base, (rect.w, rect.h))
+        cover = pygame.Surface((rect.w, rect.h), pygame.SRCALPHA)
+        cover.blit(scaled, (0, 0))
+        mask = pygame.Surface((rect.w, rect.h), pygame.SRCALPHA)
+        pygame.draw.circle(mask, (255, 255, 255, 255), (rect.w // 2, rect.h // 2), min(rect.w, rect.h) // 2 - 1)
+        cover.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        self.screen.blit(cover, rect.topleft)
 
     def world_map_view_rect(self):
         return pygame.Rect(110, 40, 780, 560)
@@ -7394,6 +7713,176 @@ class GameClient(CameraYaw):
             return
         if box and not box.collidepoint(mx, my):
             self.dungeon_prompt = None
+
+    def toggle_teleport_modal(self):
+        self.show_teleport = not self.show_teleport
+        if self.show_teleport:
+            self.show_travel = False
+            self.show_world_map = False
+            self.show_forge = False
+            self.show_cook = False
+            self.show_equipment = False
+            self.show_help = False
+            self.show_bank = False
+            self.show_shop_panel = False
+            self.show_skills = False
+            self.show_pets = False
+
+    def _start_teleport_fx(self, label):
+        now = time.time()
+        self.teleport_fx = {"start": now, "until": now + 0.95, "label": label or ""}
+
+    def cast_teleport(self, dest_id):
+        fx = self.teleport_fx
+        if fx and time.time() < fx["until"] - 0.15:
+            return
+        label = "Teleport"
+        for dest in TELEPORT_DESTINATIONS:
+            if dest["id"] == dest_id:
+                label = dest["label"]
+                break
+        self.show_teleport = False
+        self.clear_walk()
+        self._start_teleport_fx(label)
+        self.net.send("TELEPORT", dest=dest_id)
+
+    def handle_teleport_click(self, mx, my):
+        for kind, rect, payload in self.teleport_row_rects:
+            if not rect.collidepoint(mx, my):
+                continue
+            if kind == "close":
+                self.show_teleport = False
+            elif kind == "walk":
+                self.show_teleport = False
+                self.walk_and_act({WIZARD_TILE})
+            elif kind == "dest":
+                self.cast_teleport(payload)
+            return
+        box = getattr(self, "teleport_box", None)
+        if box and not box.collidepoint(mx, my):
+            self.show_teleport = False
+
+    def _click_stair_prompt(self, mx, my):
+        for rect, direction in self.stair_choice_rects:
+            if rect.collidepoint(mx, my):
+                if direction in ("up", "down"):
+                    self.net.send("STAIR", dir=direction)
+                self.stair_prompt = None
+                return True
+        self.stair_prompt = None
+        return True
+
+    def draw_stair_prompt(self):
+        box = pygame.Rect(250, 500, 400, 108)
+        panel = pygame.Surface((box.w, box.h), pygame.SRCALPHA)
+        panel.fill((16, 18, 28, 230))
+        self.screen.blit(panel, box.topleft)
+        pygame.draw.rect(self.screen, (210, 175, 70), box, 2)
+        title = self.font_small.render("Spiral stairs", True, (255, 230, 170))
+        self.screen.blit(title, (box.centerx - title.get_width() // 2, box.y + 10))
+        hint = self.font_tiny.render("Go up or down?", True, (220, 210, 180))
+        self.screen.blit(hint, (box.centerx - hint.get_width() // 2, box.y + 36))
+        labels = (("up", "Go up"), ("down", "Go down"), ("stay", "Stay"))
+        rects = []
+        width = 112
+        gap = 12
+        total = width * 3 + gap * 2
+        left = box.centerx - total // 2
+        for index, (direction, label) in enumerate(labels):
+            rect = pygame.Rect(left + index * (width + gap), box.y + 64, width, 30)
+            pygame.draw.rect(self.screen, (36, 32, 24), rect)
+            pygame.draw.rect(self.screen, (210, 175, 70), rect, 1)
+            text = self.font_small.render(label, True, (255, 236, 190))
+            self.screen.blit(text, (rect.centerx - text.get_width() // 2, rect.centery - text.get_height() // 2))
+            rects.append((rect, direction))
+        self.stair_choice_rects = rects
+
+    def draw_teleport_button(self):
+        rect = pygame.Rect(8, 332, 112, 28)
+        self.teleport_btn_rect = rect
+        pygame.draw.rect(self.screen, (36, 18, 62), rect, border_radius=6)
+        pygame.draw.rect(self.screen, (212, 175, 80), rect, 2, border_radius=6)
+        label = self.font_small.render("Teleport", True, (240, 220, 160))
+        self.screen.blit(label, (rect.centerx - label.get_width() // 2, rect.y + 6))
+
+    def draw_teleport_modal(self):
+        box = pygame.Rect(250, 70, 420, 620)
+        self.teleport_box = box
+        self.teleport_row_rects = []
+        pygame.draw.rect(self.screen, (22, 14, 36), box, border_radius=8)
+        pygame.draw.rect(self.screen, (212, 175, 80), box, 2, border_radius=8)
+        title = self.font_big.render("Teleport", True, (240, 220, 160))
+        self.screen.blit(title, (box.x + 18, box.y + 12))
+        taught = bool((self.player or {}).get("knows_teleport"))
+        close = pygame.Rect(box.right - 92, box.bottom - 40, 74, 26)
+        pygame.draw.rect(self.screen, (60, 40, 80), close, border_radius=5)
+        pygame.draw.rect(self.screen, (212, 175, 80), close, 1, border_radius=5)
+        close_lbl = self.font_small.render("Close", True, WHITE)
+        self.screen.blit(close_lbl, (close.centerx - close_lbl.get_width() // 2, close.y + 5))
+        self.teleport_row_rects.append(("close", close, None))
+        if not taught:
+            lines = [
+                "Wizard Elowen can teach you this spell.",
+                "She stands on the grass just northwest",
+                "of the village crossroads.",
+                "Talk to her, then press T or this button",
+                "and choose a castle or a town.",
+            ]
+            y = box.y + 64
+            for line in lines:
+                self.screen.blit(self.font_small.render(line, True, WHITE), (box.x + 18, y))
+                y += 22
+            walk = pygame.Rect(box.x + 18, box.bottom - 40, 180, 26)
+            pygame.draw.rect(self.screen, (96, 48, 150), walk, border_radius=5)
+            pygame.draw.rect(self.screen, (212, 175, 80), walk, 1, border_radius=5)
+            walk_lbl = self.font_small.render("Walk to Elowen", True, WHITE)
+            self.screen.blit(walk_lbl, (walk.centerx - walk_lbl.get_width() // 2, walk.y + 5))
+            self.teleport_row_rects.append(("walk", walk, None))
+            return
+        hint = self.font_tiny.render("Mythoscape and the Castle Realm are separate maps.", True, (190, 170, 210))
+        self.screen.blit(hint, (box.x + 18, box.y + 48))
+        y = box.y + 72
+        groups = (
+            ("Mythoscape", [d for d in TELEPORT_DESTINATIONS if d.get("where") == "overworld"]),
+            ("Castle Realm", [d for d in TELEPORT_DESTINATIONS if d.get("where") == "castle"]),
+        )
+        for title_text, dests in groups:
+            self.screen.blit(self.font_small.render(title_text, True, (212, 175, 80)), (box.x + 18, y))
+            y += 22
+            for dest in dests:
+                row = pygame.Rect(box.x + 16, y, box.w - 32, 36)
+                pygame.draw.rect(self.screen, (40, 24, 64), row, border_radius=6)
+                pygame.draw.rect(self.screen, (140, 100, 180), row, 1, border_radius=6)
+                self.screen.blit(self.font_small.render(dest["label"], True, (240, 220, 160)), (row.x + 12, row.y + 2))
+                self.screen.blit(self.font_tiny.render(dest["blurb"], True, (180, 170, 200)), (row.x + 12, row.y + 18))
+                self.teleport_row_rects.append(("dest", row, dest["id"]))
+                y += 40
+
+    def draw_teleport_fx(self):
+        fx = self.teleport_fx
+        if not fx:
+            return
+        now = time.time()
+        if now >= fx["until"]:
+            self.teleport_fx = None
+            return
+        u = (now - fx["start"]) / max(0.01, fx["until"] - fx["start"])
+        alpha = int(210 * math.sin(min(1.0, u) * math.pi))
+        veil = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+        veil.fill((42, 10, 78, alpha))
+        self.screen.blit(veil, (0, 0))
+        cx, cy = MAP_W // 2, MAP_H // 2
+        if self.player:
+            cam_x, cam_y = self.camera_origin()
+            sx, sy = self.world_to_view_offset(self.player["x"], self.player["y"], cam_x, cam_y)
+            cx = int(sx * TILE + TILE // 2)
+            cy = int(sy * TILE + TILE // 2)
+        for i in range(3):
+            radius = int(10 + u * 90 + i * 16)
+            pygame.draw.circle(self.screen, (198, 140, 255), (cx, cy), radius, 2)
+        if fx.get("label"):
+            text = self.font.render(fx["label"], True, (236, 220, 255))
+            self.screen.blit(text, (MAP_W // 2 - text.get_width() // 2, MAP_H // 2 - 48))
 
     def draw_travel_modal(self):
         box = pygame.Rect(140, 40, 720, 580)
@@ -8592,6 +9081,14 @@ class GameClient(CameraYaw):
         pygame.draw.line(self.screen, col, (cx, cy - 8), (cx, cy + 1), 2)
 
     def draw_sidebar(self):
+        if USE_HUD_DRAWN_PANELS and USE_NEW_HUD:
+            import hud_v2
+            hud_v2.draw_sidebar(self)
+            return
+        if USE_HUD_MOCKUP_PLATES and USE_NEW_HUD:
+            import hud_plates
+            hud_plates.draw(self)
+            return
         if USE_NEW_HUD:
             import hud_v2
             hud_v2.draw_sidebar(self)
@@ -9648,6 +10145,12 @@ class GameClient(CameraYaw):
 
     # -- chat ---------------------------------------------------------------
     def draw_chat(self):
+        if USE_HUD_DRAWN_PANELS and USE_NEW_HUD:
+            import hud_drawn
+            hud_drawn.draw_chat(self)
+            return
+        if USE_HUD_MOCKUP_PLATES and USE_NEW_HUD:
+            return
         if USE_NEW_HUD:
             import hud_v2
             hud_v2.draw_chat(self)
@@ -9704,7 +10207,10 @@ class GameClient(CameraYaw):
             fill, border, title_col = (28, 16, 40, 230), (180, 120, 255), (220, 190, 255)
         else:
             fill, border, title_col = (16, 20, 30, 220), (210, 175, 70), (255, 220, 110)
-        if d.get("explore"):
+        if d.get("id") == "castle_realm" and d.get("plane") not in (None, "", "realm"):
+            title_txt = d.get("label") or name
+            sub_txt = f"Floor {d.get('floor', 1)} of {d.get('floors', 1)} · {name}"
+        elif d.get("explore"):
             title_txt = name
             sub_txt = "Exit to leave"
         else:
@@ -9751,6 +10257,10 @@ class GameClient(CameraYaw):
 
     # -- modals ---------------------------------------------------------------
     def draw_dialogue(self):
+        if self.dialogue.get("castle"):
+            import castle_owners_client
+            castle_owners_client.draw_dialogue(self)
+            return
         box = pygame.Rect(150, 450, MAP_W - 300, 230)
         pygame.draw.rect(self.screen, (25, 25, 35), box)
         pygame.draw.rect(self.screen, WHITE, box, 2)
@@ -9780,6 +10290,8 @@ class GameClient(CameraYaw):
             bx = add_btn("turnin", "Turn in (T)", (160, 120, 40), bx)
         if self.dialogue.get("shop_id"):
             bx = add_btn("shop", "Shop (B)", (120, 90, 40), bx)
+        if self.dialogue.get("teleport"):
+            bx = add_btn("teleport", "Teleport", (96, 48, 150), bx)
         if self.dialogue.get("housing"):
             bx = add_btn("housing", "Homes (B)", (90, 70, 30), bx)
         if self.dialogue.get("bank"):
@@ -11184,13 +11696,23 @@ class GameClient(CameraYaw):
             )
             self.pet_switch_rects.append((row, entry.get("pet_id")))
 
-            icon = pygame.Rect(row.x + 10, row.y + 8, 40, 40)
+            icon = pygame.Rect(row.x + 8, row.y + 6, 44, 44)
             pygame.draw.rect(self.screen, (24, 28, 36), icon)
-            sprites.draw_pet(
-                self.screen, entry.get("sprite") or entry.get("pet_id"),
-                icon.centerx, icon.centery + 6, 28, time.time(),
-                facing=1,
-            )
+            sprite_id = entry.get("sprite") or entry.get("pet_id")
+            if not (
+                USE_NEW_PETS_AND_MONSTERS
+                and legacy_creature_sprites.blit_pet_icon(
+                    self.screen, sprite_id, icon, time.time(), facing=1,
+                )
+            ):
+                prev_clip = self.screen.get_clip()
+                self.screen.set_clip(icon)
+                sprites.draw_pet(
+                    self.screen, sprite_id,
+                    icon.centerx, icon.bottom - 4, 18, time.time(),
+                    facing=1,
+                )
+                self.screen.set_clip(prev_clip)
             name = entry.get("name", "?")
             lvl = entry.get("level", 1)
             status = "ACTIVE" if active else "Switch"

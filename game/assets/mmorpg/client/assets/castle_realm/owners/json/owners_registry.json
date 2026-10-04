@@ -1,0 +1,64 @@
+{
+  "flag": "USE_CASTLE_OWNERS",
+  "requires": "USE_CASTLE_REALM",
+  "sellers_file": "json/sellers.json",
+  "schema_file": "json/ownership_schema.json",
+  "castles": [
+    {
+      "castle_id": "gothic",
+      "deed_price": 25000000,
+      "weekly_tax": 100000,
+      "seller_tile": [
+        52,
+        77
+      ],
+      "plaque_tile": [
+        47,
+        76
+      ],
+      "deed_item_id": "deed_gothic"
+    },
+    {
+      "castle_id": "white_rose",
+      "deed_price": 40000000,
+      "weekly_tax": 150000,
+      "seller_tile": [
+        257,
+        85
+      ],
+      "plaque_tile": [
+        252,
+        84
+      ],
+      "deed_item_id": "deed_white_rose"
+    },
+    {
+      "castle_id": "sky_anchor",
+      "deed_price": 55000000,
+      "weekly_tax": 200000,
+      "seller_tile": [
+        52,
+        167
+      ],
+      "plaque_tile": [
+        47,
+        166
+      ],
+      "deed_item_id": "deed_sky_anchor"
+    },
+    {
+      "castle_id": "king",
+      "deed_price": 80000000,
+      "weekly_tax": 300000,
+      "seller_tile": [
+        152,
+        77
+      ],
+      "plaque_tile": [
+        147,
+        76
+      ],
+      "deed_item_id": "deed_king"
+    }
+  ]
+}

@@ -88,6 +88,8 @@ def ensure(client):
     client.hud_system = "inventory"
     client.hud_filter = "all"
     client.hud_selected = None
+    client.hud_inv_scroll = 0
+    client.hud_inv_max_scroll = 0
     client.hud_channel = "all"
     client.hud_pvp_mode = False
     client.hud_menu = False
@@ -354,8 +356,9 @@ def draw_sidebar(client):
     y = _draw_currencies(client, y, rects)
     y = _draw_quest_card(client, y, rects)
     y = _draw_system_tabs(client, y, rects)
-    bottom = SCREEN_H - 44
+    bottom = SCREEN_H - 80
     _draw_system_body(client, y, bottom, rects)
+    _draw_skills_button(client, rects)
     _draw_utility_row(client, rects)
     if client.hud_menu:
         _draw_menu(client, rects)
@@ -372,24 +375,38 @@ def _draw_header(client, y, rects):
     pygame.draw.circle(client.screen, GOLD, (card.x + 28, card.y + 28), 18, 2)
     name = (client.player or {}).get("name") or "Adventurer"
     level = client.player_combat_level()
-    _blit(client, client.font, name[:16], (card.x + 54, card.y + 6), INK)
-    _blit(client, client.font_tiny, f"Lv {level}", (card.x + 54, card.y + 26), GOLD)
+    _blit(client, client.font, name[:14], (card.x + 54, card.y + 6), INK)
     frac, _lvl = _xp_fraction(client)
-    bar = pygame.Rect(card.x + 100, card.y + 28, card.w - 148, 8)
-    pygame.draw.rect(client.screen, (8, 10, 18), bar, border_radius=4)
-    fill = bar.copy()
-    fill.w = max(0, int(bar.w * frac))
-    pygame.draw.rect(client.screen, GOLD, fill, border_radius=4)
-    pct = _text(client, client.font_tiny, f"{int(frac * 100)}%", MUTED)
-    client.screen.blit(pct, (bar.right + 4, bar.y - 4))
-    ribbon = pygame.Rect(card.x + 54, card.y + 46, card.w - 100, 22)
+    level_line = _text(client, client.font_tiny, f"Lv {level}  {int(frac * 100)}%", GOLD)
+    client.screen.blit(level_line, (card.x + 54, card.y + 26))
+    settings_x = SCREEN_W - 102
+    bar_x = card.x + 62 + level_line.get_width()
+    bar_w = settings_x - 8 - bar_x
+    if bar_w > 16:
+        bar = pygame.Rect(bar_x, card.y + 28, bar_w, 8)
+        pygame.draw.rect(client.screen, (8, 10, 18), bar, border_radius=4)
+        fill = bar.copy()
+        fill.w = max(0, int(bar.w * frac))
+        pygame.draw.rect(client.screen, GOLD, fill, border_radius=4)
+    ribbon = pygame.Rect(card.x + 54, card.y + 46, card.w - 68, 22)
     _panel(client.screen, ribbon, (36, 28, 48), GOLD, radius=6)
-    _blit(client, client.font_tiny, _title(client)[:22], (ribbon.x + 8, ribbon.y + 3), GOLD)
-    gear = pygame.Rect(card.right - 28, card.y + 8, 20, 20)
-    _panel(client.screen, gear, NAVY_HI, GOLD, radius=4)
-    _blit(client, client.font_tiny, "*", (gear.x + 6, gear.y + 2), GOLD)
-    rects["gear"] = gear
+    _blit(client, client.font_tiny, _title(client)[:18], (ribbon.x + 8, ribbon.y + 3), GOLD)
+    settings = pygame.Rect(SCREEN_W - 102, 8, 92, 26)
+    _panel(client.screen, settings, NAVY_HI, GOLD, radius=6, width=2)
+    _gear_mark(client.screen, settings.x + 14, settings.centery)
+    label = _text(client, client.font_tiny, "Settings", GOLD)
+    client.screen.blit(label, (settings.x + 26, settings.centery - label.get_height() // 2))
+    rects["settings"] = settings
+    client.sidebar_settings_rect = settings
     return card.bottom + 6
+
+
+def _gear_mark(screen, cx, cy):
+    """Small gear, the old settings mark."""
+    pygame.draw.circle(screen, GOLD, (cx, cy), 6, 2)
+    pygame.draw.circle(screen, GOLD, (cx, cy), 2)
+    for dx, dy in ((0, -8), (6, -6), (8, 0), (6, 6), (0, 8), (-6, 6), (-8, 0), (-6, -6)):
+        pygame.draw.line(screen, GOLD, (cx + dx // 2, cy + dy // 2), (cx + dx, cy + dy), 2)
 
 
 def _draw_currencies(client, y, rects):
@@ -481,6 +498,15 @@ def _body_w():
     return screen_w - sidebar_x - 20
 
 
+def _panel_blocking_hover(client):
+    names = (
+        "show_bank", "show_forge", "show_cook", "show_equipment", "show_help",
+        "show_shop_panel", "show_skills", "show_pets", "show_travel",
+        "drop_prompt", "dialogue",
+    )
+    return any(getattr(client, name, None) for name in names)
+
+
 def _draw_inventory(client, y, bottom, rects):
     x0 = _body_x()
     filled = len(_inventory_entries(client))
@@ -500,36 +526,61 @@ def _draw_inventory(client, y, bottom, rects):
     rects["filters"] = filters
     y += 42
     rows = _filtered_entries(client)
-    cols = 6
-    gap = 3
-    size = 36
+    cols = 4
+    gap = 4
+    size = max(40, min(48, (_body_w() - gap * (cols - 1)) // cols))
+    row_h = size + gap
     slots = {}
+    hover = None
     import procedural_sprites_finished as sprites
-    for i, (slot, entry) in enumerate(rows[:24]):
+    slot_bottom = bottom - 40
+    visible_rows = max(1, (slot_bottom - y) // row_h)
+    total_rows = (len(rows) + cols - 1) // cols if rows else 0
+    max_scroll = max(0, total_rows - visible_rows)
+    scroll = max(0, min(max_scroll, int(getattr(client, "hud_inv_scroll", 0) or 0)))
+    client.hud_inv_scroll = scroll
+    client.hud_inv_max_scroll = max_scroll
+    start = scroll * cols
+    for i, (slot, entry) in enumerate(rows[start:start + visible_rows * cols]):
         col, row = i % cols, i // cols
-        rect = pygame.Rect(x0 + col * (size + gap), y + row * (size + gap), size, size)
-        if rect.bottom > bottom - 36:
+        rect = pygame.Rect(x0 + col * (size + gap), y + row * row_h, size, size)
+        if rect.bottom > slot_bottom:
             break
         selected = slot == client.hud_selected
-        pygame.draw.rect(client.screen, NAVY_HI if entry else NAVY, rect, border_radius=4)
-        pygame.draw.rect(client.screen, GOLD if selected else GOLD_DIM, rect, 2 if selected else 1, border_radius=4)
-        sprites.draw_item_icon(client.screen, rect.inflate(-6, -6), entry["item_id"], ITEMS)
+        pygame.draw.rect(client.screen, NAVY_HI if entry else NAVY, rect, border_radius=6)
+        pygame.draw.rect(client.screen, GOLD if selected else GOLD_DIM, rect, 2 if selected else 1, border_radius=6)
+        sprites.draw_item_icon(client.screen, rect.inflate(-8, -8), entry["item_id"], ITEMS)
         if int(entry.get("qty") or 1) > 1:
             qty = _text(client, client.font_tiny, str(entry["qty"]), GOLD)
-            client.screen.blit(qty, (rect.x + 2, rect.y + 1))
+            client.screen.blit(qty, (rect.right - qty.get_width() - 4, rect.bottom - qty.get_height() - 2))
         slots[slot] = rect
+        if rect.collidepoint(pygame.mouse.get_pos()) and not getattr(client, "inv_drag", None):
+            hover = (entry, rect)
     rects["slots"] = slots
-    actions = {}
-    labels = (("equip", "Equip"), ("use", "Use"), ("split", "Split"), ("drop", "Drop"))
-    ay = bottom - 30
-    aw = (_body_w() - 12) // 4
-    for i, (key, label) in enumerate(labels):
-        rect = pygame.Rect(x0 + i * (aw + 4), ay, aw, 26)
-        _panel(client.screen, rect, NAVY_HI, GOLD_DIM, radius=6)
-        surf = _text(client, client.font_tiny, label, INK)
-        client.screen.blit(surf, (rect.centerx - surf.get_width() // 2, rect.centery - surf.get_height() // 2))
-        actions[key] = rect
-    rects["actions"] = actions
+    rects["inv_scroll_up"] = None
+    rects["inv_scroll_down"] = None
+    if max_scroll:
+        up = pygame.Rect(x0 + _body_w() - 36, y - 58, 16, 14)
+        down = pygame.Rect(up.right + 2, up.y, 16, 14)
+        for rect, label, enabled in (
+            (up, "^", scroll > 0),
+            (down, "v", scroll < max_scroll),
+        ):
+            _panel(client.screen, rect, NAVY_HI if enabled else NAVY, GOLD if enabled else GOLD_DIM, radius=3)
+            surf = _text(client, client.font_tiny, label, INK if enabled else MUTED)
+            client.screen.blit(surf, (rect.centerx - surf.get_width() // 2, rect.y))
+        rects["inv_scroll_up"] = up
+        rects["inv_scroll_down"] = down
+    rects["actions"] = {}
+    equip = pygame.Rect(x0, bottom - 32, _body_w(), 28)
+    active = bool(getattr(client, "show_equipment", False))
+    _panel(client.screen, equip, NAVY_HI if active else NAVY_CARD, GOLD if active else GOLD_DIM, radius=6, width=2)
+    surf = _text(client, client.font_small, "Equipment", INK)
+    client.screen.blit(surf, (equip.centerx - surf.get_width() // 2, equip.centery - surf.get_height() // 2))
+    rects["equipment"] = equip
+    if hover and not _panel_blocking_hover(client):
+        pygame.draw.rect(client.screen, GOLD, hover[1], 2, border_radius=6)
+        client.draw_inventory_tooltip(hover[0], hover[1])
 
 
 def _station_state(client, kind):
@@ -704,6 +755,20 @@ def _draw_achievements(client, y, bottom):
     _blit(client, client.font_tiny, f"{points} quest points", (x0, y + 42), MUTED)
 
 
+def _draw_skills_button(client, rects):
+    """Opens the same skills modal the old sidebar used."""
+    _mw, _mh, sidebar_x, screen_w, screen_h = _layout()
+    rect = pygame.Rect(sidebar_x + 8, screen_h - 74, screen_w - sidebar_x - 16, 30)
+    active = bool(getattr(client, "show_skills", False))
+    _panel(client.screen, rect, NAVY_HI if active else NAVY_CARD, GOLD if active else GOLD_DIM, radius=6, width=2 if active else 1)
+    combat = client.player_combat_level()
+    total = client.player_total_level()
+    label = _text(client, client.font_small, f"Skills   Combat {combat}   Total {total}", INK)
+    client.screen.blit(label, (rect.centerx - label.get_width() // 2, rect.centery - label.get_height() // 2))
+    rects["skills"] = rect
+    client.skills_btn_rect = rect
+
+
 def _draw_utility_row(client, rects):
     _mw, _mh, SIDEBAR_X, SCREEN_W, SCREEN_H = _layout()
     keys = (("mounts", "Mounts"), ("pets", "Pets"), ("lore", "Lore"), ("achievements", "Achieve"), ("menu", "Menu"))
@@ -862,8 +927,24 @@ def handle_sidebar_click(client, mx, my, button):
             client.help_scroll = 0
             return
         client.hud_menu = False
-    if rects.get("gear") and rects["gear"].collidepoint(mx, my):
+    if rects.get("settings") and rects["settings"].collidepoint(mx, my):
+        client.show_help = not client.show_help
+        if client.show_help:
+            client.help_scroll = 0
+            client.show_equipment = False
+        return
+    if rects.get("equipment") and rects["equipment"].collidepoint(mx, my):
         client.show_equipment = not client.show_equipment
+        if client.show_equipment:
+            client.show_help = False
+            client.show_forge = False
+            client.show_cook = False
+            client.show_skills = False
+            client.show_travel = False
+            client.show_pets = False
+        return
+    if rects.get("skills") and rects["skills"].collidepoint(mx, my):
+        client.toggle_skills_modal()
         return
     for key, rect in (rects.get("systems") or {}).items():
         if rect.collidepoint(mx, my):
@@ -874,13 +955,19 @@ def handle_sidebar_click(client, mx, my, button):
         if rect.collidepoint(mx, my):
             client.hud_filter = key
             client.hud_selected = None
+            client.hud_inv_scroll = 0
             return
+    if rects.get("inv_scroll_up") and rects["inv_scroll_up"].collidepoint(mx, my):
+        client.hud_inv_scroll = max(0, int(getattr(client, "hud_inv_scroll", 0) or 0) - 1)
+        return
+    if rects.get("inv_scroll_down") and rects["inv_scroll_down"].collidepoint(mx, my):
+        cap = int(getattr(client, "hud_inv_max_scroll", 0) or 0)
+        client.hud_inv_scroll = min(cap, int(getattr(client, "hud_inv_scroll", 0) or 0) + 1)
+        return
     for slot, rect in (rects.get("slots") or {}).items():
         if rect.collidepoint(mx, my):
-            if button == 3 or client.hud_selected == slot:
-                _activate_slot(client, slot, button if button == 3 else 1)
-            else:
-                client.hud_selected = slot
+            client.hud_selected = slot
+            _activate_slot(client, slot, button if button == 3 else 1)
             return
     for key, rect in (rects.get("actions") or {}).items():
         if rect.collidepoint(mx, my):

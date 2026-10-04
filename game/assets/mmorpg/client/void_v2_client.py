@@ -117,6 +117,16 @@ def draw_tile(client, rect, tile_id, wx, wy, t):
             key = decor.split(":")[-1]
             cx, cy = rect.centerx, rect.centery
             draw_seal(client.screen, cx, cy, rect.w, KEY_COL.get(key, (180, 140, 255)), open_, t)
+            if not open_:
+                mx, my = pygame.mouse.get_pos()
+                if rect.collidepoint(mx, my):
+                    label = _seal_label(client, decor)
+                    if label:
+                        client.blit_nameplate(label, rect.centerx, rect.y - 4, (230, 210, 255))
+        if decor == "secret":
+            mx, my = pygame.mouse.get_pos()
+            if rect.collidepoint(mx, my):
+                client.blit_nameplate("Loose bricks — click or walk into the wall", rect.centerx, rect.y - 4, (220, 210, 255))
         return
     draw_floor(client.screen, rect, wx, wy, style, t)
     _draw_prop(client, rect, decor, t)
@@ -200,8 +210,9 @@ def draw_wall_top(surf, rect, x, y, style, cracked=False, t=0.0):
     pygame.draw.rect(surf, rs.shade(mid, -18), rect)
     pygame.draw.line(surf, hi, rect.topleft, (rect.right - 1, rect.top))
     if cracked:
-        pygame.draw.rect(surf, rs.shade(mid, 10), rect.inflate(-4, -4))
-        pygame.draw.line(surf, (16, 10, 20), (rect.centerx, rect.top + 2), (rect.centerx - 3, rect.bottom - 2), 2)
+        pygame.draw.rect(surf, rs.shade(mid, 18), rect.inflate(-3, -3))
+        pygame.draw.line(surf, (255, 214, 120), (rect.centerx - 2, rect.top + 3), (rect.centerx - 6, rect.bottom - 3), 2)
+        pygame.draw.line(surf, (255, 214, 120), (rect.centerx + 4, rect.top + 5), (rect.centerx - 1, rect.bottom - 4), 2)
 
 
 def draw_abyss(surf, rect, x, y, t):
@@ -242,21 +253,32 @@ def queue_wall_faces(client, draw_list, cam_x, cam_y, vis_w, vis_h, t):
             decor = (client.dungeon.get("decor") or {}).get(f"{wx},{wy}", "")
             if decor == "abyss":
                 continue
-            if wy + 1 >= len(client.tiles) or client.tiles[wy + 1][wx] == wm.WALL:
+            marked = decor == "secret" or (decor or "").startswith("seal")
+            if not marked and (wy + 1 >= len(client.tiles) or client.tiles[wy + 1][wx] == wm.WALL):
                 continue
             style = style_at(client.dungeon, wx, wy)
             cracked = decor == "secret"
 
-            def _face(sx=sx, sy=sy, style=style, cracked=cracked, wx=wx, wy=wy):
+            def _face(sx=sx, sy=sy, style=style, cracked=cracked, decor=decor, wx=wx, wy=wy):
                 tw = client.screen.get_width() and _tile(client)
                 rect = pygame.Rect(sx * tw, sy * tw, tw, tw)
                 draw_wall_face(client.screen, rect, style, cracked, t)
-                if cracked:
+                label = _seal_label(client, decor)
+                if label:
                     mx, my = pygame.mouse.get_pos()
                     if rect.collidepoint(mx, my):
-                        client.blit_nameplate("Search Cracked wall", rect.centerx, rect.y - 4, (220, 210, 255))
+                        client.blit_nameplate(label, rect.centerx, rect.y - 4, (230, 210, 255))
 
             draw_list.append(((sy + 1) * _tile(client), 2, _face))
+
+
+def _seal_label(client, decor):
+    if decor == "secret":
+        return "Loose bricks — click or walk into the wall"
+    if decor and decor.startswith("seal") and not decor.startswith("seal_open"):
+        key = decor.split(":")[-1]
+        return (client.dungeon.get("door_hints") or {}).get(key) or "Locked door — walk into it with the key"
+    return ""
 
 
 def _tile(client):
@@ -275,7 +297,8 @@ def draw_wall_face(surf, rect, style, cracked, t):
     pygame.draw.line(surf, sh, (face.x, face.centery), (face.right - 1, face.centery))
     pygame.draw.line(surf, hi, face.topleft, (face.right - 1, face.top))
     if cracked:
-        pygame.draw.line(surf, (20, 12, 24), (face.centerx, face.top), (face.centerx - 4, face.bottom - 2), 2)
+        pygame.draw.line(surf, (255, 214, 120), (face.centerx - 1, face.top), (face.centerx - 5, face.bottom - 2), 2)
+        pygame.draw.line(surf, (255, 214, 120), (face.centerx + 4, face.top + 1), (face.centerx, face.bottom - 1), 2)
 
 
 def handle_click(client, tx, ty):

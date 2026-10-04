@@ -190,6 +190,9 @@ def draw_floor_plane(client, cam_x, cam_y, tile):
     if not _interior(client):
         return
     plane = _plane(client)
+    import castle_interiors_v2
+    if castle_interiors_v2.draw(client, plane, cam_x, cam_y, tile):
+        return
     floor = FLOORS[plane]
     relative = floor.get("sprite_1x" if tile <= 40 else "sprite_2x")
     image = _surface(floor.get("_root"), relative, tile) if relative else None
@@ -313,7 +316,11 @@ def draw_overlay(client):
     if not tile:
         return
     wx, wy = tile
-    for room in FLOORS[_plane(client)].get("rooms", []):
+    import castle_interiors_v2
+    rooms = castle_interiors_v2.rooms(_plane(client))
+    if rooms is None:
+        rooms = FLOORS[_plane(client)].get("rooms", [])
+    for room in rooms:
         x0, y0, x1, y1 = room["rect"]
         if x0 <= wx <= x1 and y0 <= wy <= y1:
             text = client.font_small.render(room.get("name", ""), True, (255, 230, 170))
