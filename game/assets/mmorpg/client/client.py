@@ -2522,6 +2522,9 @@ class GameClient(CameraYaw):
 
     def _maybe_flank_combat_target(self):
         """If not already side-by-side with the foe, step onto their row."""
+        import emberdeep_v2_client
+        if emberdeep_v2_client.fp_active(self):
+            return
         if self.player_using_bow():
             return
         # Never hijack an intentional walk (leave fight / click elsewhere)
@@ -2549,6 +2552,9 @@ class GameClient(CameraYaw):
 
     def _ensure_combat_engagement(self, tid):
         """Stand on the foe's row (east/west), with optional gap, facing them."""
+        import emberdeep_v2_client
+        if emberdeep_v2_client.fp_active(self):
+            return
         if not self.player:
             return
         # Don't yank the player back while they're walking away
@@ -2895,7 +2901,10 @@ class GameClient(CameraYaw):
 
     def try_move(self, dx, dy):
         now = time.time()
-        if now < getattr(self, "_next_walk_at", 0):
+        import emberdeep_v2_client
+        in_ember = emberdeep_v2_client.fp_active(self)
+        # One tile per press inside Emberdeep. The overworld keeps its old pace.
+        if in_ember and now < getattr(self, "_next_walk_at", 0):
             return
         if self.combat_flee_locked():
             self._say_combat_lock()
@@ -2909,7 +2918,8 @@ class GameClient(CameraYaw):
             # Hold travel facing through inter-tile gaps so combat lock can't snap back
             self._entity_moving_until[key] = time.time() + 0.55
         self.net.send("MOVE", dx=dx, dy=dy)
-        self._next_walk_at = now + 0.45
+        if in_ember:
+            self._next_walk_at = now + 0.55
 
     def _capture_home_map(self, force=False):
         """Keep the overworld tiles. Dungeon and Castle Realm swaps must not replace them."""
@@ -3323,7 +3333,8 @@ class GameClient(CameraYaw):
         elif dy != 0:
             self._entity_facing[pkey] = "back" if dy < 0 else "front"
         self._entity_moving_until[pkey] = now + 0.55
-        self._next_walk_at = now + 0.2
+        import emberdeep_v2_client
+        self._next_walk_at = now + (0.55 if emberdeep_v2_client.fp_active(self) else 0.2)
 
         if self.pending_action and self.can_do_action(self.pending_action, nx, ny):
             self.fire_action(self.pending_action)
@@ -3599,6 +3610,9 @@ class GameClient(CameraYaw):
             self.handle_sidebar_click(mx, my, event.button)
             return
         if not self.player:
+            return
+        ember_map = getattr(self, "_ember_map_rect", None)
+        if ember_map is not None and ember_map.collidepoint(mx, my):
             return
         if not self.dungeon and self._click_pack_entrance(mx, my):
             return

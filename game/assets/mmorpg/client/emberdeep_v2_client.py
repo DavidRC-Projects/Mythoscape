@@ -263,10 +263,6 @@ def _face_from_vector(lx, ly):
     return "back" if ly < 0 else "front"
 
 
-def _opposite_face(face):
-    return {"back": "front", "front": "back", 1: -1, -1: 1}.get(face, "back")
-
-
 def fp_active(client):
     return _in_emberdeep(client)
 
@@ -304,14 +300,8 @@ def _local_draw_args(client, t):
         moving = False
     yaw = float(getattr(client, "_ember_yaw", 0.0))
     lx, ly = math.sin(yaw), -math.cos(yaw)
-    face = _face_from_vector(lx, ly)
-    if moving and getattr(client, "_ember_reverse", False):
-        face = _opposite_face(face)
-    if client.combat_target_id is not None and not client.player_using_bow() and atk > 0:
-        foe = client._monster_by_id(client.combat_target_id)
-        if foe and foe.get("alive") and foe["x"] != x:
-            face = 1 if foe["x"] > x else -1
-    face = client.facing_for_view(face)
+    # The camera stays behind the body, so forward is always the walk-away pose.
+    face = "front" if moving and getattr(client, "_ember_reverse", False) else "back"
     client._entity_facing[key] = face
     action = None
     gather = p.get("gathering")
@@ -328,34 +318,19 @@ def _local_draw_args(client, t):
 
 
 def _advance_camera(client, tiles, pose, now):
-    """Follow the body one tile at a time. Yaw only changes when the player turns."""
+    """Sit on the current tile. No glide, so the room does not keep sliding."""
     px, py = pose["x"] + 0.5, pose["y"] + 0.5
     want_lx, want_ly = pose["lx"], pose["ly"]
     dungeon_id = (client.dungeon or {}).get("id")
-    prev_t = getattr(client, "_ember_cam_t", None)
     client._ember_cam_t = now
-    dt = 0.016 if prev_t is None else max(0.0, min(0.05, now - prev_t))
-    state = getattr(client, "_ember_cam", None)
-    if not state or state.get("dungeon") != dungeon_id:
-        eye = _eye(tiles, px, py, want_lx, want_ly)
-        client._ember_cam = {
-            "dungeon": dungeon_id,
-            "bx": px, "by": py,
-            "fx": px, "fy": py,
-            "lx": want_lx, "ly": want_ly,
-            "ex": eye[0], "ey": eye[1],
-        }
-        return
-    step = 1.0 - math.exp(-dt / 0.12)
-    state["bx"] += (px - state["bx"]) * step
-    state["by"] += (py - state["by"]) * step
-    state["lx"] += (want_lx - state["lx"]) * step
-    state["ly"] += (want_ly - state["ly"]) * step
-    norm = math.hypot(state["lx"], state["ly"]) or 1.0
-    state["lx"] /= norm
-    state["ly"] /= norm
-    state["fx"], state["fy"] = state["bx"], state["by"]
-    state["ex"], state["ey"] = _eye(tiles, state["bx"], state["by"], state["lx"], state["ly"])
+    eye = _eye(tiles, px, py, want_lx, want_ly)
+    client._ember_cam = {
+        "dungeon": dungeon_id,
+        "bx": px, "by": py,
+        "fx": px, "fy": py,
+        "lx": want_lx, "ly": want_ly,
+        "ex": eye[0], "ey": eye[1],
+    }
 
 
 def _eye(tiles, px, py, lx, ly):
@@ -384,22 +359,37 @@ def _tile_px(dist, mh):
     return max(24, int((mh / max(0.45, dist)) * 0.12))
 
 
-def _project(ex, ey, lx, ly, rx, ry, wx, wy, depths, rw, rh, mw, mh):
+def _project(ex, ey, lx, ly, rx, ry, wx, wy, depths, rw, rh, mw, mh, reveal=False):
     vx, vy = wx - ex, wy - ey
     along = vx * lx + vy * ly
     side = vx * rx + vy * ry
     if along < 0.2:
         return None
     angle = math.atan2(side, along)
-    if abs(angle) > _FOV * 0.55:
+    limit = _FOV * (0.85 if reveal else 0.55)
+    if abs(angle) > limit:
         return None
     col = int((0.5 + angle / _FOV) * rw)
     col = max(0, min(rw - 1, col))
-    if depths is not None and depths[col] < along - 0.25:
+    if depths is not None and not reveal and depths[col] < along - 0.25:
         return None
-    sx = int((0.5 + angle / _FOV) * mw)
+    sx = int((0.5 + max(-0.48, min(0.48, angle / _FOV))) * mw)
     sy = _feet_y(along, rh, mh)
     return along, sx, sy, _tile_px(along, mh)
+
+
+def _open_between(tiles, x0, y0, x1, y1):
+    """True when no wall stands strictly between the two tiles."""
+    x0, y0, x1, y1 = int(x0), int(y0), int(x1), int(y1)
+    steps = max(abs(x1 - x0), abs(y1 - y0))
+    if steps <= 1:
+        return True
+    for i in range(1, steps):
+        x = x0 + (x1 - x0) * i // steps
+        y = y0 + (y1 - y0) * i // steps
+        if _tile_at(tiles, x, y) == wm.WALL:
+            return False
+    return True
 
 
 def _cast(tiles, px, py, rdx, rdy):
@@ -610,6 +600,7 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
     import time
     t = time.time()
     bills = []
+    client._ember_screen_anchor = {}
     player_sx = mw // 2
     bx = pose.get("draw_x", pose["x"] + 0.5)
     by = pose.get("draw_y", pose["y"] + 0.5)
@@ -624,18 +615,32 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
         projected = (along_p, psx, psy, ptile)
     along_p, psx, psy, ptile = projected
     player_sx = psx
-    bills.append((max(0.2, along_p), "player", psx, psy, ptile, None))
+    # Keep the body low and small so the corridor, and anyone in it, stays visible.
+    player_sy = min(mh - 8, psy + int(ptile * 0.42))
+    player_tile = max(16, int(ptile * 0.55))
+    bills.append((max(0.2, along_p), "player", psx, player_sy, player_tile, None))
     seen = {pose["key"]: (pose["x"], pose["y"])}
+    floor = client.tiles or []
+    fighting = []
     for m in (client.monsters or {}).values():
         if not m.get("alive", True):
             continue
-        face, moving, atk, near, drop_down = _monster_pose(client, m, t)
+        _face, moving, atk, near, drop_down = _monster_pose(client, m, t)
         seen[("m", m["id"])] = (m["x"], m["y"])
-        proj = _project(ex, ey, lx, ly, rx, ry, m["x"] + 0.5, m["y"] + 0.5, depths, rw, rh, mw, mh)
+        dist = max(abs(m["x"] - pose["x"]), abs(m["y"] - pose["y"]))
+        targeted = client.combat_target_id == m["id"]
+        close = targeted or dist <= 3
+        if close and _open_between(floor, pose["x"], pose["y"], m["x"], m["y"]):
+            fighting.append((0 if targeted else dist, m, moving, atk, drop_down))
+            continue
+        proj = _project(
+            ex, ey, lx, ly, rx, ry, m["x"] + 0.5, m["y"] + 0.5,
+            depths, rw, rh, mw, mh,
+        )
         if proj is None:
             continue
         along, sx, sy, tile_px = proj
-        targeted = client.combat_target_id == m["id"]
+        face = _face_from_vector(pose["x"] - m["x"], pose["y"] - m["y"])
         bills.append((along, "monster", sx, sy, tile_px, (m, face, moving, atk, near or targeted, drop_down)))
     dungeon = client.dungeon or {}
     if dungeon.get("id") == "emberdeep":
@@ -664,6 +669,11 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
     for along, kind, sx, sy, tile_px, extra in bills:
         if kind == "player":
             _draw_local_player(client, pose, sx, sy, tile_px, t)
+            anchors = getattr(client, "_ember_screen_anchor", None)
+            if not isinstance(anchors, dict):
+                anchors = {}
+                client._ember_screen_anchor = anchors
+            anchors[("p", pose.get("key", (None, None))[1])] = (sx, sy, tile_px)
             continue
         if kind == "pack_prop":
             import emberdeep_creatures_client
@@ -685,12 +695,108 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
         client.draw_hp_bar(sx, hy, m["hp"], m["max_hp"])
         level = int(m.get("level") or 1)
         client.blit_combat_level(level, sx, ny - 16, client.monster_threat_color(level))
+    _draw_opponents(client, pose, fighting, mw, mh, t, psx, player_sy, player_tile)
     _draw_projectiles(client, ex, ey, lx, ly, rx, ry, rw, rh, mw, mh)
     _draw_hitsplats(client, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, mh)
     prev = dict(getattr(client, "_prev_entity_pos", {}) or {})
     prev.update(seen)
     client._prev_entity_pos = prev
+    _draw_corner_map(client, lx, ly)
     return True
+
+
+def _draw_opponents(client, pose, fighting, mw, mh, t, player_sx, player_sy, player_tile):
+    """Line up whoever is in reach just in front of the player."""
+    client._ember_fight_hits = []
+    if not fighting:
+        return
+    fighting = sorted(fighting, key=lambda item: (item[0], item[1]["id"]))[:3]
+    count = len(fighting)
+    tile = max(26, int(player_tile * 0.85))
+    gap = int(tile * 2.1)
+    origin = player_sx - (count - 1) * gap // 2
+    feet = max(tile + 8, player_sy - int(player_tile * 1.65))
+    anchors = getattr(client, "_ember_screen_anchor", None)
+    if not isinstance(anchors, dict):
+        anchors = {}
+        client._ember_screen_anchor = anchors
+    hits = []
+    for index, (_dist, m, moving, atk, drop_down) in enumerate(fighting):
+        sx = origin + index * gap
+        face = _face_from_vector(pose["x"] - m["x"], pose["y"] - m["y"])
+        _draw_monster_sprite(client, m, sx, feet, tile, t, face, moving, atk, player_sx, drop_down)
+        anchors[("m", m["id"])] = (sx, feet, tile)
+        height = int(tile * 1.8)
+        hits.append((
+            pygame.Rect(sx - tile, feet - height, tile * 2, height),
+            (int(m["x"]), int(m["y"])),
+        ))
+        from content import MONSTERS
+        mdef = MONSTERS.get(m["type"]) or {}
+        kind_name = "character" if mdef.get("humanoid") else "monster"
+        ny, hy = _label_anchor(feet, tile, kind_name)
+        client.blit_nameplate(m["name"], sx, ny)
+        client.draw_hp_bar(sx, hy, m["hp"], m["max_hp"])
+        level = int(m.get("level") or 1)
+        client.blit_combat_level(level, sx, ny - 16, client.monster_threat_color(level))
+    client._ember_fight_hits = hits
+
+
+def _draw_corner_map(client, lx, ly):
+    """Small floor plan in the corner. Up on the map is north."""
+    tiles = client.tiles or []
+    if not tiles or not client.player:
+        client._ember_map_rect = None
+        return
+    height = len(tiles)
+    width = len(tiles[0]) if height else 0
+    if width <= 0:
+        return
+    size = 156
+    mw, _mh = _map_size()
+    rect = pygame.Rect(mw - size - 12, 12, size, size)
+    client._ember_map_rect = rect
+    surf = pygame.Surface((size, size))
+    surf.fill((16, 12, 14))
+    for y in range(height):
+        y0 = int(y * size / height)
+        y1 = max(y0 + 1, int((y + 1) * size / height))
+        row = tiles[y]
+        for x in range(width):
+            tile = row[x]
+            if tile == wm.WALL:
+                color = (42, 28, 26)
+            elif tile == wm.WATER:
+                color = (176, 64, 22)
+            else:
+                color = (92, 74, 58)
+            x0 = int(x * size / width)
+            x1 = max(x0 + 1, int((x + 1) * size / width))
+            surf.fill(color, (x0, y0, x1 - x0, y1 - y0))
+    px, py = int(client.player["x"]), int(client.player["y"])
+
+    def _dot(tx, ty):
+        return int((tx + 0.5) * size / width), int((ty + 0.5) * size / height)
+
+    for mon in (client.monsters or {}).values():
+        if not mon.get("alive", True):
+            continue
+        mx, my = _dot(mon["x"], mon["y"])
+        fought = client.combat_target_id == mon["id"]
+        pygame.draw.circle(surf, (255, 214, 90) if fought else (214, 64, 52), (mx, my), 3 if fought else 2)
+    sx, sy = _dot(px, py)
+    pygame.draw.line(
+        surf, (150, 230, 130),
+        (sx, sy),
+        (int(sx + lx * 10), int(sy + ly * 10)),
+        2,
+    )
+    pygame.draw.circle(surf, (40, 40, 40), (sx, sy), 4)
+    pygame.draw.circle(surf, (90, 220, 110), (sx, sy), 3)
+    frame = rect.inflate(4, 4)
+    pygame.draw.rect(client.screen, (12, 10, 12), frame)
+    pygame.draw.rect(client.screen, (180, 120, 60), frame, 2)
+    client.screen.blit(surf, rect.topleft)
 
 
 def _screen_of(ex, ey, lx, ly, rx, ry, wx, wy, rw, rh, mw, mh):
@@ -706,20 +812,42 @@ def _draw_hitsplats(client, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, mh):
     now = time.time()
     client._flush_pending_floaters(now)
     client.floaters = [f for f in client.floaters if f["expire"] > now]
+    anchors = getattr(client, "_ember_screen_anchor", None) or {}
+    my_id = (client.player or {}).get("id")
     for floater in client.floaters:
         follow = floater.get("follow_id")
         if follow is not None:
             xy = client._entity_world_xy(follow)
             if xy is not None:
                 floater["x"], floater["y"] = xy
-        proj = _project(
-            ex, ey, lx, ly, rx, ry,
-            floater["x"] + 0.5, floater["y"] + 0.5,
-            depths, rw, rh, mw, mh,
-        )
-        if proj is None:
-            continue
-        _along, sx, sy, tile_px = proj
+        placed = None
+        if follow is not None:
+            if follow == my_id:
+                placed = anchors.get(("p", my_id))
+            else:
+                placed = anchors.get(("m", follow))
+                if placed is None:
+                    try:
+                        placed = anchors.get(("m", int(follow)))
+                    except (TypeError, ValueError):
+                        placed = None
+        if placed is not None:
+            sx, sy, tile_px = placed
+        else:
+            proj = _project(
+                ex, ey, lx, ly, rx, ry,
+                floater["x"] + 0.5, floater["y"] + 0.5,
+                None, rw, rh, mw, mh, reveal=True,
+            )
+            if proj is None and follow == my_id:
+                placed = anchors.get(("p", my_id))
+                if placed is None:
+                    continue
+                sx, sy, tile_px = placed
+            elif proj is None:
+                continue
+            else:
+                _along, sx, sy, tile_px = proj
         age_left = floater["expire"] - now
         lift = int((1.0 - min(1.0, age_left / 1.3)) * 36)
         head = rs_style.label_lift(tile_px, "character")
@@ -903,19 +1031,38 @@ def pick_tile(client, mx, my):
     mw, mh = _map_size()
     if mx < 0 or my < 0 or mx >= mw or my >= mh:
         return None
+    box = getattr(client, "_ember_map_rect", None)
+    if box is not None and box.collidepoint(mx, my):
+        return int(client.player["x"]), int(client.player["y"])
     tiles, _pose, ex, ey, lx, ly, rx, ry = _view(client)
     if not tiles:
         return None
     rw, rh = max(160, mw // 2), max(120, mh // 2)
+    for rect, tile in getattr(client, "_ember_fight_hits", None) or []:
+        if rect.collidepoint(mx, my):
+            return tile
     best = None
     best_d = 1e9
+    px, py = int(client.player["x"]), int(client.player["y"])
+    body = _project(ex, ey, lx, ly, rx, ry, px + 0.5, py + 0.5, None, rw, rh, mw, mh)
+    player_sx = body[1] if body else mw // 2
+    player_tile = max(16, int((body[3] if body else 32) * 0.55))
     for mon in (client.monsters or {}).values():
         if not mon.get("alive", True):
             continue
-        proj = _project(ex, ey, lx, ly, rx, ry, mon["x"] + 0.5, mon["y"] + 0.5, None, rw, rh, mw, mh)
+        dist = max(abs(mon["x"] - px), abs(mon["y"] - py))
+        fighting = client.combat_target_id == mon["id"] or dist <= 2
+        proj = _project(
+            ex, ey, lx, ly, rx, ry, mon["x"] + 0.5, mon["y"] + 0.5,
+            None, rw, rh, mw, mh, reveal=fighting,
+        )
         if proj is None:
             continue
         along, sx, sy, tile_px = proj
+        if fighting:
+            tile_px = max(tile_px, int(player_tile * 1.15))
+            if abs(sx - player_sx) < player_tile:
+                sx = player_sx + (player_tile if (int(mon["id"]) % 2 == 0) else -player_tile)
         if _sprite_hit(mx, my, sx, sy, tile_px) and along < best_d:
             best = (int(mon["x"]), int(mon["y"]))
             best_d = along
