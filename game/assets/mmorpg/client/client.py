@@ -1704,18 +1704,20 @@ class GameClient(CameraYaw):
             elif event.key == pygame.K_a:
                 if emberdeep_v2_client.fp_active(self):
                     self.clear_walk()
-                    yaw = getattr(self, "_ember_yaw", 0.0)
-                    rx, ry = -math.cos(yaw), -math.sin(yaw)
-                    self._ember_strafe = -1 if abs(rx) >= abs(ry) and rx < 0 else 1 if abs(rx) >= abs(ry) else "back"
                     dx, dy = emberdeep_v2_client.strafe_delta(self, -1)
+                    if abs(dx) > abs(dy):
+                        self._ember_strafe = 1 if dx > 0 else -1
+                    else:
+                        self._ember_strafe = "front" if dy > 0 else "back"
                     self.try_move(dx, dy)
             elif event.key == pygame.K_d:
                 if emberdeep_v2_client.fp_active(self):
                     self.clear_walk()
-                    yaw = getattr(self, "_ember_yaw", 0.0)
-                    rx, ry = -math.cos(yaw), -math.sin(yaw)
-                    self._ember_strafe = 1 if abs(rx) >= abs(ry) and rx > 0 else -1 if abs(rx) >= abs(ry) else "front"
                     dx, dy = emberdeep_v2_client.strafe_delta(self, 1)
+                    if abs(dx) > abs(dy):
+                        self._ember_strafe = 1 if dx > 0 else -1
+                    else:
+                        self._ember_strafe = "front" if dy > 0 else "back"
                     self.try_move(dx, dy)
             elif event.key == pygame.K_i:
                 self.sidebar_tab = "inventory"
