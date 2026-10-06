@@ -16,7 +16,7 @@ REGIONS = {
         "name": "The Depths",
         "label": "Dungeon",
         "x0": 44, "y0": 54, "x1": 90, "y1": 143,
-        "pad": (43, 69, 50, 76),
+        "pad": (44, 79, 48, 83),
         "entrance": (46, 71),
     },
     "sanctum": {

@@ -1,0 +1,129 @@
+{
+ "fairy_zone": [
+  1,
+  56,
+  40,
+  88
+ ],
+ "paint_ops": [
+  {
+   "tile": "GRASS",
+   "rect": [
+    1,
+    56,
+    40,
+    88
+   ],
+   "why": "fairy moss base (replaces mine floor, walls, ore, link)"
+  },
+  {
+   "tile": "PATH",
+   "rect": [
+    27,
+    56,
+    29,
+    88
+   ],
+   "why": "Petal Avenue N-S (continues the village road x27-29)"
+  },
+  {
+   "tile": "PATH",
+   "rect": [
+    2,
+    70,
+    40,
+    72
+   ],
+   "why": "Lantern Walk E-W (east gate -> road x41-43)"
+  },
+  {
+   "tile": "STONE",
+   "rect": [
+    20,
+    58,
+    33,
+    68
+   ],
+   "why": "Moonstone Plaza (pale stone)"
+  },
+  {
+   "tile": "STONE",
+   "rect": [
+    31,
+    76,
+    35,
+    80
+   ],
+   "why": "Lily Court ring"
+  },
+  {
+   "tile": "PATH",
+   "rect": [
+    4,
+    86,
+    29,
+    87
+   ],
+   "why": "South Walk (tree-hall + inn doors)"
+  },
+  {
+   "tile": "PATH",
+   "rect": [
+    20,
+    85,
+    20,
+    85
+   ],
+   "why": "inn door step"
+  },
+  {
+   "tile": "PATH",
+   "rect": [
+    37,
+    65,
+    37,
+    69
+   ],
+   "why": "potion shop door path"
+  },
+  {
+   "tile": "PATH",
+   "rect": [
+    30,
+    81,
+    48,
+    83
+   ],
+   "why": "Crypt Path: village SE gate -> dungeon entrance (x44-48 needs WALL->PATH before capture)"
+  },
+  {
+   "tile": "PATH",
+   "rect": [
+    27,
+    89,
+    29,
+    98
+   ],
+   "why": "avenue south to King's Row (grass today)"
+  },
+  {
+   "tile": "PATH",
+   "rect": [
+    30,
+    93,
+    31,
+    95
+   ],
+   "why": "quarry west mouth"
+  }
+ ],
+ "buildings": [
+  "queens_tree_hall",
+  "moonpetal_inn",
+  "mushroom_apothecary"
+ ],
+ "fountains": [
+  "moonstone_fountain",
+  "lily_fountain"
+ ]
+}

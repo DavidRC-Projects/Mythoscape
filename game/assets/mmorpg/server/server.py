@@ -23,7 +23,7 @@ from content import (
     RESOURCE_BAG_CAPACITY, RAW_FISH_IDS, COOKED_FISH_IDS, FLETCH_POUCH_IDS,
     INVENTORY_SIZE, INVENTORY_TAB_SIZE, INVENTORY_TABS,
     is_arrowtip, is_raw_fish, is_cooked_fish,
-    is_mining_bag_item, is_log_item, is_fletch_pouch_item, is_potion_item,
+    is_mining_bag_item, is_log_item, is_fletch_pouch_item, fletch_pouch_capacity, is_potion_item,
     is_gem_item,
     inventory_tab_for_item, is_storage_bag,
     TELEPORT_DESTINATIONS, WIZARD_ID, drops_for_kill, LOW_LEVEL_DROP_CAP,
@@ -235,7 +235,7 @@ class PlayerSession:
             self.raw_bag = {}
         self.mining_bag = self._load_bag_dict(row, "mining_bag_contents", is_mining_bag_item, RESOURCE_BAG_CAPACITY)
         self.log_bag = self._load_bag_dict(row, "log_bag_contents", is_log_item, RESOURCE_BAG_CAPACITY)
-        self.fletch_pouch = self._load_bag_dict(row, "fletch_pouch_contents", is_fletch_pouch_item, RESOURCE_BAG_CAPACITY)
+        self.fletch_pouch = self._load_bag_dict(row, "fletch_pouch_contents", is_fletch_pouch_item, fletch_pouch_capacity)
         self.potion_pouch = self._load_bag_dict(row, "potion_pouch_contents", is_potion_item, RESOURCE_BAG_CAPACITY)
         self.gem_bag = self._load_bag_dict(row, "gem_bag_contents", is_gem_item, RESOURCE_BAG_CAPACITY)
 
@@ -248,7 +248,8 @@ class PlayerSession:
             if isinstance(parsed, dict):
                 for iid, qty in parsed.items():
                     if predicate(iid):
-                        out[iid] = max(0, min(int(capacity), int(qty)))
+                        cap = capacity(iid) if callable(capacity) else int(capacity)
+                        out[iid] = max(0, min(int(cap), int(qty)))
         except (TypeError, json.JSONDecodeError, ValueError):
             return {}
         return out
@@ -609,7 +610,8 @@ class PlayerSession:
         if have <= 0 or qty <= 0:
             return 0
         cur = int(bag.get(item_id) or 0)
-        space = max(0, int(capacity) - cur)
+        cap = capacity(item_id) if callable(capacity) else int(capacity)
+        space = max(0, int(cap) - cur)
         take = min(int(qty), have, space)
         if take <= 0:
             return 0
@@ -664,7 +666,7 @@ class PlayerSession:
 
     def deposit_fletch_pouch(self, item_id, qty):
         return self._deposit_resource_bag(
-            self.fletch_pouch, "fletch_pouch_contents", RESOURCE_BAG_CAPACITY,
+            self.fletch_pouch, "fletch_pouch_contents", fletch_pouch_capacity,
             is_fletch_pouch_item, "fletch_pouch", item_id, qty,
         )
 
@@ -900,6 +902,7 @@ class PlayerSession:
             "fletch_pouch": dict(self.fletch_pouch) if self.has_fletch_pouch() else {},
             "fletch_pouch_total": self._bag_total(self.fletch_pouch) if self.has_fletch_pouch() else 0,
             "has_fletch_pouch": self.has_fletch_pouch(),
+            "feather_bag_capacity": int(fletch_pouch_capacity("feather")),
             "potion_pouch": dict(self.potion_pouch) if self.has_potion_pouch() else {},
             "potion_pouch_total": self._bag_total(self.potion_pouch) if self.has_potion_pouch() else 0,
             "has_potion_pouch": self.has_potion_pouch(),
@@ -1075,20 +1078,32 @@ class MonsterInstance:
         return chebyshev(self.x, self.y, px, py) <= reach
 
     def def_stats(self):
-        if self.stats:
+        # Dungeon scaling replaces hp and level. It must keep the type's
+        # fight rules (side-by-side, reach, cooldown) or the client walks
+        # to a gap the server then calls out of range.
+        base = MONSTERS.get(self.type)
+        if not self.stats:
+            return base or {}
+        if not base:
             return self.stats
-        return MONSTERS[self.type]
+        merged = dict(base)
+        merged.update(self.stats)
+        return merged
 
     def public_state(self):
         mdef = self.def_stats()
         name = mdef.get("name") or MONSTERS.get(self.type, {}).get("name", "Monster")
         frozen = self.is_frozen()
-        return {
+        state = {
             "id": self.id, "type": self.type, "name": name,
             "level": mdef.get("level", 1),
             "x": self.x, "y": self.y, "hp": self.hp, "max_hp": self.max_hp, "alive": self.alive,
             "frozen": frozen,
         }
+        cones = (self.stats or {}).get("cone_tiles")
+        if cones:
+            state["cone_tiles"] = cones
+        return state
 
 
 # ---------------------------------------------------------------------------
@@ -1386,7 +1401,11 @@ async def broadcast(msg_type, **fields):
 
 
 def quest_status_for(session, quest_id):
-    return session.quests.get(quest_id, {"status": "not_started", "progress": 0})
+    info = dict(session.quests.get(quest_id, {"status": "not_started", "progress": 0}))
+    if quest_id == "fairy_oath":
+        import fairy_village
+        info["objective"] = fairy_village.objective_text(session)
+    return info
 
 
 def npc_quest_ids(npc):
@@ -1509,6 +1528,9 @@ def quest_objective_line(session, qdef, prog):
         return f"Find and speak to {name}"
     if qdef["type"] == "gift":
         return "Talk to receive your reward"
+    if qdef["type"] == "oath":
+        import fairy_village
+        return fairy_village.objective_text(session)
     return qdef.get("description", "")
 
 
@@ -1634,6 +1656,8 @@ async def send_world_join(session):
     quest_log = {qid: quest_status_for(session, qid) for qid in QUESTS}
     await send(session.ws, "QUEST_LOG", quests=quest_log)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    import clans
+    await clans.on_login(session)
     await send_starter_tips(session)
     if feature_flags.USE_PLAYER_HOUSING:
         await _housing.on_login(session)
@@ -1778,7 +1802,7 @@ def enforce_bound_items(session):
 
 
 async def handle_leaderboard(ws, msg):
-    limit = max(1, min(10, int(msg.get("limit", 5))))
+    limit = max(1, min(50, int(msg.get("limit", 50))))
     boards = WORLD.db.get_leaderboards(limit=limit)
     # Total overall first, then individual skills
     skills = ["total"] + [s for s in XP_SKILLS if s in boards]
@@ -1862,6 +1886,14 @@ def _combat_locked(session):
 
 
 async def handle_move(session, msg):
+    """Apply one step. If the tile is refused, tell the client so it can undo a predicted step."""
+    origin = (session.x, session.y)
+    await _handle_move_body(session, msg)
+    if (session.x, session.y) == origin:
+        await send(session.ws, "MOVE_DENIED", x=session.x, y=session.y)
+
+
+async def _handle_move_body(session, msg):
     if getattr(session, "rooted_until", 0) > WORLD.tick_count:
         return
     if _combat_locked(session):
@@ -1983,13 +2015,16 @@ def _build_dungeon_floor(session, floor: int, dungeon_id: str = None):
         mid = next_id()
         m = MonsterInstance(mid, visual, sx, sy, stats=dict(stats))
         # Stay near where they spawned. They stop chasing once you leave that patch.
-        leash = 6
-        m.home_room = (
-            max(0, sx - leash),
-            max(0, sy - leash),
-            min(mod.DUNGEON_W - 1, sx + leash),
-            min(mod.DUNGEON_H - 1, sy + leash),
-        )
+        if dungeon_id == "emberdeep" and feature_flags.USE_EMBERDEEP_V2:
+            m.home_room = emberdeep.room_box(tiles, sx, sy)
+        else:
+            leash = 6
+            m.home_room = (
+                max(0, sx - leash),
+                max(0, sy - leash),
+                min(mod.DUNGEON_W - 1, sx + leash),
+                min(mod.DUNGEON_H - 1, sy + leash),
+            )
         monsters[mid] = m
     if dungeon_id == "emberdeep" and feature_flags.USE_EMBERDEEP_CREATURES and feature_flags.USE_EMBERDEEP_V2:
         import emberdeep_creatures
@@ -1999,13 +2034,7 @@ def _build_dungeon_floor(session, floor: int, dungeon_id: str = None):
         props = list(props) + extra_props
         for extra in extra_monsters:
             if not (extra.stats or {}).get("static"):
-                leash = 6
-                extra.home_room = (
-                    max(0, extra.x - leash),
-                    max(0, extra.y - leash),
-                    min(mod.DUNGEON_W - 1, extra.x + leash),
-                    min(mod.DUNGEON_H - 1, extra.y + leash),
-                )
+                extra.home_room = emberdeep.room_box(tiles, extra.x, extra.y)
             monsters[extra.id] = extra
     floors_list = getattr(mod, meta["floors_attr"], None) or getattr(mod, "TIDEHOLLOW_FLOORS", [])
     prev = session.dungeon or {}
@@ -2665,6 +2694,10 @@ async def handle_chat(session, msg):
     text = (msg.get("text") or "").strip()[:200]
     if not text:
         return
+    if text.lower().startswith("/clan"):
+        import clans
+        await clans.handle_command(session, text)
+        return
     await broadcast(
         "CHAT_MSG",
         **{"from": session.char_name, "text": text, "player_id": session.player_id, "speech": True},
@@ -2709,7 +2742,6 @@ WISH_GEAR_BETTER = [
     "mithril_dagger", "mithril_sword", "mithril_helmet",
     "mithril_sq_shield", "mithril_chainbody", "mithril_chainlegs",
     "mithril_body", "mithril_legs", "mithril_battleaxe", "mithril_shield",
-    "adamant_chainbody", "adamant_body",
 ]
 
 
@@ -2793,16 +2825,16 @@ async def handle_wish(session, msg):
             await _broadcast_well_rare("gear", f"{session.char_name} found Mythos gear in the well!")
 
     else:  # gold
-        # 20% → 100, 20% → mid, 35% → 5k, 25% → 10k
+        # 40% pocket change, 35% a few hundred, 20% a modest purse, 5% a rare haul
         roll = random.random()
-        if roll < 0.20:
-            amount = 100
-        elif roll < 0.40:
-            amount = random.choice((1000, 1500, 2000, 2500, 3000))
+        if roll < 0.40:
+            amount = random.randint(40, 120)
         elif roll < 0.75:
-            amount = 5000
+            amount = random.choice((200, 300, 400, 500))
+        elif roll < 0.95:
+            amount = 1000
         else:
-            amount = 10000
+            amount = 2500
             rare = True
         gained, left = WORLD.add_coins(session, amount)
         if left > 0:
@@ -2812,7 +2844,7 @@ async def handle_wish(session, msg):
         else:
             result_text = f"You wish for gold and receive {gained} coins!"
         if rare:
-            await _broadcast_well_rare("gold", f"{session.char_name} hauled 10,000 coins from the well!")
+            await _broadcast_well_rare("gold", f"{session.char_name} hauled 2,500 coins from the well!")
 
     await send(session.ws, "CHAT_MSG", **{"from": "Wishing Well", "text": result_text})
     await send(session.ws, "WISH_RESULT", kind=kind, text=result_text, rare=rare)
@@ -2847,6 +2879,17 @@ async def handle_wish_stat(session, msg):
 
 def chebyshev(ax, ay, bx, by):
     return max(abs(ax - bx), abs(ay - by))
+
+
+def _ember_wyrm_can_hit(monster, px, py):
+    """True/False when this is the static wyrm. None for every other monster."""
+    if getattr(monster, "type", None) != "emberdeep_wyrm":
+        return None
+    cones = (monster.def_stats() or {}).get("cone_tiles")
+    if not cones:
+        return None
+    import emberdeep_creatures
+    return (int(px), int(py)) in emberdeep_creatures.swing_tiles(cones)
 
 
 def adjacent_or_same(ax, ay, bx, by):
@@ -2884,7 +2927,9 @@ async def handle_attack(session, msg):
     # Side-by-side foes: allow engaging from nearby; strikes still require same row.
     if mdef.get("side_by_side"):
         reach = max(reach, int(mdef.get("attack_range") or 1))
-    if chebyshev(session.x, session.y, monster.x, monster.y) > reach:
+    wyrm = _ember_wyrm_can_hit(monster, session.x, session.y)
+    in_reach = wyrm if wyrm is not None else chebyshev(session.x, session.y, monster.x, monster.y) <= reach
+    if not in_reach:
         await send(session.ws, "ERROR", message="You're too far away to attack.")
         return
     if session.using_bow():
@@ -3052,7 +3097,9 @@ def apply_magic_cast(session, ability_id, monster, manual, events, dungeon_tag=N
     if not monster or not monster.alive:
         return False, "No target."
     reach = session.attack_reach()
-    if chebyshev(session.x, session.y, monster.x, monster.y) > reach:
+    wyrm = _ember_wyrm_can_hit(monster, session.x, session.y)
+    in_reach = wyrm if wyrm is not None else chebyshev(session.x, session.y, monster.x, monster.y) <= reach
+    if not in_reach:
         return False, "Too far away."
 
     dmg = max(0, int(ab.get("damage") or 0))
@@ -3528,6 +3575,10 @@ async def handle_talk(session, msg):
         return
     if not adjacent_or_same(session.x, session.y, npc["x"], npc["y"]):
         await send(session.ws, "ERROR", message="You're too far away to talk to them.")
+        return
+    import fairy_village
+    if npc_id in fairy_village.FAIRY_NPCS:
+        await fairy_village.open_talk(session, npc)
         return
     if npc_id == WIZARD_ID:
         if not session.knows_teleport:
@@ -4194,18 +4245,19 @@ async def handle_use_item(session, msg):
             return
         if is_fletch_pouch_item(item_id):
             if not session.has_fletch_pouch():
-                await send(session.ws, "ERROR", message="You need a Fletching Pouch first (Elena sells them).")
+                await send(session.ws, "ERROR", message="You need a Fletching Pouch first (Nell or Elena sells them).")
                 return
             took = session.deposit_fletch_pouch(item_id, qty)
             await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+            cap = fletch_pouch_capacity(item_id)
             if took <= 0:
                 cur = int(session.fletch_pouch.get(item_id) or 0)
-                await send(session.ws, "ERROR", message=f"Fletching pouch is full of {item['name']} ({cur}/{RESOURCE_BAG_CAPACITY}).")
+                await send(session.ws, "ERROR", message=f"Fletching pouch is full of {item['name']} ({cur}/{cap}).")
             else:
                 left = int(session.fletch_pouch.get(item_id) or 0)
                 await send(session.ws, "CHAT_MSG", **{
                     "from": "You",
-                    "text": f"You pack {took} {item['name']} ({left}/{RESOURCE_BAG_CAPACITY}).",
+                    "text": f"You pack {took} {item['name']} ({left}/{cap}).",
                 })
             return
         if is_potion_item(item_id):
@@ -4853,6 +4905,12 @@ async def handle_quest_turnin(session, msg):
         if prog["status"] != "ready":
             await send(session.ws, "ERROR", message="You haven't finished this quest yet.")
             return
+    elif qdef["type"] == "oath":
+        import fairy_village
+        _lines, ready = fairy_village.oath_progress(session)
+        if not ready:
+            await send(session.ws, "ERROR", message="The Moonwater Oath is not yet fulfilled.")
+            return
 
     # Grant all item rewards without aborting mid-list (slots pre-checked).
     await grant_quest_rewards(session, rewards)
@@ -5126,6 +5184,9 @@ async def handler(ws):
                 await handle_trade_confirm(session, msg)
             elif mtype == "TRADE_CANCEL":
                 await handle_trade_cancel(session, msg)
+            elif mtype == "FAIRY_ACT":
+                import fairy_village
+                await fairy_village.act(session, msg.get("id"))
             elif mtype == "LOGOUT":
                 break
     except websockets.exceptions.ConnectionClosed:
@@ -5169,17 +5230,24 @@ async def _ember_cones():
             stats = monster.stats or {}
             if not monster.alive or not stats.get("static"):
                 continue
+            if getattr(monster, "_cone_pending", False):
+                monster._cone_pending = False
+                standing = (session.x, session.y) in cones
+                monster._cone_strike = standing
+                if standing:
+                    monster.target_player_id = session.player_id
+                    # The hit is resolved in this same tick. Cooldown starts after it.
+                else:
+                    monster.target_player_id = None
+                    monster._cone_strike = False
+                    monster.mark_attacked(2.4)
+                continue
             if not monster.attack_ready():
                 continue
+            # Show the fire first. The hit lands on the next tick, so you can step aside.
             await send(session.ws, "EMBER_CONE", tiles=stats.get("cone_tiles") or [])
-            standing = (session.x, session.y) in cones
-            monster._cone_strike = standing
-            if standing:
-                monster.target_player_id = session.player_id
-            else:
-                monster.target_player_id = None
-                monster._cone_strike = False
-                monster.mark_attacked(2.4)
+            monster._cone_pending = True
+            monster._cone_strike = False
 
 
 async def game_loop():
@@ -5386,8 +5454,16 @@ async def process_combat(events):
             if primary and (primary.def_stats() or {}).get("requires_pk") and not session.player_killer:
                 session.in_combat_with = None
                 primary = None
-            elif primary and (not primary.alive or chebyshev(session.x, session.y, primary.x, primary.y) > reach):
+            elif primary and not primary.alive:
                 primary = None
+            elif primary:
+                wyrm = _ember_wyrm_can_hit(primary, session.x, session.y)
+                close = wyrm if wyrm is not None else chebyshev(session.x, session.y, primary.x, primary.y) <= reach
+                if not close:
+                    # The wyrm does not chase. Once you leave the fire, the fight ends.
+                    if wyrm is False:
+                        session.in_combat_with = None
+                    primary = None
         if primary is None and attackers:
             # Auto-retaliate only when the monster forces it (default). Bosses like
             # the dragon can hit you without locking you into fighting back.
@@ -5406,7 +5482,9 @@ async def process_combat(events):
             mreach = int(primary.def_stats().get("attack_range") or 1)
             if session.y == primary.y and abs(session.x - primary.x) <= mreach:
                 reach = max(reach, mreach)
-            if chebyshev(session.x, session.y, primary.x, primary.y) <= reach:
+            wyrm = _ember_wyrm_can_hit(primary, session.x, session.y)
+            in_reach = wyrm if wyrm is not None else chebyshev(session.x, session.y, primary.x, primary.y) <= reach
+            if in_reach:
                 ranged = bool(session.using_bow())
                 skip_player_swing = time.time() < float(getattr(session, "next_swing_at", 0) or 0)
                 if skip_player_swing:
@@ -5625,6 +5703,7 @@ async def process_combat(events):
             session.coins = 0
             session.in_combat_with = None
             session.pet_target_id = None
+            where = "village"
             if session.dungeon:
                 v2_kind = session.dungeon.get("v2")
                 realm_death = session.dungeon.get("id") == "castle_realm"
@@ -5636,7 +5715,9 @@ async def process_combat(events):
                     if stayed:
                         await _relock_dungeon_doors(session)
                         _save_dungeon_resume(session)
+                        where = "checkpoint"
                 if not stayed:
+                    where = "entrance"
                     if v2_death:
                         import void_v2
                         void_v2.strip_keys(session)
@@ -5664,6 +5745,7 @@ async def process_combat(events):
             death_data = {
                 "entity_id": session.player_id, "entity_kind": "player",
                 "coins_lost": lost,
+                "where": where,
             }
             if dungeon_tag:
                 death_data["_dungeon_player"] = dungeon_tag
@@ -5881,6 +5963,42 @@ def process_resource_respawns():
             node["depleted"] = False
 
 
+def side_by_side_goal(monster, px, py, can_stand):
+    """Post for a foe that must share the player's row.
+
+    False: already in reach, so hold still.
+    None: this foe does not fight side by side.
+    (x, y): walk toward that tile.
+    """
+    mdef = monster.def_stats() or {}
+    if not mdef.get("side_by_side"):
+        return None
+    px, py = int(px), int(py)
+    reach = max(1, int(mdef.get("attack_range") or 1))
+    gap = abs(int(monster.x) - px)
+    if int(monster.y) == py and 1 <= gap <= reach:
+        return False
+    prefer = max(1, min(int(mdef.get("side_gap") or 2), reach))
+    side = getattr(monster, "fight_side", None)
+    if side not in (1, -1):
+        side = 1 if monster.x >= px else -1
+        monster.fight_side = side
+    fallback = None
+    for g in (prefer, 3, 2, 1, 4):
+        if g < 1 or g > reach:
+            continue
+        for s in (side, -side):
+            tx, ty = px + s * g, py
+            if (tx, ty) == (px, py):
+                continue
+            if fallback is None:
+                fallback = (tx, ty)
+            if can_stand(tx, ty):
+                monster.fight_side = s
+                return (tx, ty)
+    return fallback
+
+
 def process_dungeon_ai():
     """At most one monster chases, and only while you are still in its area."""
     max_pursuers = 1
@@ -5955,13 +6073,35 @@ def process_dungeon_ai():
                 reach = max(1, int(mdef.get("attack_range") or 1))
             if dist <= reach and closest_strike is None:
                 closest_strike = m.id
-            if dist > 1:
+
+            def can_stand(tx, ty, me=m):
+                if (tx, ty) == (session.x, session.y):
+                    return False
+                if me.home_room and not in_room(tx, ty, me.home_room):
+                    return False
+                if not mod.dungeon_walkable(tiles, tx, ty) or occupied(tx, ty, me):
+                    return False
+                return True
+
+            goal = side_by_side_goal(m, session.x, session.y, can_stand)
+            if goal is False:
+                pass
+            elif goal:
+                step_toward(m, goal[0], goal[1], stay_in_room=True)
+            elif dist > 1:
                 step_toward(m, session.x, session.y, stay_in_room=True)
-        if closest_strike is not None:
+        engaged = None
+        if session.in_combat_with and session.in_combat_with[0] == "monster":
+            engaged = session.dungeon["monsters"].get(session.in_combat_with[1])
+        # The wyrm never chases. Leave that fight in place while it is alive.
+        boss_fight = bool(engaged and engaged.alive and (engaged.stats or {}).get("static"))
+        if closest_strike is not None and not boss_fight:
             session.in_combat_with = ("monster", closest_strike)
         elif session.in_combat_with and session.in_combat_with[0] == "monster":
-            current = session.dungeon["monsters"].get(session.in_combat_with[1])
-            if current is None or not current.alive or current.id not in active_ids:
+            current = engaged
+            if current and current.alive and (current.stats or {}).get("static"):
+                pass
+            elif current is None or not current.alive or current.id not in active_ids:
                 session.in_combat_with = None
 
 

@@ -1,0 +1,68 @@
+{
+ "key": "queens_tree_hall",
+ "name": "The Queen's Tree-Hall",
+ "footprint_tiles": [
+  9,
+  9
+ ],
+ "footprint": {
+  "x0": 4,
+  "y0": 77,
+  "x1": 12,
+  "y1": 85,
+  "w": 9,
+  "h": 9
+ },
+ "projection": "oblique: ortho camera el 32 deg az 0 on a (1, 1/sin32, 1.4) scaled model (buildings/housing pack)",
+ "tile_px": {
+  "1x": 40,
+  "2x": 80,
+  "4x": 160
+ },
+ "origin_px": {
+  "4x": [
+   320,
+   1440
+  ],
+  "2x": [
+   160,
+   720
+  ],
+  "1x": [
+   80,
+   360
+  ]
+ },
+ "origin_note": "pixel of the footprint's NW corner (tile x0,y0 top-left). Blit at (tile_x0*tile_px - origin_px.x, tile_y0*tile_px - origin_px.y) in world pixels.",
+ "overhang_tiles": {
+  "left": 2.0,
+  "top": 9.0,
+  "right": 1.0,
+  "bottom": 2.0
+ },
+ "canvas_extent_tiles_from_nw_corner_y_up": {
+  "left": -2,
+  "right": 10,
+  "top": 9,
+  "bottom": -11
+ },
+ "collision": "json/collision/queens_tree_hall.json",
+ "interaction_tile": [
+  8,
+  85
+ ],
+ "stand_tile": [
+  8,
+  86
+ ],
+ "door_tile": [
+  8,
+  85
+ ],
+ "files": {
+  "1x": "queens_tree_hall_1x.png",
+  "2x": "queens_tree_hall_2x.png",
+  "4x": "queens_tree_hall_4x.png"
+ },
+ "hero": "queens_tree_hall_hero_2048.png"
+}

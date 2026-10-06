@@ -48,7 +48,8 @@ ZONES = {
     "forest":  (98, 1, 132, 42),
     "mountains": (138, 1, 162, 42),
     "fishing_village": (168, 1, 198, 42),
-    "mine":    (1, 56, 40, 88),
+    "mine":    (31, 90, 43, 98),
+    "fairy_village": (1, 56, 40, 88),
     "dungeon": (44, 54, 90, 143),
     "city":    (98, 56, 148, 96),  # flag-off shell. city_bounds() grows it.
     "volcano": (154, 58, 190, 94),
@@ -457,30 +458,21 @@ def generate_world():
     # Larger end deck
     _rect(grid, 189, 15, 193, 21, PATH)
 
-    # --- Mine ---
-    mix0, miy0, mix1, miy1 = ZONES["mine"]
-    _rect(grid, mix0, miy0, mix1, miy1, FLOOR)
-    # 3-tile mouth opening onto the village road
-    _border(grid, mix0, miy0, mix1, miy1, WALL, skip={
-        (road_x - 1, miy0), (road_x, miy0), (road_x + 1, miy0),
-    })
-    # Wide path stub from village into the mine
-    for y in range(vy1, miy0 + 1):
-        for x in (road_x - 1, road_x, road_x + 1):
-            if grid[y][x] != WALL:
-                grid[y][x] = PATH
-    for x in (road_x - 1, road_x, road_x + 1):
-        grid[miy0][x] = FLOOR
-    # Apron just north of the mouth
-    for y in (miy0 - 2, miy0 - 1):
-        for x in (road_x - 2, road_x - 1, road_x, road_x + 1, road_x + 2):
-            if 0 <= x < WIDTH and grid[y][x] in (GRASS, PATH, *TREE_TILES):
-                grid[y][x] = PATH
-    for _ in range(45):
-        x = rng.randint(mix0 + 2, mix1 - 2)
-        y = rng.randint(miy0 + 2, miy1 - 2)
-        if grid[y][x] == FLOOR:
-            grid[y][x] = IRON_ORE if rng.random() < 0.25 else ORE
+    # --- Quarry beside King's Row (the old mine ground is the fairy village) ---
+    _rect(grid, 31, 90, 43, 98, WALL)
+    _rect(grid, 32, 91, 42, 97, FLOOR)
+    for y in (93, 94, 95):
+        grid[y][31] = PATH
+        if grid[y][30] in (GRASS, PATH, FLOOR):
+            grid[y][30] = PATH
+    for x, y, iron in (
+        (32, 91, False), (34, 91, False), (36, 91, True), (38, 91, False),
+        (40, 91, True), (42, 91, False), (35, 92, False), (39, 92, True),
+        (35, 96, True), (39, 96, False), (32, 97, False), (34, 97, False),
+        (36, 97, False), (38, 97, True), (40, 97, False), (42, 97, False),
+        (42, 93, True), (42, 95, False),
+    ):
+        grid[y][x] = IRON_ORE if iron else ORE
 
     # --- Dungeon rooms (upper) ---
     dx0, dy0, dx1, dy1 = ZONES["dungeon"]
@@ -498,19 +490,6 @@ def generate_world():
     _rect(grid, 53, 64, 55, 68, FLOOR)
     _rect(grid, 69, 66, 71, 70, FLOOR)
     _rect(grid, 62, 73, 64, 75, FLOOR)
-    # mine <-> dungeon link — large, obvious mouth
-    _rect(grid, 36, 66, 48, 76, FLOOR)
-    for y in range(68, 75):
-        for x in (mix1 - 1, mix1, mix1 + 1):
-            if mix0 <= x <= mix1 + 2:
-                grid[y][x] = FLOOR
-    for px, py in ((37, 66), (46, 66), (37, 76), (46, 76), (36, 70), (36, 74), (47, 70), (47, 74)):
-        if 0 <= px < WIDTH and 0 <= py < HEIGHT:
-            grid[py][px] = WALL
-    # PATH apron west of the dungeon mouth (from village/mine approach)
-    _rect(grid, 28, 68, 36, 74, PATH)
-    for y in range(68, 75):
-        grid[y][36] = FLOOR
 
     # --- Deep dungeon: iron / coal veins + giant hall ---
     iron_room = (50, 82, 64, 92)
@@ -804,6 +783,8 @@ def generate_world():
     buildings_v2.apply_stamp(grid, sys.modules[__name__])
     import housing
     housing.stamp(grid, sys.modules[__name__])
+    import fairy_village
+    fairy_village.stamp(grid)
     _clear_trees_near_buildings(grid)
     _paint_void_grounds(grid)
     _lay_wayfinder_roads(grid)

@@ -118,11 +118,11 @@ def _in_emberdeep(client):
     )
 
 
-# Eye sits a little over a tile behind the player so the corridor reads wider.
-# Horizon stays above center so the body stands in the lower middle.
-_EYE_BACK = 1.15
-_HORIZON = 0.40
-_CAM_Z = 0.62
+# Eye sits back and above the player, pitched down so the corridor is seen
+# from over their head. Horizon stays high; the body stays in the lower middle.
+_EYE_BACK = 1.55
+_HORIZON = 0.28
+_CAM_Z = 2.05
 # One key press turns the view this far. The player owns the yaw.
 _YAW_STEP = math.radians(15)
 
@@ -425,6 +425,45 @@ def _project(ex, ey, lx, ly, rx, ry, wx, wy, depths, rw, rh, mw, mh, reveal=Fals
     return along, sx, sy, _tile_px(along, mh)
 
 
+def _cone_spots(monster):
+    spots = set()
+    for spot in (monster or {}).get("cone_tiles") or []:
+        if isinstance(spot, dict):
+            spots.add((int(spot["x"]), int(spot["y"])))
+        else:
+            spots.add((int(spot[0]), int(spot[1])))
+    return spots
+
+
+def wyrm_swing_tiles(monster):
+    """Breath tiles, plus one step to either side. Matches the server."""
+    spots = _cone_spots(monster)
+    if not spots:
+        return spots
+    xs = [p[0] for p in spots]
+    lo, hi = min(xs), max(xs)
+    for y in {p[1] for p in spots}:
+        spots.add((lo - 1, y))
+        spots.add((hi + 1, y))
+    return spots
+
+
+def wyrm_approach_goals(monster):
+    """Stand beside the flame. The breath tiles still count once you are there."""
+    swing = wyrm_swing_tiles(monster)
+    safe = swing - _cone_spots(monster)
+    return safe or swing
+
+
+def _sprite_world(monster):
+    """Feet of a billboard. The wyrm is drawn in the open floor, not on the back wall."""
+    x = monster["x"] + 0.5
+    y = monster["y"] + 0.5
+    if monster.get("type") == "emberdeep_wyrm":
+        y += 1.55
+    return x, y
+
+
 def _open_between(tiles, x0, y0, x1, y1):
     """True when no wall stands strictly between the two tiles."""
     x0, y0, x1, y1 = int(x0), int(y0), int(x1), int(y1)
@@ -473,9 +512,9 @@ def _cast(tiles, px, py, rdx, rdy):
         tex = px + dist * rdx
     else:
         dist, tex = 1.0, 0.0
-    dist = max(0.05, dist)
+        dist = max(0.05, dist)
     tex -= math.floor(tex)
-    return dist, map_x, map_y, tex
+    return dist, map_x, map_y, tex, side, step_x, step_y
 
 
 def _tile_at(tiles, x, y):
@@ -494,6 +533,59 @@ def _floor_name(tiles, x, y):
     return "floor_stone.png"
 
 
+def _sample_floor(tex, tiles, fx, fy):
+    """One flagstone per tile, with grout, so the floor reads as laid stones."""
+    tw, th = tex.get_size()
+    ix, iy = math.floor(fx), math.floor(fy)
+    fu, fv = fx - ix, fy - iy
+    ix, iy = int(ix), int(iy)
+    if _tile_at(tiles, ix, iy) == wm.WATER:
+        n = (ix * 13 + iy * 7) & 31
+        return pygame.Color(min(255, 200 + n), 70 + n, 18)
+    lava = None
+    for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0)):
+        if _tile_at(tiles, ix + dx, iy + dy) == wm.WATER:
+            lava = (dx, dy)
+            break
+    if lava is None and (fu < 0.05 or fu > 0.95 or fv < 0.05 or fv > 0.95):
+        shade = 22 + ((ix * 13 + iy * 7) & 12)
+        return pygame.Color(shade, max(0, shade - 4), max(0, shade - 8))
+    cell = 4
+    cx = (ix * 3 + iy) % cell
+    if lava is None:
+        cy = (ix + iy * 2) % cell
+        uu = 0.07 + fu * 0.86
+        vv = 0.07 + fv * 0.86
+        tx = int((cx + uu) / cell * tw) % tw
+        ty = int((cy + vv) / cell * th) % th
+    else:
+        sx, sy = lava
+        if sy > 0:
+            u, v = fu, fv
+        elif sy < 0:
+            u, v = 1.0 - fu, 1.0 - fv
+        elif sx > 0:
+            u, v = fv, fu
+        else:
+            u, v = 1.0 - fv, 1.0 - fu
+        if v >= 0.72:
+            tx = int(u * tw) % tw
+            ty = int((0.75 + (v - 0.72) / 0.28 * 0.25) * th) % th
+        else:
+            cy = (ix + iy) % 3
+            uu = 0.08 + u * 0.84
+            vv = v / 0.72
+            tx = int((cx + uu) / cell * tw) % tw
+            ty = int((cy + vv) / 3.0 * (th * 0.75)) % th
+    color = tex.get_at((tx, ty))
+    vary = 90 + ((ix * 17 + iy * 11) & 28)
+    return pygame.Color(
+        min(255, color.r * vary // 100),
+        min(255, color.g * vary // 100),
+        min(255, color.b * vary // 100),
+    )
+
+
 def _wall_name(tiles, x, y, boss):
     if boss and int(y) == int(boss[1]) and abs(int(x) - int(boss[0])) <= 2:
         return "door_boss.png"
@@ -508,6 +600,217 @@ def _sample(tex, u, v):
     tx = int(u * tw) % tw
     ty = int(v * th) % th
     return tex.get_at((tx, ty))
+
+
+_LIGHT = {}
+_ROOMS = {}
+_THEMES = {}
+# Legged bodies take a step. The slug and the wyrm do not.
+_LEGS = {
+    "ash_imp": "biped",
+    "magma_knight": "biped",
+    "crucible_beast": "quad",
+    "ember_wolf": "quad",
+}
+_ROOM_THEME = {
+    "ember_imp": "soot",
+    "ash_imp": "soot",
+    "bile_toad": "moss",
+    "cinder_bitch": "claws",
+    "ember_wolf": "claws",
+    "ash_warlock": "runes",
+    "troll_cook": "grease",
+    "mistress_of_cinders": "banner",
+    "emberdeep_wyrm": "scorch",
+    "crucible_beast": "scorch",
+    "magma_knight": "scorch",
+    "magma_slug": "cracks",
+}
+_THEME_RANK = {
+    "scorch": 0, "banner": 1, "runes": 2, "claws": 3,
+    "grease": 4, "moss": 5, "soot": 6, "cracks": 7,
+}
+
+
+def _room_block(tiles, x, y):
+    """True when this floor tile belongs to a room, not a one-tile corridor."""
+    def floor(nx, ny):
+        return _tile_at(tiles, nx, ny) == wm.FLOOR
+
+    if not floor(x, y):
+        return False
+    for dx, dy in ((0, 0), (-1, 0), (0, -1), (-1, -1)):
+        if all(floor(x + dx + a, y + dy + b) for a in (0, 1) for b in (0, 1)):
+            return True
+    return False
+
+
+def _rooms(tiles):
+    """Floor tile -> room origin. Corridors are left out."""
+    key = id(tiles)
+    if _ROOMS.get("key") == key:
+        return _ROOMS["grid"]
+    h = len(tiles)
+    w = len(tiles[0]) if h else 0
+    grid = {}
+    for y in range(h):
+        for x in range(w):
+            if (x, y) in grid or not _room_block(tiles, x, y):
+                continue
+            seen = {(x, y)}
+            queue = [(x, y)]
+            i = 0
+            while i < len(queue):
+                cx, cy = queue[i]
+                i += 1
+                for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    nx, ny = cx + dx, cy + dy
+                    if (nx, ny) in seen or not _room_block(tiles, nx, ny):
+                        continue
+                    seen.add((nx, ny))
+                    queue.append((nx, ny))
+            origin = min(seen)
+            for spot in seen:
+                grid[spot] = origin
+    _ROOMS.clear()
+    _ROOMS["key"] = key
+    _ROOMS["grid"] = grid
+    return grid
+
+
+def _sconces(tiles):
+    """Candle tiles along the corridors, and how bright each map tile is."""
+    key = id(tiles)
+    if _LIGHT.get("key") == key:
+        return _LIGHT["glow"], _LIGHT["sconces"]
+    h = len(tiles)
+    w = len(tiles[0]) if h else 0
+    glow = [[0.0] * w for _ in range(h)]
+    sconces = set()
+    for y in range(h):
+        for x in range(w):
+            if _tile_at(tiles, x, y) != wm.FLOOR or _room_block(tiles, x, y):
+                continue
+            if (x + y * 3) % 5 != 0:
+                continue
+            sconces.add((x, y))
+            for dy in range(-3, 4):
+                for dx in range(-3, 4):
+                    nx, ny = x + dx, y + dy
+                    if ny < 0 or nx < 0 or ny >= h or nx >= w:
+                        continue
+                    dist = math.hypot(dx, dy)
+                    if dist > 3.1:
+                        continue
+                    glow[ny][nx] = max(glow[ny][nx], 1.0 - dist / 3.1)
+    _LIGHT.clear()
+    _LIGHT["key"] = key
+    _LIGHT["glow"] = glow
+    _LIGHT["sconces"] = sconces
+    return glow, sconces
+
+
+def _paint_theme(name):
+    """A copy of the rock wall with marks for one kind of creature room."""
+    base = _texture("wall_rock.png").copy()
+    w, h = base.get_size()
+    paint = pygame.Surface((w, h), pygame.SRCALPHA)
+    if name == "soot":
+        pygame.draw.ellipse(paint, (20, 12, 10, 150), (w // 5, h // 6, w // 2, h // 3))
+        pygame.draw.line(paint, (210, 90, 30, 200), (w // 4, h // 3), (w // 2, h // 2), 2)
+        pygame.draw.line(paint, (180, 60, 20, 160), (w // 2, h // 2), (3 * w // 5, 2 * h // 3), 2)
+    elif name == "moss":
+        pygame.draw.ellipse(paint, (48, 120, 40, 200), (w // 10, int(h * 0.62), w // 3, h // 4))
+        pygame.draw.ellipse(paint, (36, 96, 32, 190), (w // 2, int(h * 0.7), w // 3, h // 5))
+        pygame.draw.ellipse(paint, (70, 140, 50, 160), (w // 3, int(h * 0.8), w // 6, h // 8))
+    elif name == "claws":
+        for i, x0 in enumerate((w // 5, w // 3, w // 2)):
+            pygame.draw.line(paint, (190, 170, 140, 180), (x0, h // 4), (x0 + w // 8, 3 * h // 5), 2)
+    elif name == "runes":
+        pygame.draw.circle(paint, (160, 120, 60, 170), (w // 2, h // 2), w // 6, 2)
+        pygame.draw.line(paint, (170, 130, 70, 180), (w // 3, h // 2), (2 * w // 3, h // 2), 2)
+        pygame.draw.line(paint, (170, 130, 70, 180), (w // 2, h // 3), (w // 2, 2 * h // 3), 2)
+    elif name == "grease":
+        for x0 in (w // 5, w // 2, 3 * w // 4):
+            pygame.draw.line(paint, (120, 78, 28, 210), (x0, h // 8), (x0 - 6, int(h * 0.72)), 4)
+            pygame.draw.circle(paint, (90, 56, 20, 180), (x0 - 6, int(h * 0.74)), max(3, w // 18))
+    elif name == "banner":
+        pygame.draw.rect(paint, (90, 24, 22, 160), (w // 3, h // 10, w // 8, 4 * h // 5))
+        pygame.draw.rect(paint, (40, 12, 12, 180), (w // 3 + w // 10, h // 10, w // 16, 4 * h // 5))
+    elif name == "scorch":
+        pygame.draw.ellipse(paint, (12, 8, 8, 170), (w // 6, h // 5, 2 * w // 3, h // 2))
+        pygame.draw.line(paint, (220, 80, 20, 210), (w // 4, h // 3), (w // 2, 2 * h // 3), 2)
+        pygame.draw.line(paint, (200, 60, 16, 180), (w // 2, h // 4), (3 * w // 5, h // 2), 2)
+    else:
+        pygame.draw.line(paint, (70, 60, 52, 180), (w // 5, h // 4), (3 * w // 5, 3 * h // 4), 2)
+        pygame.draw.line(paint, (60, 52, 46, 160), (2 * w // 3, h // 5), (w // 3, 4 * h // 5), 2)
+    base.blit(paint, (0, 0))
+    return base
+
+
+def _theme_tex(name):
+    if name not in _THEMES:
+        _THEMES[name] = _paint_theme(name)
+    return _THEMES[name]
+
+
+def _theme_at(client, tiles, x, y):
+    """Wall marks for the creature room this floor tile belongs to."""
+    rooms = _rooms(tiles)
+    origin = rooms.get((int(x), int(y)))
+    if origin is None:
+        return None
+    key = id(tiles)
+    if _ROOMS.get("theme_key") != key:
+        chosen = {}
+        for monster in (getattr(client, "monsters", None) or {}).values():
+            if not monster.get("alive", True):
+                continue
+            spot = rooms.get((int(monster["x"]), int(monster["y"])))
+            if spot is None:
+                continue
+            theme = _ROOM_THEME.get(monster.get("type"), "cracks")
+            prev = chosen.get(spot)
+            if prev is None or _THEME_RANK[theme] < _THEME_RANK[prev]:
+                chosen[spot] = theme
+        _ROOMS["theme_key"] = key
+        _ROOMS["themes"] = chosen
+    return _ROOMS["themes"].get(origin)
+
+
+def _warm(color, glow):
+    if glow <= 0.04:
+        return color
+    return (
+        min(255, int(color[0] + 110 * glow)),
+        min(255, int(color[1] + 58 * glow)),
+        min(255, int(color[2] + 16 * glow)),
+    )
+
+
+def _candle(color, tex_u, v, flicker):
+    """A sconce on the wall face: iron cup, flame, and a warm halo."""
+    across = abs(tex_u - 0.5)
+    if across > 0.22 or not (0.16 <= v <= 0.58):
+        return color
+    halo = max(0.0, 1.0 - across / 0.22) * flicker
+    color = (
+        min(255, int(color[0] + 90 * halo)),
+        min(255, int(color[1] + 42 * halo)),
+        int(color[2]),
+    )
+    if across < 0.07 and 0.38 <= v <= 0.52:
+        return (62, 44, 32)
+    if across < 0.045 * max(0.6, flicker) and 0.24 <= v <= 0.4:
+        return (255, int(160 + 80 * flicker), 48)
+    return color
+
+
+def _stride(kind, now, tile, facing):
+    """Screen step for a legged body that is not a pack sprite."""
+    import emberdeep_creatures_client
+    sway, bob, _rock, _squash = emberdeep_creatures_client._step(kind, now, tile, facing)
+    return sway, bob
 
 
 def _view(client, advance=False):
@@ -576,8 +879,22 @@ def _draw_monster_sprite(client, m, cx, cy, tile_px, t, face, moving, atk, playe
     import time
     import emberdeep_creatures_client
     breathing = time.time() < (getattr(client, "ember_cone", None) or {}).get("until", 0)
+    if moving and m.get("type") in _LEGS:
+        step_x, step_y = _stride(_LEGS[m["type"]], t, ts, face)
+        cx += step_x
+        cy -= step_y
+    # Static preview sheets have no walk or strike. Draw the animated body instead.
+    animated = {"magma_slug": 34, "ash_imp": 46, "crucible_beast": 62}
+    if vis in animated:
+        ts = max(16, min(ts, animated[vis]))
+        sprites.draw_monster(
+            client.screen, vis, cx, cy, ts, t,
+            hurt=hurt, attacking=atk, facing=face, moving=moving,
+        )
+        return
     if emberdeep_creatures_client.draw_creature(
         client.screen, m["type"], cx, cy, ts, facing=face, breathing=breathing,
+        moving=moving, attacking=atk,
     ):
         return
     lowpoly = lowpoly_on and lowpoly_dragon_sprites.sheet_key_for_monster_type(m["type"])
@@ -593,7 +910,7 @@ def _draw_monster_sprite(client, m, cx, cy, tile_px, t, face, moving, atk, playe
             (55, 70, 95), (220, 175, 140), (35, 28, 22),
             weapon=_weapon_style(eq.get("weapon")),
             shield=bool(eq.get("shield")),
-            moving=False, t=t, facing=face_h,
+            moving=moving, t=t, facing=face_h,
             equipment=eq, attacking=atk, gender="male",
         )
     elif lowpoly and lowpoly_dragon_sprites.draw_lowpoly_dragon(
@@ -648,6 +965,7 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
     t = time.time()
     bills = []
     client._ember_screen_anchor = {}
+    client._ember_nest_drop = 0
     player_sx = mw // 2
     bx = pose.get("draw_x", pose["x"] + 0.5)
     by = pose.get("draw_y", pose["y"] + 0.5)
@@ -662,9 +980,9 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
         projected = (along_p, psx, psy, ptile)
     along_p, psx, psy, ptile = projected
     player_sx = psx
-    # Keep the body low and small so the corridor, and anyone in it, stays visible.
-    player_sy = min(mh - 8, psy + int(ptile * 0.42))
-    player_tile = max(16, int(ptile * 0.55))
+    # The high camera looks down on a smaller body so the room stays visible.
+    player_sy = min(mh - 8, psy + int(ptile * 0.28))
+    player_tile = max(16, int(ptile * 0.46))
     bills.append((max(0.2, along_p), "player", psx, player_sy, player_tile, None))
     seen = {pose["key"]: (pose["x"], pose["y"])}
     floor = client.tiles or []
@@ -676,17 +994,26 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
         seen[("m", m["id"])] = (m["x"], m["y"])
         dist = max(abs(m["x"] - pose["x"]), abs(m["y"] - pose["y"]))
         targeted = client.combat_target_id == m["id"]
-        close = targeted or dist <= 3
-        if close and _open_between(floor, pose["x"], pose["y"], m["x"], m["y"]):
+        # The wyrm stays in its chamber. Everyone else steps forward only
+        # when you are standing on the next tile, so the room stays visible.
+        beside = dist <= 1 and m.get("type") != "emberdeep_wyrm"
+        if beside and _open_between(floor, pose["x"], pose["y"], m["x"], m["y"]):
             fighting.append((0 if targeted else dist, m, moving, atk, drop_down))
             continue
+        wx, wy = _sprite_world(m)
         proj = _project(
-            ex, ey, lx, ly, rx, ry, m["x"] + 0.5, m["y"] + 0.5,
+            ex, ey, lx, ly, rx, ry, wx, wy,
             depths, rw, rh, mw, mh,
         )
         if proj is None:
             continue
         along, sx, sy, tile_px = proj
+        if m.get("type") == "emberdeep_wyrm":
+            # The north of the lair collapses onto the back wall. Drop the
+            # body into the open floor so it stands in the middle of the room.
+            want = int(mh * 0.60)
+            client._ember_nest_drop = max(0, want - sy)
+            sy = max(sy, want)
         face = _face_from_vector(pose["x"] - m["x"], pose["y"] - m["y"])
         bills.append((along, "monster", sx, sy, tile_px, (m, face, moving, atk, near or targeted, drop_down)))
     dungeon = client.dungeon or {}
@@ -702,16 +1029,10 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
             if proj is None:
                 continue
             along, sx, sy, tile_px = proj
-            bills.append((along, "pack_prop", sx, sy, tile_px, prop.get("key")))
-        cone = getattr(client, "ember_cone", None)
-        if isinstance(cone, dict) and t < cone.get("until", 0) and cone.get("tiles"):
-            tiles = cone["tiles"]
-            mx = sum(int(p[0]) for p in tiles) / len(tiles) + 0.5
-            my = max(int(p[1]) for p in tiles) + 1.0
-            proj = _project(ex, ey, lx, ly, rx, ry, mx, my, depths, rw, rh, mw, mh)
-            if proj is not None:
-                along, sx, sy, tile_px = proj
-                bills.append((along, "cone", sx, sy, tile_px, None))
+            key = prop.get("key") or ""
+            if key.startswith("dragon_egg") and 18 <= int(prop["x"]) <= 26 and int(prop["y"]) <= 6:
+                sy += int(getattr(client, "_ember_nest_drop", 0) * 0.92)
+            bills.append((along, "pack_prop", sx, sy, tile_px, key))
     bills.sort(key=lambda item: -item[0])
     for along, kind, sx, sy, tile_px, extra in bills:
         if kind == "player":
@@ -720,28 +1041,42 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
             if not isinstance(anchors, dict):
                 anchors = {}
                 client._ember_screen_anchor = anchors
-            anchors[("p", pose.get("key", (None, None))[1])] = (sx, sy, tile_px)
+            pid = pose.get("key", (None, None))[1]
+            anchors[("p", pid)] = (sx, sy, tile_px)
+            anchors[("p", str(pid))] = (sx, sy, tile_px)
+            p = client.player or {}
+            client.draw_hp_bar(sx, sy - tile_px - 8, p.get("hp", 1), p.get("max_hp", 1))
             continue
         if kind == "pack_prop":
             import emberdeep_creatures_client
-            emberdeep_creatures_client.draw_prop(client.screen, extra, sx, sy, tile_px)
-            continue
-        if kind == "cone":
-            import emberdeep_creatures_client
-            emberdeep_creatures_client.draw_cone(client.screen, sx, sy, tile_px * 2.2)
+            # Distant props were specks. Keep them big enough to read as objects.
+            emberdeep_creatures_client.draw_prop(
+                client.screen, extra, sx, sy, max(tile_px, 78),
+            )
             continue
         m, face, moving, atk, show, drop_down = extra
+        # Distant sprites were a few pixels tall. Keep a readable floor, then let body scale separate them.
+        # The wyrm is capped so its body sits in the lair instead of covering the back wall.
+        if m.get("type") == "emberdeep_wyrm":
+            tile_px = min(max(tile_px, 64), 72)
+        elif m.get("type") == "magma_slug":
+            tile_px = max(tile_px, 28)
+        else:
+            tile_px = max(tile_px, 72)
         _draw_monster_sprite(client, m, sx, sy, tile_px, t, face, moving, atk, player_sx, drop_down)
+        import emberdeep_creatures_client
+        height = emberdeep_creatures_client.creature_height(m["type"], tile_px)
+        anchors = getattr(client, "_ember_screen_anchor", None)
+        if isinstance(anchors, dict):
+            anchors[("m", m["id"])] = (sx, sy, height)
+            anchors[("m", str(m["id"]))] = (sx, sy, height)
+        bar_y = max(22, min(mh - 28, sy - height - 6))
+        client.draw_hp_bar(sx, bar_y, m["hp"], m["max_hp"])
         if not show:
             continue
-        from content import MONSTERS
-        mdef = MONSTERS.get(m["type"]) or {}
-        kind_name = "character" if mdef.get("humanoid") else "monster"
-        ny, hy = _label_anchor(sy, tile_px, kind_name)
-        client.blit_nameplate(m["name"], sx, ny)
-        client.draw_hp_bar(sx, hy, m["hp"], m["max_hp"])
+        client.blit_nameplate(m["name"], sx, bar_y - 14)
         level = int(m.get("level") or 1)
-        client.blit_combat_level(level, sx, ny - 16, client.monster_threat_color(level))
+        client.blit_combat_level(level, sx, bar_y - 28, client.monster_threat_color(level))
     _draw_opponents(client, pose, fighting, mw, mh, t, psx, player_sy, player_tile)
     _draw_projectiles(client, ex, ey, lx, ly, rx, ry, rw, rh, mw, mh)
     _draw_hitsplats(client, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, mh)
@@ -759,10 +1094,15 @@ def _draw_opponents(client, pose, fighting, mw, mh, t, player_sx, player_sy, pla
         return
     fighting = sorted(fighting, key=lambda item: (item[0], item[1]["id"]))[:3]
     count = len(fighting)
-    tile = max(26, int(player_tile * 0.85))
-    gap = int(tile * 2.1)
+    tile = max(96, int(player_tile * 2.4))
+    import emberdeep_creatures_client
+    widths = [
+        max(tile, emberdeep_creatures_client.creature_height(m["type"], tile))
+        for _dist, m, _moving, _atk, _drop in fighting
+    ]
+    gap = int(max(widths) * 1.15) if widths else tile * 2
     origin = player_sx - (count - 1) * gap // 2
-    feet = max(tile + 8, player_sy - int(player_tile * 1.65))
+    feet = max(tile + 8, player_sy - int(player_tile * 1.35))
     anchors = getattr(client, "_ember_screen_anchor", None)
     if not isinstance(anchors, dict):
         anchors = {}
@@ -772,20 +1112,18 @@ def _draw_opponents(client, pose, fighting, mw, mh, t, player_sx, player_sy, pla
         sx = origin + index * gap
         face = _face_from_vector(pose["x"] - m["x"], pose["y"] - m["y"])
         _draw_monster_sprite(client, m, sx, feet, tile, t, face, moving, atk, player_sx, drop_down)
-        anchors[("m", m["id"])] = (sx, feet, tile)
-        height = int(tile * 1.8)
+        height = emberdeep_creatures_client.creature_height(m["type"], tile)
+        anchors[("m", m["id"])] = (sx, feet, height)
+        anchors[("m", str(m["id"]))] = (sx, feet, height)
         hits.append((
-            pygame.Rect(sx - tile, feet - height, tile * 2, height),
+            pygame.Rect(sx - height // 2, feet - height, height, height),
             (int(m["x"]), int(m["y"])),
         ))
-        from content import MONSTERS
-        mdef = MONSTERS.get(m["type"]) or {}
-        kind_name = "character" if mdef.get("humanoid") else "monster"
-        ny, hy = _label_anchor(feet, tile, kind_name)
-        client.blit_nameplate(m["name"], sx, ny)
-        client.draw_hp_bar(sx, hy, m["hp"], m["max_hp"])
+        bar_y = feet - height - 6
+        client.draw_hp_bar(sx, bar_y, m["hp"], m["max_hp"])
+        client.blit_nameplate(m["name"], sx, bar_y - 14)
         level = int(m.get("level") or 1)
-        client.blit_combat_level(level, sx, ny - 16, client.monster_threat_color(level))
+        client.blit_combat_level(level, sx, bar_y - 28, client.monster_threat_color(level))
     client._ember_fight_hits = hits
 
 
@@ -855,7 +1193,6 @@ def _screen_of(ex, ey, lx, ly, rx, ry, wx, wy, rw, rh, mw, mh):
 
 def _draw_hitsplats(client, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, mh):
     import time
-    import rs_style
     now = time.time()
     client._flush_pending_floaters(now)
     client.floaters = [f for f in client.floaters if f["expire"] > now]
@@ -896,9 +1233,8 @@ def _draw_hitsplats(client, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, mh):
             else:
                 _along, sx, sy, tile_px = proj
         age_left = floater["expire"] - now
-        lift = int((1.0 - min(1.0, age_left / 1.3)) * 36)
-        head = rs_style.label_lift(tile_px, "character")
-        py = sy - head - lift
+        lift = int((1.0 - min(1.0, age_left / 1.3)) * 22)
+        py = sy - max(28, int(tile_px) + 16) - lift
         kind = floater.get("kind")
         if kind in ("hit_red", "hit_green", "hit_blue", "hit_miss", "hit_crit", "hit_thorns"):
             client.draw_hit_star(sx, py, floater["text"], floater["color"], kind=kind)
@@ -1011,6 +1347,7 @@ def draw_magic(client):
 
 def draw_first_person(client):
     """Follow the player through Emberdeep. Returns False when the top-down map should draw."""
+    import time
     if not _in_emberdeep(client):
         client._ember_cam = None
         return False
@@ -1025,20 +1362,40 @@ def draw_first_person(client):
     depths = [1e9] * rw
     pix = pygame.PixelArray(view)
     ceiling = _texture("ceiling_dark.png")
+    glow, sconces = _sconces(tiles)
+    flicker = 0.72 + 0.28 * abs(math.sin(time.time() * 9.0))
+    breath = set()
+    for mon in (client.monsters or {}).values():
+        if mon.get("alive", True) and mon.get("type") == "emberdeep_wyrm":
+            breath |= _cone_spots(mon)
+    cone = getattr(client, "ember_cone", None) or {}
+    hot = breath if time.time() < cone.get("until", 0) else set()
     for col in range(rw):
         cam = (col / max(1, rw - 1) - 0.5) * _FOV
         rdx = lx * math.cos(cam) + rx * math.sin(cam)
         rdy = ly * math.cos(cam) + ry * math.sin(cam)
-        dist, wx, wy, tex_u = _cast(tiles, ex, ey, rdx, rdy)
+        dist, wx, wy, tex_u, side, step_x, step_y = _cast(tiles, ex, ey, rdx, rdy)
         depths[col] = dist
-        wall_h = min(rh, int(rh / dist))
-        top = max(0, horizon - wall_h // 2)
-        bot = min(rh - 1, horizon + wall_h // 2)
-        wall_tex = _texture(_wall_name(tiles, wx, wy, boss))
-        shade = 180 if (wx + wy) % 2 == 0 else 230
-        for y in range(0, rh, 2):
+        wall_h = min(rh, int(rh / max(0.2, dist)))
+        # Plant the wall on the raised camera's floor line instead of the horizon.
+        floor_y = int(horizon * (1.0 + _CAM_Z / max(0.2, dist)))
+        bot = min(rh - 1, max(horizon + 4, floor_y))
+        top = max(0, bot - wall_h)
+        face_x = wx - step_x if side == 0 else wx
+        face_y = wy if side == 0 else wy - step_y
+        wall_name = _wall_name(tiles, wx, wy, boss)
+        theme = None
+        if wall_name == "wall_rock.png":
+            theme = _theme_at(client, tiles, face_x, face_y)
+        wall_tex = _theme_tex(theme) if theme else _texture(wall_name)
+        sconce = (face_x, face_y) in sconces
+        shade = 210 if sconce else (180 if (wx + wy) % 2 == 0 else 230)
+        face_glow = 0.0
+        if 0 <= face_y < len(glow) and 0 <= face_x < len(glow[0]):
+            face_glow = glow[face_y][face_x]
+        for y in range(rh):
             if top <= y <= bot:
-                v = (y - (horizon - wall_h / 2)) / max(1, wall_h)
+                v = (y - top) / max(1, bot - top)
                 color = _sample(wall_tex, tex_u, v)
                 gray = (color.r + color.g + color.b) // 3
                 color = (
@@ -1046,6 +1403,9 @@ def draw_first_person(client):
                     min(255, (gray * 2 + color.g) // 3 * shade // 255),
                     min(255, (gray * 2 + color.b) // 3 * shade // 255)
                 )
+                if sconce:
+                    color = _candle(color, tex_u, v, flicker)
+                color = _warm(color, face_glow)
             elif y < horizon:
                 row = (horizon - y) / max(1, horizon)
                 current = _CAM_Z / max(0.05, row)
@@ -1053,25 +1413,34 @@ def draw_first_person(client):
                 fy = ey + rdy * current
                 color = _sample(ceiling, fx, fy)
                 color = (color.r // 2, color.g // 2, color.b // 2)
+                ix, iy = int(fx), int(fy)
+                if 0 <= iy < len(glow) and 0 <= ix < len(glow[0]):
+                    color = _warm(color, glow[iy][ix] * 0.65)
             else:
                 row = (y - horizon) / max(1, horizon)
                 current = _CAM_Z / max(0.05, row)
                 fx = ex + rdx * current
                 fy = ey + rdy * current
                 floor_tex = _texture(_floor_name(tiles, int(fx), int(fy)))
-                color = _sample(floor_tex, fx, fy)
+                color = _sample_floor(floor_tex, tiles, fx, fy)
                 floor_dist_fade = min(240, int(140 + 100 / max(0.5, current)))
                 color = (
                     min(255, (color.r * 3 + 50) // 4 * floor_dist_fade // 255),
                     min(255, (color.g * 3 + 35) // 4 * floor_dist_fade // 255),
                     min(255, (color.b * 3 + 20) // 4 * floor_dist_fade // 255)
                 )
+                ix, iy = int(fx), int(fy)
+                if (ix, iy) in breath:
+                    heat = 0.72 if (ix, iy) in hot else 0.4
+                    color = (
+                        min(255, int(color[0] * (1 - heat) + 220 * heat)),
+                        min(255, int(color[1] * (1 - heat) + 90 * heat)),
+                        min(255, int(color[2] * (1 - heat) + 24 * heat)),
+                    )
+                if 0 <= iy < len(glow) and 0 <= ix < len(glow[0]):
+                    color = _warm(color, glow[iy][ix])
             pix[col, y] = color
-            if y + 1 < rh:
-                pix[col, y + 1] = color
     del pix
-    for y in range(max(0, horizon - 1), min(rh, horizon + 2)):
-        pygame.draw.line(view, (18, 14, 12), (0, y), (rw - 1, y), 1)
     px, py = int(pose["x"]), int(pose["y"])
     _draw_tile_highlight(view, ex, ey, lx, ly, rx, ry, px, py, rw, rh, mw, mh, (180, 200, 120), 2)
     next_dx, next_dy = 0, 0
@@ -1123,18 +1492,26 @@ def pick_tile(client, mx, my):
             continue
         dist = max(abs(mon["x"] - px), abs(mon["y"] - py))
         fighting = client.combat_target_id == mon["id"] or dist <= 2
+        wx, wy = _sprite_world(mon)
         proj = _project(
-            ex, ey, lx, ly, rx, ry, mon["x"] + 0.5, mon["y"] + 0.5,
-            None, rw, rh, mw, mh, reveal=fighting,
+            ex, ey, lx, ly, rx, ry, wx, wy,
+            None, rw, rh, mw, mh, reveal=fighting or mon.get("type") == "emberdeep_wyrm",
         )
         if proj is None:
             continue
         along, sx, sy, tile_px = proj
-        if fighting:
+        if fighting and mon.get("type") != "emberdeep_wyrm":
             tile_px = max(tile_px, int(player_tile * 1.15))
             if abs(sx - player_sx) < player_tile:
                 sx = player_sx + (player_tile if (int(mon["id"]) % 2 == 0) else -player_tile)
-        if _sprite_hit(mx, my, sx, sy, tile_px) and along < best_d:
+        if mon.get("type") == "emberdeep_wyrm":
+            import emberdeep_creatures_client
+            height = emberdeep_creatures_client.creature_height("emberdeep_wyrm", min(max(tile_px, 64), 72))
+            width = int(height * 1.5)
+            hit = pygame.Rect(sx - width // 2, sy - height, width, height).collidepoint(mx, my)
+        else:
+            hit = _sprite_hit(mx, my, sx, sy, tile_px)
+        if hit and along < best_d:
             best = (int(mon["x"]), int(mon["y"]))
             best_d = along
     if best:
@@ -1145,7 +1522,7 @@ def pick_tile(client, mx, my):
     length = math.hypot(rdx, rdy) or 1.0
     rdx /= length
     rdy /= length
-    dist, _wx, _wy, _tex = _cast(tiles, ex, ey, rdx, rdy)
+    dist, _wx, _wy, _tex, _side, _step_x, _step_y = _cast(tiles, ex, ey, rdx, rdy)
     travel = max(0.75, dist - 0.4)
     tx = int(ex + rdx * travel)
     ty = int(ey + rdy * travel)

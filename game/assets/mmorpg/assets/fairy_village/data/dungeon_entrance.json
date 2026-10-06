@@ -1,0 +1,113 @@
+{
+ "id": "dungeon_entrance",
+ "pack": "skeleton_crypt",
+ "dungeon_id": "depths",
+ "old": {
+  "x": 46,
+  "y": 71,
+  "enter": [
+   48,
+   71
+  ],
+  "exit": [
+   38,
+   71
+  ],
+  "pad": [
+   43,
+   69,
+   50,
+   76
+  ]
+ },
+ "new": {
+  "x": 46,
+  "y": 80,
+  "enter": [
+   46,
+   79
+  ],
+  "exit": [
+   46,
+   81
+  ],
+  "pad": [
+   44,
+   79,
+   48,
+   83
+  ],
+  "mouth_tiles": [
+   [
+    45,
+    79
+   ],
+   [
+    45,
+    80
+   ],
+   [
+    46,
+    79
+   ],
+   [
+    46,
+    80
+   ],
+   [
+    47,
+    79
+   ],
+   [
+    47,
+    80
+   ]
+  ],
+  "return_tile": [
+   46,
+   81
+  ]
+ },
+ "moves": {
+  "dungeon_bank (interactable + travel)": [
+   [
+    44,
+    68
+   ],
+   [
+    38,
+    84
+   ]
+  ],
+  "dungeon_hermit (Hermit Cole) + travel quest_hermit_cole": [
+   [
+    48,
+    70
+   ],
+   [
+    40,
+    84
+   ]
+  ],
+  "travel dungeon_gate": [
+   [
+    38,
+    71
+   ],
+   [
+    46,
+    81
+   ]
+  ],
+  "sign_dungeon": [
+   [
+    40,
+    66
+   ],
+   [
+    41,
+    82
+   ]
+  ]
+ }
+}

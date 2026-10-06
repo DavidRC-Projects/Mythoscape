@@ -1,0 +1,844 @@
+{
+ "version": 1,
+ "zone": [
+  1,
+  56,
+  40,
+  88
+ ],
+ "tile_px": {
+  "1x": 40,
+  "2x": 80,
+  "4x": 160
+ },
+ "draw_order": "terrain -> edge overlays -> contact skirts -> ground decals -> entities/buildings (y-sorted)",
+ "draw_rule": "blit decal image at (x*TILE - origin_px[scale][0]*TILE/tile_px[scale], y*TILE - origin_px[scale][1]*TILE/tile_px[scale]) where (x, y) is the decal's NW footprint tile. Purely visual: no collision, no clicks.",
+ "placement": "deterministic (src/ground_layout.py: hash(x,y) + lantern rows); checked by src/decal_check.py",
+ "count": 66,
+ "decals": [
+  {
+   "id": "fairy_lantern",
+   "x": 3,
+   "y": 69,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fairy_lantern",
+   "x": 11,
+   "y": 69,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fairy_lantern",
+   "x": 15,
+   "y": 69,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fairy_lantern",
+   "x": 15,
+   "y": 73,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fairy_lantern",
+   "x": 19,
+   "y": 69,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fairy_lantern",
+   "x": 23,
+   "y": 69,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fairy_lantern",
+   "x": 31,
+   "y": 69,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fairy_lantern",
+   "x": 31,
+   "y": 73,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fairy_lantern",
+   "x": 35,
+   "y": 69,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fairy_lantern",
+   "x": 35,
+   "y": 73,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fairy_lantern",
+   "x": 39,
+   "y": 69,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fairy_lantern",
+   "x": 39,
+   "y": 73,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fairy_lantern",
+   "x": 26,
+   "y": 74,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fairy_lantern",
+   "x": 26,
+   "y": 78,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fairy_lantern",
+   "x": 30,
+   "y": 78,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fairy_lantern",
+   "x": 26,
+   "y": 82,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fairy_lantern",
+   "x": 30,
+   "y": 86,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "mushroom_ring",
+   "x": 2,
+   "y": 61,
+   "w": 2,
+   "h": 2
+  },
+  {
+   "id": "mushroom_ring",
+   "x": 9,
+   "y": 61,
+   "w": 2,
+   "h": 2
+  },
+  {
+   "id": "mushroom_ring",
+   "x": 17,
+   "y": 59,
+   "w": 2,
+   "h": 2
+  },
+  {
+   "id": "toadstool_cluster",
+   "x": 4,
+   "y": 56,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "toadstool_cluster",
+   "x": 6,
+   "y": 56,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fern_clump",
+   "x": 16,
+   "y": 56,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fallen_petals",
+   "x": 10,
+   "y": 57,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "moonpetal_clump",
+   "x": 22,
+   "y": 57,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "rosebell_clump",
+   "x": 1,
+   "y": 58,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fallen_petals",
+   "x": 4,
+   "y": 58,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fern_clump",
+   "x": 12,
+   "y": 58,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "moonpetal_clump",
+   "x": 15,
+   "y": 58,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fallen_petals",
+   "x": 9,
+   "y": 59,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fern_clump",
+   "x": 12,
+   "y": 60,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "toadstool_cluster",
+   "x": 5,
+   "y": 62,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "glow_stones",
+   "x": 13,
+   "y": 62,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "glow_stones",
+   "x": 19,
+   "y": 62,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fern_clump",
+   "x": 1,
+   "y": 64,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "toadstool_cluster",
+   "x": 7,
+   "y": 64,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fern_clump",
+   "x": 16,
+   "y": 64,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fern_clump",
+   "x": 5,
+   "y": 65,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "pebbles",
+   "x": 12,
+   "y": 65,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fallen_petals",
+   "x": 14,
+   "y": 65,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "moonpetal_clump",
+   "x": 19,
+   "y": 65,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "moonpetal_clump",
+   "x": 39,
+   "y": 65,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "glow_stones",
+   "x": 1,
+   "y": 66,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fallen_petals",
+   "x": 34,
+   "y": 66,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "moonpetal_clump",
+   "x": 5,
+   "y": 67,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fallen_petals",
+   "x": 8,
+   "y": 67,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "pebbles",
+   "x": 11,
+   "y": 67,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "glow_stones",
+   "x": 13,
+   "y": 67,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "glow_stones",
+   "x": 1,
+   "y": 69,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fallen_petals",
+   "x": 33,
+   "y": 69,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fern_clump",
+   "x": 1,
+   "y": 73,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fallen_petals",
+   "x": 39,
+   "y": 76,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "rosebell_clump",
+   "x": 2,
+   "y": 77,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fallen_petals",
+   "x": 36,
+   "y": 79,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "rosebell_clump",
+   "x": 15,
+   "y": 81,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fern_clump",
+   "x": 2,
+   "y": 82,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "glow_stones",
+   "x": 14,
+   "y": 83,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "fallen_petals",
+   "x": 1,
+   "y": 85,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "rosebell_clump",
+   "x": 11,
+   "y": 85,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "glow_stones",
+   "x": 33,
+   "y": 85,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "moonpetal_clump",
+   "x": 36,
+   "y": 86,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "glow_stones",
+   "x": 11,
+   "y": 88,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "pebbles",
+   "x": 14,
+   "y": 88,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "pebbles",
+   "x": 18,
+   "y": 88,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "pebbles",
+   "x": 22,
+   "y": 88,
+   "w": 1,
+   "h": 1
+  },
+  {
+   "id": "pebbles",
+   "x": 30,
+   "y": 88,
+   "w": 1,
+   "h": 1
+  }
+ ],
+ "catalog": {
+  "mushroom_ring": {
+   "id": "mushroom_ring",
+   "footprint_tiles": [
+    2,
+    2
+   ],
+   "tile_px": {
+    "1x": 40,
+    "2x": 80,
+    "4x": 160
+   },
+   "origin_px": {
+    "4x": [
+     40.0,
+     120.0
+    ],
+    "2x": [
+     20.0,
+     60.0
+    ],
+    "1x": [
+     10.0,
+     30.0
+    ]
+   },
+   "origin_note": "pixel of the footprint's NW corner; blit at (x0*TILE - origin.x, y0*TILE - origin.y)",
+   "canvas_tiles": {
+    "left": -0.25,
+    "right": 2.25,
+    "top": 0.75,
+    "bottom": -2.25
+   },
+   "files": {
+    "4x": "mushroom_ring_4x.png",
+    "2x": "mushroom_ring_2x.png",
+    "1x": "mushroom_ring_1x.png"
+   },
+   "blocking": false,
+   "projection": "oblique el 32 deg, (1, 1/sin32, 1.4) model scale - same as the buildings pack"
+  },
+  "toadstool_cluster": {
+   "id": "toadstool_cluster",
+   "footprint_tiles": [
+    1,
+    1
+   ],
+   "tile_px": {
+    "1x": 40,
+    "2x": 80,
+    "4x": 160
+   },
+   "origin_px": {
+    "4x": [
+     40.0,
+     144.0
+    ],
+    "2x": [
+     20.0,
+     72.0
+    ],
+    "1x": [
+     10.0,
+     36.0
+    ]
+   },
+   "origin_note": "pixel of the footprint's NW corner; blit at (x0*TILE - origin.x, y0*TILE - origin.y)",
+   "canvas_tiles": {
+    "left": -0.25,
+    "right": 1.25,
+    "top": 0.9,
+    "bottom": -1.25
+   },
+   "files": {
+    "4x": "toadstool_cluster_4x.png",
+    "2x": "toadstool_cluster_2x.png",
+    "1x": "toadstool_cluster_1x.png"
+   },
+   "blocking": false,
+   "projection": "oblique el 32 deg, (1, 1/sin32, 1.4) model scale - same as the buildings pack"
+  },
+  "moonpetal_clump": {
+   "id": "moonpetal_clump",
+   "footprint_tiles": [
+    1,
+    1
+   ],
+   "tile_px": {
+    "1x": 40,
+    "2x": 80,
+    "4x": 160
+   },
+   "origin_px": {
+    "4x": [
+     40.0,
+     144.0
+    ],
+    "2x": [
+     20.0,
+     72.0
+    ],
+    "1x": [
+     10.0,
+     36.0
+    ]
+   },
+   "origin_note": "pixel of the footprint's NW corner; blit at (x0*TILE - origin.x, y0*TILE - origin.y)",
+   "canvas_tiles": {
+    "left": -0.25,
+    "right": 1.25,
+    "top": 0.9,
+    "bottom": -1.25
+   },
+   "files": {
+    "4x": "moonpetal_clump_4x.png",
+    "2x": "moonpetal_clump_2x.png",
+    "1x": "moonpetal_clump_1x.png"
+   },
+   "blocking": false,
+   "projection": "oblique el 32 deg, (1, 1/sin32, 1.4) model scale - same as the buildings pack"
+  },
+  "rosebell_clump": {
+   "id": "rosebell_clump",
+   "footprint_tiles": [
+    1,
+    1
+   ],
+   "tile_px": {
+    "1x": 40,
+    "2x": 80,
+    "4x": 160
+   },
+   "origin_px": {
+    "4x": [
+     40.0,
+     144.0
+    ],
+    "2x": [
+     20.0,
+     72.0
+    ],
+    "1x": [
+     10.0,
+     36.0
+    ]
+   },
+   "origin_note": "pixel of the footprint's NW corner; blit at (x0*TILE - origin.x, y0*TILE - origin.y)",
+   "canvas_tiles": {
+    "left": -0.25,
+    "right": 1.25,
+    "top": 0.9,
+    "bottom": -1.25
+   },
+   "files": {
+    "4x": "rosebell_clump_4x.png",
+    "2x": "rosebell_clump_2x.png",
+    "1x": "rosebell_clump_1x.png"
+   },
+   "blocking": false,
+   "projection": "oblique el 32 deg, (1, 1/sin32, 1.4) model scale - same as the buildings pack"
+  },
+  "fallen_petals": {
+   "id": "fallen_petals",
+   "footprint_tiles": [
+    1,
+    1
+   ],
+   "tile_px": {
+    "1x": 40,
+    "2x": 80,
+    "4x": 160
+   },
+   "origin_px": {
+    "4x": [
+     40.0,
+     80.0
+    ],
+    "2x": [
+     20.0,
+     40.0
+    ],
+    "1x": [
+     10.0,
+     20.0
+    ]
+   },
+   "origin_note": "pixel of the footprint's NW corner; blit at (x0*TILE - origin.x, y0*TILE - origin.y)",
+   "canvas_tiles": {
+    "left": -0.25,
+    "right": 1.25,
+    "top": 0.5,
+    "bottom": -1.25
+   },
+   "files": {
+    "4x": "fallen_petals_4x.png",
+    "2x": "fallen_petals_2x.png",
+    "1x": "fallen_petals_1x.png"
+   },
+   "blocking": false,
+   "projection": "oblique el 32 deg, (1, 1/sin32, 1.4) model scale - same as the buildings pack"
+  },
+  "glow_stones": {
+   "id": "glow_stones",
+   "footprint_tiles": [
+    1,
+    1
+   ],
+   "tile_px": {
+    "1x": 40,
+    "2x": 80,
+    "4x": 160
+   },
+   "origin_px": {
+    "4x": [
+     40.0,
+     96.0
+    ],
+    "2x": [
+     20.0,
+     48.0
+    ],
+    "1x": [
+     10.0,
+     24.0
+    ]
+   },
+   "origin_note": "pixel of the footprint's NW corner; blit at (x0*TILE - origin.x, y0*TILE - origin.y)",
+   "canvas_tiles": {
+    "left": -0.25,
+    "right": 1.25,
+    "top": 0.6,
+    "bottom": -1.25
+   },
+   "files": {
+    "4x": "glow_stones_4x.png",
+    "2x": "glow_stones_2x.png",
+    "1x": "glow_stones_1x.png"
+   },
+   "blocking": false,
+   "projection": "oblique el 32 deg, (1, 1/sin32, 1.4) model scale - same as the buildings pack"
+  },
+  "fairy_lantern": {
+   "id": "fairy_lantern",
+   "footprint_tiles": [
+    1,
+    1
+   ],
+   "tile_px": {
+    "1x": 40,
+    "2x": 80,
+    "4x": 160
+   },
+   "origin_px": {
+    "4x": [
+     40.0,
+     200.0
+    ],
+    "2x": [
+     20.0,
+     100.0
+    ],
+    "1x": [
+     10.0,
+     50.0
+    ]
+   },
+   "origin_note": "pixel of the footprint's NW corner; blit at (x0*TILE - origin.x, y0*TILE - origin.y)",
+   "canvas_tiles": {
+    "left": -0.25,
+    "right": 1.25,
+    "top": 1.25,
+    "bottom": -1.25
+   },
+   "files": {
+    "4x": "fairy_lantern_4x.png",
+    "2x": "fairy_lantern_2x.png",
+    "1x": "fairy_lantern_1x.png"
+   },
+   "blocking": false,
+   "projection": "oblique el 32 deg, (1, 1/sin32, 1.4) model scale - same as the buildings pack"
+  },
+  "fern_clump": {
+   "id": "fern_clump",
+   "footprint_tiles": [
+    1,
+    1
+   ],
+   "tile_px": {
+    "1x": 40,
+    "2x": 80,
+    "4x": 160
+   },
+   "origin_px": {
+    "4x": [
+     40.0,
+     128.0
+    ],
+    "2x": [
+     20.0,
+     64.0
+    ],
+    "1x": [
+     10.0,
+     32.0
+    ]
+   },
+   "origin_note": "pixel of the footprint's NW corner; blit at (x0*TILE - origin.x, y0*TILE - origin.y)",
+   "canvas_tiles": {
+    "left": -0.25,
+    "right": 1.25,
+    "top": 0.8,
+    "bottom": -1.25
+   },
+   "files": {
+    "4x": "fern_clump_4x.png",
+    "2x": "fern_clump_2x.png",
+    "1x": "fern_clump_1x.png"
+   },
+   "blocking": false,
+   "projection": "oblique el 32 deg, (1, 1/sin32, 1.4) model scale - same as the buildings pack"
+  },
+  "pebbles": {
+   "id": "pebbles",
+   "footprint_tiles": [
+    1,
+    1
+   ],
+   "tile_px": {
+    "1x": 40,
+    "2x": 80,
+    "4x": 160
+   },
+   "origin_px": {
+    "4x": [
+     40.0,
+     80.0
+    ],
+    "2x": [
+     20.0,
+     40.0
+    ],
+    "1x": [
+     10.0,
+     20.0
+    ]
+   },
+   "origin_note": "pixel of the footprint's NW corner; blit at (x0*TILE - origin.x, y0*TILE - origin.y)",
+   "canvas_tiles": {
+    "left": -0.25,
+    "right": 1.25,
+    "top": 0.5,
+    "bottom": -1.25
+   },
+   "files": {
+    "4x": "pebbles_4x.png",
+    "2x": "pebbles_2x.png",
+    "1x": "pebbles_1x.png"
+   },
+   "blocking": false,
+   "projection": "oblique el 32 deg, (1, 1/sin32, 1.4) model scale - same as the buildings pack"
+  }
+ }
+}

@@ -37,11 +37,8 @@ _FLOOR_VISUAL = {
 }
 
 EMBERDEEP_REWARDS = [
-    ("adamant_sword", 1),
-    ("adamant_body", 1),
-    ("adamant_battleaxe", 1),
-    ("mythos_dagger", 1),
-    ("mythos_shield", 1),
+    ("mithril_body", 1),
+    ("mithril_sword", 1),
     ("ruby", (2, 4)),
     ("diamond", (1, 2)),
     ("onyx", 1),
@@ -59,12 +56,12 @@ def roll_kill_loot(floor: int, level: int):
     coin_lo = 12 + floor * 10
     coin_hi = 28 + floor * 18
     out.append(("coins", random.randint(coin_lo, coin_hi)))
-    if random.random() < min(0.55, 0.25 + floor * 0.04):
+    if random.random() < min(0.15, 0.08 + floor * 0.006):
         food = "cooked_lobster" if floor < 5 else "cooked_swordfish"
         out.append((food, random.randint(1, 2)))
     if random.random() < min(0.40, 0.12 + floor * 0.03):
         out.append(("health_potion", 1))
-    if random.random() < 0.12 + floor * 0.02:
+    if random.random() < 0.04:
         gem = random.choice(["topaz", "sapphire", "emerald", "ruby"][: max(1, floor // 2)])
         out.append((gem, 1))
     if floor >= 5 and random.random() < 0.08:
@@ -137,7 +134,53 @@ def _load_v2_floor():
     DUNGEON_H = len(tiles)
     DUNGEON_SPAWN = marks.get("spawn", (width // 2, len(tiles) - 3))
     _V2_MARKS = marks
+    _widen_v2_halls(tiles, marks.get("boss"))
     return tiles
+
+
+def _widen_v2_halls(tiles, boss):
+    """Open one-tile halls that are cut through rock. Room walls stay put.
+
+    A hall cell has floor straight ahead and behind, and rock on both sides.
+    Each side becomes floor only when the tile beyond that rock is still
+    rock, so a one-tile wall between two rooms is not knocked out. Lava,
+    the boss threshold, and the map border are left alone.
+    """
+    height = len(tiles)
+    width = len(tiles[0]) if height else 0
+    if width < 3 or height < 3:
+        return
+    ortho = ((1, 0), (-1, 0), (0, 1), (0, -1))
+    opened = []
+    for y in range(1, height - 1):
+        for x in range(1, width - 1):
+            if tiles[y][x] != FLOOR or (x, y) == boss:
+                continue
+            neigh = []
+            for dx, dy in ortho:
+                if tiles[y + dy][x + dx] == FLOOR:
+                    neigh.append((dx, dy))
+            if len(neigh) != 2:
+                continue
+            axes = {(abs(dx), abs(dy)) for dx, dy in neigh}
+            if len(axes) != 1:
+                continue
+            ax, _ay = next(iter(axes))
+            sides = ((0, 1), (0, -1)) if ax == 1 else ((1, 0), (-1, 0))
+            for dx, dy in sides:
+                nx, ny = x + dx, y + dy
+                if not (0 < nx < width - 1 and 0 < ny < height - 1):
+                    continue
+                if tiles[ny][nx] != WALL:
+                    continue
+                ox, oy = nx + dx, ny + dy
+                if not (0 <= ox < width and 0 <= oy < height):
+                    continue
+                if tiles[oy][ox] != WALL:
+                    continue
+                opened.append((nx, ny))
+    for nx, ny in opened:
+        tiles[ny][nx] = FLOOR
 
 
 def generate_floor_tiles(floor: int, rng=None):
@@ -338,8 +381,80 @@ def pick_spawn_tiles(tiles, count, rng=None):
                 seen.add((nx, ny))
                 q.append((nx, ny))
     spots = [p for p in seen if p != DUNGEON_SPAWN]
+    if feature_flags.USE_EMBERDEEP_V2:
+        # Keep the rolled monsters in the rooms. The one-tile passages stay clear.
+        # The north lair is the wyrm's. Nothing else spawns in there.
+        lair = room_box(tiles, 22, 3) if tiles[3][22] == FLOOR else None
+        spots = [
+            p for p in spots
+            if _in_room_block(tiles, p[0], p[1])
+            and max(abs(p[0] - sx), abs(p[1] - sy)) > 2
+            and not (
+                lair
+                and lair[0] <= p[0] <= lair[2]
+                and lair[1] <= p[1] <= lair[3]
+            )
+        ]
     rng.shuffle(spots)
     return spots[:count]
+
+
+def _in_room_block(tiles, x, y):
+    """True when this floor tile is part of a room, not a one-tile corridor.
+
+    A bend in a corridor is still a corridor. A room contains a 2 by 2 of floor.
+    """
+    h = len(tiles)
+    w = len(tiles[0]) if h else 0
+
+    def floor(nx, ny):
+        return 0 <= nx < w and 0 <= ny < h and tiles[ny][nx] == FLOOR
+
+    if not floor(x, y):
+        return False
+    for dx, dy in ((0, 0), (-1, 0), (0, -1), (-1, -1)):
+        if all(floor(x + dx + a, y + dy + b) for a in (0, 1) for b in (0, 1)):
+            return True
+    return False
+
+
+def _one_tile_passage(tiles, x, y):
+    """True when this floor tile is a corridor, not the inside of a room."""
+    h = len(tiles)
+    w = len(tiles[0]) if h else 0
+
+    def open_tile(nx, ny):
+        return 0 <= nx < w and 0 <= ny < h and tiles[ny][nx] == FLOOR
+
+    sides_h = sum(open_tile(x + d, y) for d in (-1, 1))
+    sides_v = sum(open_tile(x, y + d) for d in (-1, 1))
+    return (sides_h == 0 and sides_v > 0) or (sides_v == 0 and sides_h > 0)
+
+
+def room_box(tiles, x, y):
+    """The room around a creature. The narrow passages are left out."""
+    h = len(tiles)
+    w = len(tiles[0]) if h else 0
+    x, y = int(x), int(y)
+    if not (0 <= x < w and 0 <= y < h) or tiles[y][x] != FLOOR or not _in_room_block(tiles, x, y):
+        return (x, y, x, y)
+    seen = {(x, y)}
+    queue = [(x, y)]
+    i = 0
+    while i < len(queue):
+        cx, cy = queue[i]
+        i += 1
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nx, ny = cx + dx, cy + dy
+            if (nx, ny) in seen or not (0 <= nx < w and 0 <= ny < h):
+                continue
+            if tiles[ny][nx] != FLOOR or not _in_room_block(tiles, nx, ny):
+                continue
+            seen.add((nx, ny))
+            queue.append((nx, ny))
+    xs = [px for px, _py in seen]
+    ys = [py for _px, py in seen]
+    return (min(xs), min(ys), max(xs), max(ys))
 
 
 def pick_completion_reward():

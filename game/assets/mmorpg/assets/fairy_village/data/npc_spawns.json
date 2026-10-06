@@ -1,0 +1,34 @@
+{
+ "npcs": [
+  {
+   "id": "elowen_moonwhisper",
+   "name": "Lady Elowen Moonwhisper",
+   "x": 24,
+   "y": 67,
+   "role": "story fairy",
+   "dialogue": "dialogue/fairy_story.json"
+  },
+  {
+   "id": "warden_thorne",
+   "name": "Warden Thorne Briarwing",
+   "x": 25,
+   "y": 57,
+   "role": "fairy elder / gate guard"
+  },
+  {
+   "id": "tumbleroot",
+   "name": "Tumbleroot the Gnome",
+   "x": 39,
+   "y": 66,
+   "role": "gnome potion shopkeeper"
+  },
+  {
+   "id": "pip_dewdrop",
+   "name": "Pip Dewdrop",
+   "x": 31,
+   "y": 78,
+   "role": "child fairy gardener"
+  }
+ ],
+ "note": "spawn tiles are walkable STONE/PATH/GRASS; wander radius 2 except elowen (0, stays by the fountain)"
+}

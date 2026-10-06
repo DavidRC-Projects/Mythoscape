@@ -83,6 +83,18 @@ USE_EMBERDEEP_V2 = _on("USE_EMBERDEEP_V2", "1")
 # Set USE_EMBERDEEP_FIRST_PERSON=0 to keep the top-down dungeon view.
 USE_EMBERDEEP_FIRST_PERSON = _on("USE_EMBERDEEP_FIRST_PERSON", "1")
 
-# Emberdeep set-piece creatures and props. Off by default.
-# Set USE_EMBERDEEP_CREATURES=1 to spawn the manifest layout.
-USE_EMBERDEEP_CREATURES = _on("USE_EMBERDEEP_CREATURES", "0")
+# Emberdeep set-piece creatures and props.
+# Set USE_EMBERDEEP_CREATURES=0 to keep the older dungeon monsters.
+USE_EMBERDEEP_CREATURES = _on("USE_EMBERDEEP_CREATURES", "1")
+
+# Painted comic before the first world frame of a new game.
+# Set USE_OPENING_COMIC=0 to skip it.
+USE_OPENING_COMIC = _on("USE_OPENING_COMIC", "1")
+
+# Looping tune for the login screen and for each region.
+# Set USE_AREA_MUSIC=0 to keep the game silent.
+USE_AREA_MUSIC = _on("USE_AREA_MUSIC", "1")
+
+# Hit, miss, and monster attack sounds during a fight.
+# Set USE_FIGHT_SOUNDS=0 to keep fights quiet.
+USE_FIGHT_SOUNDS = _on("USE_FIGHT_SOUNDS", "1")

@@ -1,0 +1,147 @@
+{
+ "key": "moonstone_fountain",
+ "name": "Moonstone Fountain",
+ "footprint": {
+  "x0": 26,
+  "y0": 61,
+  "x1": 30,
+  "y1": 65,
+  "w": 5,
+  "h": 5
+ },
+ "round_corners": 1,
+ "walk_mask_rows_north_to_south": [
+  [
+   1,
+   0,
+   0,
+   0,
+   1
+  ],
+  [
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  [
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  [
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  [
+   1,
+   0,
+   0,
+   0,
+   1
+  ]
+ ],
+ "mask_legend": "0 = blocked (stamp WALL), 1 = walkable (leave terrain)",
+ "blocked_tiles": [
+  [
+   27,
+   61
+  ],
+  [
+   28,
+   61
+  ],
+  [
+   29,
+   61
+  ],
+  [
+   26,
+   62
+  ],
+  [
+   27,
+   62
+  ],
+  [
+   28,
+   62
+  ],
+  [
+   29,
+   62
+  ],
+  [
+   30,
+   62
+  ],
+  [
+   26,
+   63
+  ],
+  [
+   27,
+   63
+  ],
+  [
+   28,
+   63
+  ],
+  [
+   29,
+   63
+  ],
+  [
+   30,
+   63
+  ],
+  [
+   26,
+   64
+  ],
+  [
+   27,
+   64
+  ],
+  [
+   28,
+   64
+  ],
+  [
+   29,
+   64
+  ],
+  [
+   30,
+   64
+  ],
+  [
+   27,
+   65
+  ],
+  [
+   28,
+   65
+  ],
+  [
+   29,
+   65
+  ]
+ ],
+ "interaction_tile": [
+  28,
+  65
+ ],
+ "stand_tile": [
+  28,
+  66
+ ],
+ "interaction": "'Drink Moonwater': restore a little HP/prayer, flavour text. Fountain is WALL (not WATER) so it is not a fishing spot.",
+ "sprite": "fairy_village/fountains/moonstone_fountain/"
+}

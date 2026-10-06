@@ -1,0 +1,40 @@
+{
+ "id": "fern_clump",
+ "footprint_tiles": [
+  1,
+  1
+ ],
+ "tile_px": {
+  "1x": 40,
+  "2x": 80,
+  "4x": 160
+ },
+ "origin_px": {
+  "4x": [
+   40.0,
+   128.0
+  ],
+  "2x": [
+   20.0,
+   64.0
+  ],
+  "1x": [
+   10.0,
+   32.0
+  ]
+ },
+ "origin_note": "pixel of the footprint's NW corner; blit at (x0*TILE - origin.x, y0*TILE - origin.y)",
+ "canvas_tiles": {
+  "left": -0.25,
+  "right": 1.25,
+  "top": 0.8,
+  "bottom": -1.25
+ },
+ "files": {
+  "4x": "fern_clump_4x.png",
+  "2x": "fern_clump_2x.png",
+  "1x": "fern_clump_1x.png"
+ },
+ "blocking": false,
+ "projection": "oblique el 32 deg, (1, 1/sin32, 1.4) model scale - same as the buildings pack"
+}

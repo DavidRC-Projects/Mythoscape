@@ -1,0 +1,62 @@
+{
+ "key": "mushroom_apothecary",
+ "name": "Tumbleroot's Mushroom Apothecary",
+ "footprint_tiles": [
+  7,
+  7
+ ],
+ "footprint": {
+  "x0": 34,
+  "y0": 58,
+  "x1": 40,
+  "y1": 64,
+  "w": 7,
+  "h": 7
+ },
+ "projection": "oblique: ortho camera el 32 deg az 0 on a (1, 1/sin32, 1.4) scaled model (buildings/housing pack)",
+ "tile_px": {
+  "1x": 40,
+  "2x": 80,
+  "4x": 160
+ },
+ "origin_px": {
+  "4x": [
+   160,
+   960
+  ],
+  "2x": [
+   80,
+   480
+  ],
+  "1x": [
+   40,
+   240
+  ]
+ },
+ "origin_note": "pixel of the footprint's NW corner (tile x0,y0 top-left). Blit at (tile_x0*tile_px - origin_px.x, tile_y0*tile_px - origin_px.y) in world pixels.",
+ "overhang_tiles": {
+  "left": -1,
+  "right": 8,
+  "top": 6,
+  "bottom": -8
+ },
+ "collision": "json/collision/mushroom_apothecary.json",
+ "interaction_tile": [
+  37,
+  64
+ ],
+ "stand_tile": [
+  37,
+  65
+ ],
+ "door_tile": [
+  37,
+  64
+ ],
+ "files": {
+  "1x": "mushroom_apothecary_1x.png",
+  "2x": "mushroom_apothecary_2x.png",
+  "4x": "mushroom_apothecary_4x.png"
+ },
+ "hero": "mushroom_apothecary_hero_2048.png"
+}

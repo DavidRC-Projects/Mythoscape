@@ -1,0 +1,40 @@
+{
+ "id": "pebbles",
+ "footprint_tiles": [
+  1,
+  1
+ ],
+ "tile_px": {
+  "1x": 40,
+  "2x": 80,
+  "4x": 160
+ },
+ "origin_px": {
+  "4x": [
+   40.0,
+   80.0
+  ],
+  "2x": [
+   20.0,
+   40.0
+  ],
+  "1x": [
+   10.0,
+   20.0
+  ]
+ },
+ "origin_note": "pixel of the footprint's NW corner; blit at (x0*TILE - origin.x, y0*TILE - origin.y)",
+ "canvas_tiles": {
+  "left": -0.25,
+  "right": 1.25,
+  "top": 0.5,
+  "bottom": -1.25
+ },
+ "files": {
+  "4x": "pebbles_4x.png",
+  "2x": "pebbles_2x.png",
+  "1x": "pebbles_1x.png"
+ },
+ "blocking": false,
+ "projection": "oblique el 32 deg, (1, 1/sin32, 1.4) model scale - same as the buildings pack"
+}

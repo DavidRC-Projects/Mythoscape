@@ -246,7 +246,7 @@ ITEMS = {
     "fletch_pouch": {
         "name": "Fletching Pouch", "type": "tool", "stackable": False, "value": 40,
         "equip_slot": None,
-        "desc": "Holds feathers, shafts, bowstring, and headless arrows (200 each). Fletching draws from it first.",
+        "desc": "Holds 5000 each of feathers, shafts, bowstring, and headless arrows. Fletching draws from it first.",
     },
     "potion_pouch": {
         "name": "Potion Pouch", "type": "tool", "stackable": False, "value": 40,
@@ -599,8 +599,8 @@ FIRE_LOGS = {
     "oak_logs": {"duration": 80, "level_req": 15, "xp": 60},
     "willow_logs": {"duration": 100, "level_req": 25, "xp": 90},
     "maple_logs": {"duration": 120, "level_req": 40, "xp": 135},
-    "yew_logs": {"duration": 150, "level_req": 55, "xp": 200},
-    "magic_logs": {"duration": 180, "level_req": 70, "xp": 300},
+    "yew_logs": {"duration": 150, "level_req": 45, "xp": 200},
+    "magic_logs": {"duration": 180, "level_req": 50, "xp": 300},
 }
 
 # Wood types usable by Fletching (knife carving / stringing).
@@ -784,12 +784,12 @@ MONSTERS = {
             ("coins", 1.0, (250, 900)),
             ("adamantite_ore", 0.55, (1, 3)),
             ("adamantite_bar", 0.12, (1, 1)),
-            ("mythos_dagger", 0.10, (1, 1)),       # 1 in 10
-            ("mythos_longsword", 0.02, (1, 1)),    # 1 in 50
-            ("mythos_helmet", 0.015, (1, 1)),      # 1 in ~67
-            ("mythos_legs", 0.012, (1, 1)),        # 1 in ~83
-            ("mythos_shield", 0.012, (1, 1)),      # 1 in ~83
-            ("mythos_body", 0.01, (1, 1)),         # 1 in 100 armour
+            ("mythos_dagger", 0.02, (1, 1)),       # 1 in 50
+            ("mythos_longsword", 0.012, (1, 1)),   # 1 in ~83
+            ("mythos_helmet", 0.01, (1, 1)),       # 1 in 100
+            ("mythos_legs", 0.008, (1, 1)),        # 1 in 125
+            ("mythos_shield", 0.008, (1, 1)),      # 1 in 125
+            ("mythos_body", 0.006, (1, 1)),        # 1 in ~167
             ("health_potion", 0.40, (1, 2)),
             ("bread", 0.35, (2, 4)),
             (("ruby", "diamond"), 0.22, (1, 2)),
@@ -858,11 +858,6 @@ MONSTERS = {
         "drops": [
             ("bones", 1.0, (1, 1)),
             ("coins", 0.95, (60, 160)),
-            ("adamant_helmet", 0.05, (1, 1)),
-            ("adamant_body", 0.03, (1, 1)),
-            ("adamant_legs", 0.03, (1, 1)),
-            ("adamant_sword", 0.04, (1, 1)),
-            ("adamant_shield", 0.04, (1, 1)),
             ("health_potion", 0.22, (1, 1)),
             ("bread", 0.30, (1, 2)),
             (("emerald", "ruby", "diamond"), 0.12, (1, 1)),
@@ -1177,16 +1172,12 @@ MONSTERS = {
         "drops": [
             ("big_bones", 1.0, (3, 3)),
             ("coins", 1.0, (800, 1500)),
-            ("adamant_body", 0.06, (1, 1)),
-            ("adamant_sword", 0.06, (1, 1)),
-            ("adamant_helmet", 0.06, (1, 1)),
             (("mithril_sword", "mithril_helmet", "mithril_chainbody"), 0.20, (1, 1)),
             ("ruby", 0.15, (1, 1)),
             ("diamond", 0.05, (1, 1)),
             (("strength_potion", "health_potion"), 0.20, (2, 2)),
             (("ruby_ring", "diamond_ring"), 1 / 40, (1, 1)),
             ("bone_crown", 1 / 64, (1, 1)),
-            (("mythos_longsword", "mythos_body", "mythos_helmet"), 1 / 150, (1, 1)),
         ],
     },
     # Emberdeep instance visuals (spawned only inside the private dungeon)
@@ -1238,7 +1229,7 @@ MONSTERS = {
         "def_bonus": 40, "xp": 520, "respawn_ticks": 70,
         "drops": [
             ("bones", 1.0, (1, 1)), ("coins", 1.0, (150, 400)),
-            ("adamant_sword", 0.05, (1, 1)), ("ruby", 0.14, (1, 1)), ("diamond", 0.06, (1, 1)),
+            ("ruby", 0.14, (1, 1)), ("diamond", 0.06, (1, 1)),
         ],
         "wander_radius": 2, "aggro_range": 8,
     },
@@ -1254,50 +1245,93 @@ MONSTERS = {
     },
 }
 
-# Monsters under this combat level drop coins, and only rarely bones.
+# Under this combat level, bones are rare. Gear still needs HIGH_GEAR_LEVEL.
 LOW_LEVEL_DROP_CAP = 50
 RARE_BONE_CHANCE = 0.15
+# Weapons and armour only. Ammo, ore, and quest pieces are not gear.
+HIGH_GEAR_LEVEL = 70
+RARE_GEM_CHANCE = 0.04
+UNCOMMON_FOOD_CHANCE = 0.12
+UNCOMMON_FLETCH_CHANCE = 0.15
+RARE_MYTHOS_CHANCE = 0.02
 # Quest pieces keep the chance and quantity written on the creature.
 QUEST_DROP_IDS = {"rat_tail", "goblin_mail", "spider_silk"}
 
 
+def _drop_ids(item_id):
+    if isinstance(item_id, (list, tuple)):
+        return list(item_id)
+    return [item_id]
+
+
+def _drop_kind(item_id):
+    ids = _drop_ids(item_id)
+    metas = [ITEMS.get(i) or {} for i in ids]
+    if any(i in QUEST_DROP_IDS for i in ids):
+        return "quest"
+    if any(m.get("type") == "key" or m.get("dungeon_bound") for m in metas):
+        return "key"
+    if any(str(i).startswith("mythos_") for i in ids):
+        return "mythos"
+    if any(m.get("type") in ("weapon", "armor", "jewelry") for m in metas):
+        return "gear"
+    if metas and all(m.get("type") == "gem" for m in metas):
+        return "gem"
+    if item_id in ("feather", "bow_string"):
+        return "fletch"
+    if metas and all(m.get("type") == "food" for m in metas):
+        return "food"
+    return "other"
+
+
 def drops_for_kill(monster_type):
-    """Drop table for one kill. Under level 50 this is coins plus a rare bone."""
+    """One kill's loot.
+
+    Gear only from combat level 70+. Mythos gear only from dragons, and rare.
+    Gems are rare. Food, feathers, and bowstring are uncommon.
+    """
     spec = MONSTERS.get(monster_type) or {}
     drops = list(spec.get("drops") or [])
     level = int(spec.get("level") or 1)
-    if level >= LOW_LEVEL_DROP_CAP:
-        return drops
-    coin = None
-    bone = ("bones", RARE_BONE_CHANCE, (1, 1))
-    quest = []
-    keys = []
+    dragon = "dragon" in str(monster_type)
+    out = []
     for item_id, chance, bounds in drops:
-        if isinstance(item_id, (list, tuple)):
+        kind = _drop_kind(item_id)
+        chance = float(chance)
+        if kind == "gear" and level < HIGH_GEAR_LEVEL:
             continue
-        meta = ITEMS.get(item_id) or {}
-        if meta.get("type") == "key" or meta.get("dungeon_bound"):
-            keys.append((item_id, chance, bounds))
+        if kind == "gear" and any(str(i).startswith("adamant_") for i in _drop_ids(item_id)):
             continue
-        if item_id == "coins":
+        if kind == "mythos":
+            if not dragon:
+                continue
+            chance = min(chance, RARE_MYTHOS_CHANCE)
+        elif kind == "gem":
+            chance = min(chance, RARE_GEM_CHANCE)
+        elif kind == "fletch":
+            chance = min(chance, UNCOMMON_FLETCH_CHANCE)
+        elif kind == "food":
+            chance = min(chance, UNCOMMON_FOOD_CHANCE)
+        elif kind == "other" and level < LOW_LEVEL_DROP_CAP and item_id in ("bones", "big_bones"):
+            chance = RARE_BONE_CHANCE
+            bounds = (1, 1)
+        if item_id == "coins" and level < LOW_LEVEL_DROP_CAP:
             lo, hi = bounds
             lo = max(int(lo), max(1, level))
             hi = max(int(hi), lo)
-            coin = ("coins", 1.0, (lo, hi))
-        elif item_id in ("bones", "big_bones"):
-            bone = (item_id, RARE_BONE_CHANCE, (1, 1))
-        elif item_id in QUEST_DROP_IDS:
-            quest.append((item_id, chance, bounds))
-    if coin is None:
+            bounds = (lo, hi)
+            chance = 1.0
+        out.append((item_id, chance, bounds))
+    if not any(item_id == "coins" for item_id, _, _ in out):
         lo = max(1, level)
-        coin = ("coins", 1.0, (lo, max(lo + 1, level * 4)))
-    return [coin, bone, *quest, *keys]
+        out.insert(0, ("coins", 1.0, (lo, max(lo + 1, level * 4))))
+    return out
 
 
 # Fixed monster spawn points: (monster_type, x, y)
 MONSTER_SPAWNS = [
-    ("giant_rat", 10, 60), ("giant_rat", 18, 64), ("giant_rat", 8, 68),
-    ("giant_rat", 24, 60), ("giant_rat", 12, 62), ("giant_rat", 16, 72),
+    ("giant_rat", 34, 93), ("giant_rat", 37, 94), ("giant_rat", 40, 94),
+    ("giant_rat", 35, 95), ("giant_rat", 39, 93), ("giant_rat", 33, 94),
     # Upper dungeon — goblins (more packed)
     ("goblin", 52, 60), ("goblin", 56, 58), ("goblin", 50, 62),
     ("goblin", 70, 58), ("goblin", 74, 60), ("goblin", 66, 62),
@@ -1352,14 +1386,14 @@ RESOURCE_YIELDS = {
     "oak_tree":   {"skill": "woodcutting", "level_req": 10, "xp": 30, "item": "oak_logs",     "respawn_ticks": 10, "depletion_chance": 0.15},
     "willow_tree":{"skill": "woodcutting", "level_req": 20, "xp": 45, "item": "willow_logs",  "respawn_ticks": 14, "depletion_chance": 0.14},
     "maple_tree": {"skill": "woodcutting", "level_req": 35, "xp": 70, "item": "maple_logs",   "respawn_ticks": 20, "depletion_chance": 0.12},
-    "yew_tree":   {"skill": "woodcutting", "level_req": 50, "xp": 110,"item": "yew_logs",     "respawn_ticks": 30, "depletion_chance": 0.10},
-    "magic_tree": {"skill": "woodcutting", "level_req": 70, "xp": 180,"item": "magic_logs",   "respawn_ticks": 45, "depletion_chance": 0.08},
+    "yew_tree":   {"skill": "woodcutting", "level_req": 40, "xp": 110,"item": "yew_logs",     "respawn_ticks": 30, "depletion_chance": 0.10},
+    "magic_tree": {"skill": "woodcutting", "level_req": 50, "xp": 180,"item": "magic_logs",   "respawn_ticks": 45, "depletion_chance": 0.08},
     "copper_rock":{"skill": "mining",      "level_req": 1,  "xp": 15, "item": "copper_ore",  "respawn_ticks": 8,  "depletion_chance": 0.20},
     "tin_rock":   {"skill": "mining",      "level_req": 1,  "xp": 15, "item": "tin_ore",     "respawn_ticks": 8,  "depletion_chance": 0.20},
     "iron_rock":  {"skill": "mining",      "level_req": 12, "xp": 35, "item": "iron_ore",    "respawn_ticks": 14, "depletion_chance": 0.15},
     "coal_rock":  {"skill": "mining",      "level_req": 20, "xp": 40, "item": "coal",        "respawn_ticks": 12, "depletion_chance": 0.18},
-    "mithril_rock":{"skill": "mining",     "level_req": 55, "xp": 80, "item": "mithril_ore", "respawn_ticks": 18, "depletion_chance": 0.16},
-    "adamantite_rock":{"skill": "mining",  "level_req": 70, "xp": 110,"item": "adamantite_ore","respawn_ticks": 22, "depletion_chance": 0.14},
+    "mithril_rock":{"skill": "mining",     "level_req": 40, "xp": 80, "item": "mithril_ore", "respawn_ticks": 18, "depletion_chance": 0.16},
+    "adamantite_rock":{"skill": "mining",  "level_req": 46, "xp": 110,"item": "adamantite_ore","respawn_ticks": 22, "depletion_chance": 0.14},
     "fishing_spot_shrimp":  {
         "skill": "fishing", "level_req": 1,  "xp": 10, "item": "raw_shrimp",
         "respawn_ticks": 5, "depletion_chance": 0.0,
@@ -1432,6 +1466,19 @@ NPCS = [
     {"id": "shopkeeper_joe", "name": "Shopkeeper Joe", "x": 45, "y": 7,
      "lines": ["Welcome to my general store!", "Take a look at my stock."], "shop_id": "general_store"},
 
+    {"id": "packer_nell", "name": "Nell the Packer", "x": 42, "y": 16,
+     "lines": [
+         "Bags stay in your pack and hold the goods, so your slots stay free.",
+         "Buy a bag, then click ore, logs, food, potions, gems, or fletching supplies to pack them in.",
+         "Click the bag itself to pack what you are carrying, or to unpack it back out.",
+         "Mining, log, food, raw food, potion, and gem bags hold 200 of each kind.",
+         "The fletching pouch holds 5000 each of feathers, shafts, bowstring, and headless arrows.",
+         "The arrow quiver holds 1000 of each arrow. Equip it, then click arrows to load it.",
+         "The arrowtip box holds 200 of each tip. Smithing and fletching draw from the bags first.",
+         "Press B and I'll sell you the lot.",
+     ],
+     "shop_id": "bag_shop"},
+
     {"id": "jeweler_lira", "name": "Lira the Jeweler", "x": 48, "y": 20,
      "lines": [
          "Rings, amulets, and unset gems — press B to browse.",
@@ -1455,7 +1502,7 @@ NPCS = [
     {"id": "blacksmith_gareth", "name": "Blacksmith Gareth", "x": 86, "y": 8,
      "lines": [
          "Welcome to my smithy! Furnace for smelting, anvil for smithing.",
-         "Mine iron and coal in the deep dungeon, smelt steel bars, then smith steel gear here.",
+         "I sell bronze, iron, steel, and mithril. Adamantite you smith yourself — Mythos is not for sale.",
          "I buy ores, bars, weapons and armour — open the shop to buy or sell.",
      ],
      "shop_id": "blacksmith_shop", "quest_id": "ore_for_the_forge", "forge": True},
@@ -1548,7 +1595,7 @@ NPCS = [
      ],
      "quest_id": "silk_harvest"},
 
-    {"id": "dungeon_hermit", "name": "Hermit Cole", "x": 48, "y": 70,
+    {"id": "dungeon_hermit", "name": "Hermit Cole", "x": 40, "y": 84,
      "lines": [
          "Skeletons hunt by sight — only two will pile on you at once.",
          "Clear a dozen of those rattling fools and I'll tip you for it.",
@@ -1557,6 +1604,17 @@ NPCS = [
          "Prove yourself against the adamant dragon — one set of dragon bones will do.",
      ],
      "quest_ids": ["bone_and_blade", "giants_tithe", "adamant_proof"]},
+
+    {"id": "elowen_moonwhisper", "name": "Lady Elowen Moonwhisper", "x": 24, "y": 67,
+     "lines": ["The Moonwater remembers.", "Speak with me, and I will tell you the oath."],
+     "quest_id": "fairy_oath"},
+    {"id": "warden_thorne", "name": "Warden Thorne Briarwing", "x": 25, "y": 57,
+     "lines": ["The crypt to the south-east sleeps badly."]},
+    {"id": "tumbleroot", "name": "Tumbleroot the Gnome", "x": 39, "y": 66,
+     "lines": ["Potions! Tonics! Moonwater draughts, nearly legal!"],
+     "shop_id": "fairy_apothecary"},
+    {"id": "pip_dewdrop", "name": "Pip Dewdrop", "x": 31, "y": 78,
+     "lines": ["Shh! The lilies are sleeping."]},
 
     {"id": "mad_scientist", "name": "Mad Scientist", "x": 98, "y": 22,
      "lines": [
@@ -1623,6 +1681,21 @@ NPCS = [
 # SHOPS
 # ---------------------------------------------------------------------------
 SHOPS = {
+    "bag_shop": {
+        "name": "Nell's Bags",
+        "stock": {
+            "mining_bag": {"price": 45, "qty": 10},
+            "log_bag": {"price": 40, "qty": 10},
+            "food_bag": {"price": 35, "qty": 10},
+            "raw_food_bag": {"price": 35, "qty": 10},
+            "fletch_pouch": {"price": 40, "qty": 10},
+            "gem_bag": {"price": 50, "qty": 10},
+            "potion_pouch": {"price": 40, "qty": 10},
+            "arrow_quiver": {"price": 50, "qty": 10},
+            "arrowtip_box": {"price": 40, "qty": 10},
+        },
+        "buys": False,
+    },
     "general_store": {
         "name": "General Store",
         "stock": {
@@ -1669,6 +1742,16 @@ SHOPS = {
     "blacksmith_shop": {
         "name": "Gareth's Smithy",
         "stock": {
+            "mithril_dagger": {"price": 160, "qty": 2},
+            "mithril_sword": {"price": 280, "qty": 2},
+            "mithril_battleaxe": {"price": 360, "qty": 1},
+            "mithril_helmet": {"price": 170, "qty": 2},
+            "mithril_sq_shield": {"price": 190, "qty": 2},
+            "mithril_shield": {"price": 240, "qty": 1},
+            "mithril_chainbody": {"price": 320, "qty": 1},
+            "mithril_chainlegs": {"price": 260, "qty": 1},
+            "mithril_body": {"price": 480, "qty": 1},
+            "mithril_legs": {"price": 380, "qty": 1},
             "bronze_sword": {"price": 20, "qty": 5},
             "bronze_battleaxe": {"price": 35, "qty": 3},
             "iron_sword": {"price": 60, "qty": 3},
@@ -1692,6 +1775,17 @@ SHOPS = {
             "iron_chainlegs": {"price": 55, "qty": 2},
             "iron_body": {"price": 110, "qty": 2},
             "iron_legs": {"price": 85, "qty": 2},
+            "bronze_dagger": {"price": 12, "qty": 5},
+            "steel_dagger": {"price": 80, "qty": 3},
+            "steel_longsword": {"price": 140, "qty": 3},
+            "steel_battleaxe": {"price": 180, "qty": 2},
+            "steel_sq_shield": {"price": 95, "qty": 3},
+            "steel_shield": {"price": 120, "qty": 2},
+            "steel_helmet": {"price": 85, "qty": 3},
+            "steel_chainbody": {"price": 160, "qty": 2},
+            "steel_chainlegs": {"price": 130, "qty": 2},
+            "steel_body": {"price": 240, "qty": 2},
+            "steel_legs": {"price": 190, "qty": 2},
             "bronze_bar": {"price": 18, "qty": 8},
             "bronze_arrowtips": {"price": 6, "qty": 40},
             "iron_arrowtips": {"price": 12, "qty": 25},
@@ -1724,6 +1818,17 @@ SHOPS = {
             "super_defence_potion": {"price": 120, "qty": 20},
             "health_potion": {"price": 25, "qty": 15},
             "potion_pouch": {"price": 40, "qty": 12},
+        },
+        "buys": False,
+    },
+    "fairy_apothecary": {
+        "name": "Tumbleroot's Apothecary",
+        "stock": {
+            "health_potion": {"price": 25, "qty": 20},
+            "attack_potion": {"price": 40, "qty": 15},
+            "strength_potion": {"price": 40, "qty": 15},
+            "defence_potion": {"price": 40, "qty": 15},
+            "potion_pouch": {"price": 40, "qty": 8},
         },
         "buys": False,
     },
@@ -1809,6 +1914,14 @@ SHOPS = {
 # QUESTS
 # ---------------------------------------------------------------------------
 QUESTS = {
+    "fairy_oath": {
+        "name": "The Moonwater Oath",
+        "giver": "elowen_moonwhisper",
+        "description": "Reach combat 100, own a castle, finish every other quest, and gather a clan of 25.",
+        "type": "oath",
+        "quest_points": 1,
+        "rewards": {},
+    },
     "rat_problem": {
         "name": "Rat Problem",
         "giver": "elder_miriam",
@@ -2255,7 +2368,8 @@ QUIVER_CAPACITY = 1000  # max of each arrow type stored in an equipped Arrow Qui
 TIP_BOX_CAPACITY = 200  # max of each arrowtip type stored in an Arrowtip Box
 FOOD_BAG_CAPACITY = 200  # max of each cooked fish type in a Food Bag
 RAW_BAG_CAPACITY = 200  # max of each raw fish type in a Raw Food Bag
-RESOURCE_BAG_CAPACITY = 200  # mining / log / fletch / potion / gem bags
+RESOURCE_BAG_CAPACITY = 200  # mining / log / fletch supplies / potion / gem bags
+FEATHER_BAG_CAPACITY = 5000  # feathers in the fletching pouch
 
 # Inventory "Bags" tab — containers only (not their contents)
 STORAGE_BAG_IDS = frozenset({
@@ -2301,6 +2415,12 @@ def is_log_item(item_id):
 
 def is_fletch_pouch_item(item_id):
     return item_id in FLETCH_POUCH_IDS
+
+
+def fletch_pouch_capacity(item_id):
+    if item_id in ("feather", "arrow_shaft", "bow_string", "headless_arrow"):
+        return FEATHER_BAG_CAPACITY
+    return RESOURCE_BAG_CAPACITY
 
 
 def is_potion_item(item_id):
@@ -2355,6 +2475,8 @@ TRAVEL_DESTINATIONS = [
      "x": 64, "y": 23, "blurb": "Store coins & items", "action": {"type": "BANK"}},
     {"id": "general_store", "kind": "place", "label": "General Store",
      "x": 45, "y": 8, "blurb": "Shopkeeper Joe"},
+    {"id": "bag_shop", "kind": "place", "label": "Nell's Bags",
+     "x": 42, "y": 16, "blurb": "Bags and pouches — press B"},
     {"id": "jewelry_shop", "kind": "place", "label": "Lira's Jewelry",
      "x": 48, "y": 20, "blurb": "Common rings & amulets — buys gems · Gem Bag · quest"},
     {"id": "bow_shop", "kind": "place", "label": "Elena's Bow Shop",
@@ -2394,16 +2516,16 @@ TRAVEL_DESTINATIONS = [
     {"id": "stonehaven_castle", "kind": "place", "label": "Castle Keep",
      "x": 128, "y": 66, "blurb": "Knights on patrol"},
     {"id": "dungeon_gate", "kind": "place", "label": "Dungeon Entrance",
-     "x": 38, "y": 71, "blurb": "Enter the depths"},
+     "x": 46, "y": 81, "blurb": "Enter the depths"},
     {"id": "dungeon_bank", "kind": "place", "label": "Dungeon Bank",
-     "x": 44, "y": 68, "blurb": "Chest near the gate", "action": {"type": "BANK"}},
+     "x": 38, "y": 84, "blurb": "Chest near the gate", "action": {"type": "BANK"}},
     {"id": "void_sanctum", "kind": "place", "label": "Void Sanctum",
      "x": 171, "y": 107, "blurb": "⚠ High-level mystical dungeon (SE)"},
     # Quest givers
     {"id": "quest_scout_bren", "kind": "place", "label": "Scout Bren",
      "x": 145, "y": 16, "blurb": "Quest: Wolves on the Pass"},
     {"id": "quest_hermit_cole", "kind": "place", "label": "Hermit Cole",
-     "x": 48, "y": 70, "blurb": "Dungeon quests — bones & dragon"},
+     "x": 40, "y": 84, "blurb": "Dungeon quests — bones & dragon"},
     {"id": "quest_cook_nell", "kind": "place", "label": "Cook Nell",
      "x": 174, "y": 23, "blurb": "Quest: Harbour Feast"},
     {"id": "quest_herald_rowan", "kind": "place", "label": "Herald Rowan",
@@ -2412,7 +2534,7 @@ TRAVEL_DESTINATIONS = [
      "x": 22, "y": 54, "blurb": "Quest: Silk Harvest"},
     # Monsters (camp centres)
     {"id": "rats", "kind": "monster", "label": "Giant Rats",
-     "x": 14, "y": 64, "monster": "giant_rat", "blurb": "Starter mine"},
+     "x": 36, "y": 94, "monster": "giant_rat", "blurb": "Quarry beside King's Row"},
     {"id": "goblins", "kind": "monster", "label": "Goblins",
      "x": 54, "y": 60, "monster": "goblin", "blurb": "Upper dungeon"},
     {"id": "skeletons", "kind": "monster", "label": "Skeletons",
@@ -2477,11 +2599,24 @@ INTERACTABLES = [
     {"id": "pet_door", "kind": "door", "name": "Pet Emporium Door", "x": 85, "y": 48,
      "enter_x": 85, "enter_y": 46, "exit_x": 85, "exit_y": 49, "building": "pet_emporium"},
     {"id": "bank_booth", "kind": "bank", "name": "Bank Booth", "x": 64, "y": 22},
-    {"id": "dungeon_bank", "kind": "bank", "name": "Dungeon Bank Chest", "x": 44, "y": 68,
+    {"id": "dungeon_bank", "kind": "bank", "name": "Dungeon Bank Chest", "x": 38, "y": 84,
      "variant": "chest"},
     {"id": "dungeon_entrance", "kind": "dungeon_entrance", "name": "Dungeon Entrance",
-     "x": 46, "y": 71, "enter_x": 48, "enter_y": 71, "exit_x": 38, "exit_y": 71,
+     "x": 46, "y": 80, "enter_x": 46, "enter_y": 79, "exit_x": 46, "exit_y": 81,
      "dungeon_id": "depths", "pack": "skeleton_crypt"},
+    {"id": "queens_tree_hall_door", "kind": "flavour", "name": "Queen's Tree-Hall",
+     "x": 8, "y": 85, "stand": [8, 86],
+     "lines": ["The Queen's Tree-Hall hums with old magic."]},
+    {"id": "moonpetal_inn_door", "kind": "flavour", "name": "Moonpetal Inn",
+     "x": 20, "y": 84, "stand": [20, 85],
+     "lines": ["The Moonpetal Inn smells of honey bread."]},
+    {"id": "mushroom_apothecary_door", "kind": "flavour", "name": "Mushroom Apothecary",
+     "x": 37, "y": 64, "stand": [37, 65], "shop_id": "fairy_apothecary",
+     "lines": ["Tumbleroot's door creaks open on a cloud of herbs."]},
+    {"id": "moonstone_fountain", "kind": "moonwater", "name": "Moonstone Fountain",
+     "x": 28, "y": 65, "stand": [28, 66]},
+    {"id": "lily_fountain", "kind": "moonwater", "name": "Lily Fountain",
+     "x": 33, "y": 79, "stand": [33, 80]},
     {"id": "tidehollow_cave", "kind": "cave_entrance", "name": "Tidehollow Cave",
      "x": 184, "y": 36, "blurb": "10 floors · clear each level · medal on completion",
      "dungeon_id": "tidehollow", "pack": "goblin_cave"},
@@ -2694,9 +2829,11 @@ INTERACTABLES = [
     {"id": "sign_tidehollow", "kind": "signpost", "name": "Tidehollow",
      "x": 166, "y": 34, "facing": "s", "lines": ["↓ Tidehollow"]},
     {"id": "sign_mine", "kind": "signpost", "name": "Mine",
-     "x": 30, "y": 50, "facing": "s", "lines": ["↓ Mine"]},
+     "x": 30, "y": 50, "facing": "s", "lines": ["↓ Fairy Village · Mine"]},
+    {"id": "sign_quarry", "kind": "signpost", "name": "Quarry",
+     "x": 30, "y": 92, "facing": "e", "lines": ["→ Mine"]},
     {"id": "sign_dungeon", "kind": "signpost", "name": "Dungeon",
-     "x": 40, "y": 66, "facing": "s", "lines": ["↓ Dungeon"]},
+     "x": 41, "y": 82, "facing": "e", "lines": ["→ Dungeon"]},
     {"id": "sign_city", "kind": "signpost", "name": "Stonehaven",
      "x": 96, "y": 70, "facing": "e", "lines": ["→ Stonehaven"]},
     {"id": "sign_castle", "kind": "signpost", "name": "Castle",
@@ -2953,99 +3090,99 @@ CRAFT_RECIPES = {
         "inputs": {"steel_bar": 1}, "output": ("steel_arrowtips", 15),
     },
     "smelt_mithril": {
-        "name": "Smelt Mithril Bar", "category": "smelt", "skill": "smithing", "level_req": 50, "xp": 80,
+        "name": "Smelt Mithril Bar", "category": "smelt", "skill": "smithing", "level_req": 40, "xp": 80,
         "inputs": {"mithril_ore": 1, "coal": 4}, "output": ("mithril_bar", 1),
     },
     "smelt_adamantite": {
-        "name": "Smelt Adamantite Bar", "category": "smelt", "skill": "smithing", "level_req": 70, "xp": 120,
+        "name": "Smelt Adamantite Bar", "category": "smelt", "skill": "smithing", "level_req": 46, "xp": 120,
         "inputs": {"adamantite_ore": 1, "coal": 6}, "output": ("adamantite_bar", 1),
     },
     "smith_mithril_dagger": {
-        "name": "Mithril Dagger", "category": "smith", "skill": "smithing", "level_req": 50, "xp": 90,
+        "name": "Mithril Dagger", "category": "smith", "skill": "smithing", "level_req": 40, "xp": 90,
         "inputs": {"mithril_bar": 1}, "output": ("mithril_dagger", 1),
     },
     "smith_mithril_helmet": {
-        "name": "Mithril Helmet", "category": "smith", "skill": "smithing", "level_req": 50, "xp": 95,
+        "name": "Mithril Helmet", "category": "smith", "skill": "smithing", "level_req": 40, "xp": 95,
         "inputs": {"mithril_bar": 1}, "output": ("mithril_helmet", 1),
     },
     "smith_mithril_sword": {
-        "name": "Mithril Sword", "category": "smith", "skill": "smithing", "level_req": 54, "xp": 120,
+        "name": "Mithril Sword", "category": "smith", "skill": "smithing", "level_req": 42, "xp": 120,
         "inputs": {"mithril_bar": 2}, "output": ("mithril_sword", 1),
     },
     "smith_mithril_battleaxe": {
-        "name": "Mithril Battleaxe", "category": "smith", "skill": "smithing", "level_req": 55, "xp": 130,
+        "name": "Mithril Battleaxe", "category": "smith", "skill": "smithing", "level_req": 43, "xp": 130,
         "inputs": {"mithril_bar": 2}, "output": ("mithril_battleaxe", 1),
     },
     "smith_mithril_sq_shield": {
-        "name": "Mithril Square Shield", "category": "smith", "skill": "smithing", "level_req": 52, "xp": 120,
+        "name": "Mithril Square Shield", "category": "smith", "skill": "smithing", "level_req": 41, "xp": 120,
         "inputs": {"mithril_bar": 1}, "output": ("mithril_sq_shield", 1),
     },
     "smith_mithril_shield": {
-        "name": "Mithril Kiteshield", "category": "smith", "skill": "smithing", "level_req": 56, "xp": 140,
+        "name": "Mithril Kiteshield", "category": "smith", "skill": "smithing", "level_req": 43, "xp": 140,
         "inputs": {"mithril_bar": 1}, "output": ("mithril_shield", 1),
     },
     "smith_mithril_chainlegs": {
-        "name": "Mithril Chainlegs", "category": "smith", "skill": "smithing", "level_req": 53, "xp": 140,
+        "name": "Mithril Chainlegs", "category": "smith", "skill": "smithing", "level_req": 41, "xp": 140,
         "inputs": {"mithril_bar": 2}, "output": ("mithril_chainlegs", 1),
     },
     "smith_mithril_legs": {
-        "name": "Mithril Platelegs", "category": "smith", "skill": "smithing", "level_req": 58, "xp": 170,
+        "name": "Mithril Platelegs", "category": "smith", "skill": "smithing", "level_req": 44, "xp": 170,
         "inputs": {"mithril_bar": 2}, "output": ("mithril_legs", 1),
     },
     "smith_mithril_chainbody": {
-        "name": "Mithril Chainbody", "category": "smith", "skill": "smithing", "level_req": 55, "xp": 160,
+        "name": "Mithril Chainbody", "category": "smith", "skill": "smithing", "level_req": 42, "xp": 160,
         "inputs": {"mithril_bar": 2}, "output": ("mithril_chainbody", 1),
     },
     "smith_mithril_body": {
-        "name": "Mithril Platebody", "category": "smith", "skill": "smithing", "level_req": 60, "xp": 200,
+        "name": "Mithril Platebody", "category": "smith", "skill": "smithing", "level_req": 45, "xp": 200,
         "inputs": {"mithril_bar": 3}, "output": ("mithril_body", 1),
     },
     "smith_mithril_arrowtips": {
-        "name": "Mithril Arrowtips", "category": "smith", "skill": "smithing", "level_req": 55, "xp": 110,
+        "name": "Mithril Arrowtips", "category": "smith", "skill": "smithing", "level_req": 42, "xp": 110,
         "inputs": {"mithril_bar": 1}, "output": ("mithril_arrowtips", 15),
     },
     "smith_adamant_dagger": {
-        "name": "Adamantite Dagger", "category": "smith", "skill": "smithing", "level_req": 70, "xp": 140,
+        "name": "Adamantite Dagger", "category": "smith", "skill": "smithing", "level_req": 46, "xp": 140,
         "inputs": {"adamantite_bar": 1}, "output": ("adamant_dagger", 1),
     },
     "smith_adamant_helmet": {
-        "name": "Adamantite Helmet", "category": "smith", "skill": "smithing", "level_req": 70, "xp": 145,
+        "name": "Adamantite Helmet", "category": "smith", "skill": "smithing", "level_req": 46, "xp": 145,
         "inputs": {"adamantite_bar": 1}, "output": ("adamant_helmet", 1),
     },
     "smith_adamant_sword": {
-        "name": "Adamantite Sword", "category": "smith", "skill": "smithing", "level_req": 74, "xp": 180,
+        "name": "Adamantite Sword", "category": "smith", "skill": "smithing", "level_req": 48, "xp": 180,
         "inputs": {"adamantite_bar": 2}, "output": ("adamant_sword", 1),
     },
     "smith_adamant_battleaxe": {
-        "name": "Adamantite Battleaxe", "category": "smith", "skill": "smithing", "level_req": 75, "xp": 195,
+        "name": "Adamantite Battleaxe", "category": "smith", "skill": "smithing", "level_req": 48, "xp": 195,
         "inputs": {"adamantite_bar": 2}, "output": ("adamant_battleaxe", 1),
     },
     "smith_adamant_sq_shield": {
-        "name": "Adamantite Square Shield", "category": "smith", "skill": "smithing", "level_req": 72, "xp": 180,
+        "name": "Adamantite Square Shield", "category": "smith", "skill": "smithing", "level_req": 47, "xp": 180,
         "inputs": {"adamantite_bar": 1}, "output": ("adamant_sq_shield", 1),
     },
     "smith_adamant_shield": {
-        "name": "Adamantite Kiteshield", "category": "smith", "skill": "smithing", "level_req": 76, "xp": 210,
+        "name": "Adamantite Kiteshield", "category": "smith", "skill": "smithing", "level_req": 49, "xp": 210,
         "inputs": {"adamantite_bar": 1}, "output": ("adamant_shield", 1),
     },
     "smith_adamant_chainlegs": {
-        "name": "Adamantite Chainlegs", "category": "smith", "skill": "smithing", "level_req": 73, "xp": 210,
+        "name": "Adamantite Chainlegs", "category": "smith", "skill": "smithing", "level_req": 47, "xp": 210,
         "inputs": {"adamantite_bar": 2}, "output": ("adamant_chainlegs", 1),
     },
     "smith_adamant_legs": {
-        "name": "Adamantite Platelegs", "category": "smith", "skill": "smithing", "level_req": 78, "xp": 250,
+        "name": "Adamantite Platelegs", "category": "smith", "skill": "smithing", "level_req": 49, "xp": 250,
         "inputs": {"adamantite_bar": 2}, "output": ("adamant_legs", 1),
     },
     "smith_adamant_chainbody": {
-        "name": "Adamantite Chainbody", "category": "smith", "skill": "smithing", "level_req": 75, "xp": 240,
+        "name": "Adamantite Chainbody", "category": "smith", "skill": "smithing", "level_req": 48, "xp": 240,
         "inputs": {"adamantite_bar": 2}, "output": ("adamant_chainbody", 1),
     },
     "smith_adamant_body": {
-        "name": "Adamantite Platebody", "category": "smith", "skill": "smithing", "level_req": 80, "xp": 300,
+        "name": "Adamantite Platebody", "category": "smith", "skill": "smithing", "level_req": 50, "xp": 300,
         "inputs": {"adamantite_bar": 3}, "output": ("adamant_body", 1),
     },
     "smith_adamant_arrowtips": {
-        "name": "Adamantite Arrowtips", "category": "smith", "skill": "smithing", "level_req": 75, "xp": 170,
+        "name": "Adamantite Arrowtips", "category": "smith", "skill": "smithing", "level_req": 48, "xp": 170,
         "inputs": {"adamantite_bar": 1}, "output": ("adamant_arrowtips", 15),
     },
     # Jewelry — gem + metal bar at the anvil (void jewelry stays drop-only)
@@ -3139,11 +3276,11 @@ CRAFT_RECIPES = {
         "inputs": {"maple_logs": 1}, "output": ("arrow_shaft", 30),
     },
     "fletch_shafts_yew": {
-        "name": "Arrow Shafts (Yew)", "category": "fletch", "skill": "fletching", "level_req": 55, "xp": 40,
+        "name": "Arrow Shafts (Yew)", "category": "fletch", "skill": "fletching", "level_req": 42, "xp": 40,
         "inputs": {"yew_logs": 1}, "output": ("arrow_shaft", 35),
     },
     "fletch_shafts_magic": {
-        "name": "Arrow Shafts (Magic)", "category": "fletch", "skill": "fletching", "level_req": 70, "xp": 60,
+        "name": "Arrow Shafts (Magic)", "category": "fletch", "skill": "fletching", "level_req": 50, "xp": 60,
         "inputs": {"magic_logs": 1}, "output": ("arrow_shaft", 40),
     },
     "fletch_unstrung_shortbow": {
@@ -3163,11 +3300,11 @@ CRAFT_RECIPES = {
         "inputs": {"maple_logs": 1}, "output": ("unstrung_maple_shortbow", 1),
     },
     "fletch_unstrung_yew_shortbow": {
-        "name": "Unstrung Yew Shortbow", "category": "fletch", "skill": "fletching", "level_req": 55, "xp": 120,
+        "name": "Unstrung Yew Shortbow", "category": "fletch", "skill": "fletching", "level_req": 42, "xp": 120,
         "inputs": {"yew_logs": 1}, "output": ("unstrung_yew_shortbow", 1),
     },
     "fletch_unstrung_magic_shortbow": {
-        "name": "Unstrung Magic Shortbow", "category": "fletch", "skill": "fletching", "level_req": 70, "xp": 180,
+        "name": "Unstrung Magic Shortbow", "category": "fletch", "skill": "fletching", "level_req": 50, "xp": 180,
         "inputs": {"magic_logs": 1}, "output": ("unstrung_magic_shortbow", 1),
     },
     "fletch_string_shortbow": {
@@ -3187,11 +3324,11 @@ CRAFT_RECIPES = {
         "inputs": {"unstrung_maple_shortbow": 1, "bow_string": 1}, "output": ("maple_shortbow", 1),
     },
     "fletch_string_yew_shortbow": {
-        "name": "Yew Shortbow", "category": "fletch", "skill": "fletching", "level_req": 55, "xp": 80,
+        "name": "Yew Shortbow", "category": "fletch", "skill": "fletching", "level_req": 42, "xp": 80,
         "inputs": {"unstrung_yew_shortbow": 1, "bow_string": 1}, "output": ("yew_shortbow", 1),
     },
     "fletch_string_magic_shortbow": {
-        "name": "Magic Shortbow", "category": "fletch", "skill": "fletching", "level_req": 70, "xp": 110,
+        "name": "Magic Shortbow", "category": "fletch", "skill": "fletching", "level_req": 50, "xp": 110,
         "inputs": {"unstrung_magic_shortbow": 1, "bow_string": 1}, "output": ("magic_shortbow", 1),
     },
     "fletch_headless_arrow": {
@@ -3211,11 +3348,11 @@ CRAFT_RECIPES = {
         "inputs": {"headless_arrow": 15, "steel_arrowtips": 15}, "output": ("steel_arrow", 15),
     },
     "fletch_mithril_arrow": {
-        "name": "Mithril Arrows", "category": "fletch", "skill": "fletching", "level_req": 45, "xp": 110,
+        "name": "Mithril Arrows", "category": "fletch", "skill": "fletching", "level_req": 40, "xp": 110,
         "inputs": {"headless_arrow": 15, "mithril_arrowtips": 15}, "output": ("mithril_arrow", 15),
     },
     "fletch_adamant_arrow": {
-        "name": "Adamantite Arrows", "category": "fletch", "skill": "fletching", "level_req": 60, "xp": 160,
+        "name": "Adamantite Arrows", "category": "fletch", "skill": "fletching", "level_req": 48, "xp": 160,
         "inputs": {"headless_arrow": 15, "adamant_arrowtips": 15}, "output": ("adamant_arrow", 15),
     },
     # Cooking — hearth, range, or a player-lit campfire

@@ -1,0 +1,40 @@
+{
+ "id": "queens_tree_hall_skirt",
+ "footprint_tiles": [
+  9,
+  9
+ ],
+ "tile_px": {
+  "1x": 40,
+  "2x": 80,
+  "4x": 160
+ },
+ "origin_px": {
+  "4x": [
+   160,
+   160
+  ],
+  "2x": [
+   80,
+   80
+  ],
+  "1x": [
+   40,
+   40
+  ]
+ },
+ "origin_note": "pixel of the footprint's NW corner; blit at (x0*TILE - origin.x, y0*TILE - origin.y)",
+ "canvas_tiles": {
+  "left": -1,
+  "right": 10,
+  "top": 1,
+  "bottom": -10
+ },
+ "files": {
+  "4x": "queens_tree_hall_skirt_4x.png",
+  "2x": "queens_tree_hall_skirt_2x.png",
+  "1x": "queens_tree_hall_skirt_1x.png"
+ },
+ "blocking": false,
+ "projection": "oblique el 32 deg, (1, 1/sin32, 1.4) model scale - same as the buildings pack"
+}

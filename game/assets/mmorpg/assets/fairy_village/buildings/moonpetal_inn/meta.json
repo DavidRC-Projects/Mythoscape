@@ -1,0 +1,68 @@
+{
+ "key": "moonpetal_inn",
+ "name": "The Moonpetal Inn",
+ "footprint_tiles": [
+  10,
+  8
+ ],
+ "footprint": {
+  "x0": 16,
+  "y0": 77,
+  "x1": 25,
+  "y1": 84,
+  "w": 10,
+  "h": 8
+ },
+ "projection": "oblique: ortho camera el 32 deg az 0 on a (1, 1/sin32, 1.4) scaled model (buildings/housing pack)",
+ "tile_px": {
+  "1x": 40,
+  "2x": 80,
+  "4x": 160
+ },
+ "origin_px": {
+  "4x": [
+   160,
+   800
+  ],
+  "2x": [
+   80,
+   400
+  ],
+  "1x": [
+   40,
+   200
+  ]
+ },
+ "origin_note": "pixel of the footprint's NW corner (tile x0,y0 top-left). Blit at (tile_x0*tile_px - origin_px.x, tile_y0*tile_px - origin_px.y) in world pixels.",
+ "overhang_tiles": {
+  "left": 1.0,
+  "top": 5.0,
+  "right": 0.0,
+  "bottom": 1.0
+ },
+ "canvas_extent_tiles_from_nw_corner_y_up": {
+  "left": -1,
+  "right": 10,
+  "top": 5,
+  "bottom": -9
+ },
+ "collision": "json/collision/moonpetal_inn.json",
+ "interaction_tile": [
+  20,
+  84
+ ],
+ "stand_tile": [
+  20,
+  85
+ ],
+ "door_tile": [
+  20,
+  84
+ ],
+ "files": {
+  "1x": "moonpetal_inn_1x.png",
+  "2x": "moonpetal_inn_2x.png",
+  "4x": "moonpetal_inn_4x.png"
+ },
+ "hero": "moonpetal_inn_hero_2048.png"
+}

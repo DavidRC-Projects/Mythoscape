@@ -39,6 +39,29 @@ def manifest():
     return _MANIFEST
 
 
+def _spot(spot):
+    if isinstance(spot, dict):
+        return int(spot["x"]), int(spot["y"])
+    return int(spot[0]), int(spot[1])
+
+
+def swing_tiles(cone_tiles):
+    """Where a melee swing at the wyrm lands.
+
+    The breath tiles, plus one step to either side so you can hit it
+    without standing in the fire or on its body.
+    """
+    spots = {_spot(spot) for spot in (cone_tiles or [])}
+    if not spots:
+        return spots
+    xs = [p[0] for p in spots]
+    lo, hi = min(xs), max(xs)
+    for y in {p[1] for p in spots}:
+        spots.add((lo - 1, y))
+        spots.add((hi + 1, y))
+    return spots
+
+
 def _tile_ok(tiles, chars, x, y, forbid_bridge=False):
     if y < 0 or x < 0 or y >= len(tiles) or x >= len(tiles[0]):
         return False

@@ -218,6 +218,8 @@ class Database:
             )
         if "dungeon_resume" not in cols:
             self.conn.execute("ALTER TABLE players ADD COLUMN dungeon_resume TEXT NOT NULL DEFAULT ''")
+        import clans
+        clans.ensure_tables(self.conn)
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS bank ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -341,7 +343,7 @@ class Database:
         )
         self.conn.commit()
 
-    def get_leaderboards(self, limit=5):
+    def get_leaderboards(self, limit=50):
         """Top players per skill by XP, plus overall total level."""
         cols = {row[1] for row in self.conn.execute("PRAGMA table_info(players)")}
         boards = {}
