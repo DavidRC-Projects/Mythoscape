@@ -1,0 +1,41 @@
+{
+ "pack": "Mythoscape King's Court HD NPCs",
+ "built": "2026-10-06 (Europe/London)",
+ "target_branch": "castle-interiors-v2 (local branch; never merge/push)",
+ "art_install_dir": "game/assets/mmorpg/assets/npc_hd/",
+ "copy_map": {
+  "assets/npcs/*": "game/assets/mmorpg/assets/npc_hd/assets/npcs/",
+  "json/*": "game/assets/mmorpg/assets/npc_hd/json/",
+  "previews/*": "game/assets/mmorpg/assets/npc_hd/previews/"
+ },
+ "tile_px": {
+  "1x": 40,
+  "2x": 80,
+  "4x": 160
+ },
+ "feature_flag": null,
+ "plane": "king_f1",
+ "npcs": [
+  "king",
+  "mythos_knight_1",
+  "mythos_knight_2",
+  "mythos_knight_3",
+  "mythos_knight_4"
+ ],
+ "start_here": [
+  "KING_COURT_CURSOR_PROMPT.md",
+  "NOTES.md",
+  "previews/king_court_contact_sheet.png",
+  "previews/great_hall_mock.png"
+ ],
+ "protect_never_edit": [
+  "pose_walk",
+  "rs_style.py walk posing",
+  "rs_humanoid.py",
+  "rs_humanoid_v2.py",
+  "tools/walk_proof.py",
+  "draw_humanoid",
+  "draw_humanoid_detailed"
+ ],
+ "feature_flag_policy": "NO feature flags \u2014 permanent always-on; remove old king/knight NPC data (no dual path)"
+}

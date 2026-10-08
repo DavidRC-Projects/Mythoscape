@@ -1,0 +1,79 @@
+{
+ "plane": "overworld",
+ "pack": "village_core_batch1",
+ "note": "World xy stay as in content.py (do not move tiles). Ids/names must match existing NPC spawn system \u2014 swap art only / HD blit path like Fairy Village.",
+ "npcs": [
+  {
+   "id": "shopkeeper_joe",
+   "name": "Shopkeeper Joe",
+   "sex": "M",
+   "role": "village general-store merchant",
+   "facing": "s",
+   "look": "apron, warm middle-age",
+   "xy_note": "keep content.py x,y"
+  },
+  {
+   "id": "jeweler_lira",
+   "name": "Lira the Jeweler",
+   "sex": "F",
+   "role": "elegant jeweler",
+   "facing": "s",
+   "look": "fine dress, gems/tools",
+   "xy_note": "keep content.py x,y"
+  },
+  {
+   "id": "fletcher_elena",
+   "name": "Fletcher Elena",
+   "sex": "F",
+   "role": "archer / fletcher",
+   "facing": "s",
+   "look": "leather + quiver vibe",
+   "xy_note": "keep content.py x,y"
+  },
+  {
+   "id": "blacksmith_gareth",
+   "name": "Blacksmith Gareth",
+   "sex": "M",
+   "role": "village blacksmith",
+   "facing": "s",
+   "look": "burly smith, leather apron, soot, strong arms",
+   "xy_note": "keep content.py x,y"
+  },
+  {
+   "id": "banker_iris",
+   "name": "Banker Iris",
+   "sex": "F",
+   "role": "village banker",
+   "facing": "s",
+   "look": "formal bank attire, tidy, professional",
+   "xy_note": "keep content.py x,y"
+  },
+  {
+   "id": "elder_miriam",
+   "name": "Elder Miriam",
+   "sex": "F",
+   "role": "village elder",
+   "facing": "s",
+   "look": "elderly wise elder, robes/shawl",
+   "xy_note": "keep content.py x,y"
+  },
+  {
+   "id": "farmer_tom",
+   "name": "Farmer Tom",
+   "sex": "M",
+   "role": "village farmer",
+   "facing": "s",
+   "look": "rustic farmer clothes, weathered",
+   "xy_note": "keep content.py x,y"
+  },
+  {
+   "id": "innkeeper_sarah",
+   "name": "Innkeeper Sarah",
+   "sex": "F",
+   "role": "tavern innkeeper",
+   "facing": "s",
+   "look": "tavern apron, friendly host",
+   "xy_note": "keep content.py x,y"
+  }
+ ]
+}

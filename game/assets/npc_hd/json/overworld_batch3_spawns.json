@@ -1,0 +1,79 @@
+{
+ "plane": "overworld",
+ "pack": "forest_mine_fringe_batch3",
+ "note": "World xy stay as in content.py (do not move tiles). Ids/names must match existing NPC spawn system — swap art only / HD blit path like Fairy Village.",
+ "npcs": [
+  {
+   "id": "old_fisherman_pete",
+   "name": "Old Fisherman Pete",
+   "sex": "M",
+   "role": "weathered lake fisherman",
+   "facing": "s",
+   "look": "oilskin coat, floppy hat, grey beard, fishing rod + net",
+   "xy_note": "keep content.py x,y (106,16)"
+  },
+  {
+   "id": "mia",
+   "name": "Mia",
+   "sex": "F",
+   "role": "lost daughter (child)",
+   "facing": "s",
+   "look": "child scale, rose dress, pinafore, wildflower — distinct from Timmy",
+   "xy_note": "keep content.py x,y (102,8)"
+  },
+  {
+   "id": "mysterious_traveler",
+   "name": "Mysterious Traveler",
+   "sex": "M",
+   "role": "hooded cloaked traveler",
+   "facing": "s",
+   "look": "charcoal hooded cloak, staff with crystal, satchel",
+   "xy_note": "keep content.py x,y (96,10)"
+  },
+  {
+   "id": "merchant_wanderer",
+   "name": "Wandering Merchant",
+   "sex": "M",
+   "role": "traveling merchant",
+   "facing": "s",
+   "look": "burgundy trader coat, backpack with wares, coin pouches",
+   "xy_note": "keep content.py x,y (96,24)"
+  },
+  {
+   "id": "mine_scout",
+   "name": "Scout Elena",
+   "sex": "F",
+   "role": "mine/dungeon fringe scout",
+   "facing": "s",
+   "look": "ochre leather, scout cap, lantern + pickaxe — distinct from Fletcher Elena",
+   "xy_note": "keep content.py x,y (22,54)"
+  },
+  {
+   "id": "dungeon_hermit",
+   "name": "Hermit Cole",
+   "sex": "M",
+   "role": "dungeon fringe hermit",
+   "facing": "s",
+   "look": "ragged grey-brown robes, wild grey hair/beard, gnarled staff",
+   "xy_note": "keep content.py x,y (48,70)"
+  },
+  {
+   "id": "mad_scientist",
+   "name": "Mad Scientist",
+   "sex": "M",
+   "role": "potion lab scientist",
+   "facing": "s",
+   "look": "stained lab coat, wild hair, goggles, glowing potion vials",
+   "xy_note": "keep content.py x,y (98,22)"
+  },
+  {
+   "id": "pass_scout",
+   "name": "Scout Bren",
+   "sex": "M",
+   "role": "mountain-pass scout",
+   "facing": "s",
+   "look": "slate travel gear, fur collar, trail spear, satchel",
+   "xy_note": "keep content.py x,y (145,16)"
+  }
+ ]
+}

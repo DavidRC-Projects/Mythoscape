@@ -1,0 +1,79 @@
+{
+ "plane": "overworld",
+ "pack": "village_life_batch2",
+ "note": "World xy stay as in content.py (do not move tiles). Ids/names must match existing NPC spawn system — swap art only / HD blit path like Fairy Village. packer_nell absent from content.py; pet_keeper_luna used instead.",
+ "npcs": [
+  {
+   "id": "wizard_elowen",
+   "name": "Wizard Elowen",
+   "sex": "F",
+   "role": "village teleport wizard",
+   "facing": "s",
+   "look": "indigo robes, pointed hat, violet staff — distinct from fairy Lady Elowen Moonwhisper",
+   "xy_note": "keep content.py x,y (WIZARD_TILE)"
+  },
+  {
+   "id": "guard_marcus",
+   "name": "Guard Marcus",
+   "sex": "M",
+   "role": "village north guard",
+   "facing": "s",
+   "look": "leather/mail, nasal helm, spear",
+   "xy_note": "keep content.py x,y"
+  },
+  {
+   "id": "guard_aldric",
+   "name": "Guard Aldric",
+   "sex": "M",
+   "role": "village south guard",
+   "facing": "s",
+   "look": "lighter leather, open face, sword — distinct from Marcus",
+   "xy_note": "keep content.py x,y"
+  },
+  {
+   "id": "village_kid_timmy",
+   "name": "Timmy",
+   "sex": "M",
+   "role": "playful village kid",
+   "facing": "s",
+   "look": "child scale, blue tunic, toy ball",
+   "xy_note": "keep content.py x,y"
+  },
+  {
+   "id": "village_idiot_bob",
+   "name": "Bob",
+   "sex": "M",
+   "role": "village oddball",
+   "facing": "s",
+   "look": "patched mismatched clothes, wild hair, stick",
+   "xy_note": "keep content.py x,y"
+  },
+  {
+   "id": "priest_cedric",
+   "name": "Priest Cedric",
+   "sex": "M",
+   "role": "gentle village priest",
+   "facing": "s",
+   "look": "cream robes, burgundy stole, prayer book",
+   "xy_note": "keep content.py x,y"
+  },
+  {
+   "id": "monk_healer",
+   "name": "Monk Alaric",
+   "sex": "M",
+   "role": "monk healer",
+   "facing": "s",
+   "look": "brown habit, rope belt, herb pouch",
+   "xy_note": "keep content.py x,y"
+  },
+  {
+   "id": "pet_keeper_luna",
+   "name": "Pet Keeper Luna",
+   "sex": "F",
+   "role": "pet shop keeper",
+   "facing": "s",
+   "look": "teal dress, leather apron, treat pouches (replaces missing packer_nell)",
+   "xy_note": "keep content.py x,y"
+  }
+ ]
+}

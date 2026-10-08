@@ -1,0 +1,98 @@
+{
+ "plane": "king_f1",
+ "room": "Great Hall",
+ "rect": [
+  16,
+  12,
+  36,
+  22
+ ],
+ "player_arrival": {
+  "tiles": [
+   [
+    25,
+    30
+   ],
+   [
+    26,
+    30
+   ]
+  ],
+  "facing": "n",
+  "note": "vestibule facing north into the Great Hall"
+ },
+ "verified_walkable": true,
+ "source": "workspace copy of kings_interiors_v2.json (king_f1 rows); tiles are '.'",
+ "npcs": [
+  {
+   "id": "king",
+   "name": "The King of Mythoscape",
+   "plane": "king_f1",
+   "x": 26,
+   "y": 13,
+   "facing": "s",
+   "role": "ruler of Mythoscape / great hall",
+   "talk": [
+    "You stand before the crown of Mythoscape. Speak quickly.",
+    "Fairies and Moonwater\u2026 trifles. My war is the true concern.",
+    "Kneel, or leave. The King does not wait on wanderers."
+   ]
+  },
+  {
+   "id": "mythos_knight_1",
+   "name": "Mythos Knight Valerius",
+   "plane": "king_f1",
+   "x": 22,
+   "y": 14,
+   "facing": "s",
+   "role": "royal guard",
+   "talk": [
+    "Stand aside.",
+    "Hail the King.",
+    "No closer without leave."
+   ]
+  },
+  {
+   "id": "mythos_knight_2",
+   "name": "Mythos Knight Cedric",
+   "plane": "king_f1",
+   "x": 24,
+   "y": 14,
+   "facing": "s",
+   "role": "royal guard",
+   "talk": [
+    "Eyes forward.",
+    "The court is in session.",
+    "Hail Mythoscape."
+   ]
+  },
+  {
+   "id": "mythos_knight_3",
+   "name": "Mythos Knight Roland",
+   "plane": "king_f1",
+   "x": 28,
+   "y": 14,
+   "facing": "s",
+   "role": "royal guard",
+   "talk": [
+    "By the crimson plate \u2014 hold.",
+    "Hail the King.",
+    "Your business, traveller?"
+   ]
+  },
+  {
+   "id": "mythos_knight_4",
+   "name": "Mythos Knight Garrick",
+   "plane": "king_f1",
+   "x": 30,
+   "y": 14,
+   "facing": "s",
+   "role": "royal guard",
+   "talk": [
+    "Stand aside.",
+    "The King's word is law.",
+    "Hail the crown."
+   ]
+  }
+ ]
+}

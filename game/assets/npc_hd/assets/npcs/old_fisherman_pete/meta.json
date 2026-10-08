@@ -1,0 +1,50 @@
+{
+ "id": "old_fisherman_pete",
+ "name": "Old Fisherman Pete",
+ "sex": "M",
+ "role": "weathered lake fisherman",
+ "tile_note": "world xy stay as in content.py \u2014 do not move tiles",
+ "facing": "s",
+ "facings": {
+  "s": "toward camera (south)",
+  "e": "east / screen right",
+  "n": "away (north)",
+  "w": "west / screen left"
+ },
+ "canvas": {
+  "1x": [
+   96,
+   128
+  ],
+  "2x": [
+   192,
+   256
+  ],
+  "4x": [
+   384,
+   512
+  ]
+ },
+ "feet_px": {
+  "1x": [
+   48,
+   118
+  ],
+  "2x": [
+   96,
+   236
+  ],
+  "4x": [
+   192,
+   472
+  ]
+ },
+ "scale_note": "constant 175.6 px per metre at 4x (43.9 at 1x) for every NPC",
+ "frames": 8,
+ "fps": 8,
+ "loop": true,
+ "idle_frame": 0,
+ "files": "sprite_{1x,2x,4x}/{s,e,n,w}/f00.png .. f07.png",
+ "hero": "old_fisherman_pete_hero_2048.png",
+ "portrait": "portrait_bust.png (1536, transparent) + portrait_bust_512.png + portrait_bust_bg.jpg"
+}
