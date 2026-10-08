@@ -131,7 +131,7 @@ ROCK_LOOK = {
 }
 ROBED_NPC_IDS = {
     "elder_miriam", "priest_cedric", "monk_healer", "mysterious_traveler",
-    "mad_scientist", "herald_rowan", "wizard_elowen",
+    "herald_rowan",
 }
 ORE_LABEL_COLORS = {
     "copper_rock": (255, 170, 90),
@@ -2645,7 +2645,7 @@ class GameClient(ScreensMixin, CameraYaw):
         self.resources = {}
         self.ground_items = {}
         self.fires = set()
-        self.npcs = []
+        self.npcs = list(msg.get("npcs") or [])
         self.clear_walk()
         self._minimap_base = None
         if msg.get("v2"):
@@ -5551,60 +5551,53 @@ class GameClient(ScreensMixin, CameraYaw):
                 draw_list.append((r.bottom, 0, _draw_loot))
 
         # NPCs
-        if not self.dungeon:
-            for n in self.npcs:
-              if self.entity_hidden_by_roof(n["x"], n["y"]):
-                  continue
-              sx, sy = self.world_to_view_offset(n["x"], n["y"], cam_x, cam_y)
-              if 0 <= sx <= vis_w and 0 <= sy <= vis_h:
-                  cx, cy = sx * TILE + TILE // 2, sy * TILE + TILE // 2
-                  nid = abs(hash(n["id"]))
-                  body, skin, hair = sprites.palette_for(nid)
-                  key = ("n", n["id"])
-                  face = self.facing_for_view(facing_for(key, n["x"], n["y"]))
-                  mov = moving_for(key, n["x"], n["y"])
-                  now_pos[key] = (n["x"], n["y"])
+        for n in self.npcs:
+          if not self.dungeon and self.entity_hidden_by_roof(n["x"], n["y"]):
+              continue
+          sx, sy = self.world_to_view_offset(n["x"], n["y"], cam_x, cam_y)
+          if 0 <= sx <= vis_w and 0 <= sy <= vis_h:
+              cx, cy = sx * TILE + TILE // 2, sy * TILE + TILE // 2
+              nid = abs(hash(n["id"]))
+              body, skin, hair = sprites.palette_for(nid)
+              key = ("n", n["id"])
+              face = self.facing_for_view(facing_for(key, n["x"], n["y"]))
+              mov = moving_for(key, n["x"], n["y"])
+              now_pos[key] = (n["x"], n["y"])
 
-                  def _draw_npc(cx=cx, cy=cy, body=body, skin=skin, hair=hair, n=n, face=face, mov=mov):
-                      if USE_NEW_CASTLE:
-                          cy -= castle_sprites.lift_px(n["x"], n["y"], TILE)
-                      import fairy_village_client
-                      if n["id"] in fairy_village_client.FAIRY_NPCS:
-                          fairy_village_client.draw_npc(self, n, cx, cy, TILE, t, face, mov)
-                          hint = self._hover_hint
-                          if hint and hint[0] == "npc" and hint[1] == n["id"]:
-                              ny, _ = self.entity_anchor(cx, cy, "character")
-                              self.blit_action_hint(hint[2], cx, ny - 48, hint[3])
-                          return
-                      import npc_hd_client
-                      if npc_hd_client.draw_npc(self, n, cx, cy, TILE, t, face, mov):
+              def _draw_npc(cx=cx, cy=cy, body=body, skin=skin, hair=hair, n=n, face=face, mov=mov):
+                  if USE_NEW_CASTLE and not self.dungeon:
+                      cy -= castle_sprites.lift_px(n["x"], n["y"], TILE)
+                  import fairy_village_client
+                  if n["id"] in fairy_village_client.FAIRY_NPCS:
+                      fairy_village_client.draw_npc(self, n, cx, cy, TILE, t, face, mov)
+                      hint = self._hover_hint
+                      if hint and hint[0] == "npc" and hint[1] == n["id"]:
                           ny, _ = self.entity_anchor(cx, cy, "character")
-                          self._blit_npc_role_badges(n, cx, ny - 18)
-                          hint = self._hover_hint
-                          if hint and hint[0] == "npc" and hint[1] == n["id"]:
-                              self.blit_action_hint(hint[2], cx, ny - 48, hint[3])
-                          return
-                      if n["id"] == "mad_scientist":
-                          body, skin, hair = (40, 140, 70), (235, 195, 150), (200, 200, 210)
-                      elif n["id"] == "herald_rowan":
-                          body, skin, hair = (148, 36, 48), (235, 195, 150), (70, 50, 40)
-                      elif n["id"] == "city_vendor_mira":
-                          body, skin, hair = (70, 110, 150), (230, 185, 145), (90, 55, 35)
-                      elif n["id"] == "wizard_elowen":
-                          body, skin, hair = (92, 48, 150), (232, 210, 190), (230, 230, 245)
-                          pulse = 2 + int(2 * (0.5 + 0.5 * math.sin(t * 3)))
-                          pygame.draw.circle(self.screen, (170, 110, 255), (cx, cy + 4), TILE // 2 + pulse, 2)
-                      sprites.draw_humanoid_detailed(
-                          self.screen, cx, cy, TILE, body, skin, hair,
-                          robe=n["id"] in ROBED_NPC_IDS, t=t, facing=face, moving=mov,
-                      )
+                          self.blit_action_hint(hint[2], cx, ny - 48, hint[3])
+                      return
+                  import npc_hd_client
+                  if npc_hd_client.draw_npc(self, n, cx, cy, TILE, t, face, mov):
                       ny, _ = self.entity_anchor(cx, cy, "character")
-                      self.blit_nameplate(n["name"], cx, ny, (255, 230, 160))
                       self._blit_npc_role_badges(n, cx, ny - 18)
                       hint = self._hover_hint
                       if hint and hint[0] == "npc" and hint[1] == n["id"]:
                           self.blit_action_hint(hint[2], cx, ny - 48, hint[3])
-                  draw_list.append((cy + TILE // 2, 3, _draw_npc))
+                      return
+                  if n["id"] == "herald_rowan":
+                      body, skin, hair = (148, 36, 48), (235, 195, 150), (70, 50, 40)
+                  elif n["id"] == "city_vendor_mira":
+                      body, skin, hair = (70, 110, 150), (230, 185, 145), (90, 55, 35)
+                  sprites.draw_humanoid_detailed(
+                      self.screen, cx, cy, TILE, body, skin, hair,
+                      robe=n["id"] in ROBED_NPC_IDS, t=t, facing=face, moving=mov,
+                  )
+                  ny, _ = self.entity_anchor(cx, cy, "character")
+                  self.blit_nameplate(n["name"], cx, ny, (255, 230, 160))
+                  self._blit_npc_role_badges(n, cx, ny - 18)
+                  hint = self._hover_hint
+                  if hint and hint[0] == "npc" and hint[1] == n["id"]:
+                      self.blit_action_hint(hint[2], cx, ny - 48, hint[3])
+              draw_list.append((cy + TILE // 2, 3, _draw_npc))
 
         # Monsters
         for m in self.monsters.values():

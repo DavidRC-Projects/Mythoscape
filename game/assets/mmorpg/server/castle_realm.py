@@ -426,9 +426,13 @@ def move_to_plane(session, plane_name: str, arrive) -> None:
 
 def payload(session) -> dict:
     data = session.dungeon or {}
+    plane = data.get('plane', 'realm')
+    # Include NPCs that belong to this plane
+    from content import NPCS
+    plane_npcs = [n for n in NPCS if n.get('plane') == plane]
     return {
         'id': 'castle_realm',
-        'plane': data.get('plane', 'realm'),
+        'plane': plane,
         'floor': data.get('floor', 0),
         'floors': data.get('floors', 1),
         'label': data.get('label', 'Castle Realm'),
@@ -437,6 +441,7 @@ def payload(session) -> dict:
         'width': data.get('width', 0),
         'height': data.get('height', 0),
         'monsters': [],
+        'npcs': plane_npcs,
         'remaining': 0,
         'player_x': session.x,
         'player_y': session.y,

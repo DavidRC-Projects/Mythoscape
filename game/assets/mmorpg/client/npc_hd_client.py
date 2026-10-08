@@ -39,6 +39,11 @@ OVERWORLD_HD = {
     "dungeon_hermit",
     "mad_scientist",
     "pass_scout",
+    "king",
+    "mythos_knight_1",
+    "mythos_knight_2",
+    "mythos_knight_3",
+    "mythos_knight_4",
 }
 
 _IMAGES = {}
