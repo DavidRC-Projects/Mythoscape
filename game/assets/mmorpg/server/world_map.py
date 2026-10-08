@@ -52,8 +52,8 @@ ZONES = {
     "fairy_village": (1, 56, 40, 88),
     "dungeon": (44, 54, 90, 143),
     "city":    (98, 56, 148, 96),  # flag-off shell. city_bounds() grows it.
-    "volcano": (154, 58, 190, 94),
-    "shadow_crypt": (153, 96, 196, 142),
+    "volcano": (176, 58, 198, 94),
+    "shadow_crypt": (153, 96, 198, 143),
 }
 
 SPAWN_POINT = (28, 24)  # village crossroads
@@ -655,7 +655,7 @@ def generate_world():
         else:
             grid[y][x] = MAPLE_TREE
 
-    # --- Emberdeep volcano (east of Stonehaven) — conical massif + crater mouth ---
+    # --- Emberdeep volcano (far east edge) — conical massif + crater mouth ---
     vx0, vy0, vx1, vy1 = ZONES["volcano"]
     # Scorched foothills (ash grass)
     for y in range(vy0, vy1 + 1):
@@ -664,10 +664,10 @@ def generate_world():
                 grid[y][x] = GRASS
     # Concentric basalt rings → reads as a rising cone
     rings = [
-        (154, 58, 176, 80),  # outer foothills
-        (156, 60, 174, 78),
-        (158, 62, 172, 76),
-        (160, 64, 170, 74),
+        (176, 58, 198, 80),  # outer foothills
+        (178, 60, 196, 78),
+        (180, 62, 194, 76),
+        (182, 64, 192, 74),
     ]
     for i, (x0, y0, x1, y1) in enumerate(rings):
         _border(grid, x0, y0, x1, y1, WALL)
@@ -678,45 +678,45 @@ def generate_world():
                     if grid[y][x] in (GRASS, PATH, *TREE_TILES):
                         grid[y][x] = WALL
     # Inner crater bowl (walkable floor when roof lifts)
-    _rect(grid, 161, 65, 169, 71, WALL)
-    _rect(grid, 162, 66, 168, 70, FLOOR)
+    _rect(grid, 183, 65, 191, 71, WALL)
+    _rect(grid, 184, 66, 190, 70, FLOOR)
     # Magma glow pit in crater center (blocked lava tile)
-    grid[68][164] = WATER
-    grid[68][165] = WATER
-    grid[69][164] = WATER
+    grid[68][186] = WATER
+    grid[68][187] = WATER
+    grid[69][186] = WATER
     # Mouth tunnel opening south through the rings
     for y in range(70, 74):
-        for x in range(163, 166):
+        for x in range(185, 188):
             grid[y][x] = FLOOR
     # Apron / landing in front of the mouth
-    _rect(grid, 160, 73, 169, 77, PATH)
-    grid[72][164] = PATH  # old mouth; lair entrance moved south of the crater
+    _rect(grid, 182, 73, 191, 77, PATH)
+    grid[72][186] = PATH  # old mouth; lair entrance moved south of the crater
     # Jagged outer peaks
     for _ in range(55):
-        x = rng.randint(152, 178)
+        x = rng.randint(174, 198)
         y = rng.randint(57, 81)
         # Keep mouth corridor clear
-        if 162 <= x <= 166 and 70 <= y <= 74:
+        if 184 <= x <= 188 and 70 <= y <= 74:
             continue
-        if abs(x - 164) + abs(y - 68) < 5:
+        if abs(x - 186) + abs(y - 68) < 5:
             continue
         if grid[y][x] in (GRASS, PATH):
             grid[y][x] = WALL
-    # Road from Stonehaven east gate into the crater mouth
-    for x in range(cx1, 162):
+    # Road from Stonehaven east gate to the far-east crater
+    for x in range(cx1, 184):
         for y in (72, 73, 74):
             if 0 <= x < WIDTH and grid[y][x] in (GRASS, *TREE_TILES, PATH, WALL, STONE):
                 grid[y][x] = PATH
     for y in (72, 73, 74):
         grid[y][cx1] = PATH  # east city gate
     # Dragon-lair mouth south of the crater, with a walk-in pad.
-    _rect(grid, 158, 80, 172, 90, PATH)
+    _rect(grid, 180, 80, 194, 90, PATH)
     for y in range(78, 85):
-        grid[y][164] = PATH
+        grid[y][186] = PATH
     for dx in (-1, 0, 1):
-        grid[84][164 + dx] = PATH
-        grid[83][164 + dx] = PATH
-    grid[84][164] = FLOOR
+        grid[84][186 + dx] = PATH
+        grid[83][186 + dx] = PATH
+    grid[84][186] = FLOOR
 
     # --- Void Sanctum (SE mystical crypt) — dark building + 6 sealed rooms ---
     sx0, sy0, sx1, sy1 = ZONES["shadow_crypt"]
@@ -808,7 +808,7 @@ _BUILDING_FOOTPRINTS = [
     # tidehollow cave mouth (south of the harbour)
     (176, 28, 192, 40),
     # emberdeep lair mouth
-    (158, 78, 172, 90),
+    (180, 78, 194, 90),
 ]
 
 
@@ -884,8 +884,8 @@ def _lay_wayfinder_roads(grid):
         (94, 72, 150, 72),
         (118, 73, 118, 130),
         (128, 73, 128, 125),
-        (150, 73, 162, 73),
-        (164, 73, 164, 84),
+        (150, 73, 184, 73),
+        (186, 73, 186, 86),
         (100, 98, 180, 98),
         (180, 98, 180, 101),
         (168, 100, 180, 100),
@@ -900,8 +900,8 @@ def _lay_wayfinder_roads(grid):
     ):
         if 0 <= x < WIDTH and 0 <= y < HEIGHT and grid[y][x] != WATER:
             grid[y][x] = PATH
-    for y in range(74, 85):
-        for x in (163, 164, 165):
+    for y in range(74, 87):
+        for x in (185, 186, 187):
             if grid[y][x] != WATER:
                 grid[y][x] = PATH
 

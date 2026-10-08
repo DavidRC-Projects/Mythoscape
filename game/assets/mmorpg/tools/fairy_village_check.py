@@ -25,10 +25,13 @@ PLANNED = (
     (1, 56, 40, 88),     # fairy zone
     (31, 90, 43, 98),    # quarry ring
     (30, 93, 31, 95),    # quarry mouth
-    (30, 81, 48, 83),    # crypt path
-    (44, 79, 48, 83),    # depths pad
+    (30, 81, 56, 83),    # crypt path
+    (52, 79, 56, 83),    # depths pad
     (27, 89, 29, 98),    # avenue to King's Row
-    (45, 79, 47, 81),    # mouth and return
+    (53, 79, 55, 81),    # mouth and return
+    (1, 55, 41, 55),     # north picket fence
+    (1, 89, 41, 89),     # south picket fence
+    (41, 55, 41, 89),    # east picket fence
 )
 MOVED = {
     "dungeon_entrance", "dungeon_bank", "dungeon_hermit", "dungeon_gate",
@@ -40,10 +43,10 @@ MOVED = {
 STANDS = [(8, 86), (20, 85), (37, 65), (28, 66), (33, 80)]
 NPCS = [(24, 67), (25, 57), (39, 66), (31, 78)]
 RATS = [(34, 93), (37, 94), (40, 94), (35, 95), (39, 93), (33, 94)]
-MOUTH = [(45, 79), (46, 79), (47, 79), (45, 80), (46, 80), (47, 80)]
+MOUTH = [(53, 79), (54, 79), (55, 79), (53, 80), (54, 80), (55, 80)]
 BUILDINGS = [(4, 77, 12, 85), (16, 77, 25, 84), (34, 58, 40, 64)]
 # Crypt sprite: ~11 wide, ~10.5 north of the door, apron ~5 south.
-CRYPT = (46 - 5, 80 - 11, 46 + 5, 80 + 5)
+CRYPT = (54 - 5, 80 - 11, 54 + 5, 80 + 5)
 
 
 def _inside(x, y, rects) -> bool:
@@ -234,7 +237,7 @@ def check():
         print("2. no house, castle, or unmoved pin on a changed tile: PASS")
 
     reached = _bfs(live, wm.SPAWN_POINT)
-    goals = NPCS + STANDS + MOUTH + [(46, 81)] + RATS
+    goals = NPCS + STANDS + MOUTH + [(54, 81)] + RATS
     missing = [xy for xy in goals if xy not in reached]
     ores = [(x, y) for y in range(91, 98) for x in range(32, 43)
             if live[y][x] in (wm.ORE, wm.IRON_ORE)]
@@ -276,11 +279,11 @@ def check():
     else:
         print("fountains are WALL, not fishing water: PASS")
 
-    mouth = content.entrance_mouth_tiles(46, 80)
+    mouth = content.entrance_mouth_tiles(54, 80)
     if mouth != set(MOUTH):
         fails.append(f"mouth tiles {sorted(mouth)}")
     else:
-        print("dungeon mouth (45-47, 79-80): PASS")
+        print("dungeon mouth (53-55, 79-80): PASS")
 
     clan = asyncio.run(_clan_round())
     print(clan)
@@ -317,7 +320,7 @@ def _shots(base, live):
         "plaza": (16, 54, 42, 74),
         "treehall_inn": (1, 72, 32, 90),
         "apothecary": (28, 52, 42, 72),
-        "dungeon_entrance": (28, 74, 50, 86),
+        "dungeon_entrance": (36, 74, 60, 88),
         "quarry": (24, 86, 46, 100),
     }
     scale = 8

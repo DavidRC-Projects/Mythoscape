@@ -303,7 +303,7 @@ def draw(self, ITEMS, karma_slot_bonus, sprites, weapon_style):
                                      ("Defence", "defence", "def_bonus"), ("Archery", "archery", "att_bonus"),
                                      ("Hitpoints", "hitpoints", "def_bonus")):
         if skill == "hitpoints":
-            items.append(("Hitpoints", f"{self.player['hp']}/{self.player['max_hp']}", f"level {levels.get('hitpoints', 1)}"))
+            items.append(("Hitpoints", f"{self.player['hp']}/{self.player['max_hp']}", "top 3 combat skills"))
         elif skill == "archery":
             items.append(("Archery", f"{int(levels.get('archery', 1))}", f"ranged +{ra} att / +{rsb} str"))
         else:

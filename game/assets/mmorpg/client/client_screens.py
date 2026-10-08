@@ -271,12 +271,12 @@ class ScreensMixin:
         btn.blit(text, (tx, (h - text.get_height()) // 2))
 
     def _load_login_title_overlay(self):
-        """Full MYTHOSCAPE logo with transparent background (no dark plate)."""
+        """Crownfall logo with a transparent background (no dark plate)."""
         _bind_client_globals()
         cached = getattr(self, "_login_title_overlay", None)
         if cached is not None:
             return cached
-        path = os.path.join(_HERE, "assets", "login_title_overlay.png")
+        path = os.path.join(_HERE, "assets", "login_title_crownfall.png")
         try:
             overlay = pygame.image.load(path).convert_alpha()
         except Exception:
@@ -456,12 +456,22 @@ class ScreensMixin:
     def handle_dialogue_key(self, event):
         _bind_client_globals()
         quest = self.dialogue.get("quest")
-        if event.key in (pygame.K_RIGHT, pygame.K_DOWN, pygame.K_KP6, pygame.K_KP2):
-            self._dialogue_turn_page(1)
-            return
-        if event.key in (pygame.K_LEFT, pygame.K_UP, pygame.K_KP4, pygame.K_KP8):
-            self._dialogue_turn_page(-1)
-            return
+        # Arrows turn the page when there is one. Otherwise the box closes
+        # and the same press walks, so a finished line does not trap movement.
+        if event.key in (pygame.K_RIGHT, pygame.K_DOWN, pygame.K_KP6, pygame.K_KP2) or event.scancode in (
+            pygame.KSCAN_RIGHT, pygame.KSCAN_DOWN, pygame.KSCAN_KP6, pygame.KSCAN_KP2,
+        ):
+            if self._dialogue_turn_page(1):
+                return True
+            self.dialogue = None
+            return False
+        if event.key in (pygame.K_LEFT, pygame.K_UP, pygame.K_KP4, pygame.K_KP8) or event.scancode in (
+            pygame.KSCAN_LEFT, pygame.KSCAN_UP, pygame.KSCAN_KP4, pygame.KSCAN_KP8,
+        ):
+            if self._dialogue_turn_page(-1):
+                return True
+            self.dialogue = None
+            return False
         if event.key == pygame.K_ESCAPE:
             self.dialogue = None
             self.show_shop_panel = False
@@ -484,6 +494,7 @@ class ScreensMixin:
         elif event.key == pygame.K_t and quest and quest["state"] == "ready":
             self.net.send("QUEST_TURNIN", quest_id=quest["quest_id"])
             self.dialogue = None
+        return True
 
     def _dialogue_box(self):
         """Keep the buttons above the chat strip so clicks are not stolen."""
@@ -610,7 +621,7 @@ class ScreensMixin:
             ("gender", "female"): female,
         }
         y = box.y + 24
-        for skill in ("attack", "strength", "defence", "hitpoints"):
+        for skill in ("attack", "strength", "defence", "archery"):
             base = self.stat_alloc_base.get(skill, 1)
             bonus = self.stat_alloc[skill]
             final = base + bonus
@@ -712,27 +723,29 @@ class ScreensMixin:
         geom = self._login_ui_geom()
         if ui is not None:
             if self.login_mode == "register":
-                # Form card only (skip clipped title band); logo composited over live backdrop
+                # Form card only. The mockup's side strips are a different landscape
+                # than the live backdrop, so they stay out of the crop.
                 pad = self._register_title_pad()
                 body_y0 = 78  # below clipped title / dark plate in source
-                src = pygame.Rect(0, body_y0, ui.get_width(), ui.get_height() - body_y0)
+                src = pygame.Rect(58, body_y0, 896, ui.get_height() - body_y0)
+                src.w = min(src.w, ui.get_width() - src.x)
+                src.h = min(src.h, ui.get_height() - src.y)
                 panel_img = ui.subsurface(src)
                 dw = max(1, int(src.w * geom["scale"]))
                 dh = max(1, int(src.h * geom["scale"]))
                 scaled = self._scaled_login_piece(("register-body", dw, dh), panel_img, (dw, dh))
-                px = geom["ox"]
+                px = geom["ox"] + int(src.x * geom["scale"])
                 py = geom["oy"] + int((pad + body_y0) * geom["scale"])
                 self.screen.blit(scaled, (px, py))
-                # Full unclipped MYTHOSCAPE over the scenic backdrop (no dark plate)
                 title = self._load_login_title_overlay()
                 if title is not None:
-                    tw = max(1, int(title.get_width() * geom["scale"]))
-                    th = max(1, int(title.get_height() * geom["scale"]))
+                    gap = max(4, int(8 * geom["scale"]))
+                    max_h = max(48, py - geom["oy"] - gap)
+                    max_w = int(geom["dw"] * 0.78)
+                    tw, th = self._fit_login_title(title, max_w, max_h)
                     tscaled = self._scaled_login_piece(("register-title", tw, th), title, (tw, th))
-                    # Sit in the reserved pad band, just above the form join
-                    tx = geom["ox"] + (geom["dw"] - tw) // 2
-                    ty = geom["oy"] + int((pad + body_y0) * geom["scale"]) - th - max(4, int(8 * geom["scale"]))
-                    ty = max(geom["oy"] + 2, ty)
+                    tx = px + (dw - tw) // 2
+                    ty = max(geom["oy"] + 2, py - th - gap)
                     self.screen.blit(tscaled, (tx, ty))
             else:
                 # Login form below the title plate so scenery shows behind the logo
@@ -749,12 +762,13 @@ class ScreensMixin:
                 self.screen.blit(scaled, (px, py))
                 title = self._load_login_title_overlay()
                 if title is not None:
-                    tw = max(1, int(title.get_width() * geom["scale"]))
-                    th = max(1, int(title.get_height() * geom["scale"]))
+                    gap = max(6, int(10 * geom["scale"]))
+                    max_h = max(48, py - gap - 4)
+                    max_w = int(dw * 0.92)
+                    tw, th = self._fit_login_title(title, max_w, max_h)
                     tscaled = self._scaled_login_piece(("login-title", tw, th), title, (tw, th))
-                    tx = geom["ox"] + (geom["dw"] - tw) // 2
-                    # Center in the scenery gap above the form card
-                    ty = max(4, py - th - max(6, int(10 * geom["scale"])))
+                    tx = px + (dw - tw) // 2
+                    ty = max(4, py - th - gap)
                     self.screen.blit(tscaled, (tx, ty))
 
         lay = self.login_layout()
@@ -796,6 +810,14 @@ class ScreensMixin:
 
         if self.show_leaderboard:
             self.draw_leaderboard_modal()
+
+    def _fit_login_title(self, title, max_w, max_h):
+        """Scale the wordmark into the gap above the form without covering it."""
+        tw, th = title.get_size()
+        if tw < 1 or th < 1:
+            return 1, 1
+        scale = min(max(1, max_w) / tw, max(1, max_h) / th)
+        return max(1, int(tw * scale)), max(1, int(th * scale))
 
     def _scaled_login_piece(self, key, image, size):
         """Keep a scaled login plate so the title screen does not resample every frame."""
@@ -1139,7 +1161,7 @@ class ScreensMixin:
                 self.screen, (80 + int(40 * pulse), 20, 20), bar.inflate(4, 4), border_radius=6,
             )
         pygame.draw.rect(self.screen, (36, 24, 28), bar, border_radius=5)
-        fill_c = (70, 200, 100) if pct > 0.55 else ((220, 170, 50) if pct > 0.25 else (210, 60, 55))
+        fill_c = (46, 196, 92) if pct > 0.5 else ((230, 150, 42) if pct > 0.25 else (210, 55, 48))
         if pct > 0:
             fill = pygame.Rect(bar.x + 2, bar.y + 2, max(2, int((bar.w - 4) * pct)), bar.h - 4)
             pygame.draw.rect(self.screen, fill_c, fill, border_radius=4)
@@ -1522,7 +1544,10 @@ class ScreensMixin:
         name = self.font.render(self.dialogue["npc_name"], True, YELLOW)
         self.screen.blit(name, (box.x + 12, box.y + 10))
         import fairy_village_client
+        import npc_hd_client
         bust = fairy_village_client.portrait(self, self.dialogue.get("npc_id"))
+        if bust is None:
+            bust = npc_hd_client.portrait(self, self.dialogue.get("npc_id"))
         text_x = box.x + 12
         if bust:
             self.screen.blit(bust, (box.x + 12, box.y + 40))
@@ -2172,7 +2197,7 @@ class ScreensMixin:
         ):
             if skill == "hitpoints":
                 main = f"Hitpoints  {self.player['hp']} / {self.player['max_hp']}"
-                sub = f"level {levels.get('hitpoints', 1)}"
+                sub = "three highest of Attack, Strength, Defence, Archery"
             elif skill == "archery":
                 base = int(levels.get("archery", 1))
                 main = f"Archery  {base}"
@@ -2540,7 +2565,8 @@ class ScreensMixin:
         xp_map = self.player.get("xp") or {}
         pot = self.player.get("stat_boosts") or {}
         row_h = 42
-        n_skills = len(XP_SKILLS)
+        skill_rows = ["hitpoints"] + list(XP_SKILLS)
+        n_skills = len(skill_rows)
         list_top = header_y + 28
         list_bottom = box.bottom - 34
         view_h = max(40, list_bottom - list_top)
@@ -2556,10 +2582,22 @@ class ScreensMixin:
         self.screen.set_clip(pygame.Rect(box.x + 12, list_top, box.w - 40, view_h))
 
         y = list_top - self.skills_scroll
-        for i, skill in enumerate(XP_SKILLS):
+        for i, skill in enumerate(skill_rows):
             row_top = y
             y += row_h
             if row_top + row_h < list_top or row_top > list_bottom:
+                continue
+            if skill == "hitpoints":
+                lvl = int((self.player or {}).get("max_hp") or 1)
+                hp_now = int((self.player or {}).get("hp") or 0)
+                tone, _pct = self.hp_tone(hp_now, lvl)
+                row = pygame.Rect(box.x + 16, int(row_top), box.w - 48, row_h - 4)
+                pygame.draw.rect(self.screen, (28, 34, 44), row, border_radius=4)
+                self.screen.blit(self.font.render("Hitpoints", True, WHITE), (row.x + 8, row.y + 8))
+                self.screen.blit(self.font.render(str(lvl), True, tone), (row.x + 156, row.y + 8))
+                self.screen.blit(self.font_small.render(f"{hp_now}/{lvl}", True, tone), (row.x + 228, row.y + 8))
+                self.screen.blit(self.font_small.render("—", True, GREY), (row.x + 340, row.y + 8))
+                self.screen.blit(self.font_small.render("—", True, GREY), (row.x + 480, row.y + 8))
                 continue
             lvl = int(levels.get(skill, 1))
             boost = 0

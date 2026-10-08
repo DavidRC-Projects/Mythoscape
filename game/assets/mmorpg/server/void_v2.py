@@ -263,16 +263,16 @@ SEAL_HINT = {
 }
 CHEST_LOOT = {
     "gallery_chest": [("coins", (200, 500)), ("super_attack_potion", (1, 1)), ("mithril_arrow", (15, 30))],
-    "barracks_chest": [("coins", (300, 700)), ("adamant_chainbody", (1, 1), 0.10), ("cooked_lobster", (2, 4))],
-    "crystal_chest": [("coins", (500, 900)), ("onyx", (1, 1)), ("super_defence_potion", (1, 1))],
-    "reliquary_chest": [("coins", (400, 400)), (("ruby_ring", "diamond_ring", "ruby_amulet", "diamond_amulet"), (1, 1))],
+    "barracks_chest": [("coins", (300, 700)), ("cooked_lobster", (1, 2), 0.12)],
+    "crystal_chest": [("coins", (500, 900)), ("onyx", (1, 1), 0.04), ("super_defence_potion", (1, 1))],
+    "reliquary_chest": [("coins", (400, 400)), ("onyx", (1, 1), 0.04)],
     "quartermaster_chest": [("adamantite_bar", (2, 4)), ("super_strength_potion", (1, 2)), ("health_potion", (1, 2))],
-    "starwell_chest": [("coins", (1500, 1500)), ("void_ring", (1, 1), 0.05), ("void_amulet", (1, 1), 0.04), ("onyx", (2, 2))],
+    "starwell_chest": [("coins", (400, 800)), ("void_ring", (1, 1), 0.02), ("void_amulet", (1, 1), 0.02), ("onyx", (1, 1), 0.04)],
 }
 GROUND_TABLE = [
     ("coins", (40, 120)),
     ("mithril_arrow", (8, 16)),
-    ("ruby", (1, 1)),
+    ("ruby", (1, 1), 0.04),
     ("coins", (80, 200)),
 ]
 WIND_EVERY = 17   # ~10s at 0.6s ticks
@@ -430,8 +430,12 @@ def build(session, next_id, monster_cls, spawns=None):
         monsters[mid] = m
     ground = {}
     for i, (x, y) in enumerate(GROUND_LOOT):
-        item_id, bounds = GROUND_TABLE[i % len(GROUND_TABLE)]
-        ground[(x, y)] = [{"item_id": item_id, "qty": random.randint(*bounds)}]
+        row = GROUND_TABLE[i % len(GROUND_TABLE)]
+        item_id, bounds = row[0], row[1]
+        chance = row[2] if len(row) > 2 else 1.0
+        if random.random() > chance:
+            continue
+        ground[(x, y)] = [{"item_id": item_id, "qty": random.randint(bounds[0], bounds[1])}]
     sx, sy = SPAWN
     ex, ey = EXIT
     session.dungeon = {
@@ -905,7 +909,20 @@ def process_ai(session):
         reach = max(1, int((m.def_stats() or {}).get("attack_range") or 1))
         if dist <= reach and closest is None:
             closest = m.id
-        if dist > 1:
+
+        def can_stand(tx, ty, me=m):
+            if (tx, ty) == (session.x, session.y):
+                return False
+            if me.home_room and not in_room(tx, ty, me.home_room):
+                return False
+            return walkable(tx, ty) and not occupied(tx, ty, me)
+
+        goal = srv.side_by_side_goal(m, session.x, session.y, can_stand)
+        if goal is False:
+            pass
+        elif goal:
+            step_toward(m, goal[0], goal[1])
+        elif dist > 1:
             step_toward(m, session.x, session.y)
     if closest is not None:
         session.in_combat_with = ("monster", closest)

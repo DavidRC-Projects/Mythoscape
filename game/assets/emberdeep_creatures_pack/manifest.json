@@ -32,16 +32,16 @@
       },
       "spawns": [
         {
-          "x": 16,
-          "y": 31
+          "x": 12,
+          "y": 28
         },
         {
-          "x": 22,
+          "x": 13,
           "y": 29
         },
         {
-          "x": 28,
-          "y": 32
+          "x": 11,
+          "y": 30
         }
       ]
     },
@@ -64,11 +64,11 @@
       },
       "spawns": [
         {
-          "x": 17,
-          "y": 22
+          "x": 12,
+          "y": 23
         },
         {
-          "x": 30,
+          "x": 14,
           "y": 24
         }
       ]
@@ -92,12 +92,12 @@
       },
       "spawns": [
         {
-          "x": 19,
-          "y": 24
+          "x": 26,
+          "y": 17
         },
         {
           "x": 28,
-          "y": 22
+          "y": 18
         }
       ]
     },
@@ -121,7 +121,7 @@
       "spawns": [
         {
           "x": 18,
-          "y": 10
+          "y": 11
         }
       ]
     },
@@ -144,8 +144,8 @@
       },
       "spawns": [
         {
-          "x": 8,
-          "y": 22
+          "x": 4,
+          "y": 23
         }
       ]
     },
@@ -168,8 +168,8 @@
       },
       "spawns": [
         {
-          "x": 38,
-          "y": 24
+          "x": 36,
+          "y": 19
         }
       ]
     }
@@ -184,8 +184,8 @@
       ],
       "file": "props/lava_brazier.png",
       "tile": {
-        "x": 31,
-        "y": 30
+        "x": 14,
+        "y": 27
       }
     },
     {
@@ -197,7 +197,7 @@
       ],
       "file": "props/bone_pile.png",
       "tile": {
-        "x": 14,
+        "x": 11,
         "y": 24
       }
     },
@@ -210,8 +210,8 @@
       ],
       "file": "props/chained_chest.png",
       "tile": {
-        "x": 9,
-        "y": 25
+        "x": 4,
+        "y": 24
       }
     },
     {
@@ -223,7 +223,7 @@
       ],
       "file": "props/ember_crystal.png",
       "tile": {
-        "x": 27,
+        "x": 30,
         "y": 10
       }
     },
@@ -236,21 +236,21 @@
       ],
       "file": "props/scorched_banner.png",
       "tile": {
-        "x": 18,
-        "y": 16
+        "x": 17,
+        "y": 10
       }
     },
     {
       "id": "anvil_ruin",
-      "room": "boss_chamber",
+      "room": "gallery",
       "pixels": [
         256,
         256
       ],
       "file": "props/anvil_ruin.png",
       "tile": {
-        "x": 31,
-        "y": 5
+        "x": 16,
+        "y": 9
       }
     },
     {
@@ -262,8 +262,333 @@
       ],
       "file": "props/egg_cluster.png",
       "tile": {
-        "x": 43,
+        "x": 39,
+        "y": 17
+      }
+    },
+    {
+      "id": "dragon_egg",
+      "room": "boss_chamber",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/dragon_egg.png",
+      "tile": {
+        "x": 21,
+        "y": 1
+      }
+    },
+    {
+      "id": "dragon_egg_b",
+      "room": "boss_chamber",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/dragon_egg_b.png",
+      "tile": {
+        "x": 23,
+        "y": 1
+      }
+    },
+    {
+      "id": "dragon_egg_c",
+      "room": "boss_chamber",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/dragon_egg_c.png",
+      "tile": {
+        "x": 20,
+        "y": 1
+      }
+    },
+    {
+      "id": "dragon_egg",
+      "room": "boss_chamber",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/dragon_egg.png",
+      "tile": {
+        "x": 24,
+        "y": 1
+      }
+    },
+    {
+      "id": "dragon_egg_b",
+      "room": "boss_chamber",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/dragon_egg_b.png",
+      "tile": {
+        "x": 19,
+        "y": 2
+      }
+    },
+    {
+      "id": "dragon_egg_c",
+      "room": "boss_chamber",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/dragon_egg_c.png",
+      "tile": {
+        "x": 25,
+        "y": 2
+      }
+    },
+    {
+      "id": "dragon_egg",
+      "room": "boss_chamber",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/dragon_egg.png",
+      "tile": {
+        "x": 19,
+        "y": 3
+      }
+    },
+    {
+      "id": "dragon_egg_b",
+      "room": "boss_chamber",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/dragon_egg_b.png",
+      "tile": {
+        "x": 25,
+        "y": 3
+      }
+    },
+    {
+      "id": "dragon_egg_c",
+      "room": "boss_chamber",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/dragon_egg_c.png",
+      "tile": {
+        "x": 19,
+        "y": 4
+      }
+    },
+    {
+      "id": "ash_urn",
+      "room": "entry_hall",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/ash_urn.png",
+      "tile": {
+        "x": 11,
+        "y": 29
+      }
+    },
+    {
+      "id": "cinder_vent",
+      "room": "entry_hall",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/cinder_vent.png",
+      "tile": {
+        "x": 13,
+        "y": 27
+      }
+    },
+    {
+      "id": "toadstool",
+      "room": "lava_crossing_sides",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/toadstool.png",
+      "tile": {
+        "x": 13,
         "y": 22
+      }
+    },
+    {
+      "id": "toadstool",
+      "room": "lava_crossing_sides",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/toadstool.png",
+      "tile": {
+        "x": 15,
+        "y": 23
+      }
+    },
+    {
+      "id": "toadstool",
+      "room": "lava_crossing_sides",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/toadstool.png",
+      "tile": {
+        "x": 12,
+        "y": 25
+      }
+    },
+    {
+      "id": "chain_stake",
+      "room": "lava_crossing_sides",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/chain_stake.png",
+      "tile": {
+        "x": 25,
+        "y": 19
+      }
+    },
+    {
+      "id": "chain_stake",
+      "room": "lava_crossing_sides",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/chain_stake.png",
+      "tile": {
+        "x": 29,
+        "y": 16
+      }
+    },
+    {
+      "id": "candle_cluster",
+      "room": "gallery",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/candle_cluster.png",
+      "tile": {
+        "x": 16,
+        "y": 10
+      }
+    },
+    {
+      "id": "candle_cluster",
+      "room": "gallery",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/candle_cluster.png",
+      "tile": {
+        "x": 20,
+        "y": 11
+      }
+    },
+    {
+      "id": "cinder_vent",
+      "room": "gallery",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/cinder_vent.png",
+      "tile": {
+        "x": 32,
+        "y": 11
+      }
+    },
+    {
+      "id": "cinder_vent",
+      "room": "gallery",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/cinder_vent.png",
+      "tile": {
+        "x": 29,
+        "y": 12
+      }
+    },
+    {
+      "id": "coin_heap",
+      "room": "treasury",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/coin_heap.png",
+      "tile": {
+        "x": 6,
+        "y": 23
+      }
+    },
+    {
+      "id": "coin_heap",
+      "room": "treasury",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/coin_heap.png",
+      "tile": {
+        "x": 3,
+        "y": 24
+      }
+    },
+    {
+      "id": "cinder_vent",
+      "room": "nest",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/cinder_vent.png",
+      "tile": {
+        "x": 34,
+        "y": 18
+      }
+    },
+    {
+      "id": "dragon_egg",
+      "room": "nest",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/dragon_egg.png",
+      "tile": {
+        "x": 38,
+        "y": 20
+      }
+    },
+    {
+      "id": "dragon_egg_b",
+      "room": "nest",
+      "pixels": [
+        256,
+        256
+      ],
+      "file": "props/dragon_egg_b.png",
+      "tile": {
+        "x": 42,
+        "y": 19
       }
     }
   ],
@@ -283,11 +608,15 @@
       512
     ],
     "anchor": {
-      "x": 23,
+      "x": 22,
       "y": 3
     },
     "footprint": [
       {
+        "x": 20,
+        "y": 2
+      },
+      {
         "x": 21,
         "y": 2
       },
@@ -304,8 +633,8 @@
         "y": 2
       },
       {
-        "x": 25,
-        "y": 2
+        "x": 20,
+        "y": 3
       },
       {
         "x": 21,
@@ -324,8 +653,8 @@
         "y": 3
       },
       {
-        "x": 25,
-        "y": 3
+        "x": 20,
+        "y": 4
       },
       {
         "x": 21,
@@ -341,15 +670,15 @@
       },
       {
         "x": 24,
-        "y": 4
-      },
-      {
-        "x": 25,
         "y": 4
       }
     ],
     "cone_tiles": [
       {
+        "x": 20,
+        "y": 5
+      },
+      {
         "x": 21,
         "y": 5
       },
@@ -366,8 +695,8 @@
         "y": 5
       },
       {
-        "x": 25,
-        "y": 5
+        "x": 20,
+        "y": 6
       },
       {
         "x": 21,
@@ -383,10 +712,6 @@
       },
       {
         "x": 24,
-        "y": 6
-      },
-      {
-        "x": 25,
         "y": 6
       }
     ],

@@ -13,7 +13,6 @@ STYLES = (
     ("attack", "ATK"),
     ("strength", "STR"),
     ("defence", "DEF"),
-    ("hitpoints", "HP"),
     ("archery", "RNG"),
     ("eat", "EAT"),
 )

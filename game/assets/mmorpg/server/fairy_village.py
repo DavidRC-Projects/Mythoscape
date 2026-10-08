@@ -23,6 +23,12 @@ FAIRY_NPCS = {
     "pip_dewdrop",
 }
 
+# Overworld crypt mouth. The interior door stays at (46, 71).
+CRYPT_ENTRANCE = (54, 80)
+CRYPT_PAD = (52, 79, 56, 83)
+
+_FENCE = None
+
 _STORY = None
 _MOONWATER_WAIT = 60.0
 _MOONWATER_HEAL = 8
@@ -72,10 +78,55 @@ def stamp(grid):
         blocked = _load_json(path).get("blocked_tiles") or []
         for x, y in blocked:
             put(int(x), int(y), wm.WALL)
-    # Mouth of the moved crypt. The pad keeps these tiles after capture.
+    # Old mouth, painted before capture so the saved interior stays as it was.
     for x in (45, 46, 47):
         for y in (79, 80, 81):
             put(x, y, wm.PATH)
+    for x, y in fence_cells():
+        if grid[y][x] in (wm.GRASS,) or grid[y][x] in wm.TREE_TILES:
+            put(x, y, wm.WALL)
+
+
+def fence_cells():
+    """Picket posts around the glade. The roads stay open."""
+    global _FENCE
+    if _FENCE is None:
+        cells = set()
+        for x in range(1, 42):
+            if x not in (27, 28, 29):
+                cells.add((x, 55))
+                cells.add((x, 89))
+        for y in range(55, 90):
+            if y not in (70, 71, 72, 81, 82, 83):
+                cells.add((41, y))
+        for y in range(56, 89):
+            cells.add((1, y))
+        _FENCE = cells
+    return _FENCE
+
+
+def is_fence(x, y):
+    return (int(x), int(y)) in fence_cells()
+
+
+def lay_crypt_path(grid):
+    """Walkway from the glade to the crypt. Runs after the dungeon interior is saved."""
+    import world_map as wm
+
+    height = len(grid)
+    width = len(grid[0]) if height else 0
+    x0, y0, x1, y1 = CRYPT_PAD
+
+    def put(x, y):
+        if 0 <= x < width and 0 <= y < height and not is_fence(x, y):
+            grid[y][x] = wm.PATH
+
+    for y in (81, 82, 83):
+        for x in range(30, x1 + 1):
+            put(x, y)
+    for y in range(y0, y1 + 1):
+        for x in range(x0, x1 + 1):
+            put(x, y)
 
 
 def oath_progress(session):

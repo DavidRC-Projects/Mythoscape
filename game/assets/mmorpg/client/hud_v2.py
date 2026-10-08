@@ -66,7 +66,7 @@ BAG_ROWS = (
     ("Log Bag", "has_log_bag", "log_bag_total", 200),
     ("Gem Bag", "has_gem_bag", "gem_bag_total", 200),
     ("Potion Pouch", "has_potion_pouch", "potion_pouch_total", 200),
-    ("Fletching Pouch", "has_fletch_pouch", "fletch_pouch_total", 200),
+    ("Fletching Pouch", "has_fletch_pouch", "fletch_pouch_total", 5000),
     ("Tip Box", "has_tip_box", "tip_box_total", 200),
 )
 
@@ -129,7 +129,10 @@ def _zone_safe(client):
 
 def _xp_fraction(client):
     xp_map = (client.player or {}).get("xp") or {}
-    total = int(xp_map.get("hitpoints") or 0)
+    style = getattr(client, "combat_style", None) or "attack"
+    if style not in ("attack", "strength", "defence", "archery"):
+        style = "attack"
+    total = int(xp_map.get(style) or 0)
     level = combat.level_from_xp(total)
     cur = combat.xp_for_level(level)
     nxt = combat.xp_for_level(level + 1)
@@ -301,8 +304,8 @@ def _draw_left_nav(client):
 
 def _draw_action_bar(client):
     MAP_W, MAP_H, _sx, _sw, _sh = _layout()
-    labels = ("1", "2", "3", "4", "5", "Eat")
-    keys = ("attack", "strength", "defence", "hitpoints", "archery", "eat")
+    labels = ("1", "2", "3", "5", "Eat")
+    keys = ("attack", "strength", "defence", "archery", "eat")
     width = 46 * len(labels) + 8
     origin = pygame.Rect(MAP_W // 2 - width // 2, MAP_H - 52, width, 44)
     _panel(client.screen, origin, (10, 14, 28), GOLD_DIM, radius=10)
@@ -353,6 +356,7 @@ def draw_sidebar(client):
     pygame.draw.line(client.screen, GOLD, (SIDEBAR_X, 0), (SIDEBAR_X, SCREEN_H), 2)
     y = 8
     y = _draw_header(client, y, rects)
+    y = _draw_hitpoints(client, y)
     y = _draw_currencies(client, y, rects)
     y = _draw_quest_card(client, y, rects)
     y = _draw_system_tabs(client, y, rects)
@@ -407,6 +411,28 @@ def _gear_mark(screen, cx, cy):
     pygame.draw.circle(screen, GOLD, (cx, cy), 2)
     for dx, dy in ((0, -8), (6, -6), (8, 0), (6, 6), (0, 8), (-6, 6), (-8, 0), (-6, -6)):
         pygame.draw.line(screen, GOLD, (cx + dx // 2, cy + dy // 2), (cx + dx, cy + dy), 2)
+
+
+def _draw_hitpoints(client, y):
+    """Current life on the sidebar. Green above half, orange to a quarter, then red."""
+    _mw, _mh, sidebar_x, screen_w, _sh = _layout()
+    player = client.player or {}
+    hp = int(player.get("hp") or 0)
+    max_hp = max(1, int(player.get("max_hp") or 1))
+    col, pct = client.hp_tone(hp, max_hp)
+    x0 = sidebar_x + 10
+    row = pygame.Rect(x0, y, screen_w - sidebar_x - 20, 28)
+    _panel(client.screen, row, NAVY_CARD, GOLD_DIM, radius=6)
+    _blit(client, client.font_tiny, "Hitpoints", (row.x + 8, row.y + 2), GOLD)
+    value = _text(client, client.font_tiny, f"{hp} / {max_hp}", col)
+    client.screen.blit(value, (row.right - value.get_width() - 8, row.y + 2))
+    bar = pygame.Rect(row.x + 8, row.y + 16, row.w - 16, 8)
+    pygame.draw.rect(client.screen, (8, 10, 18), bar, border_radius=4)
+    fill = bar.copy()
+    fill.w = max(0, int(bar.w * pct))
+    if fill.w:
+        pygame.draw.rect(client.screen, col, fill, border_radius=4)
+    return row.bottom + 6
 
 
 def _draw_currencies(client, y, rects):

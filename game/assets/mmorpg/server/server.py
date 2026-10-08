@@ -129,6 +129,13 @@ class PlayerSession:
             "archery": row["archery_xp"] if "archery_xp" in row.keys() else 0,
             "karma": row["karma_xp"] if "karma_xp" in row.keys() else 0,
         }
+        # A full life under the old hitpoints skill fills the new pool.
+        # A wounded life stays wounded, and never sits above the new max.
+        pool = self.max_hp()
+        if self.hp >= self.level("hitpoints"):
+            self.hp = pool
+        else:
+            self.hp = min(int(self.hp), pool)
         self.coins = min(int(row["coins"]), MAX_PURSE_COINS)
         self.bank_coins = int(row["bank_coins"]) if "bank_coins" in row.keys() else 0
         self.bank = {}  # slot -> {item_id, qty}
@@ -148,7 +155,8 @@ class PlayerSession:
         self.combat_flee_until = 0.0
         self.combat_rounds = 0
         self.combat_lock_id = None
-        self.combat_style = "attack"  # attack | strength | defence | hitpoints | archery
+        self.combat_style = "attack"  # attack unless the player picks strength or defence
+        self.melee_style = "attack"
         self.gathering_node = None   # (x, y) currently gathering
         self.dungeon = None  # Tidehollow private instance state or None
         self.trade_partner_id = None
@@ -306,7 +314,12 @@ class PlayerSession:
         WORLD.db.save_player_stats(self.player_id, last_wish_date=today)
 
     def max_hp(self):
-        return self.level("hitpoints")
+        """Hitpoints is the sum of the three highest combat skills, not its own XP."""
+        arch = self.level("archery") if "archery" in self.xp else 1
+        return combat.combat_level(
+            self.level("attack"), self.level("strength"),
+            self.level("defence"), archery=arch,
+        )
 
     def combat_stats(self, attack_bonus=0, strength_bonus=0, defence_bonus=0):
         wb = self.weapon_bonuses()
@@ -837,11 +850,14 @@ class PlayerSession:
         return sum(self.level(s) for s in XP_SKILLS)
 
     def combat_level(self):
-        return combat.combat_level(
+        """Top three combat skills, plus karma level."""
+        base = combat.combat_level(
             self.level("attack"), self.level("strength"),
             self.level("defence"), self.level("hitpoints"),
             self.level("archery") if "archery" in self.xp else 1,
         )
+        karma = self.level("karma") if "karma" in self.xp else 1
+        return base + karma
 
     def full_state(self):
         wb = self.weapon_bonuses()
@@ -852,7 +868,7 @@ class PlayerSession:
             "hp": self.hp, "max_hp": self.max_hp(), "coins": self.coins,
             "bank_coins": self.bank_coins,
             "levels": levels,
-            "xp": self.xp,
+            "xp": {s: self.xp[s] for s in XP_SKILLS if s in self.xp},
             "total_level": sum(levels.values()),
             "combat_level": self.combat_level(),
             "equipment": self.equipment,
@@ -1326,11 +1342,17 @@ class World:
         return False
 
     def grant_xp(self, session, skill, amount):
+        # Hitpoints and firemaking are not experience skills.
+        if skill in ("hitpoints", "firemaking") or skill not in session.xp:
+            return session.level(skill) if skill in session.xp else 1, session.level(skill) if skill in session.xp else 1
+        before_pool = session.max_hp() if skill in ("attack", "strength", "defence", "archery") else None
         before = session.level(skill)
         session.xp[skill] += amount
         after = session.level(skill)
-        if skill == "hitpoints" and after > before:
-            session.hp += (after - before)  # HP levels heal you up by the level gained
+        if before_pool is not None:
+            gained = session.max_hp() - before_pool
+            if gained > 0:
+                session.hp += gained
         self.db.save_player_stats(session.player_id, **{f"{skill}_xp": session.xp[skill]})
         return before, after
 
@@ -1632,8 +1654,8 @@ async def handle_login(ws, msg, is_register):
         await send(
             ws, "STAT_ALLOC_REQUIRED",
             points=10,
-            skills=["attack", "strength", "defence", "hitpoints"],
-            base_levels={"attack": 5, "strength": 5, "defence": 5, "hitpoints": 10},
+            skills=["attack", "strength", "defence", "archery"],
+            base_levels={"attack": 5, "strength": 5, "defence": 5, "archery": 1},
         )
         log.info("%s logged in as %s (id=%s) — awaiting stat allocation", username, session.char_name, session.player_id)
         return
@@ -1682,7 +1704,7 @@ async def handle_allocate_stats(session, msg):
     if session.stats_allocated:
         await send(session.ws, "ERROR", message="You already chose your starting stats.")
         return
-    allowed = ("attack", "strength", "defence", "hitpoints")
+    allowed = ("attack", "strength", "defence", "archery")
     raw = msg.get("stats") or {}
     try:
         alloc = {s: max(0, int(raw.get(s, 0))) for s in allowed}
@@ -1692,7 +1714,7 @@ async def handle_allocate_stats(session, msg):
     if sum(alloc.values()) != 10:
         await send(session.ws, "ERROR", message="You must spend exactly 10 stat points.")
         return
-    base = {"attack": 5, "strength": 5, "defence": 5, "hitpoints": 10}
+    base = {"attack": 5, "strength": 5, "defence": 5, "archery": 1}
     xp_fields = {}
     for skill, pts in alloc.items():
         new_level = base[skill] + pts
@@ -2784,7 +2806,7 @@ async def handle_wish(session, msg):
             rare = True
             await send(
                 session.ws, "WISH_STAT_CHOICE",
-                skills=["attack", "strength", "defence", "hitpoints"],
+                skills=["attack", "strength", "defence", "archery"],
                 message="The well grants a permanent power — choose a skill to raise by 1!",
             )
             await _broadcast_well_rare("power", f"{session.char_name} got a rare permanent power from the well!")
@@ -2859,17 +2881,18 @@ async def handle_wish_stat(session, msg):
         await send(session.ws, "ERROR", message="Stand next to the Wishing Well.")
         return
     skill = (msg.get("skill") or "").strip().lower()
-    if skill not in ("attack", "strength", "defence", "hitpoints"):
-        await send(session.ws, "ERROR", message="Choose attack, strength, defence, or hitpoints.")
+    if skill not in ("attack", "strength", "defence", "archery"):
+        await send(session.ws, "ERROR", message="Choose attack, strength, defence, or archery.")
         return
     cur = session.level(skill)
     new_level = min(99, cur + 1)
+    before_pool = session.max_hp()
     session.xp[skill] = combat.xp_for_level(new_level)
     col = f"{skill}_xp"
-    WORLD.db.save_player_stats(session.player_id, **{col: session.xp[skill]})
-    if skill == "hitpoints":
-        session.hp = min(session.max_hp(), session.hp + (new_level - cur))
-        WORLD.db.save_player_stats(session.player_id, hp=session.hp)
+    gained = session.max_hp() - before_pool
+    if gained > 0:
+        session.hp += gained
+    WORLD.db.save_player_stats(session.player_id, **{col: session.xp[skill], "hp": session.hp})
     session.pending_wish_stat = False
     text = f"Your {skill.title()} permanently rises to level {new_level}!"
     await send(session.ws, "CHAT_MSG", **{"from": "Wishing Well", "text": text})
@@ -3035,13 +3058,19 @@ async def handle_stop_attack(session, msg):
     session.combat_flee_until = time.time() + 1.0
 
 
-COMBAT_STYLES = ("attack", "strength", "defence", "hitpoints", "archery")
+COMBAT_STYLES = ("attack", "strength", "defence", "archery")
 
 
 async def handle_set_combat_style(session, msg):
     style = (msg.get("style") or "").lower().strip()
+    if style == "hitpoints":
+        await send(
+            session.ws, "ERROR",
+            message="Hitpoints follows your three highest combat skills. Train Attack, Strength, Defence, or Archery.",
+        )
+        return
     if style not in COMBAT_STYLES:
-        await send(session.ws, "ERROR", message="Choose Attack, Strength, Defence, Hitpoints, or Archery.")
+        await send(session.ws, "ERROR", message="Choose Attack, Strength, Defence, or Archery.")
         return
     if session.using_bow():
         if style != "archery":
@@ -3053,6 +3082,8 @@ async def handle_set_combat_style(session, msg):
     elif style == "archery":
         await send(session.ws, "ERROR", message="Equip a bow to use the Archery fighting style.")
         return
+    if style in ("attack", "strength", "defence"):
+        session.melee_style = style
     session.combat_style = style
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     await send(
@@ -3418,13 +3449,6 @@ async def light_fire(session, log_item_id):
     if session.available_craft_input(log_item_id) < 1:
         await send(session.ws, "ERROR", message=f"You need {ITEMS[log_item_id]['name']}.")
         return
-    fm_lvl = session.level("firemaking")
-    if fm_lvl < info["level_req"]:
-        await send(
-            session.ws, "ERROR",
-            message=f"You need Firemaking level {info['level_req']} to light {ITEMS[log_item_id]['name']}.",
-        )
-        return
     if not is_walkable(WORLD.grid, session.x, session.y):
         await send(session.ws, "ERROR", message="You can't light a fire here.")
         return
@@ -3434,12 +3458,6 @@ async def light_fire(session, log_item_id):
         return
     session.consume_craft_input(log_item_id, 1)
     WORLD.fires[key] = WORLD.tick_count + info["duration"]
-    before, after = WORLD.grant_xp(session, "firemaking", info["xp"])
-    await send(
-        session.ws, "SKILL_XP",
-        player_id=session.player_id, skill="firemaking", gained=info["xp"],
-        xp=session.xp["firemaking"], level=after, leveled_up=after > before,
-    )
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     await send(
         session.ws, "CHAT_MSG",
@@ -4039,7 +4057,7 @@ async def handle_equip(session, msg):
     if is_bow(entry["item_id"]):
         session.combat_style = "archery"
     elif session.combat_style == "archery":
-        session.combat_style = "attack"
+        session.combat_style = getattr(session, "melee_style", None) or "attack"
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     await send(
         session.ws, "CHAT_MSG",
@@ -4079,7 +4097,7 @@ async def handle_unequip(session, msg):
     session.equipment[slot_name] = None
     WORLD.db.set_equipment(session.player_id, slot_name, None)
     if slot_name == "weapon" and session.combat_style == "archery":
-        session.combat_style = "attack"
+        session.combat_style = getattr(session, "melee_style", None) or "attack"
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     await send(session.ws, "CHAT_MSG", **{"from": "You", "text": f"You unequip the {name}."})
 
@@ -5572,7 +5590,7 @@ async def process_combat(events):
                         if style == "archery":
                             style = "attack"
                             session.combat_style = "attack"
-                    amount = dmg * 3
+                    amount = dmg * 15
                     if amount > 0:
                         before, after = WORLD.grant_xp(session, style, amount)
                         xp_ev = {
@@ -5582,16 +5600,6 @@ async def process_combat(events):
                         if dungeon_tag:
                             xp_ev["_dungeon_player"] = dungeon_tag
                         events.append({"type": "SKILL_XP", "data": xp_ev})
-                    if dmg > 0:
-                        before_hp, after_hp = WORLD.grant_xp(session, "hitpoints", 1)
-                        hp_ev = {
-                            "player_id": session.player_id, "skill": "hitpoints", "gained": 1,
-                            "xp": session.xp["hitpoints"], "level": after_hp,
-                            "leveled_up": after_hp > before_hp,
-                        }
-                        if dungeon_tag:
-                            hp_ev["_dungeon_player"] = dungeon_tag
-                        events.append({"type": "SKILL_XP", "data": hp_ev})
                     try_auto_magic(session, primary, events, dungeon_tag=dungeon_tag)
                     if primary.hp <= 0:
                         _mark_monster_dead(primary)
@@ -6019,12 +6027,15 @@ def process_dungeon_ai():
         def step_toward(m, tx, ty, stay_in_room):
             if (m.x, m.y) == (tx, ty):
                 return
+            ember = session.dungeon.get("id") == "emberdeep"
+            if ember and WORLD.tick_count - getattr(m, "ember_step_tick", -99) < 3:
+                return
             dx = 0 if tx == m.x else (1 if tx > m.x else -1)
             dy = 0 if ty == m.y else (1 if ty > m.y else -1)
             if abs(tx - m.x) >= abs(ty - m.y):
-                steps = [(dx, 0), (0, dy), (dx, dy)]
+                steps = [(dx, 0), (0, dy)] if ember else [(dx, 0), (0, dy), (dx, dy)]
             else:
-                steps = [(0, dy), (dx, 0), (dx, dy)]
+                steps = [(0, dy), (dx, 0)] if ember else [(0, dy), (dx, 0), (dx, dy)]
             for sx, sy in steps:
                 if sx == 0 and sy == 0:
                     continue
@@ -6036,6 +6047,8 @@ def process_dungeon_ai():
                 if not mod.dungeon_walkable(tiles, nx, ny) or occupied(nx, ny, m):
                     continue
                 m.x, m.y = nx, ny
+                if ember:
+                    m.ember_step_tick = WORLD.tick_count
                 return
 
         eligible = []

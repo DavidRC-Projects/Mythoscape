@@ -164,7 +164,7 @@ def weapon_style(item_id):
 class GameClient(ScreensMixin, CameraYaw):
     def __init__(self):
         pygame.init()
-        pygame.display.set_caption("Mythoscape — Tiny MMORPG")
+        pygame.display.set_caption("Crownfall")
         self.screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
         self.clock = pygame.time.Clock()
         self.camera_yaw = 0  # Fixed north-up view (no camera rotate)
@@ -203,9 +203,9 @@ class GameClient(ScreensMixin, CameraYaw):
         self.stat_gender = "male"
         self.active_field = "username"
         self.login_error = ""
-        self.stat_alloc = {"attack": 0, "strength": 0, "defence": 0, "hitpoints": 0}
+        self.stat_alloc = {"attack": 0, "strength": 0, "defence": 0, "archery": 0}
         self.stat_alloc_points = 10
-        self.stat_alloc_base = {"attack": 5, "strength": 5, "defence": 5, "hitpoints": 10}
+        self.stat_alloc_base = {"attack": 5, "strength": 5, "defence": 5, "archery": 1}
         self.stat_alloc_error = ""
         self.stat_alloc_rects = {}
 
@@ -245,6 +245,7 @@ class GameClient(ScreensMixin, CameraYaw):
         self.combat_style_confirmed = False  # ask on first melee attack each session
         self.combat_style_prompt = None  # {"target_id": int} while choosing XP skill
         self.combat_style_prompt_rects = {}
+        self.context_menu = None  # right-click Attack / Talk-to list
         self.combat_style_rects = []  # [(rect, style), ...]
         self.trade_incoming = None  # {"from_player_id","from_name"}
         self.trade_state = None     # {"other_name","your_offer","other_offer",...}
@@ -429,6 +430,7 @@ class GameClient(ScreensMixin, CameraYaw):
                 self.handle_network()
                 self.update_walk()
                 self.handle_events()
+                self._poll_held_walk()
                 self.update_inventory_hover()
                 area_music.tick(self)
                 self.draw()
@@ -481,7 +483,7 @@ class GameClient(ScreensMixin, CameraYaw):
             self.show_leaderboard = False
             if msg.get("needs_stat_alloc"):
                 self.state = "STAT_ALLOC"
-                self.stat_alloc = {"attack": 0, "strength": 0, "defence": 0, "hitpoints": 0}
+                self.stat_alloc = {"attack": 0, "strength": 0, "defence": 0, "archery": 0}
                 self.stat_alloc_points = 10
                 self.stat_alloc_error = ""
                 self.stat_gender = "male"
@@ -549,6 +551,11 @@ class GameClient(ScreensMixin, CameraYaw):
             # Keep local player coords in sync so the camera can follow.
             if self.player and self.player["id"] in self.players:
                 live = self.players[self.player["id"]]
+                pred = getattr(self, "_predicted_step", None)
+                if pred and time.time() < pred[2] and (int(live["x"]), int(live["y"])) != (pred[0], pred[1]):
+                    live["x"], live["y"] = pred[0], pred[1]
+                else:
+                    self._predicted_step = None
                 self.player["x"] = live["x"]
                 self.player["y"] = live["y"]
                 self.player["hp"] = live["hp"]
@@ -645,7 +652,7 @@ class GameClient(ScreensMixin, CameraYaw):
                 self._maybe_combat_floater(msg.get("text") or "")
         elif t == "WISH_STAT_CHOICE":
             self.wish_stat_choice = {
-                "skills": msg.get("skills") or ["attack", "strength", "defence", "hitpoints"],
+                "skills": msg.get("skills") or ["attack", "strength", "defence", "archery"],
                 "message": msg.get("message") or "Choose a skill to raise.",
             }
             self.show_wish = False
@@ -1141,6 +1148,9 @@ class GameClient(ScreensMixin, CameraYaw):
             if self.chat_typing:
                 self.handle_chat_typing(event)
                 return
+            if event.key == pygame.K_ESCAPE and self.context_menu:
+                self.context_menu = None
+                return
             # Leave private dungeon before other Esc handlers eat the key
             if event.key == pygame.K_ESCAPE and self.dungeon and not (
                 self.trade_incoming or self.trade_state
@@ -1175,8 +1185,8 @@ class GameClient(ScreensMixin, CameraYaw):
                     self.housing_open = False
                 return
             if self.dialogue:
-                self.handle_dialogue_key(event)
-                return
+                if self.handle_dialogue_key(event):
+                    return
             if self.show_teleport:
                 if event.key in (pygame.K_ESCAPE, pygame.K_t):
                     self.show_teleport = False
@@ -1231,10 +1241,13 @@ class GameClient(ScreensMixin, CameraYaw):
                     self.wish_stat_choice = None
                     self.combat_style_prompt = None
                 elif self.combat_style_prompt and event.key in (
-                    pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5,
+                    pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_5,
                 ):
-                    styles = ("attack", "strength", "defence", "hitpoints", "archery")
-                    style = styles[event.key - pygame.K_1]
+                    styles = {
+                        pygame.K_1: "attack", pygame.K_2: "strength",
+                        pygame.K_3: "defence", pygame.K_5: "archery",
+                    }
+                    style = styles[event.key]
                     if self.player_using_bow():
                         if style == "archery":
                             self.confirm_combat_style(style)
@@ -1341,40 +1354,21 @@ class GameClient(ScreensMixin, CameraYaw):
                     self.skills_scroll = max(0, self.skills_scroll - step * 5)
                 else:
                     self.skills_scroll = min(max_scroll, self.skills_scroll + step * 5)
-            elif event.key in (pygame.K_UP, pygame.K_KP8, pygame.K_KP_8) or event.scancode in (pygame.KSCAN_KP8, pygame.KSCAN_KP_8):
-                self.clear_walk()
-                if emberdeep_v2_client.fp_active(self):
-                    self._ember_reverse = False
-                    self._ember_strafe = None
-                    dx, dy = emberdeep_v2_client.step_delta(self, 1)
-                else:
-                    dx, dy = self.rotate_move_delta(0, -1)
-                self.try_move(dx, dy)
-            elif event.key in (pygame.K_DOWN, pygame.K_KP2, pygame.K_KP_2) or event.scancode in (pygame.KSCAN_KP2, pygame.KSCAN_KP_2):
-                self.clear_walk()
-                if emberdeep_v2_client.fp_active(self):
-                    self._ember_reverse = True
-                    self._ember_strafe = None
-                    dx, dy = emberdeep_v2_client.step_delta(self, -1)
-                else:
-                    dx, dy = self.rotate_move_delta(0, 1)
-                self.try_move(dx, dy)
-            elif event.key in (pygame.K_LEFT, pygame.K_KP4, pygame.K_KP_4) or event.scancode in (pygame.KSCAN_KP4, pygame.KSCAN_KP_4):
-                if emberdeep_v2_client.fp_active(self):
-                    emberdeep_v2_client.turn(self, -1)
-                else:
-                    self.clear_walk()
-                    dx, dy = self.rotate_move_delta(-1, 0)
-                    self.try_move(dx, dy)
-            elif event.key in (pygame.K_RIGHT, pygame.K_KP6, pygame.K_KP_6) or event.scancode in (pygame.KSCAN_KP6, pygame.KSCAN_KP_6):
-                if emberdeep_v2_client.fp_active(self):
-                    emberdeep_v2_client.turn(self, 1)
-                else:
-                    self.clear_walk()
-                    dx, dy = self.rotate_move_delta(1, 0)
+            elif (step := self._arrow_step(event)) is not None:
+                dx, dy = step
+                if emberdeep_v2_client.fp_active(self) and dy == 0:
+                    emberdeep_v2_client.turn(self, 1 if dx > 0 else -1)
+                elif self._begin_key_step():
+                    if emberdeep_v2_client.fp_active(self):
+                        self._ember_reverse = dy > 0
+                        self._ember_strafe = None
+                        dx, dy = emberdeep_v2_client.step_delta(self, -1 if dy > 0 else 1)
+                    else:
+                        dx, dy = self.rotate_move_delta(dx, dy)
                     self.try_move(dx, dy)
             elif event.key == pygame.K_a and emberdeep_v2_client.fp_active(self):
-                self.clear_walk()
+                if not self._begin_key_step():
+                    return
                 dx, dy = emberdeep_v2_client.strafe_delta(self, -1)
                 if abs(dx) > abs(dy):
                     self._ember_strafe = 1 if dx > 0 else -1
@@ -1382,7 +1376,8 @@ class GameClient(ScreensMixin, CameraYaw):
                     self._ember_strafe = "front" if dy > 0 else "back"
                 self.try_move(dx, dy)
             elif event.key == pygame.K_d and emberdeep_v2_client.fp_active(self):
-                self.clear_walk()
+                if not self._begin_key_step():
+                    return
                 dx, dy = emberdeep_v2_client.strafe_delta(self, 1)
                 if abs(dx) > abs(dy):
                     self._ember_strafe = 1 if dx > 0 else -1
@@ -1488,9 +1483,12 @@ class GameClient(ScreensMixin, CameraYaw):
                 self.toggle_teleport_modal()
             elif event.key == pygame.K_SPACE:
                 self.try_attack_nearest()
-            elif event.key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5):
-                styles = ("attack", "strength", "defence", "hitpoints", "archery")
-                style = styles[event.key - pygame.K_1]
+            elif event.key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_5):
+                styles = {
+                    pygame.K_1: "attack", pygame.K_2: "strength",
+                    pygame.K_3: "defence", pygame.K_5: "archery",
+                }
+                style = styles[event.key]
                 if self.player_using_bow():
                     if style == "archery":
                         self.set_combat_style(style)
@@ -1753,6 +1751,7 @@ class GameClient(ScreensMixin, CameraYaw):
         self.dialogue = None
         self.shop = None
         self.show_shop_panel = False
+        self.context_menu = None
         self.trade_incoming = None
         self.trade_state = None
         self.show_equipment = False
@@ -2041,11 +2040,12 @@ class GameClient(ScreensMixin, CameraYaw):
         if not self.player:
             return 1
         levels = self.player.get("levels") or {}
-        return combat.combat_level(
+        base = combat.combat_level(
             levels.get("attack", 1), levels.get("strength", 1),
             levels.get("defence", 1), levels.get("hitpoints", 10),
             levels.get("archery", 1),
         )
+        return base + int(levels.get("karma", 1))
 
     def equipped_bow_range(self):
         eq = (self.player or {}).get("equipment") or {}
@@ -2499,27 +2499,108 @@ class GameClient(ScreensMixin, CameraYaw):
             "type": "TALK", "npc_id": npc["id"],
         })
 
+    def _arrow_step(self, event):
+        """Screen step for an arrow or keypad key. None when the key is not a direction."""
+        key, scan = event.key, event.scancode
+        if key in (pygame.K_UP, pygame.K_KP8, pygame.K_KP_8) or scan in (pygame.KSCAN_UP, pygame.KSCAN_KP8, pygame.KSCAN_KP_8):
+            return 0, -1
+        if key in (pygame.K_DOWN, pygame.K_KP2, pygame.K_KP_2) or scan in (pygame.KSCAN_DOWN, pygame.KSCAN_KP2, pygame.KSCAN_KP_2):
+            return 0, 1
+        if key in (pygame.K_LEFT, pygame.K_KP4, pygame.K_KP_4) or scan in (pygame.KSCAN_LEFT, pygame.KSCAN_KP4, pygame.KSCAN_KP_4):
+            return -1, 0
+        if key in (pygame.K_RIGHT, pygame.K_KP6, pygame.K_KP_6) or scan in (pygame.KSCAN_RIGHT, pygame.KSCAN_KP6, pygame.KSCAN_KP_6):
+            return 1, 0
+        return None
+
+    def _walk_keys_blocked(self):
+        """True while a panel or conversation should keep the arrow keys."""
+        if self.state != "GAME" or not self.player or self.chat_typing:
+            return True
+        if self.trade_incoming or self.trade_state or self.housing_open or self.dialogue:
+            return True
+        if self.show_teleport or self.stair_prompt or self.show_bank or self.show_shop_panel:
+            return True
+        return bool(
+            self.show_forge or self.show_cook or self.show_fletch or self.show_equipment
+            or self.show_help or self.show_skills or self.show_pets or self.show_travel
+            or self.show_world_map or self.fire_prompt or self.drop_prompt or self.loot_prompt
+            or self.arrow_prompt or self.tip_prompt or self.food_prompt or self.raw_prompt
+            or self.food_bag_prompt or self.pack_prompt or self.log_prompt
+            or self.potion_prompt or self.cook_prompt or self.dungeon_prompt
+            or self.show_wish or self.wish_stat_choice or self.combat_style_prompt
+        )
+
+    def _begin_key_step(self):
+        """Drop a click-path, then allow one keyboard step. False while a step is still in motion."""
+        if time.time() < getattr(self, "_next_walk_at", 0):
+            return False
+        self.clear_walk()
+        return True
+
+    def _poll_held_walk(self):
+        """Keep stepping while an arrow stays down. Key-repeat is unreliable for those keys."""
+        if self._walk_keys_blocked():
+            return
+        if time.time() < getattr(self, "_next_walk_at", 0):
+            return
+        keys = pygame.key.get_pressed()
+        step = None
+        if keys[pygame.K_UP] or keys[pygame.KSCAN_UP]:
+            step = (0, -1)
+        elif keys[pygame.K_DOWN] or keys[pygame.KSCAN_DOWN]:
+            step = (0, 1)
+        elif keys[pygame.K_LEFT] or keys[pygame.KSCAN_LEFT]:
+            step = (-1, 0)
+        elif keys[pygame.K_RIGHT] or keys[pygame.KSCAN_RIGHT]:
+            step = (1, 0)
+        if step is None:
+            return
+        import emberdeep_v2_client
+        dx, dy = step
+        if emberdeep_v2_client.fp_active(self):
+            if dy == 0:
+                return
+            if not self._begin_key_step():
+                return
+            self._ember_reverse = dy > 0
+            self._ember_strafe = None
+            dx, dy = emberdeep_v2_client.step_delta(self, -1 if dy > 0 else 1)
+        else:
+            if not self._begin_key_step():
+                return
+            dx, dy = self.rotate_move_delta(dx, dy)
+        self.try_move(dx, dy)
+
     def try_move(self, dx, dy):
         now = time.time()
         import emberdeep_v2_client
         in_ember = emberdeep_v2_client.fp_active(self)
-        # One tile per press inside Emberdeep. The overworld keeps its old pace.
-        if in_ember and now < getattr(self, "_next_walk_at", 0):
+        if now < getattr(self, "_next_walk_at", 0):
             return
         if self.combat_flee_locked():
             self._say_combat_lock()
             return
-        if self.player:
-            key = ("p", self.player.get("id"))
-            if abs(dx) >= abs(dy) and dx != 0:
-                self._entity_facing[key] = 1 if dx > 0 else -1
-            elif dy != 0:
-                self._entity_facing[key] = "back" if dy < 0 else "front"
-            # Hold travel facing through inter-tile gaps so combat lock can't snap back
-            self._entity_moving_until[key] = time.time() + 0.55
+        if not self.player:
+            return
+        px, py = self.player_xy()
+        nx, ny = int(px) + int(dx), int(py) + int(dy)
+        if not self.tile_walkable(nx, ny):
+            return
+        key = ("p", self.player.get("id"))
+        if abs(dx) >= abs(dy) and dx != 0:
+            self._entity_facing[key] = 1 if dx > 0 else -1
+        elif dy != 0:
+            self._entity_facing[key] = "back" if dy < 0 else "front"
+        # Hold travel facing through inter-tile gaps so combat lock can't snap back
+        self._entity_moving_until[key] = now + 0.55
         self.net.send("MOVE", dx=dx, dy=dy)
-        if in_ember:
-            self._next_walk_at = now + 0.55
+        self.player["x"], self.player["y"] = nx, ny
+        live = self.players.get(self.player["id"])
+        if live is not None:
+            live["x"], live["y"] = nx, ny
+        # A world snapshot can still be the tile we just left. Keep this step until it catches up.
+        self._predicted_step = (nx, ny, now + 0.75)
+        self._next_walk_at = now + (0.55 if in_ember else 0.16)
 
     def _capture_home_map(self, force=False):
         """Keep the overworld tiles. Dungeon and Castle Realm swaps must not replace them."""
@@ -2653,6 +2734,7 @@ class GameClient(ScreensMixin, CameraYaw):
         if not self.player or x is None or y is None:
             return
         x, y = int(x), int(y)
+        self._predicted_step = None
         self.player["x"], self.player["y"] = x, y
         live = self.players.get(self.player["id"])
         if live is not None:
@@ -3009,6 +3091,10 @@ class GameClient(ScreensMixin, CameraYaw):
 
     def adjust_zoom(self, delta):
         """Zoom in (delta>0) or out (delta<0). Smaller tiles show more of the world."""
+        import emberdeep_v2_client
+        if emberdeep_v2_client.fp_active(self):
+            emberdeep_v2_client.adjust_zoom(self, delta)
+            return
         if delta > 0:
             self.set_zoom(int(self.zoom_level) - 1)
         elif delta < 0:
@@ -3016,6 +3102,10 @@ class GameClient(ScreensMixin, CameraYaw):
 
     def set_zoom(self, level):
         """Jump to a zoom step. 0 is closest; the last step is the widest view."""
+        import emberdeep_v2_client
+        if emberdeep_v2_client.fp_active(self):
+            emberdeep_v2_client.set_zoom(self, level)
+            return
         global TILE
         level = max(0, min(len(TILE_ZOOM_SIZES) - 1, int(level)))
         if level == self.zoom_level:
@@ -3034,6 +3124,9 @@ class GameClient(ScreensMixin, CameraYaw):
 
     def zoom_control_layout(self):
         """On-map buttons: zoom out, each step, zoom in. Left is the widest view."""
+        import emberdeep_v2_client
+        if emberdeep_v2_client.fp_active(self):
+            return emberdeep_v2_client.zoom_control_layout()
         bh = 26
         gap = 4
         y = MAP_H - bh - 10
@@ -3047,6 +3140,10 @@ class GameClient(ScreensMixin, CameraYaw):
         return items
 
     def draw_zoom_controls(self):
+        import emberdeep_v2_client
+        if emberdeep_v2_client.fp_active(self):
+            emberdeep_v2_client.draw_zoom_controls(self)
+            return
         for rect, action in self.zoom_control_layout():
             active = isinstance(action, int) and action == self.zoom_level
             fill = (48, 62, 48) if active else (22, 24, 32)
@@ -3099,8 +3196,115 @@ class GameClient(ScreensMixin, CameraYaw):
         vx, vy = self.world_to_view(wx, wy)
         return vx - cam_x, vy - cam_y
 
+    def _monster_click_pad(self, monster):
+        """Extra tiles around a small creature that still count as clicking it."""
+        mtype = monster.get("type") or ""
+        small = {
+            "giant_rat": 3,
+            "goblin": 2,
+            "void_imp": 2,
+            "ash_imp": 2,
+            "wolf": 2,
+            "ember_wolf": 2,
+            "magma_slug": 2,
+        }
+        if mtype in small:
+            return small[mtype], True
+        radius = 1 if (MONSTERS.get(mtype) or {}).get("humanoid") else 0
+        if USE_LOWPOLY_DRAGONS:
+            radius = max(radius, lowpoly_dragon_sprites.click_radius_tiles(mtype))
+        if USE_ANIM_STRIP_MONSTERS:
+            radius = max(radius, anim_strip_sprites.click_radius_tiles(mtype))
+        return radius, bool((MONSTERS.get(mtype) or {}).get("humanoid"))
+
+    def _open_context_menu(self, mx, my, rows):
+        self.context_menu = {"x": mx, "y": my, "rows": rows, "option_rects": []}
+
+    def _click_context_menu(self, mx, my):
+        menu = self.context_menu or {}
+        rows = menu.get("rows") or []
+        for rect, row in zip(menu.get("option_rects") or [], rows):
+            if rect.collidepoint(mx, my):
+                self.context_menu = None
+                self._run_context_action(row)
+                return
+        self.context_menu = None
+
+    def _run_context_action(self, row):
+        kind = row.get("kind")
+        if kind == "attack":
+            monster = self._monster_by_id(row.get("id"))
+            if not monster or not monster.get("alive"):
+                return
+            self.fleeing_combat = False
+            self.walk_and_act(self.approach_goals_for(monster), {
+                "type": "ATTACK", "target_id": monster["id"],
+            })
+        elif kind == "talk":
+            npc_id = row.get("id")
+            npc = next((n for n in self.npcs if n.get("id") == npc_id), None)
+            if npc is None and row.get("x") is not None:
+                self.walk_and_act(self.adjacent_goals(row["x"], row["y"]), {
+                    "type": "TALK", "npc_id": npc_id,
+                })
+                return
+            if npc is None:
+                return
+            self.walk_and_act(self.adjacent_goals(npc["x"], npc["y"]), {
+                "type": "TALK", "npc_id": npc["id"],
+            })
+        elif kind == "walk":
+            tx, ty = int(row["x"]), int(row["y"])
+            if self.tile_walkable(tx, ty):
+                self.walk_and_act({(tx, ty)}, None)
+
+    def _context_rows(self, primary, tx, ty):
+        rows = [primary]
+        if self.tile_walkable(tx, ty):
+            rows.append({"label": "Walk here", "kind": "walk", "x": tx, "y": ty})
+        rows.append({"label": "Cancel", "kind": "cancel"})
+        return rows
+
+    def draw_context_menu(self):
+        menu = self.context_menu
+        if not menu:
+            return
+        rows = menu.get("rows") or []
+        if not rows:
+            return
+        pad_x, row_h = 10, 20
+        width = max(self.font_small.size(row["label"])[0] for row in rows) + pad_x * 2
+        height = row_h * len(rows) + 6
+        x = max(4, min(int(menu["x"]), MAP_W - width - 4))
+        y = int(menu["y"])
+        if y + height > MAP_H - 4:
+            y = max(4, y - height)
+        box = pygame.Rect(x, y, width, height)
+        pygame.draw.rect(self.screen, (42, 32, 18), box)
+        pygame.draw.rect(self.screen, (210, 176, 84), box, 2)
+        option_rects = []
+        mouse = pygame.mouse.get_pos()
+        for i, row in enumerate(rows):
+            rect = pygame.Rect(x + 3, y + 3 + i * row_h, width - 6, row_h)
+            hot = rect.collidepoint(mouse)
+            if hot:
+                pygame.draw.rect(self.screen, (92, 70, 32), rect)
+            if row["kind"] == "cancel":
+                color = (170, 160, 140)
+            elif hot or i == 0:
+                color = (255, 230, 120)
+            else:
+                color = (230, 214, 176)
+            text = self.font_small.render(row["label"], True, color)
+            self.screen.blit(text, (rect.x + 6, rect.y + 1))
+            option_rects.append(rect)
+        menu["option_rects"] = option_rects
+
     def handle_mouse_click(self, event):
         mx, my = event.pos
+        if self.context_menu and event.button == 1:
+            self._click_context_menu(mx, my)
+            return
         if self.state == "GAME":
             for rect, action in self.zoom_control_layout():
                 if rect.collidepoint(mx, my):
@@ -3421,26 +3625,10 @@ class GameClient(ScreensMixin, CameraYaw):
             if not m["alive"]:
                 continue
             dist = max(abs(m["x"] - tx), abs(m["y"] - ty))
-            radius = 0
-            humanoid = bool((MONSTERS.get(m["type"]) or {}).get("humanoid"))
-            # The rat is drawn about two tiles tall, standing on its south edge,
-            # so a click on the sprite lands on the tiles north of its feet.
-            if m["type"] == "giant_rat":
-                radius = 2
-            if humanoid:
-                radius = 1
-            if USE_LOWPOLY_DRAGONS:
-                radius = max(radius, lowpoly_dragon_sprites.click_radius_tiles(m["type"]))
-            if USE_ANIM_STRIP_MONSTERS:
-                radius = max(radius, anim_strip_sprites.click_radius_tiles(m["type"]))
+            radius, padded = self._monster_click_pad(m)
             if dist <= radius and (best_d is None or dist < best_d):
                 best_m, best_d = m, dist
-                on_sprite = (
-                    m["type"] == "giant_rat"
-                    and tx == m["x"]
-                    and m["y"] - 2 <= ty <= m["y"]
-                )
-                best_body = on_sprite or (humanoid and dist <= 1)
+                best_body = padded
             elif radius == 0 and dist == 0:
                 best_m, best_d = m, 0
                 best_body = False
@@ -3454,6 +3642,13 @@ class GameClient(ScreensMixin, CameraYaw):
             and (tx, ty) != (best_m["x"], best_m["y"])
         )
         if best_m is not None and not walk_away:
+            if event.button == 3:
+                name = best_m.get("name") or "monster"
+                self._open_context_menu(mx, my, self._context_rows(
+                    {"label": f"Attack {name}", "kind": "attack", "id": best_m["id"]},
+                    tx, ty,
+                ))
+                return
             self.fleeing_combat = False
             self.walk_and_act(self.approach_goals_for(best_m), {
                 "type": "ATTACK", "target_id": best_m["id"],
@@ -3470,6 +3665,16 @@ class GameClient(ScreensMixin, CameraYaw):
             seller = castle_owners_client.seller_at(tx, ty)
             if seller:
                 tile = seller["spawn"]["tile"]
+                if event.button == 3:
+                    name = seller.get("name") or "seller"
+                    self._open_context_menu(mx, my, self._context_rows(
+                        {
+                            "label": f"Talk-to {name}", "kind": "talk",
+                            "id": seller["npc_id"], "x": int(tile[0]), "y": int(tile[1]),
+                        },
+                        tx, ty,
+                    ))
+                    return
                 self.walk_and_act(self.adjacent_goals(int(tile[0]), int(tile[1])), {
                     "type": "TALK", "npc_id": seller["npc_id"],
                 })
@@ -3481,6 +3686,13 @@ class GameClient(ScreensMixin, CameraYaw):
             if dist <= 1 and dist < best_nd:
                 best_n, best_nd = n, dist
         if best_n is not None:
+            if event.button == 3:
+                name = best_n.get("name") or "NPC"
+                self._open_context_menu(mx, my, self._context_rows(
+                    {"label": f"Talk-to {name}", "kind": "talk", "id": best_n["id"]},
+                    tx, ty,
+                ))
+                return
             self.walk_and_act(self.adjacent_goals(best_n["x"], best_n["y"]), {
                 "type": "TALK", "npc_id": best_n["id"],
             })
@@ -3530,7 +3742,10 @@ class GameClient(ScreensMixin, CameraYaw):
                 # No fish here — just walk to the shore beside the click
                 self.walk_and_act(self.fishing_shore_goals(tx, ty), None)
             return
-        # Empty ground — walk there
+        # Empty ground — left click walks. Right click is the action menu.
+        if event.button == 3:
+            self.context_menu = None
+            return
         if self.tile_walkable(tx, ty):
             self.walk_and_act({(tx, ty)}, None)
             return
@@ -3735,17 +3950,12 @@ class GameClient(ScreensMixin, CameraYaw):
         self.net.send("SET_COMBAT_STYLE", style=style)
 
     def begin_attack(self, target_id):
-        """Start combat — prompt for XP skill on first melee attack this session."""
+        """Start combat. A bow trains Archery. Anything else keeps the chosen melee skill."""
         self.fleeing_combat = False
+        self.combat_style_prompt = None
         if self.player_using_bow():
             self.combat_style = "archery"
-            self.combat_style_confirmed = True
             self.net.send("SET_COMBAT_STYLE", style="archery")
-            self.net.send("ATTACK", target_id=target_id)
-            return
-        if not self.combat_style_confirmed:
-            self.combat_style_prompt = {"target_id": target_id}
-            return
         self.net.send("ATTACK", target_id=target_id)
 
     def confirm_combat_style(self, style):
@@ -3788,16 +3998,16 @@ class GameClient(ScreensMixin, CameraYaw):
 
     def combat_style_button_rects(self):
         """Combat style pills in one row (melee + archery)."""
-        styles = ("attack", "strength", "defence", "hitpoints", "archery")
+        styles = ("attack", "strength", "defence", "archery")
         labels = {
             "attack": "Att", "strength": "Str", "defence": "Def",
-            "hitpoints": "HP", "archery": "Arch",
+            "archery": "Arch",
         }
         rects = []
         ox = SIDEBAR_X + 14
         oy = getattr(self, "_combat_style_oy", 268)
         gap = 4
-        bw = max(40, (SCREEN_W - SIDEBAR_X - 28 - gap * 4) // 5)
+        bw = max(40, (SCREEN_W - SIDEBAR_X - 28 - gap * 3) // 4)
         bh = 28
         for i, style in enumerate(styles):
             rect = pygame.Rect(ox + i * (bw + gap), oy, bw, bh)
@@ -4903,6 +5113,7 @@ class GameClient(ScreensMixin, CameraYaw):
             self.draw_teleport_modal()
         if self.stair_prompt:
             self.draw_stair_prompt()
+        self.draw_context_menu()
         self.draw_teleport_fx()
 
     def draw_map(self):
@@ -5365,6 +5576,14 @@ class GameClient(ScreensMixin, CameraYaw):
                               ny, _ = self.entity_anchor(cx, cy, "character")
                               self.blit_action_hint(hint[2], cx, ny - 48, hint[3])
                           return
+                      import npc_hd_client
+                      if npc_hd_client.draw_npc(self, n, cx, cy, TILE, t, face, mov):
+                          ny, _ = self.entity_anchor(cx, cy, "character")
+                          self._blit_npc_role_badges(n, cx, ny - 18)
+                          hint = self._hover_hint
+                          if hint and hint[0] == "npc" and hint[1] == n["id"]:
+                              self.blit_action_hint(hint[2], cx, ny - 48, hint[3])
+                          return
                       if n["id"] == "mad_scientist":
                           body, skin, hair = (40, 140, 70), (235, 195, 150), (200, 200, 210)
                       elif n["id"] == "herald_rowan":
@@ -5660,7 +5879,7 @@ class GameClient(ScreensMixin, CameraYaw):
                     label = f"{p['name']}  (Lv {cmb})" if cmb else p["name"]
                     self.blit_nameplate(label, cx, ny,
                                         (180, 255, 180) if is_self else WHITE)
-                    self.draw_hp_bar(cx, hy, p["hp"], p["max_hp"])
+                    self.draw_hp_bar(cx, hy, p["hp"], p["max_hp"], show_value=is_self)
                     said = (self.speech or {}).get(p["id"])
                     if said and time.time() < said.get("until", 0):
                         self.draw_speech_bubble(cx, ny, said.get("text") or "")
@@ -6260,6 +6479,8 @@ class GameClient(ScreensMixin, CameraYaw):
             zone = wm.get_zone(wx, wy) if self.world_w else "wilderness"
         if not self.dungeon and fairy_ground.draw_tile(self, rect, tile_id, wx, wy):
             return
+        if not self.dungeon and fairy_ground.draw_fence(self, rect, wx, wy):
+            return
         if tile_id in (wm.TREE, wm.OAK_TREE, wm.WILLOW_TREE, wm.MAPLE_TREE, wm.YEW_TREE, wm.MAGIC_TREE, wm.FISH_SPOT):
             sprites.draw_grass(self.screen, rect, wx, wy)
         elif tile_id in (wm.ORE, wm.IRON_ORE, wm.COAL, wm.MITHRIL_ORE, wm.ADAMANTITE_ORE):
@@ -6269,7 +6490,10 @@ class GameClient(ScreensMixin, CameraYaw):
                 import fairy_village_client
                 if fairy_village_client.draw_terrain(self.screen, rect, tile_id, wx, wy):
                     return
-            sprites.draw_grass(self.screen, rect, wx, wy)
+            if zone == "shadow_crypt":
+                sprites.draw_void_ground(self.screen, rect, wx, wy)
+            else:
+                sprites.draw_grass(self.screen, rect, wx, wy)
         elif tile_id == wm.PATH:
             if self._is_pier_tile(wx, wy):
                 sprites.draw_pier(self.screen, rect, wx, wy)
@@ -7626,7 +7850,6 @@ class GameClient(ScreensMixin, CameraYaw):
             ("attack", "Attack", "1", "Accuracy / hit chance"),
             ("strength", "Strength", "2", "Heavier hits"),
             ("defence", "Defence", "3", "Take less damage"),
-            ("hitpoints", "Hitpoints", "4", "More max HP"),
             ("archery", "Archery", "5", "Ranged (bow only)"),
         )
         y = box.y + 118
@@ -7657,7 +7880,7 @@ class GameClient(ScreensMixin, CameraYaw):
         if rects.get("cancel") and rects["cancel"].collidepoint(mx, my):
             self.combat_style_prompt = None
             return
-        for style in ("attack", "strength", "defence", "hitpoints", "archery"):
+        for style in ("attack", "strength", "defence", "archery"):
             r = rects.get(style)
             if r and r.collidepoint(mx, my):
                 self.confirm_combat_style(style)
@@ -8417,15 +8640,26 @@ class GameClient(ScreensMixin, CameraYaw):
         self.screen.blit(xt, (dismiss.centerx - xt.get_width() // 2, dismiss.centery - xt.get_height() // 2))
         self.combat_quick_rects["dismiss"] = dismiss
 
-    def draw_hp_bar(self, cx, y, hp, max_hp):
-        # Classic RS-style: green remaining + red missing, small bar above head
-        w, h = 28, 4
+    def hp_tone(self, hp, max_hp):
+        """Green above half, orange from half down to a quarter, red below that."""
         pct = max(0.0, min(1.0, max(0, hp) / max(1, max_hp)))
+        if pct > 0.5:
+            return (46, 196, 92), pct
+        if pct > 0.25:
+            return (230, 150, 42), pct
+        return (210, 55, 48), pct
+
+    def draw_hp_bar(self, cx, y, hp, max_hp, show_value=False):
+        col, pct = self.hp_tone(hp, max_hp)
+        w, h = (44, 6) if show_value else (28, 4)
         x0 = cx - w // 2
         pygame.draw.rect(self.screen, (0, 0, 0), (x0 - 1, y - 1, w + 2, h + 2))
-        pygame.draw.rect(self.screen, (200, 20, 20), (x0, y, w, h))
+        pygame.draw.rect(self.screen, (48, 16, 16), (x0, y, w, h))
         if pct > 0:
-            pygame.draw.rect(self.screen, (20, 200, 20), (x0, y, max(1, int(w * pct)), h))
+            pygame.draw.rect(self.screen, col, (x0, y, max(1, int(w * pct)), h))
+        if show_value:
+            text = self.font_tiny.render(f"{int(hp)}/{int(max_hp)}", True, col)
+            self.screen.blit(text, (cx - text.get_width() // 2, y - text.get_height() - 1))
 
     def draw_map_vignette(self):
         """Soft edge darkening so the map reads as a framed playfield."""

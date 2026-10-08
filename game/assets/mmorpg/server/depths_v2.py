@@ -19,19 +19,19 @@ DOOR_HINTS = {
 }
 
 CHEST_LOOT = {
-    "ossuary_chest": [("coins", (80, 200)), ("bones", (1, 2)), ("iron_sword", (1, 1), 0.3)],
-    "catacomb_chest": [("coins", (60, 140)), ("steel_longsword", (1, 1), 0.25), ("health_potion", (1, 1))],
-    "hideyhole_chest": [("coins", (40, 100)), ("cooked_lobster", (1, 2)), ("emerald", (1, 1), 0.2)],
-    "reliquary_chest": [("coins", (100, 220)), ("ruby", (1, 1), 0.4), ("gold_ring", (1, 1), 0.25)],
-    "armoury_chest": [("coins", (80, 180)), ("mithril_sword", (1, 1), 0.4)],
-    "wyrm_chest": [("coins", (200, 500)), ("adamant_sword", (1, 1), 0.15), ("dragon_bones", (1, 1), 0.3)],
+    "ossuary_chest": [("coins", (80, 200)), ("bones", (1, 2))],
+    "catacomb_chest": [("coins", (60, 140)), ("health_potion", (1, 1), 0.12)],
+    "hideyhole_chest": [("coins", (40, 100)), ("cooked_lobster", (1, 1), 0.12), ("emerald", (1, 1), 0.04)],
+    "reliquary_chest": [("coins", (100, 220)), ("ruby", (1, 1), 0.04)],
+    "armoury_chest": [("coins", (80, 180))],
+    "wyrm_chest": [("coins", (200, 500)), ("dragon_bones", (1, 1), 0.3)],
 }
 
 CACHE_LOOT = [("cooked_lobster", (3, 3)), ("health_potion", (1, 1))]
 
 SARCOPHAGUS_LOOT = [
     ("coins", (40, 120)),
-    (("steel_longsword", "mithril_dagger", "ruby"), (1, 1), 0.45),
+    ("ruby", (1, 1), 0.04),
 ]
 
 GROUND_TABLE = [("coins", (15, 40)), ("bones", (1, 1)), ("health_potion", (1, 1))]

@@ -39,15 +39,9 @@ _FLOOR_VISUAL = {
 }
 
 TIDEHOLLOW_REWARDS = [
-    ("mythos_dagger", 1),
-    ("mythos_longsword", 1),
-    ("mythos_helmet", 1),
-    ("mythos_legs", 1),
-    ("mythos_shield", 1),
-    ("adamant_sword", 1),
-    ("adamant_body", 1),
-    ("adamant_battleaxe", 1),
     ("mithril_body", 1),
+    ("mithril_sword", 1),
+    ("steel_body", 1),
     ("coins", (2500, 6000)),
     ("health_potion", (4, 8)),
     ("super_attack_potion", (2, 4)),
@@ -68,14 +62,14 @@ def roll_kill_loot(floor: int, level: int):
     coin_hi = 18 + floor * 14
     out.append(("coins", random.randint(coin_lo, coin_hi)))
     # Food / potions — keep runs sustainable
-    if random.random() < min(0.55, 0.22 + floor * 0.03):
+    if random.random() < min(0.15, 0.08 + floor * 0.006):
         food = "cooked_trout" if floor < 5 else ("cooked_salmon" if floor < 8 else "cooked_lobster")
         out.append((food, random.randint(1, 2)))
     if random.random() < min(0.35, 0.10 + floor * 0.025):
         out.append(("health_potion", 1))
     # Fletching / smith scraps
-    if random.random() < 0.28:
-        out.append(("feather", random.randint(2, 6 + floor)))
+    if random.random() < 0.15:
+        out.append(("feather", random.randint(1, 4)))
     if random.random() < 0.18:
         out.append(("arrow_shaft", random.randint(3, 8 + floor)))
     if random.random() < min(0.30, 0.08 + floor * 0.02):
@@ -95,8 +89,8 @@ def roll_kill_loot(floor: int, level: int):
     if floor >= 4 and random.random() < 0.12:
         ore = "iron_ore" if floor < 7 else ("mithril_ore" if floor < 9 else "adamantite_ore")
         out.append((ore, random.randint(1, 2)))
-    if floor >= 6 and random.random() < 0.06:
-        out.append(("bow_string", random.randint(1, 2)))
+    if floor >= 6 and random.random() < 0.12:
+        out.append(("bow_string", 1))
     return out
 
 
@@ -110,8 +104,8 @@ def floor_info(floor: int) -> dict:
 def scaled_monster_stats(level: int) -> dict:
     """Rough combat stats for a given combat level."""
     hp = max(12, int(level * 2.2))
-    att = max(3, int(level * 0.72))
-    strength = max(3, int(level * 0.75))
+    att = max(3, int(level * 0.72)) + 10
+    strength = max(3, int(level * 0.75)) + 10
     defence = max(2, int(level * 0.62))
     return {
         "level": level,

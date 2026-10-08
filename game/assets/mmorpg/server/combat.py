@@ -90,9 +90,13 @@ def xp_to_next_level(xp):
     return max(0, LEVEL_XP_TABLE[lvl] - int(xp))
 
 
-def combat_level(attack, strength, defence, hitpoints, archery=1):
-    """Classic RS combat level with melee vs ranged (no Prayer/Summoning)."""
-    base = 0.25 * (defence + hitpoints)
-    melee = 0.325 * (attack + strength)
-    ranged = 0.325 * (archery * 2)
-    return max(1, int(math.floor(base + max(melee, ranged))))
+def combat_level(attack, strength, defence, hitpoints=1, archery=1):
+    """Sum of the three highest among attack, strength, defence, and ranged.
+
+    Hitpoints is not one of the four. The same total is the player's max HP.
+    """
+    scores = sorted(
+        (int(attack), int(strength), int(defence), int(archery)),
+        reverse=True,
+    )
+    return max(1, scores[0] + scores[1] + scores[2])

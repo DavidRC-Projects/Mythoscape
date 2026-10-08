@@ -629,7 +629,7 @@ def cook_burn_chance(cook_level, level_req):
 # ---------------------------------------------------------------------------
 MONSTERS = {
     "giant_rat": {
-        "name": "Giant Rat", "level": 3, "hp": 8, "attack": 1, "strength": 1, "defence": 1,
+        "name": "Giant Rat", "level": 3, "hp": 8, "attack": 11, "strength": 11, "defence": 1,
         "def_bonus": 0, "xp": 12, "respawn_ticks": 15,
         "drops": [
             ("bones", 1.0, (1, 1)),
@@ -644,7 +644,7 @@ MONSTERS = {
         "wander_radius": 3, "aggro_range": 0,
     },
     "goblin": {
-        "name": "Goblin", "level": 8, "hp": 15, "attack": 5, "strength": 5, "defence": 4,
+        "name": "Goblin", "level": 8, "hp": 15, "attack": 15, "strength": 15, "defence": 4,
         "def_bonus": 2, "xp": 28, "respawn_ticks": 25,
         "drops": [
             ("bones", 1.0, (1, 1)),
@@ -672,7 +672,7 @@ MONSTERS = {
         "attack_cooldown": 1.0,
     },
     "skeleton": {
-        "name": "Skeleton", "level": 15, "hp": 26, "attack": 10, "strength": 10, "defence": 8,
+        "name": "Skeleton", "level": 15, "hp": 26, "attack": 20, "strength": 20, "defence": 8,
         "def_bonus": 4, "xp": 55, "respawn_ticks": 35,
         "drops": [
             ("bones", 1.0, (1, 1)),
@@ -700,7 +700,7 @@ MONSTERS = {
         "attack_cooldown": 1.0,
     },
     "giant": {
-        "name": "Giant", "level": 28, "hp": 55, "attack": 18, "strength": 20, "defence": 14,
+        "name": "Giant", "level": 28, "hp": 55, "attack": 28, "strength": 30, "defence": 14,
         "def_bonus": 8, "xp": 120, "respawn_ticks": 50,
         "drops": [
             ("big_bones", 1.0, (1, 1)),
@@ -725,7 +725,7 @@ MONSTERS = {
     },
     # Double normal skeleton stats — mithril cavern
     "big_skeleton": {
-        "name": "Big Skeleton", "level": 30, "hp": 52, "attack": 20, "strength": 20, "defence": 16,
+        "name": "Big Skeleton", "level": 30, "hp": 52, "attack": 30, "strength": 30, "defence": 16,
         "def_bonus": 8, "xp": 110, "respawn_ticks": 40,
         "drops": [
             ("bones", 1.0, (1, 1)),
@@ -750,7 +750,7 @@ MONSTERS = {
     },
     # Spider nest — tougher than big skeletons, weaker than the dragon
     "spider": {
-        "name": "Giant Spider", "level": 48, "hp": 95, "attack": 38, "strength": 42, "defence": 30,
+        "name": "Giant Spider", "level": 48, "hp": 95, "attack": 48, "strength": 52, "defence": 30,
         "def_bonus": 14, "xp": 210, "respawn_ticks": 55,
         "drops": [
             ("bones", 1.0, (1, 1)),
@@ -777,7 +777,7 @@ MONSTERS = {
     },
     # Adamantite lair boss — tough for ~level 50 combat
     "dragon": {
-        "name": "Adamant Dragon", "level": 78, "hp": 200, "attack": 90, "strength": 155, "defence": 80,
+        "name": "Adamant Dragon", "level": 78, "hp": 200, "attack": 100, "strength": 165, "defence": 80,
         "def_bonus": 50, "xp": 650, "respawn_ticks": 120,
         "drops": [
             ("dragon_bones", 1.0, (1, 1)),
@@ -811,7 +811,7 @@ MONSTERS = {
     },
     # Mountain pass — packs of wolves guarding the route to the harbour
     "wolf": {
-        "name": "Wolf", "level": 40, "hp": 62, "attack": 32, "strength": 34, "defence": 28,
+        "name": "Wolf", "level": 40, "hp": 62, "attack": 42, "strength": 44, "defence": 28,
         "def_bonus": 10, "xp": 145, "respawn_ticks": 40,
         "drops": [
             ("bones", 1.0, (1, 1)),
@@ -833,7 +833,7 @@ MONSTERS = {
     },
     # Stonehaven City — peaceful until attacked
     "guard": {
-        "name": "City Guard", "level": 28, "hp": 55, "attack": 20, "strength": 20, "defence": 26,
+        "name": "City Guard", "level": 28, "hp": 55, "attack": 30, "strength": 30, "defence": 26,
         "def_bonus": 28, "xp": 120, "respawn_ticks": 45,
         "drops": [
             ("bones", 1.0, (1, 1)),
@@ -853,7 +853,7 @@ MONSTERS = {
         "aggro_range": 0,  # peaceful unless you attack — short street patrol
     },
     "knight": {
-        "name": "Castle Knight", "level": 48, "hp": 100, "attack": 38, "strength": 40, "defence": 42,
+        "name": "Castle Knight", "level": 48, "hp": 100, "attack": 48, "strength": 50, "defence": 42,
         "def_bonus": 40, "xp": 260, "respawn_ticks": 60,
         "drops": [
             ("bones", 1.0, (1, 1)),
@@ -872,7 +872,7 @@ MONSTERS = {
     # Village training stand-in. Stays on his tile and strikes back while fought.
     "adamant_duelist": {
         "name": "Adamant Duelist", "level": 76, "hp": 160,
-        "attack": 68, "strength": 72, "defence": 66,
+        "attack": 78, "strength": 82, "defence": 66,
         "def_bonus": 80, "xp": 420, "respawn_ticks": 5,
         "drops": [
             ("bones", 1.0, (1, 1)),
@@ -909,7 +909,7 @@ MONSTERS = {
         },
     },
     "mythos_champion": {
-        "name": "Mythos Champion", "level": 90, "hp": 280, "attack": 95, "strength": 100, "defence": 98,
+        "name": "Mythos Champion", "level": 90, "hp": 280, "attack": 105, "strength": 110, "defence": 98,
         "def_bonus": 70, "xp": 850, "respawn_ticks": 120,
         "drops": [
             ("bones", 1.0, (1, 1)),
@@ -933,7 +933,7 @@ MONSTERS = {
     },
     # Void Sanctum (SE mystical dungeon) — high-level rooms
     "shade": {
-        "name": "Shade", "level": 55, "hp": 110, "attack": 48, "strength": 50, "defence": 40,
+        "name": "Shade", "level": 55, "hp": 110, "attack": 58, "strength": 60, "defence": 40,
         "def_bonus": 18, "xp": 260, "respawn_ticks": 50,
         "drops": [
             ("bones", 1.0, (1, 1)),
@@ -954,7 +954,7 @@ MONSTERS = {
         "attack_cooldown": 1.0,
     },
     "crypt_ghoul": {
-        "name": "Crypt Ghoul", "level": 62, "hp": 135, "attack": 55, "strength": 58, "defence": 48,
+        "name": "Crypt Ghoul", "level": 62, "hp": 135, "attack": 65, "strength": 68, "defence": 48,
         "def_bonus": 22, "xp": 310, "respawn_ticks": 55,
         "drops": [
             ("bones", 1.0, (1, 1)),
@@ -975,7 +975,7 @@ MONSTERS = {
         "attack_cooldown": 1.0,
     },
     "void_imp": {
-        "name": "Void Imp", "level": 70, "hp": 150, "attack": 65, "strength": 68, "defence": 52,
+        "name": "Void Imp", "level": 70, "hp": 150, "attack": 75, "strength": 78, "defence": 52,
         "def_bonus": 24, "xp": 380, "respawn_ticks": 55,
         "drops": [
             ("bones", 1.0, (1, 1)),
@@ -996,7 +996,7 @@ MONSTERS = {
         "attack_cooldown": 1.0,
     },
     "obsidian_colossus": {
-        "name": "Obsidian Colossus", "level": 78, "hp": 190, "attack": 72, "strength": 78, "defence": 85,
+        "name": "Obsidian Colossus", "level": 78, "hp": 190, "attack": 82, "strength": 88, "defence": 85,
         "def_bonus": 40, "xp": 480, "respawn_ticks": 70,
         "drops": [
             ("big_bones", 1.0, (1, 1)),
@@ -1018,7 +1018,7 @@ MONSTERS = {
         "attack_cooldown": 1.0,
     },
     "shadow_knight": {
-        "name": "Shadow Knight", "level": 88, "hp": 230, "attack": 95, "strength": 100, "defence": 90,
+        "name": "Shadow Knight", "level": 88, "hp": 230, "attack": 105, "strength": 110, "defence": 90,
         "def_bonus": 48, "xp": 620, "respawn_ticks": 80,
         "drops": [
             ("bones", 1.0, (1, 1)),
@@ -1036,7 +1036,7 @@ MONSTERS = {
         "wander_radius": 3, "aggro_range": 8,
     },
     "void_horror": {
-        "name": "Void Horror", "level": 95, "hp": 320, "attack": 115, "strength": 125, "defence": 105,
+        "name": "Void Horror", "level": 95, "hp": 320, "attack": 125, "strength": 135, "defence": 105,
         "def_bonus": 55, "xp": 900, "respawn_ticks": 140,
         "drops": [
             ("dragon_bones", 1.0, (1, 1)),
@@ -1067,7 +1067,7 @@ MONSTERS = {
         "attack_cooldown": 1.0,
     },
     "gallery_warden": {
-        "name": "Gallery Warden", "level": 68, "hp": 190, "attack": 62, "strength": 66, "defence": 55,
+        "name": "Gallery Warden", "level": 68, "hp": 190, "attack": 72, "strength": 76, "defence": 55,
         "def_bonus": 26, "xp": 520, "respawn_ticks": 55, "aggro_range": 6,
         "visual": "crypt_ghoul", "tint": (255, 200, 90), "scale": 1.2,
         "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.0,
@@ -1078,14 +1078,14 @@ MONSTERS = {
         ],
     },
     "void_crawler": {
-        "name": "Void Crawler", "level": 82, "hp": 170, "attack": 80, "strength": 82, "defence": 70,
+        "name": "Void Crawler", "level": 82, "hp": 170, "attack": 90, "strength": 92, "defence": 70,
         "def_bonus": 36, "xp": 520, "respawn_ticks": 60, "aggro_range": 6,
         "visual": "void_imp", "tint": (80, 120, 255),
         "force_retaliate": True,
         "drops": [("onyx", 0.10, (1, 1)), ("coins", 0.8, (80, 180))],
     },
     "knight_captain_vorn": {
-        "name": "Knight-Captain Vorn", "level": 92, "hp": 320, "attack": 100, "strength": 108, "defence": 96,
+        "name": "Knight-Captain Vorn", "level": 92, "hp": 320, "attack": 110, "strength": 118, "defence": 96,
         "def_bonus": 52, "xp": 1100, "respawn_ticks": 80, "aggro_range": 7,
         "visual": "shadow_knight", "tint": (255, 80, 60), "scale": 1.2,
         "force_retaliate": True,
@@ -1096,7 +1096,7 @@ MONSTERS = {
         ],
     },
     "rift_wraith": {
-        "name": "Rift Wraith", "level": 91, "hp": 210, "attack": 98, "strength": 102, "defence": 88,
+        "name": "Rift Wraith", "level": 91, "hp": 210, "attack": 108, "strength": 112, "defence": 88,
         "def_bonus": 46, "xp": 700, "respawn_ticks": 80, "aggro_range": 7,
         "visual": "shade", "tint": (170, 60, 255),
         "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.0,
@@ -1109,7 +1109,7 @@ MONSTERS = {
     },
     "nyxarath": {
         "name": "Nyxarath, the Hollow Eclipse", "level": 110, "hp": 900,
-        "attack": 125, "strength": 135, "defence": 115,
+        "attack": 135, "strength": 145, "defence": 115,
         "def_bonus": 60, "xp": 4000, "respawn_ticks": 9999, "aggro_range": 12,
         "visual": "void_horror", "scale": 1.9, "confine_room": True,
         "force_retaliate": True, "attack_range": 3, "side_by_side": True, "side_gap": 3, "attack_cooldown": 1.0,
@@ -1129,7 +1129,7 @@ MONSTERS = {
         ],
     },
     "ossuary_keeper": {
-        "name": "Ossuary Keeper", "level": 34, "hp": 90, "attack": 24, "strength": 26, "defence": 20,
+        "name": "Ossuary Keeper", "level": 34, "hp": 90, "attack": 34, "strength": 36, "defence": 20,
         "def_bonus": 12, "xp": 220, "respawn_ticks": 9999, "aggro_range": 5,
         "visual": "big_skeleton", "tint": (255, 220, 150), "scale": 1.15,
         "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.2,
@@ -1140,21 +1140,21 @@ MONSTERS = {
         ],
     },
     "drowned_dead": {
-        "name": "Drowned Dead", "level": 36, "hp": 68, "attack": 26, "strength": 28, "defence": 20,
+        "name": "Drowned Dead", "level": 36, "hp": 68, "attack": 36, "strength": 38, "defence": 20,
         "def_bonus": 10, "xp": 140, "respawn_ticks": 45, "aggro_range": 6,
         "visual": "skeleton", "tint": (90, 200, 170),
         "force_retaliate": True,
         "drops": [("bones", 1.0, (1, 1)), ("coins", 0.9, (40, 90))],
     },
     "barrow_knight": {
-        "name": "Barrow Knight", "level": 44, "hp": 88, "attack": 34, "strength": 36, "defence": 32,
+        "name": "Barrow Knight", "level": 44, "hp": 88, "attack": 44, "strength": 46, "defence": 32,
         "def_bonus": 22, "xp": 190, "respawn_ticks": 50, "aggro_range": 6,
         "visual": "shadow_knight", "tint": (160, 200, 170),
         "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.1,
         "drops": [("bones", 1.0, (1, 1)), ("coins", 1.0, (80, 160)), ("steel_longsword", 0.08, (1, 1))],
     },
     "sir_aldric": {
-        "name": "Sir Aldric the Unquiet", "level": 52, "hp": 180, "attack": 42, "strength": 44, "defence": 40,
+        "name": "Sir Aldric the Unquiet", "level": 52, "hp": 180, "attack": 52, "strength": 54, "defence": 40,
         "def_bonus": 30, "xp": 520, "respawn_ticks": 9999, "aggro_range": 8,
         "visual": "shadow_knight", "tint": (255, 110, 70), "scale": 1.3,
         "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.1,
@@ -1165,7 +1165,7 @@ MONSTERS = {
         ],
     },
     "morvath": {
-        "name": "Morvath, the Bone King", "level": 70, "hp": 420, "attack": 62, "strength": 66, "defence": 55,
+        "name": "Morvath, the Bone King", "level": 70, "hp": 420, "attack": 72, "strength": 76, "defence": 55,
         "def_bonus": 40, "xp": 1800, "respawn_ticks": 9999, "aggro_range": 12,
         "visual": "big_skeleton", "tint": (120, 255, 160), "scale": 2.0, "confine_room": True,
         "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.2,
@@ -1182,19 +1182,19 @@ MONSTERS = {
     },
     # Emberdeep instance visuals (spawned only inside the private dungeon)
     "magma_slug": {
-        "name": "Magma Slug", "level": 22, "hp": 48, "attack": 18, "strength": 18, "defence": 16,
+        "name": "Magma Slug", "level": 22, "hp": 48, "attack": 28, "strength": 28, "defence": 16,
         "def_bonus": 8, "xp": 90, "respawn_ticks": 40,
         "drops": [("coins", 0.9, (20, 60)), ("topaz", 0.08, (1, 1))],
         "wander_radius": 2, "aggro_range": 5,
     },
     "ash_imp": {
-        "name": "Ash Imp", "level": 38, "hp": 70, "attack": 32, "strength": 30, "defence": 26,
+        "name": "Ash Imp", "level": 38, "hp": 70, "attack": 42, "strength": 40, "defence": 26,
         "def_bonus": 12, "xp": 160, "respawn_ticks": 45,
         "drops": [("coins", 0.95, (40, 100)), ("sapphire", 0.10, (1, 1)), ("health_potion", 0.2, (1, 1))],
         "wander_radius": 3, "aggro_range": 6,
     },
     "wolf": {
-        "name": "Wolf", "level": 40, "hp": 72, "attack": 34, "strength": 36, "defence": 28,
+        "name": "Wolf", "level": 40, "hp": 72, "attack": 44, "strength": 46, "defence": 28,
         "def_bonus": 12, "xp": 180, "respawn_ticks": 40,
         "drops": [
             ("bones", 1.0, (1, 1)),
@@ -1213,7 +1213,7 @@ MONSTERS = {
         "attack_cooldown": 1.0,
     },
     "ember_wolf": {
-        "name": "Ember Wolf", "level": 58, "hp": 110, "attack": 48, "strength": 50, "defence": 40,
+        "name": "Ember Wolf", "level": 58, "hp": 110, "attack": 58, "strength": 60, "defence": 40,
         "def_bonus": 18, "xp": 280, "respawn_ticks": 50,
         "drops": [("bones", 1.0, (1, 1)), ("coins", 0.95, (80, 180)), ("ruby", 0.10, (1, 1))],
         "wander_radius": 3, "aggro_range": 7,
@@ -1225,7 +1225,7 @@ MONSTERS = {
         "attack_cooldown": 1.0,
     },
     "magma_knight": {
-        "name": "Magma Knight", "level": 78, "hp": 180, "attack": 72, "strength": 75, "defence": 70,
+        "name": "Magma Knight", "level": 78, "hp": 180, "attack": 82, "strength": 85, "defence": 70,
         "def_bonus": 40, "xp": 520, "respawn_ticks": 70,
         "drops": [
             ("bones", 1.0, (1, 1)), ("coins", 1.0, (150, 400)),
@@ -1234,7 +1234,7 @@ MONSTERS = {
         "wander_radius": 2, "aggro_range": 8,
     },
     "crucible_beast": {
-        "name": "Crucible Beast", "level": 88, "hp": 260, "attack": 90, "strength": 95, "defence": 85,
+        "name": "Crucible Beast", "level": 88, "hp": 260, "attack": 100, "strength": 105, "defence": 85,
         "def_bonus": 55, "xp": 780, "respawn_ticks": 100,
         "drops": [
             ("bones", 1.0, (1, 1)), ("coins", 1.0, (300, 800)),
@@ -2003,7 +2003,7 @@ QUESTS = {
         "description": "Thin the wolf packs on the mountain pass — kill 8 Wolves, then return to Scout Bren.",
         "type": "kill", "target": "wolf", "count": 8,
         "quest_points": 3,
-        "rewards": {"coins": 120, "xp": {"attack": 80, "hitpoints": 40}},
+        "rewards": {"coins": 120, "xp": {"attack": 80}},
     },
     "bone_and_blade": {
         "name": "Bone and Blade",
@@ -2045,7 +2045,6 @@ QUESTS = {
         "quest_points": 4,
         "rewards": {
             "coins": 250,
-            "xp": {"hitpoints": 150},
             "items": [("super_attack_potion", 2), ("health_potion", 5)],
         },
     },
@@ -2089,7 +2088,7 @@ QUESTS = {
         "type": "collect", "target": "big_bones", "count": 8,
         "requires": "bone_and_blade",
         "quest_points": 5,
-        "rewards": {"coins": 200, "xp": {"strength": 120, "hitpoints": 80}},
+        "rewards": {"coins": 200, "xp": {"strength": 120}},
     },
     "adamant_proof": {
         "name": "Adamant Proof",
@@ -2116,7 +2115,7 @@ QUESTS = {
         "type": "kill", "target": "mythos_champion", "count": 1,
         "requires": "knights_of_the_keep",
         "quest_points": 6,
-        "rewards": {"coins": 500, "xp": {"attack": 200, "hitpoints": 150}, "item": ("super_defence_potion", 2)},
+        "rewards": {"coins": 500, "xp": {"attack": 200}, "item": ("super_defence_potion", 2)},
     },
     "void_crypt": {
         "name": "Void Crypt",
@@ -2125,7 +2124,7 @@ QUESTS = {
         "type": "kill", "target": "crypt_ghoul", "count": 6,
         "requires": "void_samples",
         "quest_points": 5,
-        "rewards": {"coins": 320, "xp": {"hitpoints": 180}, "item": ("super_attack_potion", 2)},
+        "rewards": {"coins": 320, "item": ("super_attack_potion", 2)},
     },
     "void_imps": {
         "name": "Impish Samples",
@@ -2134,7 +2133,7 @@ QUESTS = {
         "type": "kill", "target": "void_imp", "count": 6,
         "requires": "void_crypt",
         "quest_points": 5,
-        "rewards": {"coins": 360, "xp": {"hitpoints": 200}, "items": [("super_strength_potion", 1), ("health_potion", 5)]},
+        "rewards": {"coins": 360, "items": [("super_strength_potion", 1), ("health_potion", 5)]},
     },
     "sanctum_apex": {
         "name": "Sanctum Apex",
@@ -2145,7 +2144,7 @@ QUESTS = {
         "quest_points": 8,
         "rewards": {
             "coins": 750,
-            "xp": {"hitpoints": 300, "attack": 200},
+            "xp": {"attack": 200},
             "items": [("super_attack_potion", 3), ("super_defence_potion", 3), ("health_potion", 10)],
         },
     },
@@ -2164,7 +2163,7 @@ MAGIC_ABILITIES = {
         "desc": "A crackling jolt of lightning.",
         "quest_points": 1,
         "effect": "lightning",
-        "damage": 8,
+        "damage": 4,
         "freeze": 0.0,
         "cooldown": 7.0,
     },
@@ -2173,7 +2172,7 @@ MAGIC_ABILITIES = {
         "desc": "Scorch the foe with a burst of flame.",
         "quest_points": 3,
         "effect": "fire",
-        "damage": 12,
+        "damage": 6,
         "freeze": 0.0,
         "cooldown": 9.0,
     },
@@ -2182,7 +2181,7 @@ MAGIC_ABILITIES = {
         "desc": "Ice roots — the enemy cannot strike for a short time.",
         "quest_points": 6,
         "effect": "freeze",
-        "damage": 4,
+        "damage": 2,
         "freeze": 2.4,
         "cooldown": 12.0,
     },
@@ -2191,7 +2190,7 @@ MAGIC_ABILITIES = {
         "desc": "A heavier lightning strike.",
         "quest_points": 9,
         "effect": "lightning",
-        "damage": 18,
+        "damage": 9,
         "freeze": 0.0,
         "cooldown": 11.0,
     },
@@ -2200,7 +2199,7 @@ MAGIC_ABILITIES = {
         "desc": "A whip of searing fire.",
         "quest_points": 15,
         "effect": "fire",
-        "damage": 24,
+        "damage": 12,
         "freeze": 0.0,
         "cooldown": 13.0,
     },
@@ -2209,7 +2208,7 @@ MAGIC_ABILITIES = {
         "desc": "Encased in ice — no attacks for several seconds.",
         "quest_points": 22,
         "effect": "freeze",
-        "damage": 10,
+        "damage": 5,
         "freeze": 3.6,
         "cooldown": 16.0,
     },
@@ -2218,7 +2217,7 @@ MAGIC_ABILITIES = {
         "desc": "Forked lightning that hits hard.",
         "quest_points": 30,
         "effect": "lightning",
-        "damage": 34,
+        "damage": 17,
         "freeze": 0.0,
         "cooldown": 14.0,
     },
@@ -2227,7 +2226,7 @@ MAGIC_ABILITIES = {
         "desc": "An eruption of combat fire magic.",
         "quest_points": 42,
         "effect": "fire",
-        "damage": 44,
+        "damage": 22,
         "freeze": 0.0,
         "cooldown": 17.0,
     },
@@ -2236,7 +2235,7 @@ MAGIC_ABILITIES = {
         "desc": "Biting cold — damage and a long freeze.",
         "quest_points": 55,
         "effect": "freeze",
-        "damage": 18,
+        "damage": 9,
         "freeze": 5.0,
         "cooldown": 20.0,
     },
@@ -2245,7 +2244,7 @@ MAGIC_ABILITIES = {
         "desc": "Storm and flame together — the pinnacle of quest magic.",
         "quest_points": 75,
         "effect": "lightning",
-        "damage": 58,
+        "damage": 29,
         "freeze": 1.8,
         "cooldown": 24.0,
     },
@@ -2258,12 +2257,12 @@ MAGIC_ABILITY_ORDER = (
 )
 
 XP_SKILLS = [
-    "attack", "strength", "defence", "hitpoints", "archery",
-    "woodcutting", "mining", "fishing", "cooking", "firemaking", "smithing", "fletching", "karma",
+    "attack", "strength", "defence", "archery",
+    "woodcutting", "mining", "fishing", "cooking", "smithing", "fletching", "karma",
 ]
 
-# Skills that contribute to combat level (classic RS melee/ranged formula, no prayer).
-COMBAT_SKILLS = ("attack", "strength", "defence", "hitpoints", "archery")
+# Trained combat skills. Hitpoints is derived and has no experience.
+COMBAT_SKILLS = ("attack", "strength", "defence", "archery")
 
 SKILL_DISPLAY_NAMES = {
     "attack": "Attack", "strength": "Strength", "defence": "Defence",
@@ -2509,14 +2508,14 @@ TRAVEL_DESTINATIONS = [
     {"id": "stonehaven", "kind": "place", "label": "Stonehaven City",
      "x": 118, "y": 74, "blurb": "Stone plazas & castle"},
     {"id": "emberdeep", "kind": "place", "label": "Emberdeep Volcano",
-     "x": 164, "y": 86, "blurb": "⚠ Lava dungeon — 8 floors · east of the city",
+     "x": 186, "y": 86, "blurb": "⚠ Lava dungeon — 8 floors · far east edge",
      "action": {"type": "ENTER_DUNGEON", "dungeon_id": "emberdeep"}},
     {"id": "mira_market", "kind": "place", "label": "Mira's Market",
      "x": 116, "y": 74, "blurb": "Food, potions & steel scraps"},
     {"id": "stonehaven_castle", "kind": "place", "label": "Castle Keep",
      "x": 128, "y": 66, "blurb": "Knights on patrol"},
     {"id": "dungeon_gate", "kind": "place", "label": "Dungeon Entrance",
-     "x": 46, "y": 81, "blurb": "Enter the depths"},
+     "x": 54, "y": 81, "blurb": "Enter the depths"},
     {"id": "dungeon_bank", "kind": "place", "label": "Dungeon Bank",
      "x": 38, "y": 84, "blurb": "Chest near the gate", "action": {"type": "BANK"}},
     {"id": "void_sanctum", "kind": "place", "label": "Void Sanctum",
@@ -2602,7 +2601,7 @@ INTERACTABLES = [
     {"id": "dungeon_bank", "kind": "bank", "name": "Dungeon Bank Chest", "x": 38, "y": 84,
      "variant": "chest"},
     {"id": "dungeon_entrance", "kind": "dungeon_entrance", "name": "Dungeon Entrance",
-     "x": 46, "y": 80, "enter_x": 46, "enter_y": 79, "exit_x": 46, "exit_y": 81,
+     "x": 54, "y": 80, "enter_x": 54, "enter_y": 79, "exit_x": 54, "exit_y": 81,
      "dungeon_id": "depths", "pack": "skeleton_crypt"},
     {"id": "queens_tree_hall_door", "kind": "flavour", "name": "Queen's Tree-Hall",
      "x": 8, "y": 85, "stand": [8, 86],
@@ -2621,7 +2620,7 @@ INTERACTABLES = [
      "x": 184, "y": 36, "blurb": "10 floors · clear each level · medal on completion",
      "dungeon_id": "tidehollow", "pack": "goblin_cave"},
     {"id": "emberdeep_mouth", "kind": "volcano_entrance", "name": "Emberdeep Crater",
-     "x": 164, "y": 84, "blurb": "8 lava floors · new beasts · Emberdeep Medal",
+     "x": 186, "y": 84, "blurb": "8 lava floors · new beasts · Emberdeep Medal",
      "dungeon_id": "emberdeep", "pack": "dragon_lair"},
 
     # --- Elder's Hall (cottage_nw) floor 5–14, 5–14 ---
@@ -2833,13 +2832,13 @@ INTERACTABLES = [
     {"id": "sign_quarry", "kind": "signpost", "name": "Quarry",
      "x": 30, "y": 92, "facing": "e", "lines": ["→ Mine"]},
     {"id": "sign_dungeon", "kind": "signpost", "name": "Dungeon",
-     "x": 41, "y": 82, "facing": "e", "lines": ["→ Dungeon"]},
+     "x": 47, "y": 82, "facing": "e", "lines": ["→ Dungeon"]},
     {"id": "sign_city", "kind": "signpost", "name": "Stonehaven",
      "x": 96, "y": 70, "facing": "e", "lines": ["→ Stonehaven"]},
     {"id": "sign_castle", "kind": "signpost", "name": "Castle",
      "x": 124, "y": 74, "facing": "n", "lines": ["↑ Castle"]},
     {"id": "sign_ember", "kind": "signpost", "name": "Emberdeep",
-     "x": 160, "y": 74, "facing": "e", "lines": ["→ Emberdeep"]},
+     "x": 170, "y": 74, "facing": "e", "lines": ["→ Emberdeep"]},
     {"id": "sign_sanctum", "kind": "signpost", "name": "Void Sanctum",
      "x": 168, "y": 99, "facing": "s", "lines": ["↓ Void Sanctum"]},
 ]
@@ -2938,8 +2937,8 @@ BUILDINGS = [
     {
         "id": "emberdeep_volcano", "name": "Emberdeep", "kind": "volcano", "style": 0,
         "material": "basalt",
-        "x0": 156, "y0": 60, "x1": 174, "y1": 72,
-        "floor_x0": 162, "floor_y0": 66, "floor_x1": 168, "floor_y1": 70,
+        "x0": 178, "y0": 60, "x1": 196, "y1": 72,
+        "floor_x0": 184, "floor_y0": 66, "floor_x1": 190, "floor_y1": 70,
     },
 ]
 

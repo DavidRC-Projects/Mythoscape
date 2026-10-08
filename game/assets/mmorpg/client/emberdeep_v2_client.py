@@ -17,11 +17,18 @@ import feature_flags
 import world_map as wm
 
 _PACK = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "emberdeep_v2_pack"))
-_APRON = (154, 58, 190, 94)  # inclusive world tiles
+_APRON = (176, 58, 198, 94)  # inclusive world tiles
 _IMAGES = {}
 _SCALED = {}
 _TEX = {}
 _FOV = math.radians(78)
+# Each step lifts the eye and opens the view. 100 is the normal camera.
+# The body size is not tied to these.
+_ZOOMS = (
+    {"back": 1.55, "horizon": 0.28, "z": 2.05, "fov": 78, "label": "100"},
+    {"back": 4.8, "horizon": 0.15, "z": 7.5, "fov": 120, "label": "40"},
+    {"back": 9.0, "horizon": 0.08, "z": 16.0, "fov": 145, "label": "15"},
+)
 
 
 def _map_size():
@@ -109,6 +116,86 @@ def blit_backdrop(client):
     client.screen.blit(scaled, clip.topleft, area=src)
 
 
+def zoom_level(client):
+    return max(0, min(len(_ZOOMS) - 1, int(getattr(client, "ember_zoom", 0) or 0)))
+
+
+def apply_zoom(client):
+    """Use the Emberdeep zoom step for this frame. The player sprite is unchanged."""
+    global _EYE_BACK, _HORIZON, _CAM_Z, _FOV
+    step = _ZOOMS[zoom_level(client)]
+    _EYE_BACK = step["back"]
+    _HORIZON = step["horizon"]
+    _CAM_Z = step["z"]
+    _FOV = math.radians(step["fov"])
+
+
+def adjust_zoom(client, delta):
+    """Match the world controls: delta < 0 zooms out."""
+    level = zoom_level(client)
+    if delta < 0:
+        level += 1
+    elif delta > 0:
+        level -= 1
+    set_zoom(client, level)
+
+
+def set_zoom(client, level):
+    import time
+    level = max(0, min(len(_ZOOMS) - 1, int(level)))
+    if getattr(client, "ember_zoom", None) == level:
+        return
+    client.ember_zoom = level
+    client._zoom_toast_until = time.time() + 1.2
+    apply_zoom(client)
+
+
+def zoom_label(client):
+    return f"Zoom {_ZOOMS[zoom_level(client)]['label']}%"
+
+
+def zoom_control_layout():
+    """Same corner as the world map: zoom out, each step, zoom in."""
+    main = sys.modules.get("__main__")
+    map_h = int(getattr(main, "MAP_H", 640))
+    bh = 26
+    gap = 4
+    y = map_h - bh - 10
+    x = 10
+    items = [(pygame.Rect(x, y, 28, bh), "out")]
+    x += 28 + gap
+    for level in range(len(_ZOOMS) - 1, -1, -1):
+        items.append((pygame.Rect(x, y, 36, bh), level))
+        x += 36 + gap
+    items.append((pygame.Rect(x, y, 28, bh), "in"))
+    return items
+
+
+def draw_zoom_controls(client):
+    import time
+    level = zoom_level(client)
+    for rect, action in zoom_control_layout():
+        active = action == level
+        fill = (72, 42, 28) if active else (28, 18, 16)
+        edge = (230, 150, 70) if active else (140, 90, 50)
+        pygame.draw.rect(client.screen, fill, rect, border_radius=5)
+        pygame.draw.rect(client.screen, edge, rect, 1, border_radius=5)
+        if action == "out":
+            label = "−"
+        elif action == "in":
+            label = "+"
+        else:
+            label = _ZOOMS[action]["label"]
+        text = client.font_tiny.render(label, True, (240, 220, 190))
+        client.screen.blit(text, (rect.centerx - text.get_width() // 2, rect.centery - text.get_height() // 2))
+    if time.time() < getattr(client, "_zoom_toast_until", 0):
+        ztxt = client.font_small.render(zoom_label(client), True, (240, 220, 190))
+        zr = pygame.Rect(10, 38, ztxt.get_width() + 16, 22)
+        pygame.draw.rect(client.screen, (28, 18, 16), zr, border_radius=6)
+        pygame.draw.rect(client.screen, (230, 150, 70), zr, 1, border_radius=6)
+        client.screen.blit(ztxt, (zr.x + 8, zr.y + 3))
+
+
 def _in_emberdeep(client):
     return bool(
         feature_flags.USE_EMBERDEEP_FIRST_PERSON
@@ -120,9 +207,10 @@ def _in_emberdeep(client):
 
 # Eye sits back and above the player, pitched down so the corridor is seen
 # from over their head. Horizon stays high; the body stays in the lower middle.
-_EYE_BACK = 1.55
-_HORIZON = 0.28
-_CAM_Z = 2.05
+# These are the active step. adjust_zoom writes them from _ZOOMS.
+_EYE_BACK = _ZOOMS[0]["back"]
+_HORIZON = _ZOOMS[0]["horizon"]
+_CAM_Z = _ZOOMS[0]["z"]
 # One key press turns the view this far. The player owns the yaw.
 _YAW_STEP = math.radians(15)
 
@@ -383,8 +471,9 @@ def _advance_camera(client, tiles, pose, now):
 def _eye(tiles, px, py, lx, ly):
     """Step back along the look until a wall."""
     ex, ey = px, py
-    for i in range(1, 9):
-        dist = _EYE_BACK * i / 8.0
+    steps = max(8, int(_EYE_BACK * 4))
+    for i in range(1, steps + 1):
+        dist = _EYE_BACK * i / steps
         nx, ny = px - lx * dist, py - ly * dist
         if _tile_at(tiles, int(nx), int(ny)) != wm.FLOOR:
             break
@@ -980,9 +1069,9 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
         projected = (along_p, psx, psy, ptile)
     along_p, psx, psy, ptile = projected
     player_sx = psx
-    # The high camera looks down on a smaller body so the room stays visible.
-    player_sy = min(mh - 8, psy + int(ptile * 0.28))
-    player_tile = max(16, int(ptile * 0.46))
+    # The eye stays above and behind. The body keeps a full size in the lower frame.
+    player_sy = min(mh - 8, max(psy, int(mh * 0.74)))
+    player_tile = max(ptile, int(mh * 0.11))
     bills.append((max(0.2, along_p), "player", psx, player_sy, player_tile, None))
     seen = {pose["key"]: (pose["x"], pose["y"])}
     floor = client.tiles or []
@@ -1045,7 +1134,7 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
             anchors[("p", pid)] = (sx, sy, tile_px)
             anchors[("p", str(pid))] = (sx, sy, tile_px)
             p = client.player or {}
-            client.draw_hp_bar(sx, sy - tile_px - 8, p.get("hp", 1), p.get("max_hp", 1))
+            client.draw_hp_bar(sx, sy - tile_px - 8, p.get("hp", 1), p.get("max_hp", 1), show_value=True)
             continue
         if kind == "pack_prop":
             import emberdeep_creatures_client
@@ -1351,6 +1440,7 @@ def draw_first_person(client):
     if not _in_emberdeep(client):
         client._ember_cam = None
         return False
+    apply_zoom(client)
     tiles, pose, ex, ey, lx, ly, rx, ry = _view(client, advance=True)
     if not tiles:
         return False
@@ -1376,7 +1466,10 @@ def draw_first_person(client):
         rdy = ly * math.cos(cam) + ry * math.sin(cam)
         dist, wx, wy, tex_u, side, step_x, step_y = _cast(tiles, ex, ey, rdx, rdy)
         depths[col] = dist
-        wall_h = min(rh, int(rh / max(0.2, dist)))
+        # A higher eye would still fill the screen with the nearest wall.
+        # Shrink that face with the lift so the floor and the hall beyond show.
+        wall_scale = (2.05 / max(2.05, _CAM_Z)) ** 0.55
+        wall_h = min(rh, int(rh / max(0.2, dist) * wall_scale))
         # Plant the wall on the raised camera's floor line instead of the horizon.
         floor_y = int(horizon * (1.0 + _CAM_Z / max(0.2, dist)))
         bot = min(rh - 1, max(horizon + 4, floor_y))
@@ -1389,7 +1482,6 @@ def draw_first_person(client):
             theme = _theme_at(client, tiles, face_x, face_y)
         wall_tex = _theme_tex(theme) if theme else _texture(wall_name)
         sconce = (face_x, face_y) in sconces
-        shade = 210 if sconce else (180 if (wx + wy) % 2 == 0 else 230)
         face_glow = 0.0
         if 0 <= face_y < len(glow) and 0 <= face_x < len(glow[0]):
             face_glow = glow[face_y][face_x]
@@ -1397,15 +1489,19 @@ def draw_first_person(client):
             if top <= y <= bot:
                 v = (y - top) / max(1, bot - top)
                 color = _sample(wall_tex, tex_u, v)
-                gray = (color.r + color.g + color.b) // 3
+                # Near stone is lit; the far face and the side grain fall off.
+                light = min(255, int(150 + 110 / max(0.4, dist)))
+                if side == 1:
+                    light = int(light * 0.78)
+                light = int(light * (0.72 + 0.28 * (1.0 - v)))
                 color = (
-                    min(255, (gray * 2 + color.r) // 3 * shade // 255),
-                    min(255, (gray * 2 + color.g) // 3 * shade // 255),
-                    min(255, (gray * 2 + color.b) // 3 * shade // 255)
+                    min(255, color.r * light // 200),
+                    min(255, color.g * light // 200),
+                    min(255, color.b * light // 200),
                 )
                 if sconce:
                     color = _candle(color, tex_u, v, flicker)
-                color = _warm(color, face_glow)
+                color = _warm(color, max(face_glow, 0.35 if sconce else face_glow))
             elif y < horizon:
                 row = (horizon - y) / max(1, horizon)
                 current = _CAM_Z / max(0.05, row)
@@ -1454,6 +1550,7 @@ def draw_first_person(client):
     scaled = pygame.transform.scale(view, (mw, mh))
     client.screen.blit(scaled, (0, 0))
     _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, mh)
+    draw_zoom_controls(client)
     return True
 
 
@@ -1468,6 +1565,7 @@ def pick_tile(client, mx, my):
     """Map a follow-view click onto a dungeon tile. None keeps the top-down picker."""
     if not _in_emberdeep(client):
         return None
+    apply_zoom(client)
     mw, mh = _map_size()
     if mx < 0 or my < 0 or mx >= mw or my >= mh:
         return None

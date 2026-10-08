@@ -26,7 +26,7 @@ EMBERDEEP_FLOORS = [
 DUNGEON_W, DUNGEON_H = 20, 16
 DUNGEON_SPAWN = (10, 13)
 # South of the volcano mouth (overworld)
-CAVE_RETURN = (164, 86)
+CAVE_RETURN = (186, 86)
 
 _FLOOR_VISUAL = {
     1: "magma_slug", 2: "magma_slug",
@@ -78,8 +78,8 @@ def floor_info(floor: int) -> dict:
 
 def scaled_monster_stats(level: int) -> dict:
     hp = max(18, int(level * 2.4))
-    att = max(5, int(level * 0.78))
-    strength = max(5, int(level * 0.80))
+    att = max(5, int(level * 0.78)) + 10
+    strength = max(5, int(level * 0.80)) + 10
     defence = max(4, int(level * 0.68))
     return {
         "level": level,

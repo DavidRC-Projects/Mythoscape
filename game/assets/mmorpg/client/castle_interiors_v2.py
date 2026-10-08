@@ -224,6 +224,118 @@ def stair_pad(plane, x, y):
     return min(near, key=lambda tile: abs(tile[0] - x) + abs(tile[1] - y))
 
 
+def _floor_stamp(key, tile, variant, color):
+    """One flagstone. Cached per theme, zoom, and shade."""
+    cache_key = ("floor", key, int(tile), int(variant), color)
+    cached = _CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    surf = pygame.Surface((tile, tile))
+    surf.fill(color)
+    mortar = tuple(max(0, channel - 32) for channel in color)
+    light = tuple(min(255, channel + 16) for channel in color)
+    pygame.draw.rect(surf, mortar, (0, 0, tile, tile), 1)
+    seed = variant * 97 + 13
+    for index in range(5):
+        px = 1 + (seed * (index + 3)) % max(1, tile - 2)
+        py = 1 + (seed * (index + 5) + variant * 11) % max(1, tile - 2)
+        surf.set_at((px, py), light if index % 2 == 0 else mortar)
+    _CACHE[cache_key] = surf
+    return surf
+
+
+def _shade(rgb, delta):
+    return tuple(max(0, min(255, channel + delta)) for channel in rgb[:3])
+
+
+def _stone_courses(surf, rect, wall):
+    """Front face: lit left edge, shaded courses, darker at the floor."""
+    mortar = _shade(wall, -32)
+    lit = _shade(wall, 22)
+    pygame.draw.rect(surf, wall, rect)
+    course = max(4, rect.h // 5)
+    row = 0
+    y = rect.y
+    while y < rect.bottom:
+        pygame.draw.line(surf, mortar, (rect.x, y), (rect.right - 1, y))
+        shift = course // 2 if row % 2 else 0
+        x = rect.x + shift
+        step = max(8, rect.w // 3)
+        while x < rect.right:
+            pygame.draw.line(surf, mortar, (x, y), (x, min(rect.bottom - 1, y + course)))
+            x += step
+        y += course
+        row += 1
+    pygame.draw.line(surf, lit, (rect.x, rect.y), (rect.right - 1, rect.y))
+    pygame.draw.line(surf, lit, (rect.x, rect.y), (rect.x, rect.bottom - 1))
+    pygame.draw.line(surf, mortar, (rect.right - 1, rect.y), (rect.right - 1, rect.bottom - 1))
+    shade = pygame.Surface((rect.w, max(3, rect.h // 5)), pygame.SRCALPHA)
+    for index in range(shade.get_height()):
+        alpha = int(70 * (index + 1) / shade.get_height())
+        pygame.draw.line(shade, (0, 0, 0, alpha), (0, index), (rect.w, index))
+    surf.blit(shade, (rect.x, rect.bottom - shade.get_height()))
+
+
+def _south_block(key, tile, wall, highlight, left_cap, right_cap):
+    """South face, a top plane, and a right end. Image bottom is the floor line.
+
+    The top shears up-right by the same amount on every tile so a run of
+    walls meets as one block. ``left_cap`` / ``right_cap`` mark the ends.
+    """
+    cache_key = ("wall3d", key, int(tile), bool(left_cap), bool(right_cap))
+    cached = _CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    depth = max(6, tile // 4)
+    shear = max(4, depth // 2)
+    height = tile
+    shadow = max(3, tile // 10)
+    surf = pygame.Surface((tile + shear, depth + height + shadow), pygame.SRCALPHA)
+    back_left = 0 if left_cap else shear
+    if right_cap:
+        # End plane shares the front's floor line so the cap sits on the ground.
+        side = [
+            (tile, depth),
+            (tile + shear, 1),
+            (tile + shear, depth + height),
+            (tile, depth + height),
+        ]
+        pygame.draw.polygon(surf, _shade(wall, -42), side)
+        pygame.draw.line(surf, _shade(wall, -58), (tile + shear, 1), (tile + shear, depth + height))
+    top = [(0, depth), (tile, depth), (tile + shear, 1), (back_left, 1)]
+    pygame.draw.polygon(surf, highlight, top)
+    pygame.draw.line(surf, _shade(highlight, 28), top[3], top[2])
+    pygame.draw.line(surf, _shade(wall, -24), top[0], top[1])
+    _stone_courses(surf, pygame.Rect(0, depth, tile, height), wall)
+    foot = pygame.Surface((tile, shadow), pygame.SRCALPHA)
+    for index in range(shadow):
+        alpha = int(100 * (1 - index / shadow))
+        pygame.draw.line(foot, (8, 6, 10, alpha), (0, index), (tile, index))
+    surf.blit(foot, (0, depth + height))
+    result = (surf, depth + height)
+    _CACHE[cache_key] = result
+    return result
+
+
+def _side_block(key, tile, wall, highlight, facing):
+    """East or west face of a wall that runs north–south. Exactly one tile tall."""
+    cache_key = ("wallside", key, int(tile), facing)
+    cached = _CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    thick = max(8, tile // 3)
+    body = wall if facing == "west" else _shade(wall, -16)
+    surf = pygame.Surface((thick, tile), pygame.SRCALPHA)
+    _stone_courses(surf, pygame.Rect(0, 0, thick, tile), body)
+    pygame.draw.line(surf, highlight, (0, 0), (thick - 1, 0))
+    if facing == "west":
+        pygame.draw.line(surf, _shade(highlight, 8), (0, 0), (0, tile - 1))
+    else:
+        pygame.draw.line(surf, _shade(wall, -40), (thick - 1, 0), (thick - 1, tile - 1))
+    _CACHE[cache_key] = surf
+    return surf
+
+
 def _prop_scale(kind):
     if kind in ("taper_candle", "candle", "torch_sconce", "crystal_sconce", "candelabra"):
         return 1.35
@@ -249,8 +361,18 @@ def _draw_furniture(screen, kind, sx, sy, tile, theme):
     pygame.draw.rect(screen, (40, 28, 18), body, 2)
 
 
+def _cell(rows, x, y):
+    if y < 0 or x < 0 or y >= len(rows) or x >= len(rows[y]):
+        return "#"
+    return rows[y][x]
+
+
+def _open_side(rows, x, y):
+    return _cell(rows, x, y) != "#"
+
+
 def queue_walls(client, draw_list, cam_x, cam_y, tile):
-    """Stone wall faces. Replaces the dungeon cone cliffs inside a keep."""
+    """Extruded stone. South faces show a top and end caps; side walls show depth."""
     plane = (client.dungeon or {}).get("plane") or ""
     floor = _floors().get(plane)
     if floor is None:
@@ -258,35 +380,53 @@ def queue_walls(client, draw_list, cam_x, cam_y, tile):
     tile = int(tile)
     rows = floor.get("rows") or []
     theme = _theme(plane)
+    key = _theme_key(plane)
+    wall, highlight = theme["wall"], theme["wall_hi"]
     vis_w = max(1, 900 // max(tile, 1)) + 2
     vis_h = max(1, 640 // max(tile, 1)) + 2
-    height = max(tile, int(tile * 1.35))
+
+    def _south_face(x, y):
+        return _cell(rows, x, y) == "#" and _open_side(rows, x, y + 1)
+
     for y, row in enumerate(rows):
         for x, ch in enumerate(row):
             if ch != "#":
                 continue
-            south = rows[y + 1][x] if y + 1 < len(rows) and x < len(rows[y + 1]) else "#"
-            if south == "#":
-                continue
             sx, sy = client.world_to_view_offset(x, y, cam_x, cam_y)
-            if not (-1 <= sx <= vis_w and -1 <= sy <= vis_h):
+            if not (-2 <= sx <= vis_w + 1 and -2 <= sy <= vis_h + 1):
                 continue
-            left = sx * tile + 1
-            width = tile - 2
             bottom = (sy + 1) * tile
-            top = bottom - height
+            if _south_face(x, y):
+                block, foot = _south_block(
+                    key, tile, wall, highlight,
+                    not _south_face(x - 1, y), not _south_face(x + 1, y),
+                )
+                left = sx * tile
+                top = bottom - foot
 
-            def _draw(left=left, top=top, width=width, height=height, theme=theme):
-                face = pygame.Rect(left, top, width, height)
-                pygame.draw.rect(client.screen, theme["wall"], face)
-                pygame.draw.rect(client.screen, theme["wall_hi"], (left, top, width, max(4, tile // 6)))
-                mortar = tuple(max(0, c - 18) for c in theme["wall"])
-                for i in range(1, 4):
-                    yy = top + i * height // 4
-                    pygame.draw.line(client.screen, mortar, (left + 2, yy), (left + width - 2, yy), 1)
-                pygame.draw.rect(client.screen, mortar, face, 1)
+                def _draw(left=left, top=top, block=block):
+                    client.screen.blit(block, (left, top))
 
-            draw_list.append((bottom, 1, _draw))
+                draw_list.append((bottom, 1, _draw))
+                continue
+            if _open_side(rows, x + 1, y):
+                block = _side_block(key, tile, wall, highlight, "east")
+                left = (sx + 1) * tile - block.get_width()
+                top = sy * tile
+
+                def _draw_east(left=left, top=top, block=block):
+                    client.screen.blit(block, (left, top))
+
+                draw_list.append((bottom, 1, _draw_east))
+            if _open_side(rows, x - 1, y):
+                block = _side_block(key, tile, wall, highlight, "west")
+                left = sx * tile
+                top = sy * tile
+
+                def _draw_west(left=left, top=top, block=block):
+                    client.screen.blit(block, (left, top))
+
+                draw_list.append((bottom, 1, _draw_west))
 
 
 def _hero_spots(floor, rows):
@@ -545,20 +685,29 @@ def draw(client, plane, cam_x, cam_y, tile):
                 continue
             rect = pygame.Rect(sx * tile, sy * tile, tile, tile)
             if ch == "#":
-                pygame.draw.rect(screen, theme["wall"], rect)
-                pygame.draw.rect(screen, theme["wall_hi"], (rect.x, rect.y, rect.w, max(2, tile // 8)))
+                screen.blit(_floor_stamp(_theme_key(plane) + "-top", tile, 1, theme["wall_hi"]), rect)
+                pygame.draw.line(screen, theme["wall"], (rect.x, rect.bottom - 2), (rect.right, rect.bottom - 1), 2)
                 continue
             if (x, y) in rugs:
                 col = theme["rug"]
+                variant = 0
             elif ch == "E":
                 col = (120, 168, 90)
+                variant = 1
             elif ch in "UV":
                 col = (70, 78, 96)
+                variant = 2
+            elif ch == "D":
+                base = theme["floor"][(x + y) % 3]
+                col = tuple(max(0, channel - 18) for channel in base)
+                variant = 3
             else:
                 col = theme["floor"][(x * 3 + y * 5) % 3]
-            pygame.draw.rect(screen, col, rect)
+                variant = (x * 3 + y * 5) % 3
+            screen.blit(_floor_stamp(_theme_key(plane), tile, variant, col), rect)
             if ch == "D":
-                pygame.draw.rect(screen, (230, 190, 60), rect.inflate(-4, -4), 2)
+                mortar = tuple(max(0, channel - 36) for channel in col)
+                pygame.draw.line(screen, mortar, (rect.x + 2, rect.bottom - 3), (rect.right - 3, rect.bottom - 3), 2)
 
     cluster = stair_tiles(plane)
     if cluster:
@@ -575,12 +724,24 @@ def draw(client, plane, cam_x, cam_y, tile):
                 sy * tile + tile - image.get_height(),
             ))
     font = getattr(client, "font_tiny", None)
-    if font:
+    player = getattr(client, "player", None)
+    if font and player:
+        if hasattr(client, "player_xy"):
+            px, py = client.player_xy()
+        else:
+            px, py = player.get("x", -1), player.get("y", -1)
+        px, py = int(px), int(py)
         for room in floor.get("rooms") or []:
             x0, y0, x1, y1 = room["rect"]
-            visible, sx, sy = _onscreen((x0 + x1) // 2, (y0 + y1) // 2)
-            if not visible:
+            if not (x0 <= px <= x1 and y0 <= py <= y1):
                 continue
-            text = font.render(room.get("name") or "", True, (255, 248, 230))
-            screen.blit(text, (sx * tile + tile // 2 - text.get_width() // 2, sy * tile))
+            name = room.get("name") or ""
+            if not name:
+                break
+            text = font.render(name, True, (255, 248, 230))
+            plaque = pygame.Rect(12, 12, text.get_width() + 16, text.get_height() + 8)
+            pygame.draw.rect(screen, (22, 18, 16), plaque)
+            pygame.draw.rect(screen, theme["wall_hi"], plaque, 1)
+            screen.blit(text, (plaque.x + 8, plaque.y + 4))
+            break
     return True

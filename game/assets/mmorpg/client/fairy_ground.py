@@ -40,8 +40,11 @@ def paving_variant(x, y):
 
 
 def hides_wall(x, y):
-    """True when this WALL is a fairy building or fountain footprint."""
-    return f"{x},{y}" in _under()
+    """True when this WALL is a fairy footprint or a picket, not a cave wall."""
+    if f"{x},{y}" in _under():
+        return True
+    import fairy_village
+    return fairy_village.is_fence(x, y)
 
 
 def _zone():
@@ -164,6 +167,119 @@ def _edge_mask(client, wx, wy):
         if bits & bit and (bits & a or bits & b):
             bits &= ~bit
     return bits
+
+
+def _paint_named(client, rect, name, variant):
+    tile = rect.w
+    src = _source_px(tile)
+    path = os.path.join(_DIR, "tiles", f"{name}_v{variant}_{src}.png")
+    image = _scaled(path, tile, False)
+    if image is None:
+        return False
+    client.screen.blit(image, rect.topleft)
+    return True
+
+
+def _fence_kind(x, y):
+    import fairy_village
+    cells = fairy_village.fence_cells()
+    horizontal = (x - 1, y) in cells or (x + 1, y) in cells
+    vertical = (x, y - 1) in cells or (x, y + 1) in cells
+    if horizontal and vertical:
+        return "post"
+    if vertical:
+        return "v"
+    return "h"
+
+
+def _pickets(tile, kind):
+    key = ("picket", tile, kind)
+    image = _IMAGES.get(key)
+    if image is not None:
+        return image
+    surf = pygame.Surface((tile, tile), pygame.SRCALPHA)
+    white = (252, 250, 244, 255)
+    shade = (176, 186, 198, 255)
+    rail = (244, 246, 248, 255)
+    shadow = (30, 48, 36, 80)
+    point = max(3, tile // 8)
+    board = max(2, tile // 12)
+    if kind == "v":
+        count = 3 if tile >= 24 else 2
+        pw = max(2, tile // 9)
+        ph = max(7, tile // 4)
+        pygame.draw.ellipse(surf, shadow, (tile // 4, tile // 8, tile // 2, tile - tile // 6))
+        for i in range(count):
+            cy = int((i + 0.65) * tile / count)
+            top = cy - ph
+            pygame.draw.polygon(surf, white, [
+                (tile // 2 - pw, cy),
+                (tile // 2 + pw, cy),
+                (tile // 2 + pw, top + 3),
+                (tile // 2, top),
+                (tile // 2 - pw, top + 3),
+            ])
+            pygame.draw.line(surf, shade, (tile // 2, top), (tile // 2 + pw, cy))
+        pygame.draw.line(
+            surf, rail,
+            (tile // 2 + pw + 1, tile // 8),
+            (tile // 2 + pw + 1, tile - tile // 8),
+            max(2, tile // 14),
+        )
+    elif kind == "post":
+        pygame.draw.ellipse(surf, shadow, (tile // 4, tile // 2, tile // 2, max(3, tile // 6)))
+        cx, top, bot = tile // 2, tile // 5, int(tile * 0.78)
+        pygame.draw.polygon(surf, white, [
+            (cx - board - 1, bot),
+            (cx + board + 1, bot),
+            (cx + board + 1, top + 3),
+            (cx, top),
+            (cx - board - 1, top + 3),
+        ])
+        pygame.draw.line(surf, rail, (tile // 6, bot - point), (tile - tile // 6, bot - point), max(2, tile // 14))
+        pygame.draw.line(surf, shade, (cx, top), (cx + board, bot))
+    else:
+        base = int(tile * 0.70)
+        top = int(tile * 0.36)
+        pygame.draw.ellipse(surf, shadow, (1, base - 1, tile - 2, max(3, tile // 7)))
+        count = 5 if tile >= 24 else 4
+        span = tile - 4
+        for i in range(count):
+            cx = 2 + int((i + 0.5) * span / count)
+            pygame.draw.polygon(surf, white, [
+                (cx - board, base),
+                (cx + board, base),
+                (cx + board, top + 3),
+                (cx, top),
+                (cx - board, top + 3),
+            ])
+            pygame.draw.line(surf, shade, (cx, top), (cx + board, base))
+        rail_y = base - board - 1
+        thick = max(2, tile // 14)
+        pygame.draw.line(surf, rail, (1, rail_y), (tile - 2, rail_y), thick)
+        pygame.draw.line(surf, rail, (1, rail_y - thick - 1), (tile - 2, rail_y - thick - 1), max(1, thick - 1))
+    _IMAGES[key] = surf
+    return surf
+
+
+def draw_fence(client, rect, wx, wy):
+    """White pickets on the glade border. False when this tile is not a fence."""
+    if client.dungeon:
+        return False
+    import fairy_village
+    if not fairy_village.is_fence(wx, wy):
+        return False
+    x0, y0, x1, y1 = _zone()
+    if x0 <= wx <= x1 and y0 <= wy <= y1:
+        if not _paint_named(client, rect, "fairy_moss", fairy_variant(wx, wy)):
+            import procedural_sprites_finished as sprites
+            sprites.draw_grass(client.screen, rect, wx, wy)
+    else:
+        import procedural_sprites_finished as sprites
+        sprites.draw_grass(client.screen, rect, wx, wy)
+    image = _pickets(rect.w, _fence_kind(wx, wy))
+    client.screen.blit(image, rect.topleft)
+    return True
 
 
 def draw_tile(client, rect, tile_id, wx, wy):

@@ -16,7 +16,7 @@ REGIONS = {
         "name": "The Depths",
         "label": "Dungeon",
         "x0": 44, "y0": 54, "x1": 90, "y1": 143,
-        "pad": (44, 79, 48, 83),
+        "pad": (52, 79, 56, 83),
         "entrance": (46, 71),
     },
     "sanctum": {
@@ -84,6 +84,8 @@ def capture_and_hide(grid) -> None:
                 if _in_rect(x, y, spec["pad"]):
                     continue
                 grid[y][x] = GRASS
+    import fairy_village
+    fairy_village.lay_crypt_path(grid)
 
 
 def _open_entrance_lane(tiles, door_x, door_y):
