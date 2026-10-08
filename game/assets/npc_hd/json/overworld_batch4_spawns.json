@@ -1,0 +1,61 @@
+{
+ "plane": "overworld",
+ "pack": "harbourreach_stonehaven_batch4",
+ "note": "World xy stay as in content.py (do not move tiles). Ids/names must match existing NPC spawn system \u2014 swap art only / HD blit path like Fairy Village. No feature flags; remove old sprites/registrations for these ids.",
+ "npcs": [
+  {
+   "id": "tackle_merchant",
+   "name": "Marina the Angler",
+   "sex": "F",
+   "role": "harbour tackle merchant / angler",
+   "facing": "s",
+   "look": "sea-green oilskin, straw angler hat, fishing rod, tackle pouch",
+   "xy_note": "keep content.py x,y (177,9)"
+  },
+  {
+   "id": "fishmonger_kai",
+   "name": "Fishmonger Kai",
+   "sex": "M",
+   "role": "harbour fishmonger",
+   "facing": "s",
+   "look": "slate-blue shirt, brown trousers, stained off-white bib apron, tall boots, trimmed beard, cleaver, fish tray on forearm",
+   "xy_note": "keep content.py x,y (177,23)"
+  },
+  {
+   "id": "harbour_cook",
+   "name": "Cook Nell",
+   "sex": "F",
+   "role": "harbour cook",
+   "facing": "s",
+   "look": "terracotta cook dress, white kitchen apron, kerchief, ladle \u2014 distinct from Marina",
+   "xy_note": "keep content.py x,y (174,23)"
+  },
+  {
+   "id": "herald_rowan",
+   "name": "Herald Rowan",
+   "sex": "M",
+   "role": "Stonehaven herald",
+   "facing": "s",
+   "look": "crimson/gold formal tabard, banner staff, scroll case",
+   "xy_note": "keep content.py x,y (130,63)"
+  },
+  {
+   "id": "city_vendor_mira",
+   "name": "Mira the Vendor",
+   "sex": "F",
+   "role": "Stonehaven market vendor",
+   "facing": "s",
+   "look": "amber market dress, green stall apron, red neckerchief, bread basket + travel kit",
+   "xy_note": "keep content.py x,y (116,74)"
+  },
+  {
+   "id": "packer_nell",
+   "name": "Packer Nell",
+   "sex": "F",
+   "role": "bag / packing shop keeper",
+   "facing": "s",
+   "look": "indigo laced kirtle over oatmeal shirt, tan leather half-apron, cross-body satchel, twine coil, sack bundle on back, carried sack, copper braid \u2014 distinct from Cook Nell (kerchief/white apron) and Mira (amber/green)",
+   "xy_note": "keep content.py x,y (stands near shopkeeper_joe) \u2014 do not move"
+  }
+ ]
+}
