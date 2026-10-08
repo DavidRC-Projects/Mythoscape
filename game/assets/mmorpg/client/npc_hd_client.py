@@ -44,6 +44,12 @@ OVERWORLD_HD = {
     "mythos_knight_2",
     "mythos_knight_3",
     "mythos_knight_4",
+    "tackle_merchant",
+    "fishmonger_kai",
+    "harbour_cook",
+    "herald_rowan",
+    "city_vendor_mira",
+    "packer_nell",
 }
 
 _IMAGES = {}

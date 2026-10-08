@@ -129,10 +129,7 @@ ROCK_LOOK = {
     "mithril_rock": ((70, 140, 180), (120, 200, 240)),
     "adamantite_rock": ((50, 140, 90), (100, 220, 140)),
 }
-ROBED_NPC_IDS = {
-    "elder_miriam", "priest_cedric", "monk_healer", "mysterious_traveler",
-    "herald_rowan",
-}
+ROBED_NPC_IDS = set()
 ORE_LABEL_COLORS = {
     "copper_rock": (255, 170, 90),
     "tin_rock": (200, 210, 230),
@@ -5583,10 +5580,7 @@ class GameClient(ScreensMixin, CameraYaw):
                       if hint and hint[0] == "npc" and hint[1] == n["id"]:
                           self.blit_action_hint(hint[2], cx, ny - 48, hint[3])
                       return
-                  if n["id"] == "herald_rowan":
-                      body, skin, hair = (148, 36, 48), (235, 195, 150), (70, 50, 40)
-                  elif n["id"] == "city_vendor_mira":
-                      body, skin, hair = (70, 110, 150), (230, 185, 145), (90, 55, 35)
+                  # Fallback: draw procedural humanoid for any NPCs not in fairy/HD sets
                   sprites.draw_humanoid_detailed(
                       self.screen, cx, cy, TILE, body, skin, hair,
                       robe=n["id"] in ROBED_NPC_IDS, t=t, facing=face, moving=mov,
