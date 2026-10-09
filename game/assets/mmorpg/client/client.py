@@ -215,6 +215,8 @@ class GameClient(ScreensMixin, CameraYaw):
         self.monsters = {}   # id -> public state
         self.knight_hit_at = {}  # HD knight hit reactions (monster_id -> time)
         self.knight_corpses = []  # HD knight death animations [{type, x, y, facing, t0}]
+        self.player_hit_at = {}  # HD player hit reactions (player_id -> time)
+        self.player_death_at = {}  # HD player death animations (player_id -> time)
         self.pets = []       # list of pet public states
         self.ground_items = {}
         self.player = None   # full state dict (self)
@@ -691,6 +693,11 @@ class GameClient(ScreensMixin, CameraYaw):
                             "t0": time.time(),
                         })
             
+            # HD player death animation tracking
+            if msg.get("entity_kind") == "player":
+                pid = msg.get("entity_id")
+                self.player_death_at[pid] = time.time()
+            
             if msg.get("entity_kind") == "monster" and msg.get("entity_id") == self.combat_target_id:
                 self.combat_target_id = None
                 self.combat_rounds = 0
@@ -973,6 +980,10 @@ class GameClient(ScreensMixin, CameraYaw):
                 import knights_hd_client
                 if knights_hd_client.handles(defender.get("type")):
                     self.knight_hit_at[def_id] = now + strike_t * anim_secs
+        
+        # HD player hit reaction tracking
+        if kind == "monster_hits_player" and did_hit and msg.get("damage", 0) > 0:
+            self.player_hit_at[def_id] = now + strike_t * anim_secs
         
         self.attack_anims[anim_key] = now + anim_secs
         self.attack_anim_kind[anim_key] = "ranged" if ranged else "melee"
@@ -5913,14 +5924,35 @@ class GameClient(ScreensMixin, CameraYaw):
                         cy -= castle_sprites.lift_px(p["x"], p["y"], TILE)
                     if is_self and time.time() < self.level_up_until:
                         self.draw_level_up_glow(cx, cy, time.time())
-                    sprites.draw_humanoid_detailed(
-                        self.screen, cx, cy, TILE, body, skin, hair,
-                        weapon=weapon_style(eq.get("weapon")),
-                        shield=bool(eq.get("shield")),
-                        moving=mov, t=t, facing=face,
-                        equipment=eq, attacking=atk, action=action,
-                        gender=gender,
+                    # HD player rendering (wrap draw_humanoid_detailed)
+                    hd_on = (self.player or {}).get("hd_player", True)
+                    appearance = p.get("appearance") or (
+                        {"skin": "skin_light", "hair": "hair_side_part" if gender == "male" else "hair_ponytail",
+                         "hair_colour": "dark_brown", "top": "top_linen_shirt",
+                         "bottom": "bottom_work_trousers" if gender == "male" else "bottom_long_skirt",
+                         "shoes": "shoes_leather", "outfit": None, "accessories": []}
                     )
+                    hit_t = t - self.player_hit_at.get(p["id"], t - 999)
+                    death_t = t - self.player_death_at.get(p["id"], t - 999)
+                    drawn = False
+                    if hd_on:
+                        import player_hd_client
+                        anim = "melee" if atk > 0 and not action else (action or ("walk" if mov else "idle"))
+                        drawn = player_hd_client.draw_player(
+                            self.screen, gender, appearance, cx, cy + TILE // 2, TILE, t,
+                            anim=anim, progress=atk if atk > 0 else None, facing=face,
+                            hit_t=hit_t if 0 <= hit_t < 0.36 else -1.0,
+                            death_t=death_t if 0 <= death_t < 1.2 else -1.0,
+                        )
+                    if not drawn:
+                        sprites.draw_humanoid_detailed(
+                            self.screen, cx, cy, TILE, body, skin, hair,
+                            weapon=weapon_style(eq.get("weapon")),
+                            shield=bool(eq.get("shield")),
+                            moving=mov, t=t, facing=face,
+                            equipment=eq, attacking=atk, action=action,
+                            gender=gender,
+                        )
                     if action and gather:
                         self.draw_gather_fx(cx, cy, action, gather, t, face)
                     ny, hy = self.entity_anchor(cx, cy, "character")
