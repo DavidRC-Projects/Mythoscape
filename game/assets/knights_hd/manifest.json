@@ -1,0 +1,36 @@
+{
+ "pack": "Mythoscape HD attackable knights",
+ "built": "2026-10-08 (Europe/London)",
+ "target_branch": "main",
+ "install_dir": "game/assets/knights_hd/",
+ "monsters": [
+  "knight",
+  "shadow_knight",
+  "knight_captain_vorn",
+  "barrow_knight",
+  "sir_aldric",
+  "magma_knight"
+ ],
+ "feature_flag": null,
+ "feature_flag_policy": "NO feature flags - always on; remove old tint/visual sharing + old knight sprite/procedural code for these ids",
+ "start_here": [
+  "KNIGHTS_HD_CURSOR_PROMPT.md",
+  "NOTES_KNIGHTS_HD.md",
+  "previews/knights_hd_contact_sheet.png",
+  "previews/knights_hd_lineup_grey.png"
+ ],
+ "protect_never_edit": [
+  "pose_walk",
+  "rs_style.py",
+  "rs_humanoid.py",
+  "rs_humanoid_v2.py",
+  "tools/walk_proof.py",
+  "draw_humanoid",
+  "draw_humanoid_detailed"
+ ],
+ "tile_px": {
+  "1x": 40,
+  "2x": 80,
+  "4x": 160
+ }
+}

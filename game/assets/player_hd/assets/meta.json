@@ -1,0 +1,191 @@
+{
+ "version": 1,
+ "look": "Cycles, AgX Medium High Contrast, ortho camera 30 deg elevation; matches assets/npc_hd",
+ "px_per_m": {
+  "1x": 43.9,
+  "2x": 87.8,
+  "4x": 175.6
+ },
+ "tile_px_1x": 40,
+ "canvas": {
+  "1x": [
+   144,
+   144
+  ],
+  "2x": [
+   288,
+   288
+  ],
+  "4x": [
+   576,
+   576
+  ]
+ },
+ "feet_px": {
+  "1x": [
+   72,
+   124
+  ],
+  "2x": [
+   144,
+   248
+  ],
+  "4x": [
+   288,
+   496
+  ]
+ },
+ "canvas_note": "same px-per-metre, 30 deg camera and feet-anchor convention as assets/npc_hd (NPC 2x canvas 192x256 feet 96,236). The player canvas is wider/taller only so weapon reach, bow, rod and the death fall are not clipped; blit with feet_px exactly like NPCs and the figure lands on the same ground point / tile footprint (1 tile = 40 px at 1x = 0.91 m).",
+ "anchors_file": "anchors.json (per sex/anim/facing/frame: head_top, chest, hand_R, hand_L, weapon tip; 2x px, 1x = /2, 4x = x2, w: x' = canvas_w - x)",
+ "path": "{sex}/{scale}/{layer}/{anim}_{facing}.png  (+ {anim}_{facing}_tint.png for tintable parts)",
+ "strip": "frames laid left->right, each frame = canvas width; 4x holds idle frame 0 only (creator / shop / wardrobe preview)",
+ "facings": {
+  "s": "front (game facing 'front')",
+  "e": "game facing 1",
+  "w": "game facing -1 = horizontal flip of e",
+  "n": "back (game facing 'back')"
+ },
+ "anims": {
+  "idle": {
+   "frames": 8,
+   "facings": [
+    "s",
+    "e",
+    "n"
+   ],
+   "loop": true,
+   "runtime": "frame = int(((t / math.pi) % 1.0) * 8)   # pose_idle breath sin(t*2.0) period = pi s"
+  },
+  "walk": {
+   "frames": 8,
+   "facings": [
+    "s",
+    "e",
+    "n"
+   ],
+   "loop": true,
+   "runtime": "frame = int(((t * 1.15) % 1.0) * 8)      # pose_walk cadence TAU*1.15"
+  },
+  "melee": {
+   "frames": 10,
+   "facings": [
+    "e"
+   ],
+   "loop": false,
+   "runtime": "frame = last i with MELEE_P[i] <= progress   # pose_attack progress over ATTACK_ANIM_SECS=1.05; frame 4 = contact at 0.48 = client strike_t (hitsplat)"
+  },
+  "ranged": {
+   "frames": 8,
+   "facings": [
+    "e"
+   ],
+   "loop": false,
+   "runtime": "frame = last i with RANGED_P[i] <= progress  # pose_ranged over RANGED_ANIM_SECS=0.72; frame 5 = release at 0.55 = arrow spawn"
+  },
+  "chop": {
+   "frames": 8,
+   "facings": [
+    "e"
+   ],
+   "loop": true,
+   "runtime": "frame = int(((t * 1.1) % 1.0) * 8)       # pose_chop ph = (t*1.1)%1"
+  },
+  "mine": {
+   "frames": 8,
+   "facings": [
+    "e"
+   ],
+   "loop": true,
+   "runtime": "frame = int(((t * 1.05) % 1.0) * 8)      # pose_mine ph = (t*1.05)%1"
+  },
+  "fish": {
+   "frames": 8,
+   "facings": [
+    "e"
+   ],
+   "loop": true,
+   "runtime": "frame = int(((t * 0.55) % 1.0) * 8)      # pose_fish ph = t*TAU*0.55"
+  },
+  "hit": {
+   "frames": 4,
+   "facings": [
+    "s",
+    "e",
+    "n"
+   ],
+   "loop": false,
+   "runtime": "NEW (2D has none): frame = min(3, int(u * 4)), u = (now - splat_show_at) / 0.36; only when not attacking/moving"
+  },
+  "death": {
+   "frames": 8,
+   "facings": [
+    "s",
+    "e",
+    "n"
+   ],
+   "loop": false,
+   "runtime": "NEW (2D has none): frame = min(7, int(u * 8)), u = (now - death_at) / 1.2, then hold frame 7 until respawn"
+  }
+ },
+ "sample_progress": {
+  "melee": [
+   0.0,
+   0.1,
+   0.22,
+   0.34,
+   0.48,
+   0.55,
+   0.62,
+   0.71,
+   0.8,
+   0.91
+  ],
+  "ranged": [
+   0.0,
+   0.12,
+   0.24,
+   0.36,
+   0.48,
+   0.55,
+   0.72,
+   0.86
+  ]
+ },
+ "combat_sync": {
+  "melee_contact_frame": 4,
+  "melee_contact_progress": 0.48,
+  "client_strike_t_melee": 0.48,
+  "ranged_release_frame": 5,
+  "ranged_release_progress": 0.55,
+  "client_arrow_spawn": 0.55,
+  "client_strike_t_ranged": 0.58,
+  "server_swing_interval_s": 1.2,
+  "attack_anim_s": 1.05,
+  "ranged_anim_s": 0.72,
+  "tick_s": 0.6,
+  "rule": "frame = last index i with sample_progress[i] <= progress, so the contact / release frame is on screen exactly when the client releases the hitsplat / spawns the arrow. Timing values are read from the client; nothing here changes them."
+ },
+ "anim_notes": "frames are chosen from the SAME t / progress the 2D code uses (rs_style.resolve_pose inputs). Movement, speed, tile stepping and timing are untouched; HD only swaps the drawing. melee/ranged/chop/mine/fish exist for e only because the 2D game always shows combat & skilling in side profile.",
+ "compose": "sort the player's visible layers by z[facing] and blit at (cx - feet_x, cy_feet - feet_y). For a tintable layer blit '<name>.png' then a copy of '<name>_tint.png' multiplied by the colour (hair palette / tier tint).",
+ "shadow_layer": "shadow (draw first; same frame index as the body)",
+ "body_layers": [
+  "body_light",
+  "body_tan",
+  "body_deep"
+ ],
+ "always": [
+  "shadow",
+  "body_<skin>",
+  "brows"
+ ],
+ "fx_swing": {
+  "path": "{sex}/{scale}/fx_swing_{weapon_layer}/melee_e.png",
+  "z": {
+   "e": 91,
+   "w": 91
+  },
+  "frames": "10, same index as melee; only frame 4 (contact) and 5 (trail) have pixels",
+  "note": "optional additive-looking motion highlight drawn just above the weapon; mirror for w like every e strip. Purely visual."
+ },
+ "hair_sway": "long hair, ponytail and braid carry a baked follow-through offset per frame (walk bounce, melee lag/whip, hit snap). Nothing to do at runtime."
+}
