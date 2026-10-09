@@ -3958,13 +3958,6 @@ async def handle_update_appearance(session, msg):
     session.row = WORLD.db.get_player_by_id(session.player_id)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     await broadcast_player_state(session)
-        return
-    session.activate_pet(pet_id)
-    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
-    await send(session.ws, "CHAT_MSG", **{
-        "from": "Pets",
-        "text": f"You switch to your {PETS[pet_id]['name']}.",
-    })
 
 
 async def handle_shop_buy(session, msg):
@@ -5218,6 +5211,10 @@ async def handler(ws):
                 await handle_shop_sell(session, msg)
             elif mtype == "SET_PET":
                 await handle_set_pet(session, msg)
+            elif mtype == "TOGGLE_HD_PLAYER":
+                await handle_toggle_hd_player(session, msg)
+            elif mtype == "UPDATE_APPEARANCE":
+                await handle_update_appearance(session, msg)
             elif mtype == "EQUIP":
                 await handle_equip(session, msg)
             elif mtype == "UNEQUIP":
