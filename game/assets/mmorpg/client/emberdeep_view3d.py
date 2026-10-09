@@ -69,9 +69,7 @@ class EmberView3D:
         self.tex_base = t("wall_base_trim.png")
         self.tex_cap = t("wall_cap_trim.png")
         self.tex_lava = t("lava_flow.png")
-        door = os.path.normpath(os.path.join(
-            os.path.dirname(__file__), "..", "..", "emberdeep_v2_pack", "fp", "door_boss.png",
-        ))
+        door = os.path.join(tex_dir, "door_boss.png")
         self.tex_door = _load_rgb(door) if os.path.isfile(door) else None
         self.boss_door = boss_door
         # per-cell wall material: 0/1 stone variants, 2 lava-veined, 3 boss door
