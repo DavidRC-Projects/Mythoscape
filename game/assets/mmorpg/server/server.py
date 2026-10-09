@@ -849,8 +849,22 @@ class PlayerSession:
                 appearance = json.loads(raw)
             except Exception:
                 appearance = None
-        # None means this character has never chosen a look. The client opens
-        # the creator. Do not invent a saved appearance here.
+        # None is only for a brand-new account. That is what opens the creator.
+        # Anyone who already spent their stat points gets a look in the payload
+        # only — nothing is written back to the database.
+        if appearance is None and self.stats_allocated:
+            if self.gender == "female":
+                appearance = {
+                    "skin": "skin_light", "hair": "hair_ponytail", "hair_colour": "chestnut",
+                    "top": "top_linen_shirt", "bottom": "bottom_long_skirt", "shoes": "shoes_leather",
+                    "outfit": None, "accessories": [],
+                }
+            else:
+                appearance = {
+                    "skin": "skin_light", "hair": "hair_side_part", "hair_colour": "dark_brown",
+                    "top": "top_linen_shirt", "bottom": "bottom_work_trousers", "shoes": "shoes_leather",
+                    "outfit": None, "accessories": [],
+                }
         return appearance
 
     def public_state(self):

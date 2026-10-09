@@ -6027,12 +6027,18 @@ class GameClient(ScreensMixin, CameraYaw):
                     drawn = False
                     if hd_on:
                         import player_hd_client
-                        anim = "melee" if atk > 0 and not action else (action or ("walk" if mov else "idle"))
+                        weapon_id = (eq or {}).get("weapon") or ""
+                        ranged = self.attack_anim_kind.get(p["id"]) == "ranged" or "bow" in str(weapon_id)
+                        if atk > 0 and not action:
+                            anim = "ranged" if ranged else "melee"
+                        else:
+                            anim = action or ("walk" if mov else "idle")
                         drawn = player_hd_client.draw_player(
                             self.screen, gender, appearance, cx, cy + TILE // 2, int(round(TILE * 1.1)), t,
                             anim=anim, progress=atk if atk > 0 else None, facing=face,
                             hit_t=hit_t if 0 <= hit_t < 0.36 else -1.0,
                             death_t=death_t if 0 <= death_t < 1.2 else -1.0,
+                            equipment=eq,
                         )
                     if not drawn:
                         sprites.draw_humanoid_detailed(
