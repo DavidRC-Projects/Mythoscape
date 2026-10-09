@@ -69,7 +69,18 @@ def _pose_name(facing):
 def _frame(creature_id, facing, breathing):
     pose = _pose_name(facing)
     if creature_id == "emberdeep_wyrm":
-        # The wyrm stays facing south. The breath uses the front sheet.
+        side = facing in ("east", "west") or facing in (1, -1)
+        try:
+            side = side or float(facing) != 0
+            west = facing == "west" or float(facing) < 0
+        except (TypeError, ValueError):
+            west = facing == "west"
+        if side or west:
+            name = "fire_breath_side.png" if breathing else "idle_side.png"
+            img = _load(os.path.join("emberdeep_wyrm", name))
+            if west:
+                img = pygame.transform.flip(img, True, False)
+            return img
         name = "fire_breath_front.png" if breathing else "idle_front.png"
         return _load(os.path.join("emberdeep_wyrm", name))
     return _load(os.path.join(creature_id, f"{pose}.png"))
@@ -139,6 +150,9 @@ def draw_creature(screen, creature_id, cx, cy, tile, facing=1, breathing=False, 
         rock = 0.0
         sway = int(strike * max(3, tile * 0.08))
     height = creature_height(creature_id, tile)
+    if moving and creature_id == "emberdeep_wyrm":
+        bob = int(abs(math.sin(now * 2.2)) * height * 0.03)
+        sway = int(math.sin(now * 1.4) * tile * 0.03)
     _blit(screen, img, cx + sway, cy - bob, height, squash, rock)
     return True
 

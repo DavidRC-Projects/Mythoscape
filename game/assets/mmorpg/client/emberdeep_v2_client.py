@@ -540,16 +540,13 @@ def _cone_spots(monster):
 
 
 def wyrm_swing_tiles(monster):
-    """Breath tiles, plus one step to either side. Matches the server."""
-    spots = _cone_spots(monster)
-    if not spots:
-        return spots
-    xs = [p[0] for p in spots]
-    lo, hi = min(xs), max(xs)
-    for y in {p[1] for p in spots}:
-        spots.add((lo - 1, y))
-        spots.add((hi + 1, y))
-    return spots
+    """Breath tiles plus the ring around the body. Matches the server."""
+    import emberdeep_creatures
+    ax, ay = int(monster["x"]), int(monster["y"])
+    return emberdeep_creatures.swing_tiles(
+        monster.get("cone_tiles") or [],
+        emberdeep_creatures.footprint(ax, ay),
+    )
 
 
 def wyrm_approach_goals(monster):
@@ -560,12 +557,27 @@ def wyrm_approach_goals(monster):
 
 
 def _sprite_world(monster):
-    """Feet of a billboard. The wyrm is drawn in the open floor, not on the back wall."""
-    x = monster["x"] + 0.5
-    y = monster["y"] + 0.5
-    if monster.get("type") == "emberdeep_wyrm":
-        y += 1.55
-    return x, y
+    """Feet of a billboard."""
+    return monster["x"] + 0.5, monster["y"] + 0.5
+
+
+def _wyrm_glide(client, monster, now):
+    """Slide the wyrm between server tiles over one tick."""
+    glides = getattr(client, "_wyrm_glide", None)
+    if not isinstance(glides, dict):
+        glides = {}
+        client._wyrm_glide = glides
+    tile = (int(monster["x"]), int(monster["y"]))
+    rec = glides.get(monster["id"])
+    if rec is None or rec.get("tile") != tile:
+        origin = rec["pos"] if rec else (tile[0] + 0.5, tile[1] + 0.5)
+        rec = {"tile": tile, "from": origin, "t0": now}
+        glides[monster["id"]] = rec
+    u = min(1.0, (now - rec["t0"]) / 0.6)
+    x = rec["from"][0] + (tile[0] + 0.5 - rec["from"][0]) * u
+    y = rec["from"][1] + (tile[1] + 0.5 - rec["from"][1]) * u
+    rec["pos"] = (x, y)
+    return x, y, u < 1.0
 
 
 def _open_between(tiles, x0, y0, x1, y1):
@@ -978,6 +990,8 @@ def _draw_monster_sprite(client, m, cx, cy, tile_px, t, face, moving, atk, playe
     import time
     import emberdeep_creatures_client
     breathing = time.time() < (getattr(client, "ember_cone", None) or {}).get("until", 0)
+    if m.get("type") == "emberdeep_wyrm" and m.get("facing"):
+        face = m["facing"]
     if moving and m.get("type") in _LEGS:
         step_x, step_y = _stride(_LEGS[m["type"]], t, ts, face)
         cx += step_x
@@ -1179,7 +1193,6 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
     t = time.time()
     bills = []
     client._ember_screen_anchor = {}
-    client._ember_nest_drop = 0
     player_sx = mw // 2
     bx = pose.get("draw_x", pose["x"] + 0.5)
     by = pose.get("draw_y", pose["y"] + 0.5)
@@ -1199,6 +1212,10 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
         seen[("m", m["id"])] = (m["x"], m["y"])
         targeted = client.combat_target_id == m["id"]
         wx, wy = _separate_feet(client, pose, m, along_p, psx, player_tile)
+        if m.get("type") == "emberdeep_wyrm":
+            wx, wy, gliding = _wyrm_glide(client, m, t)
+            if gliding:
+                moving = True
         import ember_combat_fx
         ax, ay, squash = ember_combat_fx.attack_pose(client, m, t)
         hx, hy, flash = ember_combat_fx.hit_pose(client, m, t)
@@ -1223,8 +1240,6 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
                 continue
             along, sx, sy, tile_px = proj
             key = prop.get("key") or ""
-            if key.startswith("dragon_egg") and 18 <= int(prop["x"]) <= 26 and int(prop["y"]) <= 6:
-                sy += int(getattr(client, "_ember_nest_drop", 0) * 0.92)
             bills.append((along, "pack_prop", sx, sy, tile_px, key))
     bills.sort(key=lambda item: -item[0])
     client._ember_sprite_hits = []

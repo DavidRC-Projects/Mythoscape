@@ -1175,6 +1175,9 @@ class MonsterInstance:
         cones = (self.stats or {}).get("cone_tiles")
         if cones:
             state["cone_tiles"] = cones
+        facing = (self.stats or {}).get("facing")
+        if facing:
+            state["facing"] = facing
         return state
 
 
@@ -2969,7 +2972,8 @@ def _ember_wyrm_can_hit(monster, px, py):
     if not cones:
         return None
     import emberdeep_creatures
-    return (int(px), int(py)) in emberdeep_creatures.swing_tiles(cones)
+    body = emberdeep_creatures.footprint(monster.x, monster.y)
+    return (int(px), int(py)) in emberdeep_creatures.swing_tiles(cones, body)
 
 
 def adjacent_or_same(ax, ay, bx, by):
@@ -5454,33 +5458,32 @@ async def _ember_cones():
     if not feature_flags.USE_EMBERDEEP_CREATURES:
         return
     import emberdeep_creatures
-    cones = {
-        (int(spot["x"]), int(spot["y"]))
-        for spot in (emberdeep_creatures.manifest().get("boss") or {}).get("cone_tiles") or []
-    }
     for session in list(WORLD.sessions.values()):
         dungeon = session.dungeon or {}
         if dungeon.get("id") != "emberdeep":
             continue
+        players = [(session.x, session.y)]
         for monster in dungeon.get("monsters", {}).values():
             stats = monster.stats or {}
             if not monster.alive or not stats.get("static"):
                 continue
+            emberdeep_creatures.wyrm_tick(monster, dungeon.get("tiles") or [], players, WORLD.tick_count)
+            cones = {tuple(p) for p in (monster.stats or {}).get("cone_tiles") or []}
             if getattr(monster, "_cone_pending", False):
                 monster._cone_pending = False
                 standing = (session.x, session.y) in cones
                 monster._cone_strike = standing
                 if standing:
                     monster.target_player_id = session.player_id
-                    # The hit is resolved in this same tick. Cooldown starts after it.
                 else:
                     monster.target_player_id = None
                     monster._cone_strike = False
                     monster.mark_attacked(2.4)
                 continue
+            if WORLD.tick_count - getattr(monster, "_turned_tick", -99) < 1:
+                continue
             if not monster.attack_ready():
                 continue
-            # Show the fire first. The hit lands on the next tick, so you can step aside.
             await send(session.ws, "EMBER_CONE", tiles=stats.get("cone_tiles") or [])
             monster._cone_pending = True
             monster._cone_strike = False
