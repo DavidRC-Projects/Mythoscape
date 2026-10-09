@@ -1462,14 +1462,6 @@ NPCS = [
      ],
      "teleport_teacher": True},
 
-    {"id": "hair_stylist_wren", "name": "Wren the Stylist", "x": 59, "y": 17,
-     "lines": ["Welcome to the hair salon. Take a seat and pick a style."],
-     "cosmetic": "hair"},
-
-    {"id": "tailor_bram", "name": "Bram the Tailor", "x": 70, "y": 17,
-     "lines": ["Shirts, shoes, and a few full outfits. Have a look."],
-     "cosmetic": "clothing"},
-
     {"id": "shopkeeper_joe", "name": "Shopkeeper Joe", "x": 45, "y": 7,
      "lines": ["Welcome to my general store!", "Take a look at my stock."], "shop_id": "general_store"},
 
@@ -2636,10 +2628,6 @@ INTERACTABLES = [
      "enter_x": 64, "enter_y": 26, "exit_x": 64, "exit_y": 29, "building": "bank"},
     {"id": "pet_door", "kind": "door", "name": "Pet Emporium Door", "x": 85, "y": 48,
      "enter_x": 85, "enter_y": 46, "exit_x": 85, "exit_y": 49, "building": "pet_emporium"},
-    {"id": "hair_salon_door", "kind": "door", "name": "Hair Salon Door", "x": 59, "y": 16,
-     "enter_x": 59, "enter_y": 14, "exit_x": 59, "exit_y": 17, "building": "hair_salon"},
-    {"id": "clothing_shop_door", "kind": "door", "name": "Clothing Shop Door", "x": 70, "y": 16,
-     "enter_x": 70, "enter_y": 14, "exit_x": 70, "exit_y": 17, "building": "clothing_shop"},
     {"id": "bank_booth", "kind": "bank", "name": "Bank Booth", "x": 64, "y": 22},
     {"id": "dungeon_bank", "kind": "bank", "name": "Dungeon Bank Chest", "x": 38, "y": 84,
      "variant": "chest"},
@@ -2934,18 +2922,6 @@ BUILDINGS = [
         "material": "wood",
         "x0": 78, "y0": 36, "x1": 92, "y1": 48,
         "floor_x0": 79, "floor_y0": 37, "floor_x1": 91, "floor_y1": 47,
-    },
-    {
-        "id": "hair_salon", "name": "Hair Salon", "kind": "house", "style": 0,
-        "material": "wood",
-        "x0": 54, "y0": 6, "x1": 64, "y1": 16,
-        "floor_x0": 55, "floor_y0": 7, "floor_x1": 63, "floor_y1": 15,
-    },
-    {
-        "id": "clothing_shop", "name": "Clothing Shop", "kind": "house", "style": 1,
-        "material": "red_brick",
-        "x0": 66, "y0": 6, "x1": 75, "y1": 16,
-        "floor_x0": 67, "floor_y0": 7, "floor_x1": 74, "floor_y1": 15,
     },
     {
         "id": "harbour_tackle", "name": "Harbourreach Tackle", "kind": "house", "style": 0,

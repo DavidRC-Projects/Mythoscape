@@ -802,14 +802,6 @@ class GameClient(ScreensMixin, CameraYaw):
                         "kind": "level_up",
                     })
         elif t == "DIALOGUE":
-            if msg.get("npc_id") == "hair_stylist_wren":
-                self.dialogue = None
-                self.hair_salon.open()
-                return
-            if msg.get("npc_id") == "tailor_bram":
-                self.dialogue = None
-                self.clothing_shop.open()
-                return
             if msg.get("npc_id") == "elder_miriam":
                 self.guide_until = 0.0
             self.dialogue = {

@@ -237,9 +237,6 @@ def generate_world():
     _building(78, 4, 94, 18, door_x=86)
     # Pet Emporium
     _building(78, 36, 92, 48, door_x=85)
-    # Hair salon and clothing shop, on the grass between the general store and the smithy.
-    _building(54, 6, 64, 16, door_x=59)
-    _building(66, 6, 75, 16, door_x=70)
 
     # Restore village roads (do not punch through walls)
     for x in range(vx0, min(vx1, 94) + 1):
@@ -252,20 +249,12 @@ def generate_world():
     door_aprons = (
         (9, 16), (45, 16), (9, 48), (45, 48),
         (64, 29), (86, 19), (85, 49),
-        (59, 17), (70, 17),
     )
     for cx, cy in door_aprons:
         for ox in (-1, 0, 1):
             dx, dy = cx + ox, cy
             if 0 <= dx < WIDTH and 0 <= dy < HEIGHT and grid[dy][dx] != WALL:
                 grid[dy][dx] = PATH
-    # Lane from those doors east, then south onto the village road. Stays clear of the bank.
-    for x in range(58, 77):
-        if grid[17][x] != WALL:
-            grid[17][x] = PATH
-    for y in range(17, 25):
-        if grid[y][76] != WALL:
-            grid[y][76] = PATH
     for dx, dy in (
         (32, 22), (31, 22), (33, 22), (32, 21), (32, 23),  # wishing well plaza
     ):
@@ -807,7 +796,6 @@ _BUILDING_FOOTPRINTS = [
     # village
     (4, 4, 15, 15), (40, 4, 51, 15), (4, 36, 15, 47), (40, 36, 51, 47),
     (58, 18, 70, 28), (78, 4, 94, 18), (78, 36, 92, 48),
-    (54, 6, 64, 16), (66, 6, 75, 16),
     # harbour
     (172, 6, 182, 14), (172, 20, 182, 28),
     # city — tree clearing keeps the old keep rect. The v2 stamp already
