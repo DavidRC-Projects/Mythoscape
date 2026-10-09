@@ -457,8 +457,15 @@ def _ease_follow(client, pose, now):
     client._ember_cam_t = now
     zoom = float(getattr(client, "_ember_zoom_cur", client.ember_zoom))
     zoom += (client.ember_zoom - zoom) * (1 - math.exp(-dt * 10.0))
+    want_x, want_y = pose["x"] + 0.5, pose["y"] + 0.5
+    foe = (getattr(client, "monsters", None) or {}).get(getattr(client, "combat_target_id", None))
+    if foe and foe.get("alive", True):
+        if max(abs(foe["x"] - pose["x"]), abs(foe["y"] - pose["y"])) <= 3:
+            want_x = want_x * 0.65 + (foe["x"] + 0.5) * 0.35
+            want_y = want_y * 0.65 + (foe["y"] + 0.5) * 0.35
+            zoom = max(zoom, 0.25)
     client._ember_zoom_cur = zoom
-    fx, fy = pose["x"] + 0.5, pose["y"] + 0.5
+    fx, fy = want_x, want_y
     ox, oy = getattr(client, "_ember_focus", (fx, fy))
     kf = 1 - math.exp(-dt / 0.12) if dt else 1.0
     fx = ox + (fx - ox) * kf
@@ -1051,6 +1058,37 @@ def _draw_local_player(client, pose, sx, sy, tile_px, t):
     )
 
 
+def _separate_feet(client, pose, monster, player_depth, player_sx, player_tile):
+    """Nudge a drawn body so it does not cover the player. The server tile stays put."""
+    wx, wy = _sprite_world(monster)
+    px, py = pose["x"] + 0.5, pose["y"] + 0.5
+    same = int(monster["x"]) == int(pose["x"]) and int(monster["y"]) == int(pose["y"])
+    vx, vy = wx - px, wy - py
+    if same or math.hypot(vx, vy) < 0.05:
+        cam = _VIEW
+        if cam is not None:
+            vx, vy = float(cam.r[0]), float(cam.r[1])
+        else:
+            vx, vy = 1.0, 0.0
+    else:
+        length = math.hypot(vx, vy) or 1.0
+        vx, vy = vx / length, vy / length
+    mw, mh = _map_size()
+    trial = _project(0, 0, 0, 0, 0, 0, wx, wy, None, 1, 1, mw, mh)
+    if trial is None:
+        return wx, wy
+    depth, sx, _sy, px_per = trial
+    body = max(8.0, px_per)
+    overlap = min(body, player_tile) and (
+        max(0.0, min(sx + body / 2, player_sx + player_tile / 2) - max(sx - body / 2, player_sx - player_tile / 2))
+        / min(body, float(player_tile))
+    )
+    if overlap > 0.35 and abs(depth - player_depth) < 0.6:
+        wx += vx * 0.35
+        wy += vy * 0.35
+    return wx, wy
+
+
 def _occlude_sprite(client, sx, sy, width, height, depth):
     """Walls nearer than the sprite cover it, using the cached room render."""
     cam = _VIEW
@@ -1099,35 +1137,17 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
     player_tile = max(24, int(ptile))
     bills.append((max(0.2, along_p), "player", psx, player_sy, player_tile, None))
     seen = {pose["key"]: (pose["x"], pose["y"])}
-    floor = client.tiles or []
-    fighting = []
     for m in (client.monsters or {}).values():
         if not m.get("alive", True):
             continue
         _face, moving, atk, near, drop_down = _monster_pose(client, m, t)
         seen[("m", m["id"])] = (m["x"], m["y"])
-        dist = max(abs(m["x"] - pose["x"]), abs(m["y"] - pose["y"]))
         targeted = client.combat_target_id == m["id"]
-        # The wyrm stays in its chamber. Everyone else steps forward only
-        # when you are standing on the next tile, so the room stays visible.
-        beside = dist <= 1 and m.get("type") != "emberdeep_wyrm"
-        if beside and _open_between(floor, pose["x"], pose["y"], m["x"], m["y"]):
-            fighting.append((0 if targeted else dist, m, moving, atk, drop_down))
-            continue
-        wx, wy = _sprite_world(m)
-        proj = _project(
-            ex, ey, lx, ly, rx, ry, wx, wy,
-            depths, rw, rh, mw, mh,
-        )
+        wx, wy = _separate_feet(client, pose, m, along_p, psx, player_tile)
+        proj = _project(ex, ey, lx, ly, rx, ry, wx, wy, depths, rw, rh, mw, mh)
         if proj is None:
             continue
         along, sx, sy, tile_px = proj
-        if m.get("type") == "emberdeep_wyrm":
-            # The north of the lair collapses onto the back wall. Drop the
-            # body into the open floor so it stands in the middle of the room.
-            want = int(mh * 0.60)
-            client._ember_nest_drop = max(0, want - sy)
-            sy = max(sy, want)
         face = _face_from_vector(pose["x"] - m["x"], pose["y"] - m["y"])
         bills.append((along, "monster", sx, sy, tile_px, (m, face, moving, atk, near or targeted, drop_down)))
     dungeon = client.dungeon or {}
@@ -1156,24 +1176,13 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
             continue
         if kind == "pack_prop":
             import emberdeep_creatures_client
-            # Distant props were specks. Keep them big enough to read as objects.
-            emberdeep_creatures_client.draw_prop(
-                client.screen, extra, sx, sy, max(tile_px, 78),
-            )
-            _occlude_sprite(client, sx, sy, max(tile_px, 78), max(tile_px, 78), along)
+            emberdeep_creatures_client.draw_prop(client.screen, extra, sx, sy, tile_px)
+            _occlude_sprite(client, sx, sy, tile_px, tile_px, along)
             continue
         m, face, moving, atk, show, drop_down = extra
-        # Distant sprites were a few pixels tall. Keep a readable floor, then let body scale separate them.
-        # The wyrm is capped so its body sits in the lair instead of covering the back wall.
-        if m.get("type") == "emberdeep_wyrm":
-            tile_px = min(max(tile_px, 64), 72)
-        elif m.get("type") == "magma_slug":
-            tile_px = max(tile_px, 28)
-        else:
-            tile_px = max(tile_px, 72)
-        _draw_monster_sprite(client, m, sx, sy, tile_px, t, face, moving, atk, player_sx, drop_down)
         import emberdeep_creatures_client
         height = emberdeep_creatures_client.creature_height(m["type"], tile_px)
+        _draw_monster_sprite(client, m, sx, sy, tile_px, t, face, moving, atk, player_sx, drop_down)
         _occlude_sprite(client, sx, sy, height, height, along)
         hit = pygame.Rect(int(sx - height / 2), int(sy - height), int(height), int(height))
         client._ember_sprite_hits.append((hit, (int(m["x"]), int(m["y"]))))
@@ -1199,7 +1208,6 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
         anchors[("p", str(pid))] = (sx, sy, tile_px)
         p = client.player or {}
         client.draw_hp_bar(sx, sy - tile_px - 8, p.get("hp", 1), p.get("max_hp", 1), show_value=True)
-    _draw_opponents(client, pose, fighting, mw, mh, t, psx, player_sy, player_tile)
     _draw_projectiles(client, ex, ey, lx, ly, rx, ry, rw, rh, mw, mh)
     _draw_hitsplats(client, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, mh)
     prev = dict(getattr(client, "_prev_entity_pos", {}) or {})
@@ -1207,46 +1215,6 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
     client._prev_entity_pos = prev
     _draw_corner_map(client, lx, ly)
     return True
-
-
-def _draw_opponents(client, pose, fighting, mw, mh, t, player_sx, player_sy, player_tile):
-    """Line up whoever is in reach just in front of the player."""
-    client._ember_fight_hits = []
-    if not fighting:
-        return
-    fighting = sorted(fighting, key=lambda item: (item[0], item[1]["id"]))[:3]
-    count = len(fighting)
-    tile = max(96, int(player_tile * 2.4))
-    import emberdeep_creatures_client
-    widths = [
-        max(tile, emberdeep_creatures_client.creature_height(m["type"], tile))
-        for _dist, m, _moving, _atk, _drop in fighting
-    ]
-    gap = int(max(widths) * 1.15) if widths else tile * 2
-    origin = player_sx - (count - 1) * gap // 2
-    feet = max(tile + 8, player_sy - int(player_tile * 1.35))
-    anchors = getattr(client, "_ember_screen_anchor", None)
-    if not isinstance(anchors, dict):
-        anchors = {}
-        client._ember_screen_anchor = anchors
-    hits = []
-    for index, (_dist, m, moving, atk, drop_down) in enumerate(fighting):
-        sx = origin + index * gap
-        face = _face_from_vector(pose["x"] - m["x"], pose["y"] - m["y"])
-        _draw_monster_sprite(client, m, sx, feet, tile, t, face, moving, atk, player_sx, drop_down)
-        height = emberdeep_creatures_client.creature_height(m["type"], tile)
-        anchors[("m", m["id"])] = (sx, feet, height)
-        anchors[("m", str(m["id"]))] = (sx, feet, height)
-        hits.append((
-            pygame.Rect(sx - height // 2, feet - height, height, height),
-            (int(m["x"]), int(m["y"])),
-        ))
-        bar_y = feet - height - 6
-        client.draw_hp_bar(sx, bar_y, m["hp"], m["max_hp"])
-        client.blit_nameplate(m["name"], sx, bar_y - 14)
-        level = int(m.get("level") or 1)
-        client.blit_combat_level(level, sx, bar_y - 28, client.monster_threat_color(level))
-    client._ember_fight_hits = hits
 
 
 def _draw_corner_map(client, lx, ly):
@@ -1527,40 +1495,20 @@ def pick_tile(client, mx, my):
     tiles, _pose, ex, ey, lx, ly, rx, ry = _view(client)
     if not tiles:
         return None
-    rw, rh = max(160, mw // 2), max(120, mh // 2)
-    for rect, tile in getattr(client, "_ember_fight_hits", None) or []:
-        if rect.collidepoint(mx, my):
-            return tile
+    rw, rh = (getattr(client, "_ember_render", None) or (max(160, mw // 2), max(120, mh // 2)))
     best = None
     best_d = 1e9
-    px, py = int(client.player["x"]), int(client.player["y"])
-    body = _project(ex, ey, lx, ly, rx, ry, px + 0.5, py + 0.5, None, rw, rh, mw, mh)
-    player_sx = body[1] if body else mw // 2
-    player_tile = max(16, int((body[3] if body else 32) * 0.55))
     for mon in (client.monsters or {}).values():
         if not mon.get("alive", True):
             continue
-        dist = max(abs(mon["x"] - px), abs(mon["y"] - py))
-        fighting = client.combat_target_id == mon["id"] or dist <= 2
         wx, wy = _sprite_world(mon)
-        proj = _project(
-            ex, ey, lx, ly, rx, ry, wx, wy,
-            None, rw, rh, mw, mh, reveal=fighting or mon.get("type") == "emberdeep_wyrm",
-        )
+        proj = _project(ex, ey, lx, ly, rx, ry, wx, wy, None, rw, rh, mw, mh)
         if proj is None:
             continue
         along, sx, sy, tile_px = proj
-        if fighting and mon.get("type") != "emberdeep_wyrm":
-            tile_px = max(tile_px, int(player_tile * 1.15))
-            if abs(sx - player_sx) < player_tile:
-                sx = player_sx + (player_tile if (int(mon["id"]) % 2 == 0) else -player_tile)
-        if mon.get("type") == "emberdeep_wyrm":
-            import emberdeep_creatures_client
-            height = emberdeep_creatures_client.creature_height("emberdeep_wyrm", min(max(tile_px, 64), 72))
-            width = int(height * 1.5)
-            hit = pygame.Rect(sx - width // 2, sy - height, width, height).collidepoint(mx, my)
-        else:
-            hit = _sprite_hit(mx, my, sx, sy, tile_px)
+        import emberdeep_creatures_client
+        height = emberdeep_creatures_client.creature_height(mon["type"], tile_px)
+        hit = pygame.Rect(sx - height / 2, sy - height, height, height).collidepoint(mx, my)
         if hit and along < best_d:
             best = (int(mon["x"]), int(mon["y"]))
             best_d = along
