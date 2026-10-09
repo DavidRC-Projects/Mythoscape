@@ -482,6 +482,10 @@ class GameClient(ScreensMixin, CameraYaw):
             self.combat_style_prompt = None
             self.login_error = ""
             self.show_leaderboard = False
+            # Open character creator if no appearance saved
+            if not self.player.get("appearance"):
+                gender = self.player.get("gender", "male")
+                self.char_creator.open(gender)
             if msg.get("needs_stat_alloc"):
                 self.state = "STAT_ALLOC"
                 self.stat_alloc = {"attack": 0, "strength": 0, "defence": 0, "archery": 0}
@@ -1576,6 +1580,13 @@ class GameClient(ScreensMixin, CameraYaw):
                 self.dungeon_prompt = None
                 self.clear_walk()
         elif event.type == pygame.MOUSEWHEEL:
+            # Character creator scroll
+            if self.char_creator.active:
+                dy = getattr(event, "precise_y", None)
+                if dy is None:
+                    dy = float(event.y)
+                self.char_creator.handle_scroll(int(-dy * 2))
+                return
             if self.state == "GAME" and self.show_help:
                 dy = getattr(event, "precise_y", None)
                 if dy is None:
@@ -3339,6 +3350,10 @@ class GameClient(ScreensMixin, CameraYaw):
 
     def handle_mouse_click(self, event):
         mx, my = event.pos
+        # Character creator takes priority
+        if self.char_creator.active:
+            self.char_creator.handle_click(mx, my)
+            return
         if self.context_menu and event.button == 1:
             self._click_context_menu(mx, my)
             return
