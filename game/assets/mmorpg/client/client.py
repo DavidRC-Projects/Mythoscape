@@ -1302,6 +1302,12 @@ class GameClient(ScreensMixin, CameraYaw):
                         self.help_scroll = 0
                         self.show_forge = False
                         self.show_cook = False
+                elif event.key == pygame.K_j:
+                    # Hair salon (J for hairstyle)
+                    if self.hair_salon.active:
+                        self.hair_salon.close()
+                    else:
+                        self.hair_salon.open()
                         self.show_equipment = False
                         self.show_skills = False
                         self.show_pets = False
@@ -4888,6 +4894,10 @@ class GameClient(ScreensMixin, CameraYaw):
         # Character creator overlay (highest priority)
         if self.char_creator.active:
             self.char_creator.render(self.screen)
+        
+        # Hair salon overlay
+        if self.hair_salon.active:
+            self.hair_salon.render(self.screen)
         
         pygame.display.flip()
 
