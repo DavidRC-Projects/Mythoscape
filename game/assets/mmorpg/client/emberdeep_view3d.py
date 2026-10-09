@@ -246,8 +246,8 @@ class EmberView3D:
             sel = act[done]
             kind[sel] = np.where(s_hit[done], 1, np.where(top[done], 2, 3))
             t_hit[sel] = np.where(s_hit[done], ti[done], np.where(top[done], th[done], tf[act][done]))
-            hit_cx[sel] = ax[done]
-            hit_cy[sel] = ay[done]
+            hit_cx[sel] = np.clip(ax[done], 0, self.w - 1)
+            hit_cy[sel] = np.clip(ay[done], 0, self.h - 1)
             hit_h[sel] = h[done]
             act = act[~done]
             if act.size == 0:
