@@ -237,6 +237,8 @@ def generate_world():
     _building(78, 4, 94, 18, door_x=86)
     # Pet Emporium
     _building(78, 36, 92, 48, door_x=85)
+    # Mythos Outfitters — open field south-east of the bank, door onto the road.
+    _building(60, 37, 72, 47, door_x=66)
 
     # Restore village roads (do not punch through walls)
     for x in range(vx0, min(vx1, 94) + 1):
@@ -248,7 +250,7 @@ def generate_world():
     # 3-wide apron tiles outside village doors + wishing-well plaza
     door_aprons = (
         (9, 16), (45, 16), (9, 48), (45, 48),
-        (64, 29), (86, 19), (85, 49),
+        (64, 29), (86, 19), (85, 49), (66, 48),
     )
     for cx, cy in door_aprons:
         for ox in (-1, 0, 1):
@@ -796,6 +798,7 @@ _BUILDING_FOOTPRINTS = [
     # village
     (4, 4, 15, 15), (40, 4, 51, 15), (4, 36, 15, 47), (40, 36, 51, 47),
     (58, 18, 70, 28), (78, 4, 94, 18), (78, 36, 92, 48),
+    (60, 37, 72, 47),
     # harbour
     (172, 6, 182, 14), (172, 20, 182, 28),
     # city — tree clearing keeps the old keep rect. The v2 stamp already

@@ -1462,6 +1462,10 @@ NPCS = [
      ],
      "teleport_teacher": True},
 
+    {"id": "outfitter_mae", "name": "Mae the Outfitter", "x": 66, "y": 41,
+     "lines": ["Welcome to Mythos Outfitters. Hair, clothes, and full outfits."],
+     "cosmetic": "outfitters"},
+
     {"id": "shopkeeper_joe", "name": "Shopkeeper Joe", "x": 45, "y": 7,
      "lines": ["Welcome to my general store!", "Take a look at my stock."], "shop_id": "general_store"},
 
@@ -2503,6 +2507,8 @@ TRAVEL_DESTINATIONS = [
      "x": 28, "y": 24, "blurb": "Spawn & hub"},
     {"id": "bank", "kind": "place", "label": "Village Bank",
      "x": 64, "y": 23, "blurb": "Store coins & items", "action": {"type": "BANK"}},
+    {"id": "outfitters", "kind": "place", "label": "Mythos Outfitters",
+     "x": 66, "y": 49, "blurb": "Hair, clothes & outfits"},
     {"id": "general_store", "kind": "place", "label": "General Store",
      "x": 45, "y": 8, "blurb": "Shopkeeper Joe"},
     {"id": "bag_shop", "kind": "place", "label": "Nell's Bags",
@@ -2626,6 +2632,11 @@ INTERACTABLES = [
      "enter_x": 45, "enter_y": 45, "exit_x": 45, "exit_y": 48, "building": "cottage_se"},
     {"id": "bank_door", "kind": "door", "name": "Bank Door", "x": 64, "y": 28,
      "enter_x": 64, "enter_y": 26, "exit_x": 64, "exit_y": 29, "building": "bank"},
+    {"id": "outfitters_door", "kind": "door", "name": "Mythos Outfitters Door", "x": 66, "y": 47,
+     "enter_x": 66, "enter_y": 45, "exit_x": 66, "exit_y": 48, "building": "mythos_outfitters"},
+    {"id": "sign_outfitters", "kind": "signpost", "name": "Mythos Outfitters",
+     "x": 63, "y": 48, "facing": "n",
+     "lines": ["Mythos Outfitters: hair, clothes, outfits"]},
     {"id": "pet_door", "kind": "door", "name": "Pet Emporium Door", "x": 85, "y": 48,
      "enter_x": 85, "enter_y": 46, "exit_x": 85, "exit_y": 49, "building": "pet_emporium"},
     {"id": "bank_booth", "kind": "bank", "name": "Bank Booth", "x": 64, "y": 22},
@@ -2916,6 +2927,12 @@ BUILDINGS = [
         "material": "red_brick",
         "x0": 78, "y0": 4, "x1": 94, "y1": 18,
         "floor_x0": 79, "floor_y0": 5, "floor_x1": 93, "floor_y1": 17,
+    },
+    {
+        "id": "mythos_outfitters", "name": "Mythos Outfitters", "kind": "house", "style": 1,
+        "material": "red_brick",
+        "x0": 60, "y0": 37, "x1": 72, "y1": 47,
+        "floor_x0": 61, "floor_y0": 38, "floor_x1": 71, "floor_y1": 46,
     },
     {
         "id": "pet_emporium", "name": "Pet Emporium", "kind": "house", "style": 0,
