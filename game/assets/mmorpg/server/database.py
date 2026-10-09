@@ -232,6 +232,10 @@ class Database:
             self.conn.execute(
                 "ALTER TABLE players ADD COLUMN hd_player INTEGER NOT NULL DEFAULT 1"
             )
+        if "saved_outfits" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN saved_outfits TEXT NOT NULL DEFAULT '[]'"
+            )
         import clans
         clans.ensure_tables(self.conn)
         self.conn.execute(

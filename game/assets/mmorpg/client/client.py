@@ -420,10 +420,8 @@ class GameClient(ScreensMixin, CameraYaw):
         self.CHAT_VISIBLE = 6
         self.CHAT_MAX = 80
 
-        from cosmetics_ui import CharacterCreator, HairSalon, ClothingShop
-        self.char_creator = CharacterCreator(self)
-        self.hair_salon = HairSalon(self)
-        self.clothing_shop = ClothingShop(self)
+        from cosmetics_ui import Outfitters
+        self.outfitters = Outfitters(self)
         self.needs_appearance = False
 
         self.running = True
@@ -490,7 +488,7 @@ class GameClient(ScreensMixin, CameraYaw):
             self.show_leaderboard = False
             # New accounts have no saved look. Open the creator after the
             # stat screen and the opening comic, not on top of either.
-            self.needs_appearance = not self.player.get("appearance")
+            self.needs_appearance = not self.player.get("appearance_saved")
             if msg.get("needs_stat_alloc"):
                 self.state = "STAT_ALLOC"
                 self.stat_alloc = {"attack": 0, "strength": 0, "defence": 0, "archery": 0}
@@ -622,7 +620,7 @@ class GameClient(ScreensMixin, CameraYaw):
         elif t == "PLAYER_UPDATE":
             prev_boosts = (self.player or {}).get("stat_boosts") or {}
             self.player = msg["player"]
-            if self.player and self.player.get("appearance"):
+            if self.player and self.player.get("appearance_saved"):
                 self.needs_appearance = False
             prompt = self.stair_prompt
             if prompt and self.player:
@@ -802,6 +800,10 @@ class GameClient(ScreensMixin, CameraYaw):
                         "kind": "level_up",
                     })
         elif t == "DIALOGUE":
+            if msg.get("npc_id") == "outfitter_mae":
+                self.dialogue = None
+                self.outfitters.open("shop")
+                return
             if msg.get("npc_id") == "elder_miriam":
                 self.guide_until = 0.0
             self.dialogue = {
@@ -1193,6 +1195,9 @@ class GameClient(ScreensMixin, CameraYaw):
 
     def handle_game_event(self, event):
         import emberdeep_v2_client
+        if getattr(self, "outfitters", None) and self.outfitters.active:
+            self.outfitters.handle_event(event)
+            return
         if event.type == pygame.KEYDOWN:
             if self.chat_typing:
                 self.handle_chat_typing(event)
@@ -1310,23 +1315,6 @@ class GameClient(ScreensMixin, CameraYaw):
                         self.help_scroll = 0
                         self.show_forge = False
                         self.show_cook = False
-                elif event.key == pygame.K_j:
-                    # Hair salon (J for hairstyle)
-                    if self.hair_salon.active:
-                        self.hair_salon.close()
-                    else:
-                        self.hair_salon.open()
-                elif event.key == pygame.K_k:
-                    # Clothing shop (K for Klothes)
-                    if self.clothing_shop.active:
-                        self.clothing_shop.close()
-                    else:
-                        self.clothing_shop.open()
-                        self.show_equipment = False
-                        self.show_skills = False
-                        self.show_pets = False
-                        self.show_travel = False
-                        self.show_world_map = False
                 elif self.show_help and event.key in (
                     pygame.K_UP, pygame.K_DOWN, pygame.K_PAGEUP, pygame.K_PAGEDOWN,
                 ):
@@ -1600,27 +1588,6 @@ class GameClient(ScreensMixin, CameraYaw):
                 self.dungeon_prompt = None
                 self.clear_walk()
         elif event.type == pygame.MOUSEWHEEL:
-            # Character creator scroll
-            if self.char_creator.active:
-                dy = getattr(event, "precise_y", None)
-                if dy is None:
-                    dy = float(event.y)
-                self.char_creator.handle_scroll(int(-dy * 2))
-                return
-            # Hair salon scroll
-            if self.hair_salon.active:
-                dy = getattr(event, "precise_y", None)
-                if dy is None:
-                    dy = float(event.y)
-                self.hair_salon.handle_scroll(int(-dy * 2))
-                return
-            # Clothing shop scroll
-            if self.clothing_shop.active:
-                dy = getattr(event, "precise_y", None)
-                if dy is None:
-                    dy = float(event.y)
-                self.clothing_shop.handle_scroll(int(-dy * 2))
-                return
             if self.state == "GAME" and self.show_help:
                 dy = getattr(event, "precise_y", None)
                 if dy is None:
@@ -3385,18 +3352,6 @@ class GameClient(ScreensMixin, CameraYaw):
 
     def handle_mouse_click(self, event):
         mx, my = event.pos
-        # Character creator takes priority
-        if self.char_creator.active:
-            self.char_creator.handle_click(mx, my)
-            return
-        # Hair salon
-        if self.hair_salon.active:
-            self.hair_salon.handle_click(mx, my)
-            return
-        # Clothing shop
-        if self.clothing_shop.active:
-            self.clothing_shop.handle_click(mx, my)
-            return
         if self.context_menu and event.button == 1:
             self._click_context_menu(mx, my)
             return
@@ -4917,17 +4872,8 @@ class GameClient(ScreensMixin, CameraYaw):
         else:
             self.draw_game()
         
-        # Character creator overlay (highest priority)
-        if self.char_creator.active:
-            self.char_creator.render(self.screen)
-        
-        # Hair salon overlay
-        if self.hair_salon.active:
-            self.hair_salon.render(self.screen)
-        
-        # Clothing shop overlay
-        if self.clothing_shop.active:
-            self.clothing_shop.render(self.screen)
+        if self.outfitters.active:
+            self.outfitters.render(self.screen)
         
         pygame.display.flip()
 
@@ -4935,10 +4881,9 @@ class GameClient(ScreensMixin, CameraYaw):
         """Open the creator once a new account is actually in the world."""
         if not getattr(self, "needs_appearance", False):
             return
-        if self.char_creator.active or self.state != "GAME":
+        if self.outfitters.active or self.state != "GAME":
             return
-        gender = (self.player or {}).get("gender") or "male"
-        self.char_creator.open(gender)
+        self.outfitters.open("creator")
 
     def remaining_stat_points(self):
         return self.stat_alloc_points - sum(self.stat_alloc.values())

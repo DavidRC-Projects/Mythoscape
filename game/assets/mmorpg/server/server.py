@@ -867,6 +867,20 @@ class PlayerSession:
                 }
         return appearance
 
+    def appearance_saved(self):
+        return bool(self._row_val("appearance"))
+
+    def _json_list(self, key):
+        import json
+        raw = self._row_val(key)
+        if not raw:
+            return []
+        try:
+            data = json.loads(raw)
+        except Exception:
+            return []
+        return data if isinstance(data, list) else []
+
     def public_state(self):
         return {
             "id": self.player_id, "name": self.char_name, "x": self.x, "y": self.y,
@@ -927,6 +941,9 @@ class PlayerSession:
             "gathering": self.gathering_public(),
             "gender": self.gender,
             "appearance": appearance,
+            "appearance_saved": self.appearance_saved(),
+            "owned_cosmetics": self._json_list("owned_cosmetics"),
+            "saved_outfits": (self._json_list("saved_outfits") + [None, None, None])[:3],
             "hd_player": bool(self._row_val("hd_player", 1)),
             "wish_available": self.can_wish(),
             "unlimited_wishes": self.has_unlimited_wishes(),
@@ -3960,22 +3977,146 @@ async def handle_toggle_hd_player(session, msg):
     await send(session.ws, "CHAT_MSG", **{"from": "Settings", "text": f"Player rendering: {mode}"})
 
 
-async def handle_update_appearance(session, msg):
-    """Save player appearance (from character creator / salon / wardrobe)."""
-    appearance = msg.get("appearance")
-    if not appearance or not isinstance(appearance, dict):
-        await send(session.ws, "ERROR", message="Invalid appearance data.")
-        return
-    # TODO: validate cosmetics ownership in step 5 (UIs)
+def _cosmetic_catalogue():
     import json
+    import os
+    path = os.path.join(os.path.dirname(__file__), "..", "..", "player_hd", "assets", "catalogue.json")
+    with open(path, encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def _clean_appearance(session, appearance, owned=None):
+    """Return a saved look, or an error string."""
+    if not isinstance(appearance, dict):
+        return None, "Invalid appearance data."
+    cat = _cosmetic_catalogue()
+    items = {entry["id"]: entry for entry in cat.get("items") or []}
+    colours = {entry.get("id") for entry in cat.get("hair_palette") or []}
+    if owned is None:
+        owned = set(session._json_list("owned_cosmetics"))
+    cleaned = {
+        "skin": appearance.get("skin"),
+        "hair": appearance.get("hair"),
+        "hair_colour": appearance.get("hair_colour"),
+        "top": appearance.get("top"),
+        "bottom": appearance.get("bottom"),
+        "shoes": appearance.get("shoes"),
+        "outfit": appearance.get("outfit") or None,
+        "accessories": [],
+    }
+    if cleaned["hair_colour"] not in colours:
+        return None, "That hair colour is not in the catalogue."
+    for slot in ("skin", "hair", "top", "bottom", "shoes"):
+        item_id = cleaned[slot]
+        item = items.get(item_id)
+        if not item or item.get("slot") != slot:
+            return None, "That look uses an unknown item."
+        if not item.get("starter") and item_id not in owned:
+            return None, "You do not own every piece of that look."
+    if cleaned["outfit"]:
+        item = items.get(cleaned["outfit"])
+        if not item or item.get("slot") != "outfit":
+            return None, "That outfit is not in the catalogue."
+        if not item.get("starter") and cleaned["outfit"] not in owned:
+            return None, "You do not own that outfit."
+    limit = int(cat.get("accessory_max") or 2)
+    for item_id in appearance.get("accessories") or []:
+        item = items.get(item_id)
+        if not item or item.get("slot") != "accessory":
+            return None, "That accessory is not in the catalogue."
+        if not item.get("starter") and item_id not in owned:
+            return None, "You do not own that accessory."
+        if item_id not in cleaned["accessories"]:
+            cleaned["accessories"].append(item_id)
+        if len(cleaned["accessories"]) > limit:
+            return None, "Too many accessories."
+    return cleaned, None
+
+
+async def handle_set_gender(session, msg):
+    gender = "female" if str(msg.get("gender") or "").lower() == "female" else "male"
+    session.gender = gender
+    WORLD.db.save_player_stats(session.player_id, gender=gender)
+    session.row = WORLD.db.get_player_by_id(session.player_id)
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+
+
+async def handle_update_appearance(session, msg):
+    """Save a look. Paid pieces must already be owned."""
+    import json
+    appearance, error = _clean_appearance(session, msg.get("appearance"))
+    if error:
+        await send(session.ws, "ERROR", message=error)
+        return
     WORLD.db.save_player_stats(session.player_id, appearance=json.dumps(appearance))
     session.row = WORLD.db.get_player_by_id(session.player_id)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     await broadcast_player_state(session)
-    await send(
-        session.ws, "CHAT_MSG",
-        **{"from": "Tailor", "text": "Look saved. Press J for the hair salon, K for the clothing shop."},
+    await send(session.ws, "CHAT_MSG", **{"from": "Mae", "text": "Look saved."})
+
+
+async def handle_buy_cosmetics(session, msg):
+    """Buy the unowned pieces being tried on, then wear the look."""
+    import json
+    cat = _cosmetic_catalogue()
+    items = {entry["id"]: entry for entry in cat.get("items") or []}
+    owned = session._json_list("owned_cosmetics")
+    owned_set = set(owned)
+    cost = 0
+    buying = []
+    for item_id in msg.get("items") or []:
+        item = items.get(item_id)
+        if not item:
+            await send(session.ws, "ERROR", message="That item is not in the catalogue.")
+            return
+        if item.get("starter") or item_id in owned_set:
+            continue
+        price = int(item.get("price") or 0)
+        cost += price
+        buying.append(item_id)
+        owned_set.add(item_id)
+    if cost > session.coins:
+        await send(session.ws, "ERROR", message="You don't have enough coins.")
+        return
+    owned.extend(buying)
+    appearance, error = _clean_appearance(session, msg.get("appearance"), owned_set)
+    if error:
+        await send(session.ws, "ERROR", message=error)
+        return
+    session.coins -= cost
+    WORLD.db.save_player_stats(
+        session.player_id,
+        coins=session.coins,
+        owned_cosmetics=json.dumps(owned),
+        appearance=json.dumps(appearance),
     )
+    session.row = WORLD.db.get_player_by_id(session.player_id)
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    await broadcast_player_state(session)
+    if cost:
+        await send(session.ws, "CHAT_MSG", **{"from": "Mae", "text": f"Bought and worn for {cost} coins."})
+    else:
+        await send(session.ws, "CHAT_MSG", **{"from": "Mae", "text": "Worn."})
+
+
+async def handle_save_outfit(session, msg):
+    import json
+    try:
+        slot = int(msg.get("slot"))
+    except (TypeError, ValueError):
+        return
+    if slot not in (0, 1, 2):
+        return
+    appearance, error = _clean_appearance(session, msg.get("appearance"))
+    if error:
+        await send(session.ws, "ERROR", message=error)
+        return
+    outfits = (session._json_list("saved_outfits") + [None, None, None])[:3]
+    outfits[slot] = appearance
+    WORLD.db.save_player_stats(session.player_id, saved_outfits=json.dumps(outfits))
+    session.row = WORLD.db.get_player_by_id(session.player_id)
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    await send(session.ws, "CHAT_MSG", **{"from": "Mae", "text": f"Saved outfit {slot + 1}."})
 
 
 async def handle_shop_buy(session, msg):
@@ -5233,6 +5374,12 @@ async def handler(ws):
                 await handle_toggle_hd_player(session, msg)
             elif mtype == "UPDATE_APPEARANCE":
                 await handle_update_appearance(session, msg)
+            elif mtype == "BUY_COSMETICS":
+                await handle_buy_cosmetics(session, msg)
+            elif mtype == "SAVE_OUTFIT":
+                await handle_save_outfit(session, msg)
+            elif mtype == "SET_GENDER":
+                await handle_set_gender(session, msg)
             elif mtype == "EQUIP":
                 await handle_equip(session, msg)
             elif mtype == "UNEQUIP":
