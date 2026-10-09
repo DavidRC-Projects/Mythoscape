@@ -7854,7 +7854,7 @@ class GameClient(ScreensMixin, CameraYaw):
         self.screen.blit(label, (rect.centerx - label.get_width() // 2, rect.y + 6))
 
     def draw_teleport_modal(self):
-        box = pygame.Rect(250, 70, 420, 620)
+        box = pygame.Rect(250, 50, 420, 660)
         self.teleport_box = box
         self.teleport_row_rects = []
         pygame.draw.rect(self.screen, (22, 14, 36), box, border_radius=8)
@@ -7898,13 +7898,13 @@ class GameClient(ScreensMixin, CameraYaw):
             self.screen.blit(self.font_small.render(title_text, True, (212, 175, 80)), (box.x + 18, y))
             y += 22
             for dest in dests:
-                row = pygame.Rect(box.x + 16, y, box.w - 32, 36)
+                row = pygame.Rect(box.x + 16, y, box.w - 32, 32)
                 pygame.draw.rect(self.screen, (40, 24, 64), row, border_radius=6)
                 pygame.draw.rect(self.screen, (140, 100, 180), row, 1, border_radius=6)
-                self.screen.blit(self.font_small.render(dest["label"], True, (240, 220, 160)), (row.x + 12, row.y + 2))
-                self.screen.blit(self.font_tiny.render(dest["blurb"], True, (180, 170, 200)), (row.x + 12, row.y + 18))
+                self.screen.blit(self.font_small.render(dest["label"], True, (240, 220, 160)), (row.x + 12, row.y + 1))
+                self.screen.blit(self.font_tiny.render(dest["blurb"], True, (180, 170, 200)), (row.x + 12, row.y + 16))
                 self.teleport_row_rects.append(("dest", row, dest["id"]))
-                y += 40
+                y += 36
 
     def draw_teleport_fx(self):
         fx = self.teleport_fx

@@ -1441,6 +1441,7 @@ WIZARD_TILE = (23, 20)
 TELEPORT_DESTINATIONS = [
     {"id": "village", "label": "Village", "blurb": "The crossroads", "where": "overworld", "x": 28, "y": 24},
     {"id": "bank", "label": "Village Bank", "blurb": "Store coins and items", "where": "overworld", "x": 64, "y": 23},
+    {"id": "outfitters", "label": "Mythos Outfitters", "blurb": "Hair, clothes & outfits", "where": "overworld", "x": 66, "y": 49},
     {"id": "stonehaven", "label": "Stonehaven", "blurb": "The city square", "where": "overworld", "x": 118, "y": 74},
     {"id": "keep", "label": "Stonehaven Castle", "blurb": "The overworld keep", "where": "overworld", "x": 128, "y": 66},
     {"id": "harbour", "label": "Harbourreach", "blurb": "The docks", "where": "overworld", "x": 176, "y": 18},
