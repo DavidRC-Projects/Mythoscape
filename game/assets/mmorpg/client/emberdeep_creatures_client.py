@@ -1,6 +1,7 @@
 """Billboard the Emberdeep creature pack. Idle contact strips are not drawn."""
 from __future__ import annotations
 
+import json
 import math
 import os
 
@@ -19,7 +20,6 @@ _POSES = {
     "ash_warlock": "quad",
     "troll_cook": "quad",
     "mistress_of_cinders": "quad",
-    "emberdeep_wyrm": "wyrm",
 }
 # How tall each creature is, compared with one floor tile.
 _BODY = {
@@ -68,21 +68,6 @@ def _pose_name(facing):
 
 def _frame(creature_id, facing, breathing):
     pose = _pose_name(facing)
-    if creature_id == "emberdeep_wyrm":
-        side = facing in ("east", "west") or facing in (1, -1)
-        try:
-            side = side or float(facing) != 0
-            west = facing == "west" or float(facing) < 0
-        except (TypeError, ValueError):
-            west = facing == "west"
-        if side or west:
-            name = "fire_breath_side.png" if breathing else "idle_side.png"
-            img = _load(os.path.join("emberdeep_wyrm", name))
-            if west:
-                img = pygame.transform.flip(img, True, False)
-            return img
-        name = "fire_breath_front.png" if breathing else "idle_front.png"
-        return _load(os.path.join("emberdeep_wyrm", name))
     return _load(os.path.join(creature_id, f"{pose}.png"))
 
 
@@ -143,16 +128,13 @@ def draw_creature(screen, creature_id, cx, cy, tile, facing=1, breathing=False, 
     if moving and kind:
         sway, bob, rock, squash = _step(kind, now, tile, facing)
     atk = max(0.0, min(1.0, float(attacking or 0)))
-    if atk > 0 and creature_id != "emberdeep_wyrm":
+    if atk > 0:
         strike = math.sin(atk * math.pi)
         bob -= int(strike * max(4, tile * 0.16))
         squash = 1.0 + 0.16 * strike
         rock = 0.0
         sway = int(strike * max(3, tile * 0.08))
     height = creature_height(creature_id, tile)
-    if moving and creature_id == "emberdeep_wyrm":
-        bob = int(abs(math.sin(now * 2.2)) * height * 0.03)
-        sway = int(math.sin(now * 1.4) * tile * 0.03)
     _blit(screen, img, cx + sway, cy - bob, height, squash, rock)
     return True
 
@@ -187,3 +169,125 @@ def draw_cone(screen, cx, cy, tile):
         return
     img = _load(os.path.join("fx", "fire_cone.png"))
     _blit(screen, img, cx, cy, tile * 2.2)
+
+
+# The wyrm is a set of rendered frames. One constant sets its size. West is its own art.
+WYRM_TILES_H = 4.8
+_DRAGON = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "emberdeep_hd", "dragon"))
+_WYRM_META = None
+_WYRM_SCALED = {}
+_WYRM_BUCKETS = []
+
+
+def _wyrm_meta():
+    global _WYRM_META
+    if _WYRM_META is None:
+        with open(os.path.join(_DRAGON, "meta.json"), encoding="utf-8") as handle:
+            _WYRM_META = json.load(handle)
+    return _WYRM_META
+
+
+def wyrm_facing(facing):
+    """s, e, n, w. Words from the server map onto the same letters."""
+    names = {
+        "s": "s", "south": "s", "front": "s",
+        "n": "n", "north": "n", "back": "n",
+        "e": "e", "east": "e",
+        "w": "w", "west": "w",
+    }
+    if facing in names:
+        return names[facing]
+    try:
+        return "w" if float(facing) < 0 else "e"
+    except (TypeError, ValueError):
+        return "s"
+
+
+def wyrm_canvas(tile_px):
+    """Pixel size of the 768×512 canvas, and where the feet sit on it."""
+    meta = _wyrm_meta()
+    height = max(16, int(round(WYRM_TILES_H * float(tile_px) / 16.0)) * 16)
+    width = max(16, int(round(height * meta["frame_w"] / float(meta["frame_h"]))))
+    feet_x = int(meta["feet_px"][0] / meta["frame_w"] * width)
+    feet_y = int(meta["feet_px"][1] / meta["frame_h"] * height)
+    return width, height, feet_x, feet_y
+
+
+def _keep_bucket(bucket):
+    if bucket in _WYRM_BUCKETS:
+        _WYRM_BUCKETS.remove(bucket)
+    _WYRM_BUCKETS.append(bucket)
+    while len(_WYRM_BUCKETS) > 3:
+        old = _WYRM_BUCKETS.pop(0)
+        for key in [item for item in _WYRM_SCALED if item[3] == old]:
+            del _WYRM_SCALED[key]
+
+
+def _wyrm_frame(anim, facing, index, tile_px):
+    _width, height, _fx, _fy = wyrm_canvas(tile_px)
+    key = (anim, facing, int(index), height)
+    cached = _WYRM_SCALED.get(key)
+    if cached is not None:
+        _keep_bucket(height)
+        return cached
+    meta = _wyrm_meta()
+    frame_w = int(meta["frame_w"])
+    frame_h = int(meta["frame_h"])
+    count = int(meta["anims"][anim]["frames"])
+    strip = pygame.image.load(os.path.join(_DRAGON, f"{anim}_{facing}.png")).convert_alpha()
+    canvas_w = max(16, int(round(height * frame_w / float(frame_h))))
+    for i in range(count):
+        frame = strip.subsurface((i * frame_w, 0, frame_w, frame_h))
+        _WYRM_SCALED[(anim, facing, i, height)] = pygame.transform.smoothscale(frame, (canvas_w, height))
+    del strip
+    _keep_bucket(height)
+    return _WYRM_SCALED[key]
+
+
+def wyrm_choice(now, moving, attack_p, breath_t0, hit_at, death_t0):
+    """Which frame to show. Death, breath, hit, walk, then idle."""
+    if death_t0 is not None:
+        age = now - death_t0
+        if age >= 4.0:
+            return None, 0, 0
+        frame = min(7, int(age * 8))
+        alpha = 255
+        if age > 3.5:
+            alpha = int(255 * (1.0 - (age - 3.5) / 0.5))
+        return "death", frame, max(0, alpha)
+    if breath_t0 is not None:
+        frame = int((now - breath_t0) / 0.15)
+        if 0 <= frame <= 7:
+            return "breath", frame, 255
+    if hit_at is not None and 0.0 <= now - hit_at <= 0.3:
+        return "hit", min(2, int((now - hit_at) * 10)), 255
+    if attack_p and attack_p > 0:
+        if attack_p < 0.34:
+            frame = 1
+        elif attack_p < 0.67:
+            frame = 3
+        else:
+            frame = 7
+        return "breath", frame, 255
+    if moving:
+        return "walk", int(now * 10) % 8, 255
+    return "idle", int(now * 6) % 4, 255
+
+
+def draw_wyrm(screen, sx, sy, tile_px, facing, now, moving=False, attack_p=0.0,
+              breath_t0=None, hit_at=None, death_t0=None):
+    """Blit one rendered frame so its feet sit on (sx, sy). None when the death fade is over."""
+    anim, index, alpha = wyrm_choice(now, moving, attack_p, breath_t0, hit_at, death_t0)
+    if anim is None or alpha <= 0:
+        return None
+    face = wyrm_facing(facing)
+    image = _wyrm_frame(anim, face, index, tile_px)
+    if alpha < 255:
+        image = image.copy()
+        image.set_alpha(alpha)
+    _width, _height, feet_x, feet_y = wyrm_canvas(tile_px)
+    rect = image.get_rect()
+    rect.left = int(sx) - feet_x
+    rect.top = int(sy) - feet_y
+    screen.blit(image, rect)
+    return rect

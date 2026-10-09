@@ -216,6 +216,7 @@ class GameClient(ScreensMixin, CameraYaw):
         self.knight_hit_at = {}  # HD knight hit reactions (monster_id -> time)
         self.monster_hit_at = {}  # Emberdeep hit flash (monster_id -> strike time)
         self.ember_corpses = []
+        self.wyrm_death = None
         self.knight_corpses = []  # HD knight death animations [{type, x, y, facing, t0}]
         self.player_hit_at = {}  # HD player hit reactions (player_id -> time)
         self.player_death_at = {}  # HD player death animations (player_id -> time)
@@ -684,7 +685,8 @@ class GameClient(ScreensMixin, CameraYaw):
         elif t == "COMBAT_EVENT":
             self.handle_combat_event(msg)
         elif t == "EMBER_CONE":
-            self.ember_cone = {"tiles": msg.get("tiles") or [], "until": time.time() + 0.9}
+            now = time.time()
+            self.ember_cone = {"tiles": msg.get("tiles") or [], "until": now + 1.2, "t0": now}
         elif t == "MOVE_DENIED":
             self._undo_refused_step(msg.get("x"), msg.get("y"))
         elif t == "DEATH":
@@ -705,14 +707,21 @@ class GameClient(ScreensMixin, CameraYaw):
                             "t0": time.time(),
                         })
                     elif self.dungeon and self.dungeon.get("id") == "emberdeep":
-                        face_key = ("m", mid)
-                        self.ember_corpses.append({
-                            "type": m.get("type"),
-                            "x": m["x"],
-                            "y": m["y"],
-                            "face": self._entity_facing.get(face_key, "front"),
-                            "t0": time.time(),
-                        })
+                        if m.get("type") == "emberdeep_wyrm":
+                            self.wyrm_death = {
+                                "x": m["x"], "y": m["y"],
+                                "facing": m.get("facing") or "s",
+                                "t0": time.time(),
+                            }
+                        else:
+                            face_key = ("m", mid)
+                            self.ember_corpses.append({
+                                "type": m.get("type"),
+                                "x": m["x"],
+                                "y": m["y"],
+                                "face": self._entity_facing.get(face_key, "front"),
+                                "t0": time.time(),
+                            })
             
             # HD player death animation tracking
             if msg.get("entity_kind") == "player":

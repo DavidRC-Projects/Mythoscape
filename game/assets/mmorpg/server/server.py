@@ -1177,7 +1177,7 @@ class MonsterInstance:
             state["cone_tiles"] = cones
         facing = (self.stats or {}).get("facing")
         if facing:
-            state["facing"] = facing
+            state["facing"] = {"south": "s", "north": "n", "east": "e", "west": "w"}.get(facing, facing)
         return state
 
 

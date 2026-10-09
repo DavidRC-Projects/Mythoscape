@@ -906,9 +906,11 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
             if gliding:
                 moving = True
         import ember_combat_fx
-        ax, ay, squash = ember_combat_fx.attack_pose(client, m, t)
-        hx, hy, flash = ember_combat_fx.hit_pose(client, m, t)
-        wx, wy = wx + ax + hx, wy + ay + hy
+        _hx, _hy, flash = ember_combat_fx.hit_pose(client, m, t)
+        squash = 1.0
+        if m.get("type") != "emberdeep_wyrm":
+            ax, ay, squash = ember_combat_fx.attack_pose(client, m, t)
+            wx, wy = wx + ax + _hx, wy + ay + _hy
         proj = _project(ex, ey, lx, ly, rx, ry, wx, wy, depths, rw, rh, mw, mh)
         if proj is None:
             continue
@@ -964,6 +966,9 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
         m, face, moving, atk, show, drop_down, flash = extra
         import emberdeep_creatures_client
         import ember_combat_fx
+        if m.get("type") == "emberdeep_wyrm":
+            _draw_wyrm_billboard(client, m, sx, sy, tile_px, t, moving, atk, flash, along, show, mh)
+            continue
         height = emberdeep_creatures_client.creature_height(m["type"], tile_px)
         if flash > 0.01:
             pad = int(height * 1.4)
@@ -999,7 +1004,8 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
             level = int(m.get("level") or 1)
             client.blit_combat_level(level, sx, bar_y - 28, client.monster_threat_color(level))
     _draw_ember_corpses(client, t, rw, rh, mw, mh)
-    _draw_breath(client, rw, rh, mw, mh)
+    _draw_wyrm_death(client, t, rw, rh, mw, mh)
+    _draw_breath(client, t, rw, rh, mw, mh)
     if player_bill is not None:
         _along, sx, sy, tile_px = player_bill
         _draw_local_player(client, pose, sx, sy, tile_px, t, _along)
@@ -1019,6 +1025,65 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
     client._prev_entity_pos = prev
     _draw_corner_map(client, lx, ly)
     return True
+
+
+def _draw_wyrm_billboard(client, monster, sx, sy, tile_px, now, moving, atk, flash, depth, show, mh):
+    """Rendered wyrm frames. The lunge lives in the art, so only the hit flash is added."""
+    import emberdeep_creatures_client
+    import ember_combat_fx
+    cone = getattr(client, "ember_cone", None) or {}
+    breath_t0 = cone.get("t0")
+    hit_at = (getattr(client, "monster_hit_at", None) or {}).get(monster["id"])
+    facing = monster.get("facing") or "s"
+    if flash > 0.01:
+        width, height, feet_x, feet_y = emberdeep_creatures_client.wyrm_canvas(tile_px)
+        temp = pygame.Surface((width, height), pygame.SRCALPHA)
+        emberdeep_creatures_client.draw_wyrm(
+            temp, feet_x, feet_y, tile_px, facing, now,
+            moving=moving, attack_p=atk, breath_t0=breath_t0, hit_at=hit_at,
+        )
+        temp = ember_combat_fx.flash_surface(temp, flash)
+        rect = temp.get_rect(topleft=(int(sx - feet_x), int(sy - feet_y)))
+        client.screen.blit(temp, rect)
+    else:
+        rect = emberdeep_creatures_client.draw_wyrm(
+            client.screen, sx, sy, tile_px, facing, now,
+            moving=moving, attack_p=atk, breath_t0=breath_t0, hit_at=hit_at,
+        )
+    if rect is None:
+        return
+    _occlude_sprite(client, rect.centerx, rect.bottom, rect.w, rect.h, depth)
+    client._ember_sprite_hits.append((rect, (int(monster["x"]), int(monster["y"]))))
+    label = tile_px * 3.0
+    anchors = getattr(client, "_ember_screen_anchor", None)
+    if isinstance(anchors, dict):
+        anchors[("m", monster["id"])] = (sx, sy, label)
+        anchors[("m", str(monster["id"]))] = (sx, sy, label)
+    bar_y = max(22, min(mh - 28, sy - label - 6))
+    client.draw_hp_bar(sx, bar_y, monster["hp"], monster["max_hp"])
+    if show:
+        client.blit_nameplate(monster["name"], sx, bar_y - 14)
+        level = int(monster.get("level") or 1)
+        client.blit_combat_level(level, sx, bar_y - 28, client.monster_threat_color(level))
+
+
+def _draw_wyrm_death(client, now, rw, rh, mw, mh):
+    import emberdeep_creatures_client
+    death = getattr(client, "wyrm_death", None)
+    if not death:
+        return
+    if now - death["t0"] >= 4.0:
+        client.wyrm_death = None
+        return
+    hit = _project(0, 0, 0, 0, 0, 0, death["x"] + 0.5, death["y"] + 0.5, None, rw, rh, mw, mh)
+    if hit is None:
+        return
+    depth, sx, sy, tile_px = hit
+    rect = emberdeep_creatures_client.draw_wyrm(
+        client.screen, sx, sy, tile_px, death.get("facing") or "s", now, death_t0=death["t0"],
+    )
+    if rect is not None:
+        _occlude_sprite(client, rect.centerx, rect.bottom, rect.w, rect.h, depth)
 
 
 def _draw_ember_corpses(client, now, rw, rh, mw, mh):
@@ -1051,10 +1116,13 @@ def _draw_ember_corpses(client, now, rw, rh, mw, mh):
     client.ember_corpses = keep
 
 
-def _draw_breath(client, rw, rh, mw, mh):
-    import time
+def _draw_breath(client, now, rw, rh, mw, mh):
     cone = getattr(client, "ember_cone", None) or {}
-    if time.time() >= cone.get("until", 0):
+    t0 = cone.get("t0")
+    if t0 is None:
+        return
+    frame = int((now - t0) / 0.15)
+    if frame < 0 or frame > 7:
         return
     spots = []
     for spot in cone.get("tiles") or []:
@@ -1064,26 +1132,32 @@ def _draw_breath(client, rw, rh, mw, mh):
             spots.append((int(spot[0]), int(spot[1])))
     if not spots:
         return
-    import ember_combat_fx
+    released = frame >= 4
     points = []
     for x, y in spots:
         hit = _project(0, 0, 0, 0, 0, 0, x + 0.5, y + 0.5, None, rw, rh, mw, mh)
         if hit is None:
             continue
         points.append(hit)
-        flick = 0.55 + 0.35 * abs(math.sin(time.time() * 11 + x * 3 + y))
-        pygame.draw.circle(
-            client.screen, (255, int(80 + 40 * flick), 24),
-            (int(hit[1]), int(hit[2])), max(3, int(hit[3] * 0.28 * flick)),
-        )
-    image = ember_combat_fx._cone_image()
-    if image is None or not points:
+        if released:
+            flick = 0.55 + 0.35 * abs(math.sin(now * 11 + x * 3 + y))
+            color = (255, int(80 + 40 * flick), 24)
+            radius = max(3, int(hit[3] * 0.28 * flick))
+        else:
+            color = (120, 24, 18)
+            radius = max(2, int(hit[3] * 0.16))
+        pygame.draw.circle(client.screen, color, (int(hit[1]), int(hit[2])), radius)
+    if not released or not points:
         return
-    facing = "south"
+    import ember_combat_fx
+    image = ember_combat_fx._cone_image()
+    if image is None:
+        return
+    facing = "s"
     for monster in (client.monsters or {}).values():
         if monster.get("type") == "emberdeep_wyrm":
-            facing = str(monster.get("facing") or "south")
-    angle = {"east": -90, "west": 90, "north": 180}.get(facing, 0)
+            facing = str(monster.get("facing") or "s")
+    angle = {"e": -90, "east": -90, "w": 90, "west": 90, "n": 180, "north": 180}.get(facing, 0)
     spun = pygame.transform.rotate(image, angle)
     xs = [p[1] for p in points]
     ys = [p[2] for p in points]
