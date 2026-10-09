@@ -1051,6 +1051,36 @@ def _draw_local_player(client, pose, sx, sy, tile_px, t):
     )
 
 
+def _occlude_sprite(client, sx, sy, width, height, depth):
+    """Walls nearer than the sprite cover it, using the cached room render."""
+    cam = _VIEW
+    bg = _FRAME.get("surf")
+    render = getattr(client, "_ember_render", None)
+    if cam is None or bg is None or not render:
+        return
+    rw, rh = render
+    mw, mh = _map_size()
+    rect = pygame.Rect(int(sx - width / 2), int(sy - height), max(1, int(width)), max(1, int(height)))
+    rect = rect.clip(pygame.Rect(0, 0, mw, mh))
+    if rect.w < 1 or rect.h < 1:
+        return
+    mask, origin = cam.occluders(
+        rect.x * rw / float(mw), rect.y * rh / float(mh),
+        rect.right * rw / float(mw), rect.bottom * rh / float(mh),
+        depth,
+    )
+    if mask is None or not getattr(mask, "any", lambda: False)():
+        return
+    ox, oy = origin
+    piece = bg.subsurface((ox, oy, int(mask.shape[1]), int(mask.shape[0]))).convert_alpha()
+    alpha = pygame.surfarray.pixels_alpha(piece)
+    alpha[:, :] = (mask.swapaxes(0, 1) * 255).astype("uint8")
+    del alpha
+    if piece.get_size() != rect.size:
+        piece = pygame.transform.scale(piece, rect.size)
+    client.screen.blit(piece, rect.topleft)
+
+
 def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, mh):
     import time
     t = time.time()
@@ -1118,18 +1148,11 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
                 sy += int(getattr(client, "_ember_nest_drop", 0) * 0.92)
             bills.append((along, "pack_prop", sx, sy, tile_px, key))
     bills.sort(key=lambda item: -item[0])
+    client._ember_sprite_hits = []
+    player_bill = None
     for along, kind, sx, sy, tile_px, extra in bills:
         if kind == "player":
-            _draw_local_player(client, pose, sx, sy, tile_px, t)
-            anchors = getattr(client, "_ember_screen_anchor", None)
-            if not isinstance(anchors, dict):
-                anchors = {}
-                client._ember_screen_anchor = anchors
-            pid = pose.get("key", (None, None))[1]
-            anchors[("p", pid)] = (sx, sy, tile_px)
-            anchors[("p", str(pid))] = (sx, sy, tile_px)
-            p = client.player or {}
-            client.draw_hp_bar(sx, sy - tile_px - 8, p.get("hp", 1), p.get("max_hp", 1), show_value=True)
+            player_bill = (along, sx, sy, tile_px)
             continue
         if kind == "pack_prop":
             import emberdeep_creatures_client
@@ -1137,6 +1160,7 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
             emberdeep_creatures_client.draw_prop(
                 client.screen, extra, sx, sy, max(tile_px, 78),
             )
+            _occlude_sprite(client, sx, sy, max(tile_px, 78), max(tile_px, 78), along)
             continue
         m, face, moving, atk, show, drop_down = extra
         # Distant sprites were a few pixels tall. Keep a readable floor, then let body scale separate them.
@@ -1150,17 +1174,31 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
         _draw_monster_sprite(client, m, sx, sy, tile_px, t, face, moving, atk, player_sx, drop_down)
         import emberdeep_creatures_client
         height = emberdeep_creatures_client.creature_height(m["type"], tile_px)
+        _occlude_sprite(client, sx, sy, height, height, along)
+        hit = pygame.Rect(int(sx - height / 2), int(sy - height), int(height), int(height))
+        client._ember_sprite_hits.append((hit, (int(m["x"]), int(m["y"]))))
         anchors = getattr(client, "_ember_screen_anchor", None)
         if isinstance(anchors, dict):
             anchors[("m", m["id"])] = (sx, sy, height)
             anchors[("m", str(m["id"]))] = (sx, sy, height)
         bar_y = max(22, min(mh - 28, sy - height - 6))
         client.draw_hp_bar(sx, bar_y, m["hp"], m["max_hp"])
-        if not show:
-            continue
-        client.blit_nameplate(m["name"], sx, bar_y - 14)
-        level = int(m.get("level") or 1)
-        client.blit_combat_level(level, sx, bar_y - 28, client.monster_threat_color(level))
+        if show:
+            client.blit_nameplate(m["name"], sx, bar_y - 14)
+            level = int(m.get("level") or 1)
+            client.blit_combat_level(level, sx, bar_y - 28, client.monster_threat_color(level))
+    if player_bill is not None:
+        _along, sx, sy, tile_px = player_bill
+        _draw_local_player(client, pose, sx, sy, tile_px, t)
+        anchors = getattr(client, "_ember_screen_anchor", None)
+        if not isinstance(anchors, dict):
+            anchors = {}
+            client._ember_screen_anchor = anchors
+        pid = pose.get("key", (None, None))[1]
+        anchors[("p", pid)] = (sx, sy, tile_px)
+        anchors[("p", str(pid))] = (sx, sy, tile_px)
+        p = client.player or {}
+        client.draw_hp_bar(sx, sy - tile_px - 8, p.get("hp", 1), p.get("max_hp", 1), show_value=True)
     _draw_opponents(client, pose, fighting, mw, mh, t, psx, player_sy, player_tile)
     _draw_projectiles(client, ex, ey, lx, ly, rx, ry, rw, rh, mw, mh)
     _draw_hitsplats(client, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, mh)
@@ -1483,6 +1521,9 @@ def pick_tile(client, mx, my):
     box = getattr(client, "_ember_map_rect", None)
     if box is not None and box.collidepoint(mx, my):
         return int(client.player["x"]), int(client.player["y"])
+    for rect, tile in getattr(client, "_ember_sprite_hits", None) or []:
+        if rect.collidepoint(mx, my):
+            return tile
     tiles, _pose, ex, ey, lx, ly, rx, ry = _view(client)
     if not tiles:
         return None
