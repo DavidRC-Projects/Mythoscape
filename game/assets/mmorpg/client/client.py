@@ -420,6 +420,12 @@ class GameClient(ScreensMixin, CameraYaw):
         self.CHAT_VISIBLE = 6
         self.CHAT_MAX = 80
 
+        from cosmetics_ui import CharacterCreator, HairSalon, ClothingShop
+        self.char_creator = CharacterCreator(self)
+        self.hair_salon = HairSalon(self)
+        self.clothing_shop = ClothingShop(self)
+        self.needs_appearance = False
+
         self.running = True
         pygame.key.set_repeat(180, 120)
 
@@ -482,10 +488,9 @@ class GameClient(ScreensMixin, CameraYaw):
             self.combat_style_prompt = None
             self.login_error = ""
             self.show_leaderboard = False
-            # Open character creator if no appearance saved
-            if not self.player.get("appearance"):
-                gender = self.player.get("gender", "male")
-                self.char_creator.open(gender)
+            # New accounts have no saved look. Open the creator after the
+            # stat screen and the opening comic, not on top of either.
+            self.needs_appearance = not self.player.get("appearance")
             if msg.get("needs_stat_alloc"):
                 self.state = "STAT_ALLOC"
                 self.stat_alloc = {"attack": 0, "strength": 0, "defence": 0, "archery": 0}
@@ -518,6 +523,7 @@ class GameClient(ScreensMixin, CameraYaw):
                 opening_comic.begin(self)
             else:
                 self.state = "GAME"
+                self._offer_appearance()
                 if self.arrival_guide:
                     import new_player_guide
                     new_player_guide.start(self)
@@ -616,6 +622,8 @@ class GameClient(ScreensMixin, CameraYaw):
         elif t == "PLAYER_UPDATE":
             prev_boosts = (self.player or {}).get("stat_boosts") or {}
             self.player = msg["player"]
+            if self.player and self.player.get("appearance"):
+                self.needs_appearance = False
             prompt = self.stair_prompt
             if prompt and self.player:
                 px, py = int(self.player.get("x", 0)), int(self.player.get("y", 0))
@@ -794,6 +802,14 @@ class GameClient(ScreensMixin, CameraYaw):
                         "kind": "level_up",
                     })
         elif t == "DIALOGUE":
+            if msg.get("npc_id") == "hair_stylist_wren":
+                self.dialogue = None
+                self.hair_salon.open()
+                return
+            if msg.get("npc_id") == "tailor_bram":
+                self.dialogue = None
+                self.clothing_shop.open()
+                return
             if msg.get("npc_id") == "elder_miriam":
                 self.guide_until = 0.0
             self.dialogue = {
@@ -4923,6 +4939,15 @@ class GameClient(ScreensMixin, CameraYaw):
         
         pygame.display.flip()
 
+    def _offer_appearance(self):
+        """Open the creator once a new account is actually in the world."""
+        if not getattr(self, "needs_appearance", False):
+            return
+        if self.char_creator.active or self.state != "GAME":
+            return
+        gender = (self.player or {}).get("gender") or "male"
+        self.char_creator.open(gender)
+
     def remaining_stat_points(self):
         return self.stat_alloc_points - sum(self.stat_alloc.values())
 
@@ -5669,14 +5694,14 @@ class GameClient(ScreensMixin, CameraYaw):
                       cy -= castle_sprites.lift_px(n["x"], n["y"], TILE)
                   import fairy_village_client
                   if n["id"] in fairy_village_client.FAIRY_NPCS:
-                      fairy_village_client.draw_npc(self, n, cx, cy, TILE, t, face, mov)
+                      fairy_village_client.draw_npc(self, n, cx, cy, int(round(TILE * 1.1)), t, face, mov)
                       hint = self._hover_hint
                       if hint and hint[0] == "npc" and hint[1] == n["id"]:
                           ny, _ = self.entity_anchor(cx, cy, "character")
                           self.blit_action_hint(hint[2], cx, ny - 48, hint[3])
                       return
                   import npc_hd_client
-                  if npc_hd_client.draw_npc(self, n, cx, cy, TILE, t, face, mov):
+                  if npc_hd_client.draw_npc(self, n, cx, cy, int(round(TILE * 1.1)), t, face, mov):
                       ny, _ = self.entity_anchor(cx, cy, "character")
                       self._blit_npc_role_badges(n, cx, ny - 18)
                       hint = self._hover_hint
@@ -5766,11 +5791,13 @@ class GameClient(ScreensMixin, CameraYaw):
                     _vis = _mdef.get("visual") or m["type"]
                     _scale = float(_mdef.get("scale") or 1.0)
                     _ts = max(8, int(TILE * _scale))
+                    _hd_ts = max(8, int(round(_ts * 1.1)))
                     # HD knights first (permanent, always-on)
                     import knights_hd_client
+                    import emberdeep_creatures_client
                     hit_t = t - self.knight_hit_at.get(mid, t - 999) if hasattr(self, 'knight_hit_at') else -1.0
                     if knights_hd_client.draw(
-                        self.screen, m["type"], cx, cy + TILE // 2, _ts, t,
+                        self.screen, m["type"], cx, cy + TILE // 2, _hd_ts, t,
                         facing=face, moving=draw_moving, attacking=atk_arg, hurt=hurt,
                         hit_t=hit_t if 0 <= hit_t < 0.36 else -1.0,
                     ):
@@ -5833,7 +5860,7 @@ class GameClient(ScreensMixin, CameraYaw):
                     ny, hy = self.entity_anchor(cx, cy, anchor_kind)
                     # HD knights use custom head positioning
                     if knights_hd_client.handles(m["type"]):
-                        hy = cy + TILE // 2 + knights_hd_client.head_top_dy(m["type"], _ts)
+                        hy = cy + TILE // 2 + knights_hd_client.head_top_dy(m["type"], _hd_ts)
                         ny = hy
                     lvl = int(m.get("level") or 1)
                     lvl_color = self.monster_threat_color(lvl)
@@ -5871,7 +5898,7 @@ class GameClient(ScreensMixin, CameraYaw):
                         cy -= castle_sprites.lift_px(corpse["x"], corpse["y"], TILE)
                     mdef = MONSTERS.get(corpse["type"]) or {}
                     scale = float(mdef.get("scale") or 1.0)
-                    ts = max(8, int(TILE * scale))
+                    ts = max(8, int(round(TILE * scale * 1.1)))
                     knights_hd_client.draw(
                         self.screen, corpse["type"], cx, cy + TILE // 2, ts, t,
                         facing=corpse["facing"], moving=False, attacking=-1.0,
@@ -6002,7 +6029,7 @@ class GameClient(ScreensMixin, CameraYaw):
                         import player_hd_client
                         anim = "melee" if atk > 0 and not action else (action or ("walk" if mov else "idle"))
                         drawn = player_hd_client.draw_player(
-                            self.screen, gender, appearance, cx, cy + TILE // 2, TILE, t,
+                            self.screen, gender, appearance, cx, cy + TILE // 2, int(round(TILE * 1.1)), t,
                             anim=anim, progress=atk if atk > 0 else None, facing=face,
                             hit_t=hit_t if 0 <= hit_t < 0.36 else -1.0,
                             death_t=death_t if 0 <= death_t < 1.2 else -1.0,
@@ -6019,6 +6046,10 @@ class GameClient(ScreensMixin, CameraYaw):
                     if action and gather:
                         self.draw_gather_fx(cx, cy, action, gather, t, face)
                     ny, hy = self.entity_anchor(cx, cy, "character")
+                    if drawn:
+                        lift = int(round(TILE * 0.31))
+                        ny -= lift
+                        hy -= lift
                     pk_on = bool(p.get("player_killer")) or (
                         is_self and bool((self.player or {}).get("player_killer"))
                     )
@@ -7321,7 +7352,7 @@ class GameClient(ScreensMixin, CameraYaw):
         static = next((n for n in NPCS if n.get("id") == npc.get("id")), None) or {}
         merged = {**static, **(npc or {})}
         tags = []
-        if merged.get("shop_id"):
+        if merged.get("shop_id") or merged.get("cosmetic"):
             tags.append(("Shop", (200, 160, 60), (40, 32, 16)))
         if merged.get("bank"):
             tags.append(("Bank", (140, 190, 255), (20, 32, 48)))

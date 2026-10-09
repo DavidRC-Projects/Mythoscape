@@ -103,6 +103,7 @@ def next_id():
 class PlayerSession:
     def __init__(self, ws, row):
         self.ws = ws
+        self.row = row
         self.player_id = row["id"]
         self.username = row["username"]
         self.char_name = row["char_name"]
@@ -834,6 +835,24 @@ class PlayerSession:
             "resource": node["type"],
         }
 
+    def _row_val(self, key, default=None):
+        if key in self.row.keys():
+            return self.row[key]
+        return default
+
+    def appearance_state(self):
+        import json
+        appearance = None
+        raw = self._row_val("appearance")
+        if raw:
+            try:
+                appearance = json.loads(raw)
+            except Exception:
+                appearance = None
+        # None means this character has never chosen a look. The client opens
+        # the creator. Do not invent a saved appearance here.
+        return appearance
+
     def public_state(self):
         return {
             "id": self.player_id, "name": self.char_name, "x": self.x, "y": self.y,
@@ -844,8 +863,8 @@ class PlayerSession:
             "gender": self.gender,
             "player_killer": bool(self.player_killer),
             "pk_kills": int(self.pk_kills or 0),
-            "appearance": appearance,
-            "hd_player": bool(self.row.get("hd_player", 1)),
+            "appearance": self.appearance_state(),
+            "hd_player": bool(self._row_val("hd_player", 1)),
         }
 
     def total_level(self):
@@ -865,29 +884,7 @@ class PlayerSession:
         wb = self.weapon_bonuses()
         karma_lvl = self.level("karma") if "karma" in self.xp else 1
         levels = {s: self.level(s) for s in XP_SKILLS}
-        # Parse appearance JSON
-        import json
-        appearance = None
-        if self.row.get("appearance"):
-            try:
-                appearance = json.loads(self.row["appearance"])
-            except Exception:
-                pass
-        # Default appearance if none saved
-        if appearance is None:
-            gender = self.row.get("gender", "male")
-            if gender == "male":
-                appearance = {
-                    "skin": "skin_light", "hair": "hair_side_part", "hair_colour": "dark_brown",
-                    "top": "top_linen_shirt", "bottom": "bottom_work_trousers", "shoes": "shoes_leather",
-                    "outfit": None, "accessories": [],
-                }
-            else:
-                appearance = {
-                    "skin": "skin_light", "hair": "hair_ponytail", "hair_colour": "chestnut",
-                    "top": "top_linen_shirt", "bottom": "bottom_long_skirt", "shoes": "shoes_leather",
-                    "outfit": None, "accessories": [],
-                }
+        appearance = self.appearance_state()
         
         return {
             "id": self.player_id, "name": self.char_name, "x": self.x, "y": self.y,
@@ -915,6 +912,8 @@ class PlayerSession:
             "stat_boosts": self.active_boosts_public(),
             "gathering": self.gathering_public(),
             "gender": self.gender,
+            "appearance": appearance,
+            "hd_player": bool(self._row_val("hd_player", 1)),
             "wish_available": self.can_wish(),
             "unlimited_wishes": self.has_unlimited_wishes(),
             "quest_points": self.quest_points(),
@@ -3959,6 +3958,10 @@ async def handle_update_appearance(session, msg):
     session.row = WORLD.db.get_player_by_id(session.player_id)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     await broadcast_player_state(session)
+    await send(
+        session.ws, "CHAT_MSG",
+        **{"from": "Tailor", "text": "Look saved. Press J for the hair salon, K for the clothing shop."},
+    )
 
 
 async def handle_shop_buy(session, msg):

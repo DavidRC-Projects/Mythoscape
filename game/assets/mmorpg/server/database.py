@@ -221,6 +221,17 @@ class Database:
             )
         if "dungeon_resume" not in cols:
             self.conn.execute("ALTER TABLE players ADD COLUMN dungeon_resume TEXT NOT NULL DEFAULT ''")
+        if "appearance" not in cols:
+            self.conn.execute("ALTER TABLE players ADD COLUMN appearance TEXT")
+            self._backfill_existing_looks()
+        if "owned_cosmetics" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN owned_cosmetics TEXT NOT NULL DEFAULT '[]'"
+            )
+        if "hd_player" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN hd_player INTEGER NOT NULL DEFAULT 1"
+            )
         import clans
         clans.ensure_tables(self.conn)
         self.conn.execute(
@@ -238,6 +249,35 @@ class Database:
     def get_player_by_username(self, username):
         cur = self.conn.execute("SELECT * FROM players WHERE username = ?", (username,))
         return cur.fetchone()
+
+    def _backfill_existing_looks(self):
+        """Characters already in the world keep a default look.
+
+        A new account leaves appearance empty until the creator saves it.
+        """
+        import json
+        rows = self.conn.execute(
+            "SELECT id, gender FROM players WHERE appearance IS NULL AND stats_allocated = 1"
+        ).fetchall()
+        for row in rows:
+            if row["gender"] == "female":
+                look = {
+                    "skin": "skin_light", "hair": "hair_ponytail", "hair_colour": "chestnut",
+                    "top": "top_linen_shirt", "bottom": "bottom_long_skirt", "shoes": "shoes_leather",
+                    "outfit": None, "accessories": [],
+                }
+            else:
+                look = {
+                    "skin": "skin_light", "hair": "hair_side_part", "hair_colour": "dark_brown",
+                    "top": "top_linen_shirt", "bottom": "bottom_work_trousers", "shoes": "shoes_leather",
+                    "outfit": None, "accessories": [],
+                }
+            self.conn.execute(
+                "UPDATE players SET appearance = ? WHERE id = ?",
+                (json.dumps(look), row["id"]),
+            )
+        if rows:
+            self.conn.commit()
 
     def create_account(self, username, password, char_name, gender="male"):
         salt = os.urandom(8).hex()

@@ -63,6 +63,8 @@ def finish(client):
     _stop()
     client.opening_comic_pending = False
     client.state = "GAME"
+    if hasattr(client, "_offer_appearance"):
+        client._offer_appearance()
     if getattr(client, "arrival_guide", False):
         import new_player_guide
         new_player_guide.start(client)
