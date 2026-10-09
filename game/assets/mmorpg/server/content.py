@@ -1087,7 +1087,7 @@ MONSTERS = {
     "knight_captain_vorn": {
         "name": "Knight-Captain Vorn", "level": 92, "hp": 320, "attack": 110, "strength": 118, "defence": 96,
         "def_bonus": 52, "xp": 1100, "respawn_ticks": 80, "aggro_range": 7,
-        "visual": "shadow_knight", "tint": (255, 80, 60), "scale": 1.2,
+        "scale": 1.2,
         "force_retaliate": True,
         "drops": [
             ("void_rift_sigil", 1.0, (1, 1)),
@@ -1149,14 +1149,13 @@ MONSTERS = {
     "barrow_knight": {
         "name": "Barrow Knight", "level": 44, "hp": 88, "attack": 44, "strength": 46, "defence": 32,
         "def_bonus": 22, "xp": 190, "respawn_ticks": 50, "aggro_range": 6,
-        "visual": "shadow_knight", "tint": (160, 200, 170),
         "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.1,
         "drops": [("bones", 1.0, (1, 1)), ("coins", 1.0, (80, 160)), ("steel_longsword", 0.08, (1, 1))],
     },
     "sir_aldric": {
         "name": "Sir Aldric the Unquiet", "level": 52, "hp": 180, "attack": 52, "strength": 54, "defence": 40,
         "def_bonus": 30, "xp": 520, "respawn_ticks": 9999, "aggro_range": 8,
-        "visual": "shadow_knight", "tint": (255, 110, 70), "scale": 1.3,
+        "scale": 1.3,
         "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.1,
         "drops": [
             ("depths_knight_seal", 1.0, (1, 1)),

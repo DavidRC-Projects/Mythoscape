@@ -48,9 +48,7 @@ _PET_DRAGON_SCALE = 0.55
 _MONSTER_PREVIEW = {
     "giant_rat": "giant_rat",
     "guard": "guard",
-    "knight": "castle_knight",
     "mythos_champion": "mythos_champion",
-    "shadow_knight": "shadow_knight",
     "magma_slug": "magma_slug",
     "ash_imp": "ash_imp",
     "crucible_beast": "crucible_beast",
@@ -64,7 +62,6 @@ _HEIGHT = {
     "guard": 3.6,
     "castle_knight": 4.0,
     "mythos_champion": 4.4,
-    "shadow_knight": 4.6,
     "magma_slug": 2.4,
     "ash_imp": 3.0,
     "crucible_beast": 5.4,
