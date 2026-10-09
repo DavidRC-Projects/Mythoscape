@@ -1673,7 +1673,14 @@ class GameClient(ScreensMixin, CameraYaw):
                     self.chat_scroll = max(0, min(max_off, self.chat_scroll + event.y))
                 elif mx < MAP_W and my < MAP_H:
                     # Wheel over the world map: zoom out / in
-                    if event.y > 0:
+                    import emberdeep_v2_client
+                    if emberdeep_v2_client.fp_active(self):
+                        wheel = getattr(event, "precise_y", None)
+                        if wheel is None:
+                            wheel = event.y
+                        if wheel:
+                            self.adjust_zoom(float(wheel))
+                    elif event.y > 0:
                         self.adjust_zoom(1)
                     elif event.y < 0:
                         self.adjust_zoom(-1)

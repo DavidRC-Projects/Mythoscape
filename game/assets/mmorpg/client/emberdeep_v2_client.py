@@ -21,14 +21,14 @@ _APRON = (176, 58, 198, 94)  # inclusive world tiles
 _IMAGES = {}
 _SCALED = {}
 _TEX = {}
-_FOV = math.radians(78)
-# Each step lifts the eye and opens the view. 100 is the normal camera.
-# The body size is not tied to these.
-_ZOOMS = (
-    {"back": 1.55, "horizon": 0.28, "z": 2.05, "fov": 78, "label": "100"},
-    {"back": 4.8, "horizon": 0.15, "z": 7.5, "fov": 120, "label": "40"},
-    {"back": 9.0, "horizon": 0.08, "z": 16.0, "fov": 145, "label": "15"},
-)
+_TEX_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "emberdeep_hd", "textures"))
+_VIEW = None
+_VIEW_KEY = None
+_FRAME = {}
+_RENDER_MS = []
+_INTERNAL_SCALE = 0.42
+_PRESETS = (0.0, 0.5, 1.0)
+_PRESET_NAMES = ("Near", "Mid", "Far")
 
 
 def _map_size():
@@ -117,41 +117,30 @@ def blit_backdrop(client):
 
 
 def zoom_level(client):
-    return max(0, min(len(_ZOOMS) - 1, int(getattr(client, "ember_zoom", 0) or 0)))
-
-
-def apply_zoom(client):
-    """Use the Emberdeep zoom step for this frame. The player sprite is unchanged."""
-    global _EYE_BACK, _HORIZON, _CAM_Z, _FOV
-    step = _ZOOMS[zoom_level(client)]
-    _EYE_BACK = step["back"]
-    _HORIZON = step["horizon"]
-    _CAM_Z = step["z"]
-    _FOV = math.radians(step["fov"])
+    z = float(getattr(client, "ember_zoom", 0.35) or 0.0)
+    return min(range(len(_PRESETS)), key=lambda i: abs(_PRESETS[i] - z))
 
 
 def adjust_zoom(client, delta):
-    """Match the world controls: delta < 0 zooms out."""
-    level = zoom_level(client)
-    if delta < 0:
-        level += 1
-    elif delta > 0:
-        level -= 1
-    set_zoom(client, level)
+    """delta < 0 zooms out (raises the camera)."""
+    import time
+    current = getattr(client, "ember_zoom", 0.35)
+    if not isinstance(current, float):
+        current = _PRESETS[max(0, min(2, int(current or 0)))]
+    target = max(0.0, min(1.0, float(current) - float(delta) * 0.10))
+    client.ember_zoom = target
+    client._zoom_toast_until = time.time() + 1.2
 
 
 def set_zoom(client, level):
     import time
-    level = max(0, min(len(_ZOOMS) - 1, int(level)))
-    if getattr(client, "ember_zoom", None) == level:
-        return
-    client.ember_zoom = level
+    level = max(0, min(2, int(level)))
+    client.ember_zoom = _PRESETS[level]
     client._zoom_toast_until = time.time() + 1.2
-    apply_zoom(client)
 
 
 def zoom_label(client):
-    return f"Zoom {_ZOOMS[zoom_level(client)]['label']}%"
+    return _PRESET_NAMES[zoom_level(client)]
 
 
 def zoom_control_layout():
@@ -164,7 +153,7 @@ def zoom_control_layout():
     x = 10
     items = [(pygame.Rect(x, y, 28, bh), "out")]
     x += 28 + gap
-    for level in range(len(_ZOOMS) - 1, -1, -1):
+    for level in range(len(_PRESETS) - 1, -1, -1):
         items.append((pygame.Rect(x, y, 36, bh), level))
         x += 36 + gap
     items.append((pygame.Rect(x, y, 28, bh), "in"))
@@ -185,7 +174,7 @@ def draw_zoom_controls(client):
         elif action == "in":
             label = "+"
         else:
-            label = _ZOOMS[action]["label"]
+            label = _PRESET_NAMES[action]
         text = client.font_tiny.render(label, True, (240, 220, 190))
         client.screen.blit(text, (rect.centerx - text.get_width() // 2, rect.centery - text.get_height() // 2))
     if time.time() < getattr(client, "_zoom_toast_until", 0):
@@ -205,13 +194,7 @@ def _in_emberdeep(client):
     )
 
 
-# Eye sits back and above the player, pitched down so the corridor is seen
-# from over their head. Horizon stays high; the body stays in the lower middle.
-# These are the active step. adjust_zoom writes them from _ZOOMS.
-_EYE_BACK = _ZOOMS[0]["back"]
-_HORIZON = _ZOOMS[0]["horizon"]
-_CAM_Z = _ZOOMS[0]["z"]
-# One key press turns the view this far. The player owns the yaw.
+# One key press turns the view this far. The drawn yaw eases toward it.
 _YAW_STEP = math.radians(15)
 
 
@@ -352,32 +335,23 @@ def _face_from_vector(lx, ly):
 
 
 def _draw_tile_highlight(view, ex, ey, lx, ly, rx, ry, tile_x, tile_y, rw, rh, mw, mh, color, thickness=2):
-    """Draw an outline around a floor tile at (tile_x, tile_y)."""
-    corners = [
-        (tile_x, tile_y),
-        (tile_x + 1, tile_y),
-        (tile_x + 1, tile_y + 1),
-        (tile_x, tile_y + 1),
-    ]
+    """Outline a floor tile using the follow camera."""
+    cam = _VIEW
+    if cam is None:
+        return
     screen_pts = []
-    for cx, cy in corners:
-        vx, vy = cx - ex, cy - ey
-        along = vx * lx + vy * ly
-        if along < 0.3:
+    scale_x = mw / float(getattr(cam, "_last", (rw, rh))[0] or rw)
+    scale_y = mh / float(getattr(cam, "_last", (rw, rh))[1] or rh)
+    for cx, cy in ((tile_x, tile_y), (tile_x + 1, tile_y), (tile_x + 1, tile_y + 1), (tile_x, tile_y + 1)):
+        hit = cam.project(cx, cy, 0.02)
+        if hit is None:
             return
-        side = vx * rx + vy * ry
-        angle = math.atan2(side, along)
-        if abs(angle) > _FOV * 0.6:
-            return
-        sx = int((0.5 + angle / _FOV) * rw)
-        sy = _feet_y(along, rh, mh)
-        screen_pts.append((sx, sy))
-    if len(screen_pts) == 4:
-        for i in range(4):
-            p1 = screen_pts[i]
-            p2 = screen_pts[(i + 1) % 4]
-            for t in range(thickness):
-                pygame.draw.line(view, color, (p1[0], p1[1] + t), (p2[0], p2[1] + t), 1)
+        _depth, sx, sy, _px = hit
+        screen_pts.append((int(sx * scale_x), int(sy * scale_y)))
+    for i in range(4):
+        p1 = screen_pts[i]
+        p2 = screen_pts[(i + 1) % 4]
+        pygame.draw.line(view, color, p1, p2, thickness)
 
 
 def fp_active(client):
@@ -452,66 +426,100 @@ def _local_draw_args(client, t):
     }
 
 
-def _advance_camera(client, tiles, pose, now):
-    """Sit on the current tile. No glide, so the room does not keep sliding."""
-    px, py = pose["x"] + 0.5, pose["y"] + 0.5
-    want_lx, want_ly = pose["lx"], pose["ly"]
-    dungeon_id = (client.dungeon or {}).get("id")
+def _ensure_view(client):
+    global _VIEW, _VIEW_KEY
+    tiles = client.tiles
+    if not tiles:
+        return None
+    boss = (client.dungeon or {}).get("boss_door")
+    key = (id(tiles), tuple(boss) if isinstance(boss, (list, tuple)) else boss)
+    if _VIEW is None or _VIEW_KEY != key:
+        from emberdeep_view3d import EmberView3D
+        _VIEW = EmberView3D(
+            tiles, _TEX_DIR,
+            lambda tile: tile == wm.WALL,
+            lambda tile: tile == wm.WATER,
+            boss_door=boss,
+        )
+        _VIEW_KEY = key
+        _FRAME.clear()
+    return _VIEW
+
+
+def _ease_follow(client, pose, now):
+    """Smooth focus, yaw and zoom. Returns focus, drawn yaw, zoom and dt."""
+    current = getattr(client, "ember_zoom", 0.35)
+    if not isinstance(current, float):
+        current = 0.35
+    client.ember_zoom = max(0.0, min(1.0, float(current)))
+    prev = float(getattr(client, "_ember_cam_t", now) or now)
+    dt = max(0.0, min(0.1, now - prev))
     client._ember_cam_t = now
-    eye = _eye(tiles, px, py, want_lx, want_ly)
-    client._ember_cam = {
-        "dungeon": dungeon_id,
-        "bx": px, "by": py,
-        "fx": px, "fy": py,
-        "lx": want_lx, "ly": want_ly,
-        "ex": eye[0], "ey": eye[1],
-    }
+    zoom = float(getattr(client, "_ember_zoom_cur", client.ember_zoom))
+    zoom += (client.ember_zoom - zoom) * (1 - math.exp(-dt * 10.0))
+    client._ember_zoom_cur = zoom
+    fx, fy = pose["x"] + 0.5, pose["y"] + 0.5
+    ox, oy = getattr(client, "_ember_focus", (fx, fy))
+    kf = 1 - math.exp(-dt / 0.12) if dt else 1.0
+    fx = ox + (fx - ox) * kf
+    fy = oy + (fy - oy) * kf
+    client._ember_focus = (fx, fy)
+    target = float(getattr(client, "_ember_yaw", 0.0))
+    yaw = float(getattr(client, "_ember_yaw_draw", target))
+    delta = (target - yaw + math.pi) % (2 * math.pi) - math.pi
+    yaw += delta * kf
+    client._ember_yaw_draw = yaw
+    return fx, fy, yaw, zoom, dt
 
 
-def _eye(tiles, px, py, lx, ly):
-    """Step back along the look until a wall."""
-    ex, ey = px, py
-    steps = max(8, int(_EYE_BACK * 4))
-    for i in range(1, steps + 1):
-        dist = _EYE_BACK * i / steps
-        nx, ny = px - lx * dist, py - ly * dist
-        if _tile_at(tiles, int(nx), int(ny)) != wm.FLOOR:
-            break
-        ex, ey = nx, ny
-    return ex, ey
+def _heights_settling(view):
+    gap = view.heights_target - view.heights
+    return bool((abs(gap) > 0.02).any())
 
 
-def _right(lx, ly):
-    return -ly, lx
-
-
-def _feet_y(dist, rh, mh):
-    horizon = rh * _HORIZON
-    yb = horizon * (1.0 + _CAM_Z / max(0.2, dist))
-    return int(yb * (mh / float(rh)))
-
-
-def _tile_px(dist, mh):
-    return max(24, int((mh / max(0.45, dist)) * 0.12))
+def _render_cached(view, mw, mh, now, fx, fy, yaw, zoom):
+    global _INTERNAL_SCALE
+    rw = max(96, int(round(mw * _INTERNAL_SCALE)))
+    rh = max(64, int(round(mh * _INTERNAL_SCALE)))
+    state = _FRAME.get("state")
+    if state and _FRAME.get("surf") is not None:
+        cfx, cfy, cyaw, cz, ct = state
+        if (
+            abs(fx - cfx) < 0.005 and abs(fy - cfy) < 0.005
+            and abs(yaw - cyaw) < 0.002 and abs(zoom - cz) < 0.002
+            and now - ct < (1.0 / 15.0)
+            and not _heights_settling(view)
+            and _FRAME.get("rw") == rw
+        ):
+            return _FRAME["surf"], rw, rh
+    import time
+    started = time.perf_counter()
+    rgb, _depth = view.render(rw, rh, now)
+    elapsed = (time.perf_counter() - started) * 1000.0
+    _RENDER_MS.append(elapsed)
+    if len(_RENDER_MS) > 30:
+        del _RENDER_MS[:-30]
+    if len(_RENDER_MS) >= 30 and sum(_RENDER_MS) / len(_RENDER_MS) > 45.0 and _INTERNAL_SCALE > 0.30:
+        _INTERNAL_SCALE = max(0.30, _INTERNAL_SCALE - 0.04)
+    surf = pygame.surfarray.make_surface(rgb.swapaxes(0, 1))
+    _FRAME["surf"] = surf
+    _FRAME["state"] = (fx, fy, yaw, zoom, now)
+    _FRAME["rw"] = rw
+    _FRAME["rh"] = rh
+    return surf, rw, rh
 
 
 def _project(ex, ey, lx, ly, rx, ry, wx, wy, depths, rw, rh, mw, mh, reveal=False):
-    vx, vy = wx - ex, wy - ey
-    along = vx * lx + vy * ly
-    side = vx * rx + vy * ry
-    if along < 0.2:
+    """World point -> (depth, map x, map y, px per tile)."""
+    cam = _VIEW
+    if cam is None or not hasattr(cam, "_last"):
         return None
-    angle = math.atan2(side, along)
-    limit = _FOV * (0.85 if reveal else 0.75)
-    if abs(angle) > limit:
+    hit = cam.project(float(wx), float(wy), 0.0)
+    if hit is None:
         return None
-    col = int((0.5 + angle / _FOV) * rw)
-    col = max(0, min(rw - 1, col))
-    if depths is not None and not reveal and depths[col] < along - 0.25:
-        return None
-    sx = int((0.5 + max(-0.48, min(0.48, angle / _FOV))) * mw)
-    sy = _feet_y(along, rh, mh)
-    return along, sx, sy, _tile_px(along, mh)
+    depth, sx, sy, px = hit
+    last_w, last_h = cam._last[0], cam._last[1]
+    return depth, sx * mw / float(last_w), sy * mh / float(last_h), px * mw / float(last_w)
 
 
 def _cone_spots(monster):
@@ -902,26 +910,20 @@ def _stride(kind, now, tile, facing):
     return sway, bob
 
 
+def _right(lx, ly):
+    return -ly, lx
+
+
 def _view(client, advance=False):
     """Eye, look, and the local pose. The drawn body can lead the camera."""
     import time
     tiles = client.tiles or []
     pose = _local_draw_args(client, time.time())
-    if advance and tiles:
-        _advance_camera(client, tiles, pose, time.time())
-    state = getattr(client, "_ember_cam", None)
-    if state and tiles:
-        lx, ly = state["lx"], state["ly"]
-        ex, ey = state["ex"], state["ey"]
-        pose["draw_x"] = state["bx"]
-        pose["draw_y"] = state["by"]
-    else:
-        lx, ly = pose["lx"], pose["ly"]
-        ex, ey = _eye(tiles, pose["x"] + 0.5, pose["y"] + 0.5, lx, ly)
-        pose["draw_x"] = pose["x"] + 0.5
-        pose["draw_y"] = pose["y"] + 0.5
+    pose["draw_x"] = pose["x"] + 0.5
+    pose["draw_y"] = pose["y"] + 0.5
+    lx, ly = pose["lx"], pose["ly"]
     rx, ry = _right(lx, ly)
-    return tiles, pose, ex, ey, lx, ly, rx, ry
+    return tiles, pose, pose["draw_x"], pose["draw_y"], lx, ly, rx, ry
 
 
 def _monster_pose(client, m, t):
@@ -1060,18 +1062,11 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
     by = pose.get("draw_y", pose["y"] + 0.5)
     projected = _project(ex, ey, lx, ly, rx, ry, bx, by, None, rw, rh, mw, mh)
     if projected is None:
-        along_p = max(0.35, (bx - ex) * lx + (by - ey) * ly)
-        side_p = (bx - ex) * rx + (by - ey) * ry
-        angle_p = math.atan2(side_p, max(0.2, along_p))
-        psx = int((0.5 + angle_p / _FOV) * mw)
-        psy = min(mh - 8, _feet_y(along_p, rh, mh))
-        ptile = _tile_px(along_p, mh)
-        projected = (along_p, psx, psy, ptile)
+        projected = (1.0, mw // 2, int(mh * 0.72), max(32, mh // 12))
     along_p, psx, psy, ptile = projected
     player_sx = psx
-    # The eye stays above and behind. The body keeps a full size in the lower frame.
-    player_sy = min(mh - 8, max(psy, int(mh * 0.74)))
-    player_tile = max(ptile, int(mh * 0.11))
+    player_sy = psy
+    player_tile = max(24, int(ptile))
     bills.append((max(0.2, along_p), "player", psx, player_sy, player_tile, None))
     seen = {pose["key"]: (pose["x"], pose["y"])}
     floor = client.tiles or []
@@ -1440,116 +1435,33 @@ def draw_first_person(client):
     if not _in_emberdeep(client):
         client._ember_cam = None
         return False
-    apply_zoom(client)
     tiles, pose, ex, ey, lx, ly, rx, ry = _view(client, advance=True)
     if not tiles:
         return False
+    view = _ensure_view(client)
+    if view is None:
+        return False
+    now = time.time()
+    fx, fy, yaw, zoom, dt = _ease_follow(client, pose, now)
+    view.set_camera(fx, fy, yaw, zoom)
+    view.ease(dt)
     mw, mh = _map_size()
-    rw, rh = max(160, mw // 2), max(120, mh // 2)
-    view = pygame.Surface((rw, rh))
-    boss = client.dungeon.get("boss_door")
-    horizon = int(rh * _HORIZON)
-    depths = [1e9] * rw
-    pix = pygame.PixelArray(view)
-    ceiling = _texture("ceiling_dark.png")
-    glow, sconces = _sconces(tiles)
-    flicker = 0.72 + 0.28 * abs(math.sin(time.time() * 9.0))
-    breath = set()
-    for mon in (client.monsters or {}).values():
-        if mon.get("alive", True) and mon.get("type") == "emberdeep_wyrm":
-            breath |= _cone_spots(mon)
-    cone = getattr(client, "ember_cone", None) or {}
-    hot = breath if time.time() < cone.get("until", 0) else set()
-    for col in range(rw):
-        cam = (col / max(1, rw - 1) - 0.5) * _FOV
-        rdx = lx * math.cos(cam) + rx * math.sin(cam)
-        rdy = ly * math.cos(cam) + ry * math.sin(cam)
-        dist, wx, wy, tex_u, side, step_x, step_y = _cast(tiles, ex, ey, rdx, rdy)
-        depths[col] = dist
-        # A higher eye would still fill the screen with the nearest wall.
-        # Shrink that face with the lift so the floor and the hall beyond show.
-        wall_scale = (2.05 / max(2.05, _CAM_Z)) ** 0.55
-        wall_h = min(rh, int(rh / max(0.2, dist) * wall_scale))
-        # Plant the wall on the raised camera's floor line instead of the horizon.
-        floor_y = int(horizon * (1.0 + _CAM_Z / max(0.2, dist)))
-        bot = min(rh - 1, max(horizon + 4, floor_y))
-        top = max(0, bot - wall_h)
-        face_x = wx - step_x if side == 0 else wx
-        face_y = wy if side == 0 else wy - step_y
-        wall_name = _wall_name(tiles, wx, wy, boss)
-        theme = None
-        if wall_name == "wall_rock.png":
-            theme = _theme_at(client, tiles, face_x, face_y)
-        wall_tex = _theme_tex(theme) if theme else _texture(wall_name)
-        sconce = (face_x, face_y) in sconces
-        face_glow = 0.0
-        if 0 <= face_y < len(glow) and 0 <= face_x < len(glow[0]):
-            face_glow = glow[face_y][face_x]
-        for y in range(rh):
-            if top <= y <= bot:
-                v = (y - top) / max(1, bot - top)
-                color = _sample(wall_tex, tex_u, v)
-                # Near stone is lit; the far face and the side grain fall off.
-                light = min(255, int(150 + 110 / max(0.4, dist)))
-                if side == 1:
-                    light = int(light * 0.78)
-                light = int(light * (0.72 + 0.28 * (1.0 - v)))
-                color = (
-                    min(255, color.r * light // 200),
-                    min(255, color.g * light // 200),
-                    min(255, color.b * light // 200),
-                )
-                if sconce:
-                    color = _candle(color, tex_u, v, flicker)
-                color = _warm(color, max(face_glow, 0.35 if sconce else face_glow))
-            elif y < horizon:
-                row = (horizon - y) / max(1, horizon)
-                current = _CAM_Z / max(0.05, row)
-                fx = ex + rdx * current
-                fy = ey + rdy * current
-                color = _sample(ceiling, fx, fy)
-                color = (color.r // 2, color.g // 2, color.b // 2)
-                ix, iy = int(fx), int(fy)
-                if 0 <= iy < len(glow) and 0 <= ix < len(glow[0]):
-                    color = _warm(color, glow[iy][ix] * 0.65)
-            else:
-                row = (y - horizon) / max(1, horizon)
-                current = _CAM_Z / max(0.05, row)
-                fx = ex + rdx * current
-                fy = ey + rdy * current
-                floor_tex = _texture(_floor_name(tiles, int(fx), int(fy)))
-                color = _sample_floor(floor_tex, tiles, fx, fy)
-                floor_dist_fade = min(240, int(140 + 100 / max(0.5, current)))
-                color = (
-                    min(255, (color.r * 3 + 50) // 4 * floor_dist_fade // 255),
-                    min(255, (color.g * 3 + 35) // 4 * floor_dist_fade // 255),
-                    min(255, (color.b * 3 + 20) // 4 * floor_dist_fade // 255)
-                )
-                ix, iy = int(fx), int(fy)
-                if (ix, iy) in breath:
-                    heat = 0.72 if (ix, iy) in hot else 0.4
-                    color = (
-                        min(255, int(color[0] * (1 - heat) + 220 * heat)),
-                        min(255, int(color[1] * (1 - heat) + 90 * heat)),
-                        min(255, int(color[2] * (1 - heat) + 24 * heat)),
-                    )
-                if 0 <= iy < len(glow) and 0 <= ix < len(glow[0]):
-                    color = _warm(color, glow[iy][ix])
-            pix[col, y] = color
-    del pix
+    surf, rw, rh = _render_cached(view, mw, mh, now, fx, fy, yaw, zoom)
+    scaled = pygame.transform.smoothscale(surf, (mw, mh))
+    client.screen.blit(scaled, (0, 0))
+    client._ember_render = (rw, rh)
     px, py = int(pose["x"]), int(pose["y"])
-    _draw_tile_highlight(view, ex, ey, lx, ly, rx, ry, px, py, rw, rh, mw, mh, (180, 200, 120), 2)
-    next_dx, next_dy = 0, 0
+    _draw_tile_highlight(client.screen, ex, ey, lx, ly, rx, ry, px, py, rw, rh, mw, mh, (180, 200, 120), 2)
     if abs(lx) >= abs(ly):
-        next_dx = 1 if lx > 0 else -1
+        next_dx, next_dy = (1 if lx > 0 else -1), 0
     else:
-        next_dy = 1 if ly > 0 else -1
+        next_dx, next_dy = 0, (1 if ly > 0 else -1)
     next_x, next_y = px + next_dx, py + next_dy
     if _tile_at(tiles, next_x, next_y) == wm.FLOOR:
-        _draw_tile_highlight(view, ex, ey, lx, ly, rx, ry, next_x, next_y, rw, rh, mw, mh, (150, 170, 100), 1)
-    scaled = pygame.transform.scale(view, (mw, mh))
-    client.screen.blit(scaled, (0, 0))
-    _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, mh)
+        _draw_tile_highlight(
+            client.screen, ex, ey, lx, ly, rx, ry, next_x, next_y, rw, rh, mw, mh, (150, 170, 100), 1,
+        )
+    _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, None, rw, rh, mw, mh)
     draw_zoom_controls(client)
     return True
 
@@ -1565,7 +1477,6 @@ def pick_tile(client, mx, my):
     """Map a follow-view click onto a dungeon tile. None keeps the top-down picker."""
     if not _in_emberdeep(client):
         return None
-    apply_zoom(client)
     mw, mh = _map_size()
     if mx < 0 or my < 0 or mx >= mw or my >= mh:
         return None
@@ -1614,17 +1525,8 @@ def pick_tile(client, mx, my):
             best_d = along
     if best:
         return best
-    cam = (mx / max(1, mw - 1) - 0.5) * _FOV
-    rdx = lx * math.cos(cam) + rx * math.sin(cam)
-    rdy = ly * math.cos(cam) + ry * math.sin(cam)
-    length = math.hypot(rdx, rdy) or 1.0
-    rdx /= length
-    rdy /= length
-    dist, _wx, _wy, _tex, _side, _step_x, _step_y = _cast(tiles, ex, ey, rdx, rdy)
-    travel = max(0.75, dist - 0.4)
-    tx = int(ex + rdx * travel)
-    ty = int(ey + rdy * travel)
-    if _tile_at(tiles, tx, ty) != wm.FLOOR:
-        tx = int(ex + rdx * 0.75)
-        ty = int(ey + rdy * 0.75)
-    return tx, ty
+    cam = _VIEW
+    rw, rh = (getattr(client, "_ember_render", None) or (mw, mh))[:2]
+    if cam is None or not hasattr(cam, "_last"):
+        return int(client.player["x"]), int(client.player["y"])
+    return cam.pick(mx * rw / float(mw), my * rh / float(mh))
