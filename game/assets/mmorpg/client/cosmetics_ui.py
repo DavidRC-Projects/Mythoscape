@@ -401,7 +401,187 @@ class HairSalon:
 
 
 # --- Clothing Shop ---
-# (To be implemented: browse all items, try-on preview, purchase)
+
+class ClothingShop:
+    """
+    Modal for browsing and purchasing cosmetic items.
+    Categories: top, bottom, shoes, outfit
+    Try-on preview (doesn't commit until purchased)
+    Purchase with coins, adds to owned_cosmetics
+    """
+    
+    def __init__(self, client):
+        self.client = client
+        self.active = False
+        self.category = "top"  # top, bottom, shoes, outfit
+        self.preview_appearance = None
+        self.trying_on = None  # item_id being previewed
+        self.scroll = 0
+        self.rects = []
+    
+    def open(self):
+        if not self.client.player:
+            return
+        self.active = True
+        self.category = "top"
+        self.preview_appearance = dict(self.client.player.get("appearance") or {})
+        self.trying_on = None
+        self.scroll = 0
+    
+    def close(self):
+        self.active = False
+    
+    def handle_click(self, mx, my):
+        # Category tabs
+        tabs = [("top", 220), ("bottom", 340), ("shoes", 460), ("outfit", 580)]
+        for cat, tab_x in tabs:
+            rect = pygame.Rect(tab_x, 150, 110, 40)
+            if rect.collidepoint(mx, my):
+                self.category = cat
+                self.scroll = 0
+                self.trying_on = None
+                self.preview_appearance = dict(self.client.player.get("appearance") or {})
+                return
+        
+        # Item selection (try-on)
+        for rect, item_id in self.rects:
+            if rect.collidepoint(mx, my):
+                self.trying_on = item_id
+                # Apply to preview
+                self.preview_appearance[self.category] = item_id
+                if self.category == "outfit":
+                    # Outfit replaces top/bottom/shoes
+                    self.preview_appearance["top"] = None
+                    self.preview_appearance["bottom"] = None
+                    self.preview_appearance["shoes"] = None
+                break
+        
+        # Purchase button
+        purchase_btn = pygame.Rect(480, 700, 140, 40)
+        if purchase_btn.collidepoint(mx, my) and self.trying_on:
+            self._purchase()
+        
+        # Cancel button
+        cancel_btn = pygame.Rect(640, 700, 120, 40)
+        if cancel_btn.collidepoint(mx, my):
+            self.close()
+    
+    def _purchase(self):
+        if not self.trying_on:
+            return
+        player = self.client.player
+        if not player:
+            return
+        
+        # Find item
+        cat = _load_catalogue()
+        item = None
+        for it in cat.get("items", []):
+            if it["id"] == self.trying_on:
+                item = it
+                break
+        if not item:
+            return
+        
+        # Check if already owned
+        owned = player.get("owned_cosmetics") or []
+        if self.trying_on in owned:
+            # Already owned, just equip
+            self.client.net.send("UPDATE_APPEARANCE", appearance=self.preview_appearance)
+            self.close()
+            return
+        
+        # Check coins
+        price = item.get("price", 0)
+        if player.get("coins", 0) < price:
+            self.client.add_chat(f"[!] You need {price} coins.", color=(255, 100, 100))
+            return
+        
+        # Purchase: server will deduct coins and add to owned_cosmetics
+        # For now, just send UPDATE_APPEARANCE (TODO: server validation in future)
+        self.client.net.send("UPDATE_APPEARANCE", appearance=self.preview_appearance)
+        self.close()
+    
+    def handle_scroll(self, dy):
+        self.scroll = max(0, self.scroll + dy)
+    
+    def render(self, surf):
+        # Dark overlay
+        overlay = pygame.Surface((1200, 800), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        surf.blit(overlay, (0, 0))
+        
+        # Modal box
+        box = pygame.Rect(180, 100, 840, 650)
+        pygame.draw.rect(surf, (40, 35, 30), box)
+        pygame.draw.rect(surf, (200, 180, 140), box, 3)
+        
+        # Title
+        title = self.client.font_big.render("Clothing Shop", True, (255, 240, 200))
+        surf.blit(title, (600 - title.get_width() // 2, 120))
+        
+        # Category tabs
+        tabs = [("top", 220), ("bottom", 340), ("shoes", 460), ("outfit", 580)]
+        for cat, tab_x in tabs:
+            rect = pygame.Rect(tab_x, 150, 110, 40)
+            active = self.category == cat
+            pygame.draw.rect(surf, (70, 60, 50) if active else (50, 45, 40), rect)
+            pygame.draw.rect(surf, (220, 200, 140) if active else (120, 110, 100), rect, 2)
+            label = self.client.font_small.render(cat.capitalize(), True, (255, 240, 200) if active else (180, 170, 150))
+            surf.blit(label, (rect.centerx - label.get_width() // 2, rect.centery - label.get_height() // 2))
+        
+        # Preview (left side)
+        preview_x, preview_y = 300, 420
+        self._render_preview(surf, preview_x, preview_y)
+        
+        # Item grid (right side)
+        grid_x, grid_y = 550, 220
+        self._render_items(surf, grid_x, grid_y)
+        
+        # Purchase and Cancel buttons
+        purchase_btn = pygame.Rect(480, 700, 140, 40)
+        can_purchase = self.trying_on is not None
+        pygame.draw.rect(surf, (100, 160, 100) if can_purchase else (60, 60, 60), purchase_btn)
+        pygame.draw.rect(surf, (180, 255, 180) if can_purchase else (100, 100, 100), purchase_btn, 2)
+        purchase_text = self.client.font.render("Purchase", True, (255, 255, 255) if can_purchase else (120, 120, 120))
+        surf.blit(purchase_text, (purchase_btn.centerx - purchase_text.get_width() // 2, purchase_btn.centery - purchase_text.get_height() // 2))
+        
+        cancel_btn = pygame.Rect(640, 700, 120, 40)
+        pygame.draw.rect(surf, (140, 80, 80), cancel_btn)
+        pygame.draw.rect(surf, (220, 120, 120), cancel_btn, 2)
+        cancel_text = self.client.font.render("Cancel", True, (255, 255, 255))
+        surf.blit(cancel_text, (cancel_btn.centerx - cancel_text.get_width() // 2, cancel_btn.centery - cancel_text.get_height() // 2))
+    
+    def _render_preview(self, surf, cx, cy):
+        if not self.preview_appearance:
+            return
+        import player_hd_client
+        gender = (self.client.player or {}).get("gender", "male")
+        player_hd_client.draw_player(
+            surf, gender, self.preview_appearance, cx, cy, 80, 0.0,
+            anim="idle", facing=1,
+        )
+    
+    def _render_items(self, surf, x, y):
+        self.rects = []
+        player = self.client.player
+        gender = player.get("gender", "male") if player else "male"
+        owned = player.get("owned_cosmetics", []) if player else []
+        
+        items = [it for it in _items_by_slot(self.category) if it.get("gender_exclusive") is None or it.get("gender_exclusive") == gender]
+        for i, item in enumerate(items[self.scroll:self.scroll + 9]):
+            rect = pygame.Rect(x, y + i * 55, 420, 50)
+            selected = self.trying_on == item["id"]
+            is_owned = item["id"] in owned
+            pygame.draw.rect(surf, (60, 55, 50) if selected else (50, 45, 40), rect)
+            pygame.draw.rect(surf, (200, 200, 140) if selected else (120, 110, 100), rect, 2)
+            
+            # Item name + price (or "Owned")
+            status = "Owned" if is_owned else f"{item['price']} coins"
+            label = self.client.font_small.render(f"{item['name']} - {status}", True, (180, 255, 180) if is_owned else (255, 240, 200))
+            surf.blit(label, (rect.x + 10, rect.centery - label.get_height() // 2))
+            self.rects.append((rect, item["id"]))
+
 
 # --- Wardrobe ---
 # (To be implemented: equip owned cosmetics, save outfit slots)

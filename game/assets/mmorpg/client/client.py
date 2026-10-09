@@ -1308,6 +1308,12 @@ class GameClient(ScreensMixin, CameraYaw):
                         self.hair_salon.close()
                     else:
                         self.hair_salon.open()
+                elif event.key == pygame.K_k:
+                    # Clothing shop (K for Klothes)
+                    if self.clothing_shop.active:
+                        self.clothing_shop.close()
+                    else:
+                        self.clothing_shop.open()
                         self.show_equipment = False
                         self.show_skills = False
                         self.show_pets = False
@@ -1599,6 +1605,13 @@ class GameClient(ScreensMixin, CameraYaw):
                 if dy is None:
                     dy = float(event.y)
                 self.hair_salon.handle_scroll(int(-dy * 2))
+                return
+            # Clothing shop scroll
+            if self.clothing_shop.active:
+                dy = getattr(event, "precise_y", None)
+                if dy is None:
+                    dy = float(event.y)
+                self.clothing_shop.handle_scroll(int(-dy * 2))
                 return
             if self.state == "GAME" and self.show_help:
                 dy = getattr(event, "precise_y", None)
@@ -3371,6 +3384,10 @@ class GameClient(ScreensMixin, CameraYaw):
         if self.hair_salon.active:
             self.hair_salon.handle_click(mx, my)
             return
+        # Clothing shop
+        if self.clothing_shop.active:
+            self.clothing_shop.handle_click(mx, my)
+            return
         if self.context_menu and event.button == 1:
             self._click_context_menu(mx, my)
             return
@@ -4898,6 +4915,10 @@ class GameClient(ScreensMixin, CameraYaw):
         # Hair salon overlay
         if self.hair_salon.active:
             self.hair_salon.render(self.screen)
+        
+        # Clothing shop overlay
+        if self.clothing_shop.active:
+            self.clothing_shop.render(self.screen)
         
         pygame.display.flip()
 
