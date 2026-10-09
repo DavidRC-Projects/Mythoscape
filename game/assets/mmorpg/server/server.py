@@ -844,6 +844,8 @@ class PlayerSession:
             "gender": self.gender,
             "player_killer": bool(self.player_killer),
             "pk_kills": int(self.pk_kills or 0),
+            "appearance": appearance,
+            "hd_player": bool(self.row.get("hd_player", 1)),
         }
 
     def total_level(self):
@@ -863,6 +865,30 @@ class PlayerSession:
         wb = self.weapon_bonuses()
         karma_lvl = self.level("karma") if "karma" in self.xp else 1
         levels = {s: self.level(s) for s in XP_SKILLS}
+        # Parse appearance JSON
+        import json
+        appearance = None
+        if self.row.get("appearance"):
+            try:
+                appearance = json.loads(self.row["appearance"])
+            except Exception:
+                pass
+        # Default appearance if none saved
+        if appearance is None:
+            gender = self.row.get("gender", "male")
+            if gender == "male":
+                appearance = {
+                    "skin": "skin_light", "hair": "hair_side_part", "hair_colour": "dark_brown",
+                    "top": "top_linen_shirt", "bottom": "bottom_work_trousers", "shoes": "shoes_leather",
+                    "outfit": None, "accessories": [],
+                }
+            else:
+                appearance = {
+                    "skin": "skin_light", "hair": "hair_ponytail", "hair_colour": "chestnut",
+                    "top": "top_linen_shirt", "bottom": "bottom_long_skirt", "shoes": "shoes_leather",
+                    "outfit": None, "accessories": [],
+                }
+        
         return {
             "id": self.player_id, "name": self.char_name, "x": self.x, "y": self.y,
             "hp": self.hp, "max_hp": self.max_hp(), "coins": self.coins,
@@ -3902,6 +3928,36 @@ async def handle_set_pet(session, msg):
         await send(session.ws, "CHAT_MSG", **{
             "from": "Pets", "text": f"{PETS[pet_id]['name']} is already with you.",
         })
+        return
+    WORLD.set_player_pet(session, pet_id)
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    await send(session.ws, "CHAT_MSG", **{
+        "from": "Pets", "text": f"{PETS[pet_id]['name']} joins you.",
+    })
+
+
+async def handle_toggle_hd_player(session, msg):
+    """Toggle HD player rendering (2D/3D)."""
+    enabled = bool(msg.get("enabled", True))
+    WORLD.db.save_player_stats(session.player_id, hd_player=int(enabled))
+    session.row = WORLD.db.get_player_by_id(session.player_id)
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    mode = "3D" if enabled else "2D"
+    await send(session.ws, "CHAT_MSG", **{"from": "Settings", "text": f"Player rendering: {mode}"})
+
+
+async def handle_update_appearance(session, msg):
+    """Save player appearance (from character creator / salon / wardrobe)."""
+    appearance = msg.get("appearance")
+    if not appearance or not isinstance(appearance, dict):
+        await send(session.ws, "ERROR", message="Invalid appearance data.")
+        return
+    # TODO: validate cosmetics ownership in step 5 (UIs)
+    import json
+    WORLD.db.save_player_stats(session.player_id, appearance=json.dumps(appearance))
+    session.row = WORLD.db.get_player_by_id(session.player_id)
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    await broadcast_player_state(session)
         return
     session.activate_pet(pet_id)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())

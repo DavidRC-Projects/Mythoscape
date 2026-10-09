@@ -55,7 +55,10 @@ CREATE TABLE IF NOT EXISTS players (
     gender TEXT NOT NULL DEFAULT 'male',
     last_wish_date TEXT,
     created_at TEXT NOT NULL,
-    last_login TEXT
+    last_login TEXT,
+    appearance TEXT,
+    owned_cosmetics TEXT NOT NULL DEFAULT '[]',
+    hd_player INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS inventory (
