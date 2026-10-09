@@ -213,6 +213,8 @@ class GameClient(ScreensMixin, CameraYaw):
         self.resources = {}  # "x,y" -> type
         self.players = {}    # id -> public state
         self.monsters = {}   # id -> public state
+        self.knight_hit_at = {}  # HD knight hit reactions (monster_id -> time)
+        self.knight_corpses = []  # HD knight death animations [{type, x, y, facing, t0}]
         self.pets = []       # list of pet public states
         self.ground_items = {}
         self.player = None   # full state dict (self)
@@ -672,6 +674,23 @@ class GameClient(ScreensMixin, CameraYaw):
         elif t == "MOVE_DENIED":
             self._undo_refused_step(msg.get("x"), msg.get("y"))
         elif t == "DEATH":
+            # HD knight death corpse tracking
+            if msg.get("entity_kind") == "monster":
+                mid = msg.get("entity_id")
+                if mid in self.monsters:
+                    m = self.monsters[mid]
+                    import knights_hd_client
+                    if knights_hd_client.handles(m.get("type")):
+                        face_key = ("m", mid)
+                        facing = self._entity_facing.get(face_key, 1)
+                        self.knight_corpses.append({
+                            "type": m["type"],
+                            "x": m["x"],
+                            "y": m["y"],
+                            "facing": facing,
+                            "t0": time.time(),
+                        })
+            
             if msg.get("entity_kind") == "monster" and msg.get("entity_id") == self.combat_target_id:
                 self.combat_target_id = None
                 self.combat_rounds = 0
@@ -945,6 +964,16 @@ class GameClient(ScreensMixin, CameraYaw):
         anim_key = atk_id
         ranged = bool(msg.get("ranged"))
         anim_secs = self.RANGED_ANIM_SECS if ranged else self.ATTACK_ANIM_SECS
+        strike_t = 0.58 if ranged else 0.48
+        
+        # HD knight hit reaction tracking
+        if kind in ("player_hits_monster", "pet_hits_monster") and did_hit and msg.get("damage", 0) > 0:
+            defender = self._monster_by_id(def_id) if def_id else None
+            if defender:
+                import knights_hd_client
+                if knights_hd_client.handles(defender.get("type")):
+                    self.knight_hit_at[def_id] = now + strike_t * anim_secs
+        
         self.attack_anims[anim_key] = now + anim_secs
         self.attack_anim_kind[anim_key] = "ranged" if ranged else "melee"
         if "combat_rounds" in msg and kind == "player_hits_monster" and atk_id == (self.player or {}).get("id"):
@@ -5641,13 +5670,14 @@ class GameClient(ScreensMixin, CameraYaw):
                         # Ice rim while frost-bound
                         pygame.draw.circle(self.screen, (140, 210, 255), (cx, cy), TILE // 2 + 4, 2)
                     # Skip the red target ellipse for sheet/strip sprites (looked like a red box).
+                    import knights_hd_client  # noqa: E402
                     legacy_sheet = (
                         USE_NEW_PETS_AND_MONSTERS
                         and legacy_creature_sprites.handles_monster(
                             (MONSTERS.get(m["type"]) or {}).get("visual") or m["type"]
                         )
                     )
-                    if targeted and not lowpoly and not strip and not legacy_sheet:
+                    if targeted and not lowpoly and not strip and not legacy_sheet and not knights_hd_client.handles(m["type"]):
                         ring = pygame.Surface((TILE + 12, TILE + 12), pygame.SRCALPHA)
                         pygame.draw.ellipse(ring, (255, 90, 70, 90), (2, TILE // 2 + 2, TILE + 8, TILE // 2))
                         pygame.draw.ellipse(ring, (255, 160, 80, 180), (2, TILE // 2 + 2, TILE + 8, TILE // 2), 2)
@@ -5662,10 +5692,17 @@ class GameClient(ScreensMixin, CameraYaw):
                     _vis = _mdef.get("visual") or m["type"]
                     _scale = float(_mdef.get("scale") or 1.0)
                     _ts = max(8, int(TILE * _scale))
-                    import emberdeep_creatures_client
-                    _breathing = time.time() < (getattr(self, "ember_cone", None) or {}).get("until", 0)
-                    if emberdeep_creatures_client.draw_creature(
-                        self.screen, m["type"], cx, cy, _ts, facing=face, breathing=_breathing,
+                    # HD knights first (permanent, always-on)
+                    import knights_hd_client
+                    hit_t = t - self.knight_hit_at.get(mid, t - 999) if hasattr(self, 'knight_hit_at') else -1.0
+                    if knights_hd_client.draw(
+                        self.screen, m["type"], cx, cy + TILE // 2, _ts, t,
+                        facing=face, moving=draw_moving, attacking=atk_arg, hurt=hurt,
+                        hit_t=hit_t if 0 <= hit_t < 0.36 else -1.0,
+                    ):
+                        pass
+                    elif emberdeep_creatures_client.draw_creature(
+                        self.screen, m["type"], cx, cy, _ts, facing=face, breathing=time.time() < (getattr(self, "ember_cone", None) or {}).get("until", 0),
                     ):
                         pass
                     elif _mdef.get("humanoid"):
@@ -5720,6 +5757,10 @@ class GameClient(ScreensMixin, CameraYaw):
                         depths_v2_client.draw_bone_crown(self.screen, cx, cy - TILE, TILE)
                     anchor_kind = "character" if _mdef.get("humanoid") else "monster"
                     ny, hy = self.entity_anchor(cx, cy, anchor_kind)
+                    # HD knights use custom head positioning
+                    if knights_hd_client.handles(m["type"]):
+                        hy = cy + TILE // 2 + knights_hd_client.head_top_dy(m["type"], _ts)
+                        ny = hy
                     lvl = int(m.get("level") or 1)
                     lvl_color = self.monster_threat_color(lvl)
                     if hurt or near or targeted or m.get("frozen") or _mdef.get("humanoid"):
@@ -5735,6 +5776,37 @@ class GameClient(ScreensMixin, CameraYaw):
                     if hint and hint[0] == "monster" and hint[1] == m["id"]:
                         self.blit_action_hint(hint[2], cx, ny - 42, hint[3])
                 draw_list.append((cy + TILE // 2, 4, _draw_mon))
+        
+        # HD knight corpses (death animations)
+        if hasattr(self, 'knight_corpses'):
+            import knights_hd_client
+            keep_corpses = []
+            for corpse in self.knight_corpses:
+                sx, sy = self.world_to_view_offset(corpse["x"], corpse["y"], cam_x, cam_y)
+                if not (0 <= sx <= vis_w and 0 <= sy <= vis_h):
+                    keep_corpses.append(corpse)
+                    continue
+                cx, cy = sx * TILE + TILE // 2, sy * TILE + TILE // 2
+                death_t = t - corpse["t0"]
+                if death_t > 1.5:  # 0.9s death + 0.6s fade
+                    continue
+                alpha = 255 if death_t < 0.9 else int(255 * (1 - (death_t - 0.9) / 0.6))
+                
+                def _draw_corpse(cx=cx, cy=cy, corpse=corpse, death_t=death_t, alpha=alpha):
+                    if USE_NEW_CASTLE:
+                        cy -= castle_sprites.lift_px(corpse["x"], corpse["y"], TILE)
+                    mdef = MONSTERS.get(corpse["type"]) or {}
+                    scale = float(mdef.get("scale") or 1.0)
+                    ts = max(8, int(TILE * scale))
+                    knights_hd_client.draw(
+                        self.screen, corpse["type"], cx, cy + TILE // 2, ts, t,
+                        facing=corpse["facing"], moving=False, attacking=-1.0,
+                        hit_t=-1.0, death_t=death_t, alpha=alpha,
+                    )
+                
+                draw_list.append((cy + TILE // 2, 4, _draw_corpse))
+                keep_corpses.append(corpse)
+            self.knight_corpses = keep_corpses
 
         # Pets
         for pet in self.pets:
