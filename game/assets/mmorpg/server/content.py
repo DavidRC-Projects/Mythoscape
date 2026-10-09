@@ -1676,31 +1676,31 @@ NPCS = [
      "shop_id": "stonehaven_market"},
 
     # King's Great Hall (king_f1 interior plane)
-    {"id": "king", "name": "The King of Mythoscape", "x": 26, "y": 13, "plane": "king_f1",
+    {"id": "king", "name": "The King of Mythoscape", "x": 26, "y": 26, "plane": "king_f1",
      "lines": [
          "You stand before the crown of Mythoscape. Speak quickly.",
          "Fairies and Moonwater… trifles. My war is the true concern.",
          "Kneel, or leave. The King does not wait on wanderers.",
      ]},
-    {"id": "mythos_knight_1", "name": "Mythos Knight Valerius", "x": 22, "y": 14, "plane": "king_f1",
+    {"id": "mythos_knight_1", "name": "Mythos Knight Valerius", "x": 22, "y": 27, "plane": "king_f1",
      "lines": [
          "Stand aside.",
          "Hail the King.",
          "No closer without leave.",
      ]},
-    {"id": "mythos_knight_2", "name": "Mythos Knight Cedric", "x": 24, "y": 14, "plane": "king_f1",
+    {"id": "mythos_knight_2", "name": "Mythos Knight Cedric", "x": 24, "y": 27, "plane": "king_f1",
      "lines": [
          "Eyes forward.",
          "The court is in session.",
          "Hail Mythoscape.",
      ]},
-    {"id": "mythos_knight_3", "name": "Mythos Knight Roland", "x": 28, "y": 14, "plane": "king_f1",
+    {"id": "mythos_knight_3", "name": "Mythos Knight Roland", "x": 28, "y": 27, "plane": "king_f1",
      "lines": [
          "By the crimson plate — hold.",
          "Hail the King.",
          "Your business, traveller?",
      ]},
-    {"id": "mythos_knight_4", "name": "Mythos Knight Garrick", "x": 30, "y": 14, "plane": "king_f1",
+    {"id": "mythos_knight_4", "name": "Mythos Knight Garrick", "x": 30, "y": 27, "plane": "king_f1",
      "lines": [
          "Stand aside.",
          "The King's word is law.",

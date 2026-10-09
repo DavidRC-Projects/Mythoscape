@@ -2766,6 +2766,7 @@ class GameClient(ScreensMixin, CameraYaw):
         if self.player:
             self.player["x"] = msg.get("player_x", self.player.get("x", 0))
             self.player["y"] = msg.get("player_y", self.player.get("y", 0))
+        self.npcs = list(msg.get("npcs") or [])
         self._realm_fade_until = time.time() + 0.45
         self.clear_walk()
         self._minimap_base = None

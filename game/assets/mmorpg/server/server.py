@@ -1695,7 +1695,8 @@ async def handle_login(ws, msg, is_register):
 async def send_world_join(session):
     await send(
         session.ws, "WORLD_STATE",
-        width=WIDTH, height=HEIGHT, tiles=WORLD.grid, npcs=NPCS,
+        width=WIDTH, height=HEIGHT, tiles=WORLD.grid,
+        npcs=[n for n in NPCS if not n.get("plane")],
         resources={f"{x},{y}": n["type"] for (x, y), n in WORLD.resource_nodes.items() if not n["depleted"]},
         interactables=INTERACTABLES,
         craft_recipes=CRAFT_RECIPES,

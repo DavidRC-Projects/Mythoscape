@@ -175,6 +175,19 @@ def _castle_at(x: int, y: int):
     return None
 
 
+def _castle_client_tile(x: int, y: int) -> int:
+    """Tile the client pathfinder sees. Matches walkable() for this footprint."""
+    data = _castle_at(x, y)
+    if data is None:
+        return wm.WALL
+    char = _castle_char_at(data, x, y)
+    if char not in set(data.get("walkable_chars", ())):
+        return wm.WATER if char == "M" else wm.WALL
+    if char in "BG":
+        return wm.PATH
+    return wm.FLOOR
+
+
 def _castle_char_at(data: dict, x: int, y: int):
     fp = data.get("footprint", {})
     x0, y0 = int(fp.get("x0", 0)), int(fp.get("y0", 0))
@@ -212,17 +225,22 @@ def build_plane(name: str) -> dict:
             raise ValueError("castle_realm_map.json has inconsistent realm dimensions")
         legend = REALM.get("legend", {})
         tiles = []
-        for row in rows:
+        for y, row in enumerate(rows):
             converted = []
-            for char in row:
+            for x, char in enumerate(row):
                 spec = legend.get(char)
                 if not spec:
                     raise ValueError(f"unknown realm tile character: {char!r}")
-                # Castle footprint is visually blocked until the castle grid
-                # is consulted by walkable().
-                converted.append(_REALM_TILE_IDS.get(
-                    spec.get("server_tile"), wm.WALL
-                ))
+                # The footprint marker is a wall until the castle's own grid
+                # says the tile is a path, floor, or door. That is what lets
+                # the client walk the bridge and gate instead of stopping
+                # on the tower cones.
+                if char == "c":
+                    converted.append(_castle_client_tile(x, y))
+                else:
+                    converted.append(_REALM_TILE_IDS.get(
+                        spec.get("server_tile"), wm.WALL
+                    ))
             tiles.append(converted)
         transitions = {}
         return_portal = REALM.get("return_portal", {})
