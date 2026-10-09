@@ -2752,6 +2752,14 @@ class ScreensMixin:
             True, GREY,
         )
         self.screen.blit(hint, (box.x + 16, box.y + 44))
+        hd_on = bool((self.player or {}).get("hd_player", True))
+        self.hd_look_rect = pygame.Rect(box.x + 16, box.y + 66, 220, 28)
+        pygame.draw.rect(self.screen, (32, 42, 68), self.hd_look_rect, border_radius=14)
+        pygame.draw.rect(self.screen, (212, 175, 90), self.hd_look_rect, 1, border_radius=14)
+        look = self.font_small.render(
+            "Player look: 3D" if hd_on else "Player look: 2D", True, (232, 226, 210),
+        )
+        self.screen.blit(look, (self.hd_look_rect.x + 12, self.hd_look_rect.y + 5))
 
         sections = [
             ("Start here", [
@@ -2867,7 +2875,7 @@ class ScreensMixin:
             ]),
         ]
 
-        list_top = box.y + 64
+        list_top = box.y + 104
         list_bottom = box.bottom - 36
         view_h = max(40, list_bottom - list_top)
         key_w = 150

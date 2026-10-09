@@ -3352,6 +3352,11 @@ class GameClient(ScreensMixin, CameraYaw):
 
     def handle_mouse_click(self, event):
         mx, my = event.pos
+        look = getattr(self, "hd_look_rect", None)
+        if self.show_help and look and look.collidepoint(mx, my):
+            enabled = not bool((self.player or {}).get("hd_player", True))
+            self.net.send("TOGGLE_HD_PLAYER", enabled=enabled)
+            return
         if self.context_menu and event.button == 1:
             self._click_context_menu(mx, my)
             return
