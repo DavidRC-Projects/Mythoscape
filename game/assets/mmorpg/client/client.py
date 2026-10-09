@@ -1587,6 +1587,13 @@ class GameClient(ScreensMixin, CameraYaw):
                     dy = float(event.y)
                 self.char_creator.handle_scroll(int(-dy * 2))
                 return
+            # Hair salon scroll
+            if self.hair_salon.active:
+                dy = getattr(event, "precise_y", None)
+                if dy is None:
+                    dy = float(event.y)
+                self.hair_salon.handle_scroll(int(-dy * 2))
+                return
             if self.state == "GAME" and self.show_help:
                 dy = getattr(event, "precise_y", None)
                 if dy is None:
@@ -3354,6 +3361,10 @@ class GameClient(ScreensMixin, CameraYaw):
         if self.char_creator.active:
             self.char_creator.handle_click(mx, my)
             return
+        # Hair salon
+        if self.hair_salon.active:
+            self.hair_salon.handle_click(mx, my)
+            return
         if self.context_menu and event.button == 1:
             self._click_context_menu(mx, my)
             return
@@ -4873,6 +4884,11 @@ class GameClient(ScreensMixin, CameraYaw):
             opening_comic.draw(self)
         else:
             self.draw_game()
+        
+        # Character creator overlay (highest priority)
+        if self.char_creator.active:
+            self.char_creator.render(self.screen)
+        
         pygame.display.flip()
 
     def remaining_stat_points(self):

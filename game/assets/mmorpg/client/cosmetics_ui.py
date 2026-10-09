@@ -218,7 +218,187 @@ class CharacterCreator:
 
 
 # --- Hair Salon ---
-# (To be implemented: separate style and colour pickers, purchase with coins)
+
+class HairSalon:
+    """
+    Modal for changing hair style and colour separately.
+    Each change costs coins (defined in catalogue).
+    
+    Tabs: Style | Colour
+    Preview shows live changes, Apply button charges and commits.
+    """
+    
+    def __init__(self, client):
+        self.client = client
+        self.active = False
+        self.tab = "style"  # "style" or "colour"
+        self.preview_appearance = None
+        self.scroll = 0
+        self.rects = []
+    
+    def open(self):
+        if not self.client.player:
+            return
+        self.active = True
+        self.tab = "style"
+        self.preview_appearance = dict(self.client.player.get("appearance") or {})
+        self.scroll = 0
+    
+    def close(self):
+        self.active = False
+    
+    def handle_click(self, mx, my):
+        # Tab buttons
+        style_tab = pygame.Rect(250, 150, 150, 40)
+        colour_tab = pygame.Rect(410, 150, 150, 40)
+        if style_tab.collidepoint(mx, my):
+            self.tab = "style"
+            self.scroll = 0
+            return
+        if colour_tab.collidepoint(mx, my):
+            self.tab = "colour"
+            self.scroll = 0
+            return
+        
+        # Item selection
+        for rect, item_id in self.rects:
+            if rect.collidepoint(mx, my):
+                if self.tab == "style":
+                    self.preview_appearance["hair"] = item_id
+                else:
+                    self.preview_appearance["hair_colour"] = item_id
+                break
+        
+        # Apply button
+        apply_btn = pygame.Rect(500, 700, 120, 40)
+        if apply_btn.collidepoint(mx, my):
+            self._apply()
+        
+        # Cancel button
+        cancel_btn = pygame.Rect(640, 700, 120, 40)
+        if cancel_btn.collidepoint(mx, my):
+            self.close()
+    
+    def _apply(self):
+        player = self.client.player
+        if not player:
+            return
+        current = player.get("appearance") or {}
+        changed_style = self.preview_appearance.get("hair") != current.get("hair")
+        changed_colour = self.preview_appearance.get("hair_colour") != current.get("hair_colour")
+        
+        cost = 0
+        cat = _load_catalogue()
+        if changed_style:
+            # Hair style change price (look up item)
+            for item in cat.get("items", []):
+                if item["id"] == self.preview_appearance.get("hair"):
+                    cost += item.get("price", 0)
+                    break
+        if changed_colour:
+            # Hair colour change price (fixed in catalogue)
+            cost += cat.get("hair_colour_change_price", 20)
+        
+        if cost > 0 and player.get("coins", 0) < cost:
+            self.client.add_chat(f"[!] You need {cost} coins.", color=(255, 100, 100))
+            return
+        
+        # Send update
+        self.client.net.send("UPDATE_APPEARANCE", appearance=self.preview_appearance)
+        self.close()
+    
+    def handle_scroll(self, dy):
+        self.scroll = max(0, self.scroll + dy)
+    
+    def render(self, surf):
+        # Dark overlay
+        overlay = pygame.Surface((1200, 800), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        surf.blit(overlay, (0, 0))
+        
+        # Modal box
+        box = pygame.Rect(200, 100, 800, 650)
+        pygame.draw.rect(surf, (40, 35, 30), box)
+        pygame.draw.rect(surf, (200, 180, 140), box, 3)
+        
+        # Title
+        title = self.client.font_big.render("Hair Salon", True, (255, 240, 200))
+        surf.blit(title, (600 - title.get_width() // 2, 120))
+        
+        # Tabs
+        style_tab = pygame.Rect(250, 150, 150, 40)
+        colour_tab = pygame.Rect(410, 150, 150, 40)
+        for tab_rect, tab_name in [(style_tab, "style"), (colour_tab, "colour")]:
+            active = self.tab == tab_name
+            pygame.draw.rect(surf, (70, 60, 50) if active else (50, 45, 40), tab_rect)
+            pygame.draw.rect(surf, (220, 200, 140) if active else (120, 110, 100), tab_rect, 2)
+            label = self.client.font.render(tab_name.capitalize(), True, (255, 240, 200) if active else (180, 170, 150))
+            surf.blit(label, (tab_rect.centerx - label.get_width() // 2, tab_rect.centery - label.get_height() // 2))
+        
+        # Preview (left side)
+        preview_x, preview_y = 300, 400
+        self._render_preview(surf, preview_x, preview_y)
+        
+        # Options grid (right side)
+        grid_x, grid_y = 550, 220
+        self._render_options(surf, grid_x, grid_y)
+        
+        # Apply and Cancel buttons
+        apply_btn = pygame.Rect(500, 700, 120, 40)
+        pygame.draw.rect(surf, (100, 160, 100), apply_btn)
+        pygame.draw.rect(surf, (180, 255, 180), apply_btn, 2)
+        apply_text = self.client.font.render("Apply", True, (255, 255, 255))
+        surf.blit(apply_text, (apply_btn.centerx - apply_text.get_width() // 2, apply_btn.centery - apply_text.get_height() // 2))
+        
+        cancel_btn = pygame.Rect(640, 700, 120, 40)
+        pygame.draw.rect(surf, (140, 80, 80), cancel_btn)
+        pygame.draw.rect(surf, (220, 120, 120), cancel_btn, 2)
+        cancel_text = self.client.font.render("Cancel", True, (255, 255, 255))
+        surf.blit(cancel_text, (cancel_btn.centerx - cancel_text.get_width() // 2, cancel_btn.centery - cancel_text.get_height() // 2))
+    
+    def _render_preview(self, surf, cx, cy):
+        if not self.preview_appearance:
+            return
+        import player_hd_client
+        gender = (self.client.player or {}).get("gender", "male")
+        player_hd_client.draw_player(
+            surf, gender, self.preview_appearance, cx, cy, 80, 0.0,
+            anim="idle", facing=1,
+        )
+    
+    def _render_options(self, surf, x, y):
+        self.rects = []
+        if self.tab == "style":
+            player = self.client.player
+            gender = player.get("gender", "male") if player else "male"
+            items = [it for it in _items_by_slot("hair") if it.get("gender_exclusive") is None or it.get("gender_exclusive") == gender]
+            for i, item in enumerate(items[self.scroll:self.scroll + 10]):
+                rect = pygame.Rect(x, y + i * 50, 400, 45)
+                selected = self.preview_appearance.get("hair") == item["id"]
+                pygame.draw.rect(surf, (60, 55, 50) if selected else (50, 45, 40), rect)
+                pygame.draw.rect(surf, (200, 200, 140) if selected else (120, 110, 100), rect, 2)
+                label = self.client.font_small.render(f"{item['name']} ({item['price']} coins)", True, (255, 240, 200))
+                surf.blit(label, (rect.x + 10, rect.centery - label.get_height() // 2))
+                self.rects.append((rect, item["id"]))
+        else:
+            colours = _hair_colours()
+            for i, hc in enumerate(colours[self.scroll:self.scroll + 10]):
+                rect = pygame.Rect(x, y + i * 50, 400, 45)
+                selected = self.preview_appearance.get("hair_colour") == hc["id"]
+                rgb = tuple(hc.get("rgb", [180, 180, 180]))
+                # Draw colour swatch
+                swatch = pygame.Rect(rect.x + 10, rect.y + 10, 25, 25)
+                pygame.draw.rect(surf, rgb, swatch)
+                pygame.draw.rect(surf, (200, 200, 200), swatch, 1)
+                # Background
+                pygame.draw.rect(surf, (60, 55, 50) if selected else (50, 45, 40), rect)
+                pygame.draw.rect(surf, (200, 200, 140) if selected else (120, 110, 100), rect, 2)
+                cat = _load_catalogue()
+                price = cat.get("hair_colour_change_price", 20)
+                label = self.client.font_small.render(f"{hc['name']} ({price} coins)", True, (255, 240, 200))
+                surf.blit(label, (rect.x + 45, rect.centery - label.get_height() // 2))
+                self.rects.append((rect, hc["id"]))
+
 
 # --- Clothing Shop ---
 # (To be implemented: browse all items, try-on preview, purchase)
