@@ -214,6 +214,8 @@ class GameClient(ScreensMixin, CameraYaw):
         self.players = {}    # id -> public state
         self.monsters = {}   # id -> public state
         self.knight_hit_at = {}  # HD knight hit reactions (monster_id -> time)
+        self.monster_hit_at = {}  # Emberdeep hit flash (monster_id -> strike time)
+        self.ember_corpses = []
         self.knight_corpses = []  # HD knight death animations [{type, x, y, facing, t0}]
         self.player_hit_at = {}  # HD player hit reactions (player_id -> time)
         self.player_death_at = {}  # HD player death animations (player_id -> time)
@@ -702,6 +704,15 @@ class GameClient(ScreensMixin, CameraYaw):
                             "facing": facing,
                             "t0": time.time(),
                         })
+                    elif self.dungeon and self.dungeon.get("id") == "emberdeep":
+                        face_key = ("m", mid)
+                        self.ember_corpses.append({
+                            "type": m.get("type"),
+                            "x": m["x"],
+                            "y": m["y"],
+                            "face": self._entity_facing.get(face_key, "front"),
+                            "t0": time.time(),
+                        })
             
             # HD player death animation tracking
             if msg.get("entity_kind") == "player":
@@ -994,10 +1005,15 @@ class GameClient(ScreensMixin, CameraYaw):
                 import knights_hd_client
                 if knights_hd_client.handles(defender.get("type")):
                     self.knight_hit_at[def_id] = now + strike_t * anim_secs
+                if self.dungeon and self.dungeon.get("id") == "emberdeep":
+                    self.monster_hit_at[def_id] = now + strike_t * anim_secs
         
-        # HD player hit reaction tracking
         if kind == "monster_hits_player" and did_hit and msg.get("damage", 0) > 0:
             self.player_hit_at[def_id] = now + strike_t * anim_secs
+            if def_id == (self.player or {}).get("id") and self.dungeon and self.dungeon.get("id") == "emberdeep":
+                strike = now + strike_t * anim_secs
+                self._ember_shake_from = strike
+                self._ember_shake_until = strike + 0.08
         
         self.attack_anims[anim_key] = now + anim_secs
         self.attack_anim_kind[anim_key] = "ranged" if ranged else "melee"

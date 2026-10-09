@@ -959,13 +959,14 @@ def _monster_pose(client, m, t):
     return face, moving and not swinging, atk, near, bool(side_fight and near)
 
 
-def _draw_monster_sprite(client, m, cx, cy, tile_px, t, face, moving, atk, player_sx, drop_down=False):
+def _draw_monster_sprite(client, m, cx, cy, tile_px, t, face, moving, atk, player_sx, drop_down=False, dest=None):
     """The top-down monster chain, drawn at a projected foot point."""
     import procedural_sprites_finished as sprites
     import lowpoly_dragon_sprites
     import anim_strip_sprites
     import legacy_creature_sprites
     from content import MONSTERS
+    screen = dest if dest is not None else client.screen
     main = sys.modules.get("__main__")
     lowpoly_on = getattr(main, "USE_LOWPOLY_DRAGONS", True)
     strip_on = getattr(main, "USE_ANIM_STRIP_MONSTERS", True)
@@ -986,25 +987,25 @@ def _draw_monster_sprite(client, m, cx, cy, tile_px, t, face, moving, atk, playe
     if vis in animated:
         ts = max(16, min(ts, animated[vis]))
         sprites.draw_monster(
-            client.screen, vis, cx, cy, ts, t,
+            screen, vis, cx, cy, ts, t,
             hurt=hurt, attacking=atk, facing=face, moving=moving,
         )
         return
     if emberdeep_creatures_client.draw_creature(
-        client.screen, m["type"], cx, cy, ts, facing=face, breathing=breathing,
+        screen, m["type"], cx, cy, ts, facing=face, breathing=breathing,
         moving=moving, attacking=atk,
     ):
         return
     lowpoly = lowpoly_on and lowpoly_dragon_sprites.sheet_key_for_monster_type(m["type"])
     strip = (not lowpoly) and strip_on and anim_strip_sprites.sheet_key_for_monster_type(m["type"])
     if m.get("frozen"):
-        pygame.draw.circle(client.screen, (140, 210, 255), (cx, cy), ts // 2 + 4, 2)
+        pygame.draw.circle(screen, (140, 210, 255), (cx, cy), ts // 2 + 4, 2)
     atk_arg = atk if (m["id"] in client.attack_anims or str(m["id"]) in client.attack_anims) else -1.0
     if mdef.get("humanoid"):
         eq = mdef.get("equipment") or {}
         face_h = 1 if client.player["x"] >= m["x"] else -1
         sprites.draw_humanoid_detailed(
-            client.screen, cx, cy, ts,
+            screen, cx, cy, ts,
             (55, 70, 95), (220, 175, 140), (35, 28, 22),
             weapon=_weapon_style(eq.get("weapon")),
             shield=bool(eq.get("shield")),
@@ -1012,28 +1013,28 @@ def _draw_monster_sprite(client, m, cx, cy, tile_px, t, face, moving, atk, playe
             equipment=eq, attacking=atk, gender="male",
         )
     elif lowpoly and lowpoly_dragon_sprites.draw_lowpoly_dragon(
-        client.screen, vis, cx, cy, ts, t,
+        screen, vis, cx, cy, ts, t,
         hurt=hurt, attacking=atk_arg, facing=face, moving=moving,
         foe_cx=player_sx, drop_down=drop_down,
     ):
         pass
     elif strip and anim_strip_sprites.draw_anim_strip_monster(
-        client.screen, vis, cx, cy, ts, t,
+        screen, vis, cx, cy, ts, t,
         hurt=hurt, attacking=atk_arg, facing=face, moving=moving,
         foe_cx=player_sx, drop_down=drop_down,
     ):
         pass
     elif feature_flags.USE_NEW_PETS_AND_MONSTERS and legacy_creature_sprites.draw_monster(
-        client.screen, vis, cx, cy, ts, t,
+        screen, vis, cx, cy, ts, t,
         hurt=hurt, attacking=atk_arg, facing=face, moving=moving,
     ):
         pass
     else:
         sprites.draw_monster(
-            client.screen, vis, cx, cy, ts, t,
+            screen, vis, cx, cy, ts, t,
             hurt=hurt, attacking=atk, facing=face, moving=moving,
         )
-    if mdef.get("visual"):
+    if dest is None and mdef.get("visual"):
         import void_v2_client
         void_v2_client.tint_and_halo(client, m, cx, cy, ts)
 
@@ -1045,17 +1046,71 @@ def _label_anchor(cy, tile_px, kind):
     return hp_y - 16, hp_y
 
 
-def _draw_local_player(client, pose, sx, sy, tile_px, t):
+def _combat_facing(client, pose, sx, tile_px, player_depth):
+    """Face the target the way it sits on screen while a swing is live."""
+    attacking = pose["atk"] > 0
+    target = (client.monsters or {}).get(getattr(client, "combat_target_id", None))
+    if not attacking and not (target and target.get("alive", True)):
+        return pose["face"]
+    if not target:
+        return pose["face"]
+    mw, mh = _map_size()
+    hit = _project(0, 0, 0, 0, 0, 0, target["x"] + 0.5, target["y"] + 0.5, None, 1, 1, mw, mh)
+    if hit is None:
+        return pose["face"]
+    depth, tx, _ty, _px = hit
+    if abs(tx - sx) > 0.35 * max(8, tile_px):
+        return 1 if tx > sx else -1
+    return "back" if depth > player_depth else "front"
+
+
+def _draw_local_player(client, pose, sx, sy, tile_px, t, player_depth=1.0):
     import procedural_sprites_finished as sprites
-    sprites.draw_humanoid_detailed(
-        client.screen, sx, sy, tile_px,
-        (70, 210, 90), (235, 195, 150), (70, 45, 30),
-        weapon=_weapon_style(pose["eq"].get("weapon")),
-        shield=bool(pose["eq"].get("shield")),
-        moving=pose["moving"], t=t, facing=pose["face"],
-        equipment=pose["eq"], attacking=pose["atk"], action=pose["action"],
-        gender=pose["gender"],
-    )
+    face = _combat_facing(client, pose, sx, tile_px, player_depth)
+    pose["face"] = face
+    client._entity_facing[pose["key"]] = face
+    p = client.player or {}
+    gender = pose["gender"]
+    eq = pose["eq"]
+    hd_on = p.get("hd_player", True)
+    appearance = p.get("appearance") or {
+        "skin": "skin_light",
+        "hair": "hair_side_part" if gender == "male" else "hair_ponytail",
+        "hair_colour": "dark_brown",
+        "top": "top_linen_shirt",
+        "bottom": "bottom_work_trousers" if gender == "male" else "bottom_long_skirt",
+        "shoes": "shoes_leather",
+        "outfit": None,
+        "accessories": [],
+    }
+    hit_t = t - client.player_hit_at.get(p.get("id"), t - 999)
+    death_t = t - client.player_death_at.get(p.get("id"), t - 999)
+    drawn = False
+    if hd_on:
+        import player_hd_client
+        weapon_id = (eq or {}).get("weapon") or ""
+        ranged = client.attack_anim_kind.get(p.get("id")) == "ranged" or "bow" in str(weapon_id)
+        if pose["atk"] > 0 and not pose["action"]:
+            anim = "ranged" if ranged else "melee"
+        else:
+            anim = pose["action"] or ("walk" if pose["moving"] else "idle")
+        drawn = player_hd_client.draw_player(
+            client.screen, gender, appearance, sx, sy, int(round(tile_px * 1.1)), t,
+            anim=anim, progress=pose["atk"] if pose["atk"] > 0 else None, facing=face,
+            hit_t=hit_t if 0 <= hit_t < 0.36 else -1.0,
+            death_t=death_t if 0 <= death_t < 1.2 else -1.0,
+            equipment=eq,
+        )
+    if not drawn:
+        sprites.draw_humanoid_detailed(
+            client.screen, sx, sy, tile_px,
+            (70, 210, 90), (235, 195, 150), (70, 45, 30),
+            weapon=_weapon_style(eq.get("weapon")),
+            shield=bool(eq.get("shield")),
+            moving=pose["moving"], t=t, facing=face,
+            equipment=eq, attacking=pose["atk"], action=pose["action"],
+            gender=gender,
+        )
 
 
 def _separate_feet(client, pose, monster, player_depth, player_sx, player_tile):
@@ -1144,12 +1199,16 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
         seen[("m", m["id"])] = (m["x"], m["y"])
         targeted = client.combat_target_id == m["id"]
         wx, wy = _separate_feet(client, pose, m, along_p, psx, player_tile)
+        import ember_combat_fx
+        ax, ay, squash = ember_combat_fx.attack_pose(client, m, t)
+        hx, hy, flash = ember_combat_fx.hit_pose(client, m, t)
+        wx, wy = wx + ax + hx, wy + ay + hy
         proj = _project(ex, ey, lx, ly, rx, ry, wx, wy, depths, rw, rh, mw, mh)
         if proj is None:
             continue
         along, sx, sy, tile_px = proj
         face = _face_from_vector(pose["x"] - m["x"], pose["y"] - m["y"])
-        bills.append((along, "monster", sx, sy, tile_px, (m, face, moving, atk, near or targeted, drop_down)))
+        bills.append((along, "monster", sx, sy, tile_px * squash, (m, face, moving, atk, near or targeted, drop_down, flash)))
     dungeon = client.dungeon or {}
     if dungeon.get("id") == "emberdeep":
         for prop in dungeon.get("props") or []:
@@ -1169,8 +1228,11 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
             bills.append((along, "pack_prop", sx, sy, tile_px, key))
     bills.sort(key=lambda item: -item[0])
     client._ember_sprite_hits = []
+    shx, shy = getattr(client, "_ember_shake_px", (0, 0))
     player_bill = None
     for along, kind, sx, sy, tile_px, extra in bills:
+        sx += shx
+        sy += shy
         if kind == "player":
             player_bill = (along, sx, sy, tile_px)
             continue
@@ -1179,10 +1241,30 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
             emberdeep_creatures_client.draw_prop(client.screen, extra, sx, sy, tile_px)
             _occlude_sprite(client, sx, sy, tile_px, tile_px, along)
             continue
-        m, face, moving, atk, show, drop_down = extra
+        m, face, moving, atk, show, drop_down, flash = extra
         import emberdeep_creatures_client
+        import ember_combat_fx
         height = emberdeep_creatures_client.creature_height(m["type"], tile_px)
-        _draw_monster_sprite(client, m, sx, sy, tile_px, t, face, moving, atk, player_sx, drop_down)
+        if flash > 0.01:
+            pad = int(height * 1.4)
+            temp = pygame.Surface((pad, pad), pygame.SRCALPHA)
+            _draw_monster_sprite(
+                client, m, pad // 2, pad - 4, tile_px, t, face, moving, atk, player_sx, drop_down, dest=temp,
+            )
+            temp = ember_combat_fx.flash_surface(temp, flash)
+            client.screen.blit(temp, (int(sx - pad // 2), int(sy - (pad - 4))))
+        else:
+            _draw_monster_sprite(client, m, sx, sy, tile_px, t, face, moving, atk, player_sx, drop_down)
+        if ember_combat_fx.contact(client, m, t) and client.player:
+            mid = _project(
+                ex, ey, lx, ly, rx, ry,
+                (m["x"] + client.player["x"]) / 2 + 0.5,
+                (m["y"] + client.player["y"]) / 2 + 0.5,
+                None, rw, rh, mw, mh,
+            )
+            if mid:
+                pygame.draw.circle(client.screen, (255, 210, 120), (int(mid[1]), int(mid[2])), 7)
+                pygame.draw.circle(client.screen, (255, 120, 40), (int(mid[1]), int(mid[2])), 3)
         _occlude_sprite(client, sx, sy, height, height, along)
         hit = pygame.Rect(int(sx - height / 2), int(sy - height), int(height), int(height))
         client._ember_sprite_hits.append((hit, (int(m["x"]), int(m["y"]))))
@@ -1196,9 +1278,11 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
             client.blit_nameplate(m["name"], sx, bar_y - 14)
             level = int(m.get("level") or 1)
             client.blit_combat_level(level, sx, bar_y - 28, client.monster_threat_color(level))
+    _draw_ember_corpses(client, t, rw, rh, mw, mh)
+    _draw_breath(client, rw, rh, mw, mh)
     if player_bill is not None:
         _along, sx, sy, tile_px = player_bill
-        _draw_local_player(client, pose, sx, sy, tile_px, t)
+        _draw_local_player(client, pose, sx, sy, tile_px, t, _along)
         anchors = getattr(client, "_ember_screen_anchor", None)
         if not isinstance(anchors, dict):
             anchors = {}
@@ -1215,6 +1299,79 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
     client._prev_entity_pos = prev
     _draw_corner_map(client, lx, ly)
     return True
+
+
+def _draw_ember_corpses(client, now, rw, rh, mw, mh):
+    import ember_combat_fx
+    import emberdeep_creatures_client
+    keep = []
+    px = (client.player or {}).get("x", 0)
+    for corpse in getattr(client, "ember_corpses", None) or []:
+        age = now - corpse.get("t0", now)
+        if age > 1.0:
+            continue
+        keep.append(corpse)
+        hit = _project(0, 0, 0, 0, 0, 0, corpse["x"] + 0.5, corpse["y"] + 0.5 + 0.2 * age, None, rw, rh, mw, mh)
+        if hit is None:
+            continue
+        _depth, sx, sy, tile_px = hit
+        height = emberdeep_creatures_client.creature_height(corpse.get("type"), tile_px)
+        pad = max(8, int(height * 1.6))
+        temp = pygame.Surface((pad, pad), pygame.SRCALPHA)
+        emberdeep_creatures_client.draw_creature(
+            temp, corpse.get("type"), pad // 2, pad - 4, tile_px, facing=corpse.get("face", "front"),
+        )
+        sign = -1 if corpse["x"] >= px else 1
+        spun = pygame.transform.rotate(temp, sign * 80 * age)
+        if age > 0.5:
+            spun.set_alpha(int(255 * (1.0 - (age - 0.5) / 0.5)))
+        rect = spun.get_rect(center=(int(sx), int(sy)))
+        client.screen.blit(spun, rect)
+        ember_combat_fx.draw_embers(client.screen, sx, sy - height * 0.4, age)
+    client.ember_corpses = keep
+
+
+def _draw_breath(client, rw, rh, mw, mh):
+    import time
+    cone = getattr(client, "ember_cone", None) or {}
+    if time.time() >= cone.get("until", 0):
+        return
+    spots = []
+    for spot in cone.get("tiles") or []:
+        if isinstance(spot, dict):
+            spots.append((int(spot["x"]), int(spot["y"])))
+        elif spot:
+            spots.append((int(spot[0]), int(spot[1])))
+    if not spots:
+        return
+    import ember_combat_fx
+    points = []
+    for x, y in spots:
+        hit = _project(0, 0, 0, 0, 0, 0, x + 0.5, y + 0.5, None, rw, rh, mw, mh)
+        if hit is None:
+            continue
+        points.append(hit)
+        flick = 0.55 + 0.35 * abs(math.sin(time.time() * 11 + x * 3 + y))
+        pygame.draw.circle(
+            client.screen, (255, int(80 + 40 * flick), 24),
+            (int(hit[1]), int(hit[2])), max(3, int(hit[3] * 0.28 * flick)),
+        )
+    image = ember_combat_fx._cone_image()
+    if image is None or not points:
+        return
+    facing = "south"
+    for monster in (client.monsters or {}).values():
+        if monster.get("type") == "emberdeep_wyrm":
+            facing = str(monster.get("facing") or "south")
+    angle = {"east": -90, "west": 90, "north": 180}.get(facing, 0)
+    spun = pygame.transform.rotate(image, angle)
+    xs = [p[1] for p in points]
+    ys = [p[2] for p in points]
+    span = max(points[0][3] * 2, 24)
+    size = (max(24, int(max(xs) - min(xs) + span)), max(24, int(max(ys) - min(ys) + span)))
+    spun = pygame.transform.smoothscale(spun, size)
+    spun.set_alpha(150)
+    client.screen.blit(spun, (int(sum(xs) / len(xs) - size[0] / 2), int(sum(ys) / len(ys) - size[1] / 2)))
 
 
 def _draw_corner_map(client, lx, ly):
@@ -1453,8 +1610,11 @@ def draw_first_person(client):
     view.ease(dt)
     mw, mh = _map_size()
     surf, rw, rh = _render_cached(view, mw, mh, now, fx, fy, yaw, zoom)
+    import ember_combat_fx
+    ox, oy = ember_combat_fx.shake_offset(client, now)
+    client._ember_shake_px = (ox, oy)
     scaled = pygame.transform.smoothscale(surf, (mw, mh))
-    client.screen.blit(scaled, (0, 0))
+    client.screen.blit(scaled, (ox, oy))
     client._ember_render = (rw, rh)
     px, py = int(pose["x"]), int(pose["y"])
     _draw_tile_highlight(client.screen, ex, ey, lx, ly, rx, ry, px, py, rw, rh, mw, mh, (180, 200, 120), 2)
