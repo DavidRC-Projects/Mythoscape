@@ -1076,7 +1076,10 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
         anchors[("p", pid)] = (sx, sy, tile_px)
         anchors[("p", str(pid))] = (sx, sy, tile_px)
         p = client.player or {}
-        client.draw_hp_bar(sx, sy - tile_px - 8, p.get("hp", 1), p.get("max_hp", 1), show_value=True)
+        import player_hd_client
+        head = (player_hd_client.last_draw or {}).get("head_top")
+        bar_y = sy + int(head[1]) - 8 if head else sy - tile_px - 8
+        client.draw_hp_bar(sx, bar_y, p.get("hp", 1), p.get("max_hp", 1), show_value=True)
     _draw_projectiles(client, ex, ey, lx, ly, rx, ry, rw, rh, mw, mh)
     _draw_hitsplats(client, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, mh)
     prev = dict(getattr(client, "_prev_entity_pos", {}) or {})
@@ -1362,6 +1365,12 @@ def _draw_hitsplats(client, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, mh):
                         placed = None
         if placed is not None:
             sx, sy, tile_px = placed
+            if follow == my_id:
+                import player_hd_client
+                chest = (player_hd_client.last_draw or {}).get("chest")
+                if chest:
+                    sx += int(chest[0])
+                    sy += int(chest[1])
         else:
             proj = _project(
                 ex, ey, lx, ly, rx, ry,
@@ -1423,9 +1432,17 @@ def _draw_projectiles(client, ex, ey, lx, ly, rx, ry, rw, rh, mw, mh):
             keep.append(proj)
             continue
         _along, sx, sy, _tile = spot
+        kind = proj.get("kind") or "arrow"
+        if kind != "dragonfire":
+            p = client.player or {}
+            if int(p.get("x", -999)) == int(ax) and int(p.get("y", -999)) == int(ay):
+                import player_hd_client
+                origin = (player_hd_client.last_draw or {}).get("hand_L")
+                if origin:
+                    sx += int(origin[0])
+                    sy += int(origin[1])
         arc = math.sin(ease * math.pi) * 18
         sy = int(sy - arc)
-        kind = proj.get("kind") or "arrow"
         if kind == "dragonfire":
             for col, rad in (((255, 120, 40), 14), ((255, 180, 50), 9), ((255, 240, 160), 5)):
                 pygame.draw.circle(client.screen, col, (sx, sy), rad)

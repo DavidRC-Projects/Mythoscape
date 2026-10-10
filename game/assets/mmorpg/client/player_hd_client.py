@@ -161,6 +161,39 @@ def _build_item_map():
     return items
 
 
+_MISSING_STRIPS = set()
+last_draw = {}
+
+
+def _warn_missing_strip(sex, anim, facing):
+    key = (sex, anim, facing)
+    if key in _MISSING_STRIPS:
+        return
+    _MISSING_STRIPS.add(key)
+    import logging
+    logging.getLogger("player_hd").warning(
+        "missing %s %s_%s strip, using the east strip", sex, anim, facing,
+    )
+
+
+def _weapon_z_anim(layer_name, anim, facing_tag):
+    """z override for one attack facing. melee_n / ranged_n draw the weapon on top."""
+    for entry in _load_catalogue().get("weapon_layers") or []:
+        if entry.get("layer") != layer_name and entry.get("id") != layer_name:
+            continue
+        table = (entry.get("z_anim") or {}).get(anim) or {}
+        if facing_tag in table:
+            return table[facing_tag]
+    return None
+
+
+def _effective_z(layer_name, zmap, anim, facing_tag):
+    override = _weapon_z_anim(layer_name, anim, facing_tag)
+    if override is not None:
+        return override
+    return (zmap or {}).get(facing_tag, 50)
+
+
 def _layer_z(layer_name, fallback):
     cat = _load_catalogue()
     for group in ("armour_layers", "weapon_layers"):
@@ -390,14 +423,20 @@ def draw_player(
     if scale_tag == "4x" and final_anim != "idle":
         scale_tag, base = "2x", 80
     facing_tag = _facing_str(facing)
-    anim_facings = (meta.get("anims") or {}).get(final_anim, {}).get("facings", ["s", "e", "n"])
     flip_x = False
-    if facing_tag not in anim_facings:
-        if facing_tag == "w" and "e" in anim_facings:
+    if final_anim in ("melee", "ranged"):
+        # s and n have their own strips. w is the east strip, mirrored.
+        if facing_tag == "w":
             facing_tag = "e"
             flip_x = True
-        else:
-            facing_tag = "s"
+    else:
+        anim_facings = (meta.get("anims") or {}).get(final_anim, {}).get("facings", ["s", "e", "n"])
+        if facing_tag not in anim_facings:
+            if facing_tag == "w" and "e" in anim_facings:
+                facing_tag = "e"
+                flip_x = True
+            elif facing_tag not in anim_facings:
+                facing_tag = "s"
     item_map = _build_item_map()
     cosmetic = _cosmetic_layers(appearance, sex, item_map)
     visible, swing_layer = _apply_covers(cosmetic, equipment, final_anim)
@@ -407,7 +446,7 @@ def draw_player(
             f"fx_swing_{swing_layer}", None,
             {"s": 91, "e": 91, "n": 91, "w": 91},
         ))
-    visible.sort(key=lambda row: (row[2] or {}).get(facing_tag, 50))
+    visible.sort(key=lambda row: _effective_z(row[0], row[2], final_anim, facing_tag))
 
     feet_px = (meta.get("feet_px") or {}).get(scale_tag, [72, 124])
     k = tile / float(base)
@@ -425,6 +464,8 @@ def draw_player(
             sex, scale_tag, layer_name, final_anim, use_facing, frame_idx, tile, base,
         )
         if main_surf is None and tint_surf is None and use_facing != "e":
+            if final_anim in ("melee", "ranged") and use_facing in ("s", "n"):
+                _warn_missing_strip(sex, final_anim, use_facing)
             main_surf, tint_surf = _layer_parts(
                 sex, scale_tag, layer_name, final_anim, "e", frame_idx, tile, base,
             )
@@ -435,6 +476,16 @@ def draw_player(
             continue
         if layer_name.startswith("body_") and (main_surf is not None or tint_surf is not None):
             body_ok = True
+            file_facing = "e" if (layer_flip and not flip_x) else use_facing
+            last_draw.clear()
+            last_draw.update({
+                "anim": final_anim,
+                "facing": file_facing,
+                "strip": f"{final_anim}_{file_facing}.png",
+                "frame": frame_idx,
+                "flip": bool(layer_flip),
+            })
+            _store_combat_anchors(sex, final_anim, file_facing, frame_idx, tile, equipment)
         anchor_x = feet_x
         if layer_flip and not flip_x:
             width = (main_surf or tint_surf).get_width()
@@ -454,6 +505,58 @@ def draw_player(
 
 def head_top_dy(sex, tile):
     return -int(tile * 4.5)
+
+
+def _load_anchors():
+    path = os.path.join(_BASE, "assets", "anchors.json")
+    key = ("anchors", path)
+    if key not in _META:
+        if not os.path.isfile(path):
+            _META[key] = {}
+        else:
+            import json
+            with open(path, encoding="utf-8") as handle:
+                _META[key] = json.load(handle)
+    return _META[key]
+
+
+def anchor_offset(sex, anim, facing, frame, name, tile, weapon=None):
+    """Screen offset from the feet for one anchors.json point. None if absent."""
+    sex = "female" if sex == "female" else "male"
+    tag = facing if facing in ("s", "e", "n") else "e"
+    frames = (
+        (((_load_anchors().get("anchors") or {}).get(sex) or {}).get(anim) or {}).get(tag) or []
+    )
+    if not frames:
+        return None
+    sample = frames[max(0, min(int(frame), len(frames) - 1))]
+    point = sample.get(name)
+    if isinstance(point, dict):
+        point = point.get(weapon) or None
+    if not isinstance(point, (list, tuple)) or len(point) < 2:
+        return None
+    # Anchors are 2x canvas pixels. Feet sit at (144, 248) on the 288 canvas.
+    ax, ay = float(point[0]), float(point[1])
+    if facing == "w":
+        ax = 288.0 - ax
+    scale = float(tile) / 80.0
+    return (ax - 144.0) * scale, (ay - 248.0) * scale
+
+
+def _store_combat_anchors(sex, anim, facing, frame, tile, equipment):
+    if anim not in ("melee", "ranged"):
+        return
+    weapon = None
+    if equipment:
+        weapon, _tint = _weapon_spec(equipment.get("weapon"))
+    for name in ("head_top", "chest", "hand_L", "hand_R"):
+        off = anchor_offset(sex, anim, facing, frame, name, tile, weapon)
+        if off is not None:
+            last_draw[name] = off
+    if weapon:
+        tip = anchor_offset(sex, anim, facing, frame, "tip", tile, weapon)
+        if tip is not None:
+            last_draw["tip"] = tip
 
 
 def get_default_appearance(sex):

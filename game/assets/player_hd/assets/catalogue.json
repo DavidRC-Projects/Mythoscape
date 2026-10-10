@@ -4031,6 +4031,11 @@
     "w": 90,
     "n": 8
    },
+   "z_anim": {
+    "melee": {
+     "n": 90
+    }
+   },
    "tintable": true,
    "files": {
     "male": {
@@ -4110,6 +4115,11 @@
     "e": 90,
     "w": 90,
     "n": 8
+   },
+   "z_anim": {
+    "melee": {
+     "n": 90
+    }
    },
    "tintable": true,
    "files": {
@@ -4197,6 +4207,11 @@
     "w": 90,
     "n": 8
    },
+   "z_anim": {
+    "melee": {
+     "n": 90
+    }
+   },
    "tintable": true,
    "files": {
     "male": {
@@ -4282,6 +4297,11 @@
     "w": 3,
     "n": 8
    },
+   "z_anim": {
+    "ranged": {
+     "n": 90
+    }
+   },
    "tintable": true,
    "files": {
     "male": {
@@ -4360,6 +4380,11 @@
     "e": 90,
     "w": 90,
     "n": 8
+   },
+   "z_anim": {
+    "melee": {
+     "n": 90
+    }
    },
    "tintable": true,
    "files": {
