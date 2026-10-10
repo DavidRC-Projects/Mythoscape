@@ -1037,7 +1037,10 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
         import emberdeep_creatures_client
         import ember_combat_fx
         if m.get("type") == "emberdeep_wyrm":
-            _draw_wyrm_billboard(client, m, sx, sy, tile_px, t, moving, atk, flash, along, show, mh)
+            _draw_wyrm_billboard(
+                client, m, sx, sy, tile_px, t, moving, atk, flash, along, show, mh,
+                (player_sx + shx, player_sy + shy, player_tile),
+            )
             continue
         height = emberdeep_creatures_client.creature_height(m["type"], tile_px)
         if flash > 0.01:
@@ -1097,7 +1100,27 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
     return True
 
 
-def _draw_wyrm_billboard(client, monster, sx, sy, tile_px, now, moving, atk, flash, depth, show, mh):
+def _wyrm_bar_y(bar_y, sx, player_sx, player_sy, player_tile, show):
+    """Move the wyrm label up when it would cover the player's head."""
+    if player_tile <= 0:
+        return bar_y
+    head = pygame.Rect(
+        int(player_sx - player_tile * 0.6),
+        int(player_sy - player_tile * 2.2),
+        max(1, int(player_tile * 1.2)),
+        max(1, int(player_tile * 0.8)),
+    )
+    top = bar_y - (28 if show else 0)
+    label = pygame.Rect(int(sx - 22), int(top), 44, max(1, int(bar_y + 6 - top)))
+    if not label.colliderect(head):
+        return bar_y
+    overlap = label.bottom - head.top
+    if overlap <= 0:
+        return bar_y
+    return bar_y - overlap
+
+
+def _draw_wyrm_billboard(client, monster, sx, sy, tile_px, now, moving, atk, flash, depth, show, mh, player_screen=None):
     """Rendered wyrm frames. The lunge lives in the art, so only the hit flash is added."""
     import emberdeep_creatures_client
     import ember_combat_fx
@@ -1132,6 +1155,8 @@ def _draw_wyrm_billboard(client, monster, sx, sy, tile_px, now, moving, atk, fla
         anchors[("m", monster["id"])] = (sx, sy, label)
         anchors[("m", str(monster["id"]))] = (sx, sy, label)
     bar_y = max(22, min(mh - 28, sy - label - 6))
+    if player_screen is not None:
+        bar_y = _wyrm_bar_y(bar_y, sx, player_screen[0], player_screen[1], player_screen[2], show)
     client.draw_hp_bar(sx, bar_y, monster["hp"], monster["max_hp"])
     if show:
         client.blit_nameplate(monster["name"], sx, bar_y - 14)
