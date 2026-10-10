@@ -17,7 +17,6 @@ from PIL import Image
 TYPE_MAP = {
     "goblin": "goblin_grunt",
     "skeleton": "skeleton_warrior",
-    "big_skeleton": "skeleton_mage",
     "spider": "spider_giant",
     "giant": "giant_hill",
     "wolf": "wolf_grey",
@@ -34,7 +33,6 @@ TYPE_MAP = {
 _DRAW_TILES = {
     "goblin_grunt": 4.8,
     "skeleton_warrior": 5.2,
-    "skeleton_mage": 5.8,
     "spider_giant": 4.6,
     "wolf_grey": 4.2,
     "wolf_dire": 4.8,

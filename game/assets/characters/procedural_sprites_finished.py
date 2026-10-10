@@ -1731,7 +1731,6 @@ def draw_goblin(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1):
 MONSTER_DRAWERS = {
     # Core bases defined above this dict (spider/dragon/wolf/shade/knight
     # are registered later after their draw_* defs).
-    "giant_rat": draw_giant_rat,
     "goblin": draw_goblin,
     "skeleton": draw_skeleton,
 
@@ -1743,15 +1742,15 @@ MONSTER_DRAWERS = {
     "magma_slug": draw_magma_slug,
     "crucible_beast": draw_crucible_beast,
     "ember_wolf": draw_ember_wolf,
-    "big_skeleton": draw_big_skeleton,
-    "guard": draw_guard,
     "crypt_ghoul": draw_crypt_ghoul,
     "void_horror": draw_void_horror,
-    "mythos_champion": draw_mythos_champion,
 }
 
 
 def draw_monster(surf, mtype, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1, moving=False):
+    # These ids are HD-only. The function below stays as the unknown-type fallback.
+    if mtype in ("giant_rat", "guard", "mythos_champion", "adamant_duelist"):
+        return
     fn = MONSTER_DRAWERS.get(mtype, draw_giant_rat)
     try:
         fn(surf, cx, cy, tile, t, hurt=hurt, attacking=attacking, facing=facing, moving=moving)
@@ -5594,8 +5593,6 @@ def draw_mythos_champion(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facin
     )
 
 
-MONSTER_DRAWERS["guard"] = draw_guard
-MONSTER_DRAWERS["mythos_champion"] = draw_mythos_champion
 
 
 def _draw_castle_keep(surf, rect, alpha=245):

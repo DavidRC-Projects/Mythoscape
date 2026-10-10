@@ -46,9 +46,6 @@ _PET_DRAGON_SCALE = 0.55
 
 # content visual → preview file. Magma knight is intentionally absent.
 _MONSTER_PREVIEW = {
-    "giant_rat": "giant_rat",
-    "guard": "guard",
-    "mythos_champion": "mythos_champion",
     "magma_slug": "magma_slug",
     "ash_imp": "ash_imp",
     "crucible_beast": "crucible_beast",
@@ -58,10 +55,7 @@ _HEIGHT = {
     "pet_husky": 2.4,
     "pet_dragon_frost": 4.4,
     "pet_dragon_mythic": 4.8,
-    "giant_rat": 2.2,
-    "guard": 3.96,
     "castle_knight": 4.4,
-    "mythos_champion": 4.84,
     "magma_slug": 2.4,
     "ash_imp": 3.0,
     "crucible_beast": 5.4,
