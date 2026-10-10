@@ -1737,7 +1737,6 @@ MONSTER_DRAWERS = {
     # Stubs / early impls — later MONSTER_DRAWERS.update() overrides with finals.
     "ash_imp": draw_ash_imp,
     "void_imp": draw_void_imp,
-    "giant": draw_giant,
     "obsidian_colossus": draw_obsidian_colossus,
     "magma_slug": draw_magma_slug,
     "crucible_beast": draw_crucible_beast,
@@ -1749,7 +1748,7 @@ MONSTER_DRAWERS = {
 
 def draw_monster(surf, mtype, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1, moving=False):
     # These ids are HD-only. The function below stays as the unknown-type fallback.
-    if mtype in ("giant_rat", "guard", "mythos_champion", "adamant_duelist"):
+    if mtype in ("giant_rat", "guard", "mythos_champion", "adamant_duelist", "giant", "wolf"):
         return
     fn = MONSTER_DRAWERS.get(mtype, draw_giant_rat)
     try:
@@ -4884,7 +4883,6 @@ def draw_pet(surf, sprite, cx, cy, tile, t, hurt=False, attacking=0.0, moving=Fa
 MONSTER_DRAWERS.update({
     "orc": draw_orc,
     "slime": draw_slime,
-    "giant": draw_giant,
     "big_skeleton": draw_big_skeleton,
     "spider": draw_spider,
     "dragon": draw_dragon,
@@ -4955,9 +4953,6 @@ def draw_wolf(surf, cx, cy, tile, t, hurt=False, attacking=0.0, moving=False, fa
             (hx + 7 * s * facing, hy + 0.5 * s),
             (hx + 4 * s * facing, hy + 2 * s),
         ])
-
-
-MONSTER_DRAWERS["wolf"] = draw_wolf
 
 
 def draw_shade(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1, moving=False):

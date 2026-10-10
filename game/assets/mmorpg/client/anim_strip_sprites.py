@@ -18,8 +18,6 @@ TYPE_MAP = {
     "goblin": "goblin_grunt",
     "skeleton": "skeleton_warrior",
     "spider": "spider_giant",
-    "giant": "giant_hill",
-    "wolf": "wolf_grey",
     "ember_wolf": "wolf_dire",
     "shade": "barrow_wraith",
     "crypt_ghoul": "rot_ghoul",
@@ -34,14 +32,12 @@ _DRAW_TILES = {
     "goblin_grunt": 4.8,
     "skeleton_warrior": 5.2,
     "spider_giant": 4.6,
-    "wolf_grey": 4.2,
     "wolf_dire": 4.8,
     "barrow_wraith": 5.4,
     "rot_ghoul": 5.2,
     "void_spawn": 4.4,
     "void_brute": 7.6,
     "stone_golem": 8.0,
-    "giant_hill": 9.5,
 }
 
 FRAMES = 5
