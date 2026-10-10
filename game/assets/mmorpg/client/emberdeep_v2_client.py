@@ -828,7 +828,10 @@ def _draw_local_player(client, pose, sx, sy, tile_px, t, player_depth=1.0):
         import player_hd_client
         weapon_id = (eq or {}).get("weapon") or ""
         ranged = client.attack_anim_kind.get(p.get("id")) == "ranged" or "bow" in str(weapon_id)
-        attacking = pose["atk"] > 0 and not pose["action"]
+        # Progress is exactly 0 on the first beat, while the swing is still in attack_anims.
+        pid = p.get("id")
+        in_swing = pose["atk"] > 0 or pid in client.attack_anims or str(pid) in client.attack_anims
+        attacking = in_swing and not pose["action"]
         if attacking:
             anim = "ranged" if ranged else "melee"
         else:
@@ -838,7 +841,7 @@ def _draw_local_player(client, pose, sx, sy, tile_px, t, player_depth=1.0):
         swing_hit = -1.0 if attacking else (hit_t if 0 <= hit_t < 0.36 else -1.0)
         drawn = player_hd_client.draw_player(
             client.screen, gender, appearance, sx, sy, body_px, t,
-            anim=anim, progress=pose["atk"] if pose["atk"] > 0 else None, facing=face,
+            anim=anim, progress=pose["atk"] if attacking else None, facing=face,
             hit_t=swing_hit,
             death_t=death_t if 0 <= death_t < 1.2 else -1.0,
             equipment=eq,
