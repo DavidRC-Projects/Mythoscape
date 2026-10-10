@@ -746,48 +746,31 @@ def _label_anchor(cy, tile_px, kind):
 
 def _target_point(client, target):
     """Tile centre to face: the wyrm body tile nearest the player, else the anchor."""
-    if target.get("type") == "emberdeep_wyrm":
-        import time
-        import emberdeep_creatures
-        gx, gy, _sliding = _wyrm_glide(client, target, time.time())
-        ax, ay = gx - 0.5, gy - 0.5
-        p = client.player or {}
-        px = float(p.get("x", 0)) + 0.5
-        py = float(p.get("y", 0)) + 0.5
-        best = None
-        best_d = None
-        for x, y in emberdeep_creatures.footprint(round(ax), round(ay)):
-            cx, cy = x + 0.5, y + 0.5
-            dist = (cx - px) ** 2 + (cy - py) ** 2
-            if best_d is None or dist < best_d:
-                best_d = dist
-                best = (cx, cy)
-        if best is not None:
-            return best
-    return (target["x"] + 0.5, target["y"] + 0.5)
+    import hd_combat_facing
+    return hd_combat_facing.target_point(client, target, glide=_wyrm_glide)
 
 
 def _combat_facing(client, pose, sx, tile_px, player_depth):
-    """Side-on to the live target. Attack sheets exist only for the side view."""
+    """Face the live target on the dominant screen axis: side, front, or back."""
     del sx, player_depth
     target = (client.monsters or {}).get(getattr(client, "combat_target_id", None))
     if not target or not target.get("alive", True):
         return pose["face"]
-    tx, ty = _target_point(client, target)
     feet_x = pose.get("draw_x", pose["x"] + 0.5)
     feet_y = pose.get("draw_y", pose["y"] + 0.5)
     mw, mh = _map_size()
-    hit = _project(0, 0, 0, 0, 0, 0, tx, ty, None, 1, 1, mw, mh)
-    feet = _project(0, 0, 0, 0, 0, 0, feet_x, feet_y, None, 1, 1, mw, mh)
-    side = getattr(client, "_ember_fight_side", 1)
-    if side not in (1, -1):
-        side = 1
-    if hit is not None and feet is not None:
-        dxs = hit[1] - feet[1]
-        if abs(dxs) > 0.12 * tile_px:
-            side = 1 if dxs > 0 else -1
-            client._ember_fight_side = side
-    return side
+
+    def screen_of(wx, wy):
+        hit = _project(0, 0, 0, 0, 0, 0, wx, wy, None, 1, 1, mw, mh)
+        if hit is None:
+            return None
+        return hit[1], hit[2]
+
+    import hd_combat_facing
+    return hd_combat_facing.choose(
+        client, (feet_x, feet_y), target, screen_of, tile_px,
+        fallback=pose["face"], glide=_wyrm_glide,
+    )
 
 
 def _wyrm_fight_facing(client, monster):
