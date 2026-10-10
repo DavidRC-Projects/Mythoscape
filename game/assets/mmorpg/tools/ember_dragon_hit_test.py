@@ -121,7 +121,7 @@ def _snap_camera(client):
 
 
 def _screen_gap(client):
-    """Dragon nearest-point screen x minus the player's screen x, and the tile size."""
+    """Screen delta from the player to the nearest dragon tile, and that tile."""
     monster = client.monsters[9]
     tx, ty = ev2._target_point(client, monster)
     feet_x = client.player["x"] + 0.5
@@ -129,9 +129,15 @@ def _screen_gap(client):
     hit = ev2._project(0, 0, 0, 0, 0, 0, tx, ty, None, 1, 1, MAP_W, MAP_H)
     feet = ev2._project(0, 0, 0, 0, 0, 0, feet_x, feet_y, None, 1, 1, MAP_W, MAP_H)
     if hit is None or feet is None:
-        return None, None, None
+        return None, None, None, None
     tile_px = max(24, int(feet[3]))
-    return hit[1] - feet[1], tile_px, (tx, ty)
+    return hit[1] - feet[1], hit[2] - feet[2], tile_px, (tx, ty)
+
+
+def _fresh_face(dxs, dys):
+    if abs(dxs) > abs(dys):
+        return 1 if dxs > 0 else -1
+    return "front" if dys > 0 else "back"
 
 
 def _changed_ratio(with_player, without, rect):
@@ -194,6 +200,79 @@ def _sheet(frames):
     pygame.image.save(sheet, "/tmp/ember_hit_sheet.png")
 
 
+def _overworld_cases():
+    """One goblin on each side of an HD player, then the 2D side-only path."""
+    import hd_combat_facing
+
+    rows = []
+    failed = False
+    host = type("Host", (), {})()
+    host.player = {"id": 1, "x": 10, "y": 10}
+    appearance = player_hd_client.get_default_appearance("male")
+    surf = pygame.Surface((240, 240))
+
+    def screen_of(wx, wy):
+        return float(wx) * 40.0, float(wy) * 40.0
+
+    for dx, dy, want in ((0, 2, "s"), (0, -2, "n"), (2, 0, "e"), (-2, 0, "w")):
+        host._ember_fight_face = None
+        host._ember_fight_point = None
+        goblin = {"type": "goblin", "x": 10 + dx, "y": 10 + dy, "alive": True}
+        face = hd_combat_facing.choose(
+            host, (10.5, 10.5), goblin, screen_of, 40, fallback=1,
+        )
+        tag = hd_combat_facing.sheet_tag(face)
+        player_hd_client.draw_player(
+            surf, "male", appearance, 120, 180, 44, 0.0,
+            anim="melee", progress=0.48, facing=face, hit_t=-1.0,
+            equipment={"weapon": "bronze_sword"},
+        )
+        drawn = dict(player_hd_client.last_draw)
+        problems = []
+        if tag != want:
+            problems.append(f"facing {face} tag {tag}")
+        if drawn.get("anim") != "melee":
+            problems.append(f"anim {drawn.get('anim')}")
+        letter = "e" if want == "w" else want
+        if drawn.get("strip") != f"melee_{letter}.png":
+            problems.append(f"strip {drawn.get('strip')}")
+        if want == "w" and not drawn.get("flip"):
+            problems.append("west was not mirrored")
+        if drawn.get("frame") != 4:
+            problems.append(f"contact frame {drawn.get('frame')}")
+        ok = not problems
+        failed = failed or not ok
+        rows.append((
+            "goblin", want, "melee", str(face), str(drawn.get("frame")),
+            drawn.get("strip") or "", "",
+            "PASS" if ok else "FAIL " + "; ".join(problems),
+        ))
+
+    import client as game
+
+    stub = type("Stub", (), {"_entity_facing": {}})()
+    two_d = [
+        (12, 10, 1),
+        (8, 10, -1),
+        (10, 14, None),
+        (10, 6, None),
+    ]
+    for tx, ty, exact in two_d:
+        face = game.GameClient.face_toward_target(stub, 10, 10, tx, ty)
+        problems = []
+        if face not in (1, -1):
+            problems.append(f"2d facing {face}")
+        if exact is not None and face != exact:
+            problems.append(f"2d facing {face} want {exact}")
+        ok = not problems
+        failed = failed or not ok
+        rows.append((
+            "2d", f"{tx},{ty}", "", str(face), "", "", "",
+            "PASS" if ok else "FAIL " + "; ".join(problems),
+        ))
+    return failed, rows
+
+
 def main():
     pygame.init()
     pygame.display.set_mode((MAP_W, MAP_H))
@@ -204,9 +283,15 @@ def main():
 
     calls = []
     skip = [False]
+    force_idle = [False]
     real_draw = player_hd_client.draw_player
 
     def wrapped(*args, **kwargs):
+        if force_idle[0]:
+            kwargs = dict(kwargs)
+            kwargs["anim"] = "idle"
+            kwargs["progress"] = None
+            return real_draw(*args, **kwargs)
         if skip[0]:
             return True
         calls.append((args, kwargs))
@@ -216,10 +301,13 @@ def main():
     rows = []
     frames = {}
     failed = False
+    seen = set()
     try:
         cases = [(yaw, None) for yaw in YAWS]
         cases.append((0, (25, 5)))
         for yaw, corner in cases:
+            client._ember_fight_face = None
+            client._ember_fight_point = None
             if corner is not None:
                 client.player["x"], client.player["y"] = corner
             else:
@@ -243,6 +331,7 @@ def main():
                 if not got:
                     problems.append("draw_player was not called")
                     anim, facing, frame, cx, cy, tile = None, None, None, 0, 0, 32
+                    drawn = {}
                 else:
                     args, kwargs = got[0]
                     anim = kwargs.get("anim")
@@ -252,24 +341,34 @@ def main():
                         anim, args[6], kwargs.get("progress"),
                         kwargs.get("hit_t", -1.0), kwargs.get("death_t", -1.0),
                     )[1]
+                    drawn = dict(player_hd_client.last_draw)
                     frames_for_yaw.append(frame)
-                    if anim != "melee":
-                        problems.append(f"anim {anim}")
-                    if facing not in (1, -1):
+                    if anim != "melee" or drawn.get("anim") != "melee":
+                        problems.append(f"anim {anim}/{drawn.get('anim')}")
+                    if facing not in (1, -1, "front", "back"):
                         problems.append(f"facing {facing}")
 
-                gap, tile_px, target = _screen_gap(client)
-                if gap is not None and tile_px and facing in (1, -1):
-                    if abs(gap) > 0.12 * tile_px:
-                        want = 1 if gap > 0 else -1
-                        if facing != want:
-                            problems.append(f"facing {facing} but screen gap {gap:.1f}")
-                elif gap is None:
+                dxs, dys, tile_px, target = _screen_gap(client)
+                if dxs is None:
                     problems.append("target did not project")
+                elif facing in (1, -1, "front", "back") and tile_px:
+                    want = _fresh_face(dxs, dys)
+                    if facing != want:
+                        problems.append(f"facing {facing} want {want}")
+                    if corner is None:
+                        seen.add(want)
 
                 if corner is not None and target is not None:
                     if target != (24.5, 4.5):
                         problems.append(f"nearest point {target}")
+
+                strip = drawn.get("strip") or ""
+                if anim == "melee" and facing in (1, -1, "front", "back"):
+                    letter = {1: "e", -1: "e", "front": "s", "back": "n"}[facing]
+                    if strip != f"melee_{letter}.png" or "idle" in strip:
+                        problems.append(f"strip {strip}")
+                    if facing == -1 and not drawn.get("flip"):
+                        problems.append("west did not mirror the east strip")
 
                 body_tile = max(1.0, float(tile) / 1.1)
                 rect = pygame.Rect(
@@ -286,6 +385,15 @@ def main():
                     side = _dragon_side_count(shown, hidden, rect, cx, facing)
                     if side <= 0:
                         problems.append("no pixels on the dragon side")
+                if progress == 0.48 and facing in ("front", "back"):
+                    force_idle[0] = True
+                    ev2.draw_first_person(client)
+                    idle_surf = client.screen.copy()
+                    force_idle[0] = False
+                    _pose_ratio, pose_px = _changed_ratio(shown, idle_surf, rect)
+                    side = pose_px
+                    if pose_px <= 0:
+                        problems.append("swing matches the idle pose")
 
                 ok = not problems
                 failed = failed or not ok
@@ -302,6 +410,15 @@ def main():
                     f"{yaw:>3}", "swing", "", "", str(frames_for_yaw),
                     "", "", "FAIL frame index did not change",
                 ))
+        if "front" not in seen or "back" not in seen or not ({1, -1} & seen):
+            failed = True
+            rows.append((
+                "mix", "", "", str(sorted(seen, key=str)), "",
+                "", "", "FAIL need a front, a back, and a side across the yaws",
+            ))
+        over_fail, over_rows = _overworld_cases()
+        failed = failed or over_fail
+        rows.extend(over_rows)
     finally:
         player_hd_client.draw_player = real_draw
 
