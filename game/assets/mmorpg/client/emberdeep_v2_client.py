@@ -549,10 +549,18 @@ def wyrm_swing_tiles(monster):
 
 
 def wyrm_approach_goals(monster):
-    """Stand beside the flame. The breath tiles still count once you are there."""
+    """Stand in front of the head, not on the right flank."""
+    ax, ay = int(monster["x"]), int(monster["y"])
+    facing = str(monster.get("facing") or "s")
+    if facing in ("e", "east"):
+        goals = {(ax + 3, ay), (ax + 3, ay - 1), (ax + 3, ay + 1)}
+    elif facing in ("w", "west"):
+        goals = {(ax - 3, ay), (ax - 3, ay - 1), (ax - 3, ay + 1)}
+    else:
+        goals = {(ax, ay + 2), (ax - 1, ay + 2), (ax + 1, ay + 2)}
     swing = wyrm_swing_tiles(monster)
-    safe = swing - _cone_spots(monster)
-    return safe or swing
+    front = {spot for spot in goals if spot in swing}
+    return front or goals or swing
 
 
 def _sprite_world(monster):
@@ -736,22 +744,174 @@ def _label_anchor(cy, tile_px, kind):
     return hp_y - 16, hp_y
 
 
+def _target_point(client, target):
+    """Tile centre to face: the wyrm body tile nearest the player, else the anchor."""
+    if target.get("type") == "emberdeep_wyrm":
+        import time
+        import emberdeep_creatures
+        gx, gy, _sliding = _wyrm_glide(client, target, time.time())
+        ax, ay = gx - 0.5, gy - 0.5
+        p = client.player or {}
+        px = float(p.get("x", 0)) + 0.5
+        py = float(p.get("y", 0)) + 0.5
+        best = None
+        best_d = None
+        for x, y in emberdeep_creatures.footprint(round(ax), round(ay)):
+            cx, cy = x + 0.5, y + 0.5
+            dist = (cx - px) ** 2 + (cy - py) ** 2
+            if best_d is None or dist < best_d:
+                best_d = dist
+                best = (cx, cy)
+        if best is not None:
+            return best
+    return (target["x"] + 0.5, target["y"] + 0.5)
+
+
 def _combat_facing(client, pose, sx, tile_px, player_depth):
-    """Face the target the way it sits on screen while a swing is live."""
-    attacking = pose["atk"] > 0
+    """Side-on to the live target. Attack sheets exist only for the side view."""
+    del sx, player_depth
     target = (client.monsters or {}).get(getattr(client, "combat_target_id", None))
-    if not attacking and not (target and target.get("alive", True)):
+    if not target or not target.get("alive", True):
         return pose["face"]
-    if not target:
-        return pose["face"]
+    tx, ty = _target_point(client, target)
+    feet_x = pose.get("draw_x", pose["x"] + 0.5)
+    feet_y = pose.get("draw_y", pose["y"] + 0.5)
     mw, mh = _map_size()
-    hit = _project(0, 0, 0, 0, 0, 0, target["x"] + 0.5, target["y"] + 0.5, None, 1, 1, mw, mh)
-    if hit is None:
-        return pose["face"]
-    depth, tx, _ty, _px = hit
-    if abs(tx - sx) > 0.35 * max(8, tile_px):
-        return 1 if tx > sx else -1
-    return "back" if depth > player_depth else "front"
+    hit = _project(0, 0, 0, 0, 0, 0, tx, ty, None, 1, 1, mw, mh)
+    feet = _project(0, 0, 0, 0, 0, 0, feet_x, feet_y, None, 1, 1, mw, mh)
+    side = getattr(client, "_ember_fight_side", 1)
+    if side not in (1, -1):
+        side = 1
+    if hit is not None and feet is not None:
+        dxs = hit[1] - feet[1]
+        if abs(dxs) > 0.12 * tile_px:
+            side = 1 if dxs > 0 else -1
+            client._ember_fight_side = side
+    return side
+
+
+def _wyrm_fight_facing(client, monster):
+    """Mouth toward the player when they stand in front of the wyrm."""
+    p = client.player or {}
+    dx = p.get("x", monster["x"]) - monster["x"]
+    dy = p.get("y", monster["y"]) - monster["y"]
+    if dy >= 0 and abs(dx) <= max(2, dy):
+        return "s"
+    if abs(dx) >= abs(dy):
+        return "e" if dx >= 0 else "w"
+    return "s" if dy >= 0 else ("w" if dx < 0 else "e")
+
+
+_MELEE_ANCHORS = None
+
+
+def _melee_hand_tip(sex, frame, layer):
+    """Grip and blade tip for one east melee frame, in 2x canvas pixels."""
+    global _MELEE_ANCHORS
+    if _MELEE_ANCHORS is None:
+        import json
+        path = os.path.join(os.path.dirname(__file__), "..", "..", "player_hd", "assets", "anchors.json")
+        with open(path, encoding="utf-8") as handle:
+            _MELEE_ANCHORS = json.load(handle)
+    sex = "female" if sex == "female" else "male"
+    row = _MELEE_ANCHORS["anchors"][sex]["melee"]["e"][int(frame)]
+    hand = row["hand_R"]
+    tip = (row.get("tip") or {}).get(layer) or (row.get("tip") or {}).get("wpn_sword") or hand
+    return hand, tip
+
+
+def _rotate_about(surf, degrees, px, py):
+    """Spin a surface counter-clockwise about a pixel on it. Returns the new surface and that pixel's new position."""
+    width, height = surf.get_size()
+    spun = pygame.transform.rotate(surf, degrees)
+    rad = math.radians(degrees)
+    ox, oy = px - width / 2.0, py - height / 2.0
+    rx = ox * math.cos(rad) + oy * math.sin(rad)
+    ry = -ox * math.sin(rad) + oy * math.cos(rad)
+    sw, sh = spun.get_size()
+    return spun, (sw / 2.0 + rx, sh / 2.0 + ry)
+
+
+def _dragon_aim_point(client, sx, sy, face):
+    """Where the blade should land: the dragon's head, or straight ahead."""
+    target = (client.monsters or {}).get(getattr(client, "combat_target_id", None))
+    mw, mh = _map_size()
+    if target:
+        hit = _project(0, 0, 0, 0, 0, 0, target["x"] + 0.5, target["y"] + 0.5, None, 1, 1, mw, mh)
+        if hit:
+            return hit[1], hit[2] - hit[3] * 1.8
+    reach = 90 if face == "back" else -70
+    return sx, sy - reach
+
+
+def _swing_toward_head(client, sex, equipment, sx, sy, tile, progress, face):
+    """Melee frames, with the blade travelling from the hand into the dragon."""
+    import player_hd_client
+    layer, tint = player_hd_client._weapon_spec((equipment or {}).get("weapon"))
+    if not layer or "bow" in layer:
+        layer, tint = "wpn_sword", (210, 214, 220)
+    frame = 0
+    for i, mark in enumerate(player_hd_client.MELEE_PROGRESS):
+        if mark <= progress:
+            frame = i
+    draw_tile = max(8, int(tile))
+    sex = "female" if sex == "female" else "male"
+    blade, tint_surf = player_hd_client._layer_parts(
+        sex, "2x", layer, "melee", "e", frame, draw_tile, 80,
+    )
+    if blade is None:
+        return
+    hand, tip = _melee_hand_tip(sex, frame, layer)
+    scale = draw_tile / 80.0
+    hx, hy = hand[0] * scale, hand[1] * scale
+    tx, ty = tip[0] * scale, tip[1] * scale
+    grip_x, grip_y = hx, hy
+    hold = _MELEE_ANCHORS["anchors"][sex]["idle"]["n" if face == "back" else "s"][0]["hand_R"]
+    feet_x, feet_y = 144.0 * scale, 248.0 * scale
+    screen_hand = (sx - feet_x + hold[0] * scale, sy - feet_y + hold[1] * scale)
+    aim_x, aim_y = _dragon_aim_point(client, sx, sy, face)
+    if progress < 0.30:
+        reach = 0.15 * (progress / 0.30)
+    elif progress < 0.48:
+        reach = 0.15 + 0.85 * ((progress - 0.30) / 0.18)
+    else:
+        reach = max(0.15, 1.0 - (progress - 0.48) / 0.45)
+    tip_at = (
+        screen_hand[0] + (aim_x - screen_hand[0]) * reach,
+        screen_hand[1] + (aim_y - screen_hand[1]) * reach,
+    )
+    natural = math.hypot(tx - hx, ty - hy) or 1.0
+    wanted = math.hypot(tip_at[0] - screen_hand[0], tip_at[1] - screen_hand[1]) or 1.0
+    factor = max(0.4, min(3.5, wanted / natural))
+    if abs(factor - 1.0) > 0.05:
+        blade = pygame.transform.smoothscale(
+            blade, (max(1, int(blade.get_width() * factor)), max(1, int(blade.get_height() * factor))),
+        )
+        if tint_surf is not None:
+            tint_surf = pygame.transform.smoothscale(
+                tint_surf,
+                (max(1, int(tint_surf.get_width() * factor)), max(1, int(tint_surf.get_height() * factor))),
+            )
+        hx, hy = hx * factor, hy * factor
+        tx, ty = tx * factor, ty * factor
+    current = math.degrees(math.atan2(-(ty - hy), tx - hx))
+    want = math.degrees(math.atan2(-(tip_at[1] - screen_hand[1]), tip_at[0] - screen_hand[0]))
+    spun, grip = _rotate_about(blade, want - current, hx, hy)
+    # Land the blade tip on the dragon, not beside the player.
+    tip_local = _rotate_about(blade, want - current, tx, ty)[1]
+    pos = (int(tip_at[0] - tip_local[0]), int(tip_at[1] - tip_local[1]))
+    client.screen.blit(spun, pos)
+    if tint_surf is not None and tint:
+        tinted, _grip = _rotate_about(tint_surf, want - current, hx, hy)
+        player_hd_client._blit_tinted(client.screen, tinted, tint, pos)
+    del grip
+    if frame in (4, 5):
+        arc, _arc_tint = player_hd_client._layer_parts(
+            sex, "2x", f"fx_swing_{layer}", "melee", "e", frame, draw_tile, 80,
+        )
+        if arc is not None:
+            arc_spun, _arc_grip = _rotate_about(arc, want - current, grip_x, grip_y)
+            client.screen.blit(arc_spun, (int(tip_at[0] - arc_spun.get_width() / 2), int(tip_at[1] - arc_spun.get_height() / 2)))
 
 
 def _draw_local_player(client, pose, sx, sy, tile_px, t, player_depth=1.0):
@@ -781,7 +941,12 @@ def _draw_local_player(client, pose, sx, sy, tile_px, t, player_depth=1.0):
         weapon_id = (eq or {}).get("weapon") or ""
         ranged = client.attack_anim_kind.get(p.get("id")) == "ranged" or "bow" in str(weapon_id)
         if pose["atk"] > 0 and not pose["action"]:
-            anim = "ranged" if ranged else "melee"
+            # The side view has a real swing. In front, stay facing the dragon
+            # and drive the blade into it instead of marching on the spot.
+            if face in ("back", "front") and not ranged:
+                anim = "idle"
+            else:
+                anim = "ranged" if ranged else "melee"
         else:
             anim = pose["action"] or ("walk" if pose["moving"] else "idle")
         body_px = int(round(tile_px * 1.1))
@@ -797,6 +962,8 @@ def _draw_local_player(client, pose, sx, sy, tile_px, t, player_depth=1.0):
                 client.screen, gender, appearance, sx, sy, min(80, body_px), t,
                 anim="idle", facing=face, equipment=eq,
             )
+        if drawn and pose["atk"] > 0 and face in ("back", "front"):
+            _swing_toward_head(client, gender, eq, sx, sy, body_px, pose["atk"], face)
     if hd_on:
         return
     if not drawn:
@@ -1054,6 +1221,8 @@ def _draw_wyrm_billboard(client, monster, sx, sy, tile_px, now, moving, atk, fla
     breath_t0 = cone.get("t0")
     hit_at = (getattr(client, "monster_hit_at", None) or {}).get(monster["id"])
     facing = monster.get("facing") or "s"
+    if breath_t0 is not None or client.combat_target_id == monster.get("id"):
+        facing = _wyrm_fight_facing(client, monster)
     if flash > 0.01:
         width, height, feet_x, feet_y = emberdeep_creatures_client.wyrm_canvas(tile_px)
         temp = pygame.Surface((width, height), pygame.SRCALPHA)
@@ -1172,14 +1341,35 @@ def _draw_breath(client, now, rw, rh, mw, mh):
     image = ember_combat_fx._cone_image()
     if image is None:
         return
-    facing = "s"
+    wyrm = None
     for monster in (client.monsters or {}).values():
         if monster.get("type") == "emberdeep_wyrm":
-            facing = str(monster.get("facing") or "s")
-    angle = {"e": -90, "east": -90, "w": 90, "west": 90, "n": 180, "north": 180}.get(facing, 0)
+            wyrm = monster
+    p = client.player or {}
+    src = dst = None
+    if wyrm and p:
+        src = _project(0, 0, 0, 0, 0, 0, wyrm["x"] + 0.5, wyrm["y"] + 0.5, None, rw, rh, mw, mh)
+        dst = _project(0, 0, 0, 0, 0, 0, p.get("x", 0) + 0.5, p.get("y", 0) + 0.5, None, rw, rh, mw, mh)
+    if src and dst:
+        vx, vy = dst[1] - src[1], dst[2] - src[2]
+        dist = math.hypot(vx, vy) or 1.0
+        # The cone art points east. Positive pygame rotation is counter-clockwise,
+        # and screen y grows downward, so negate the screen angle.
+        angle = -math.degrees(math.atan2(vy, vx))
+        length = max(24, int(dist))
+        thick = max(18, int((src[3] + dst[3]) * 0.55))
+        scaled = pygame.transform.smoothscale(image, (length, thick))
+        spun = pygame.transform.rotate(scaled, angle)
+        spun.set_alpha(150)
+        rect = spun.get_rect(center=(int(src[1] + vx * 0.55), int(src[2] + vy * 0.55)))
+        client.screen.blit(spun, rect.topleft)
+        return
+    facing = _wyrm_fight_facing(client, wyrm) if wyrm else "s"
+    # Art points east. South, toward the player in front, is a quarter turn clockwise.
+    angle = {"e": 0, "w": 180, "n": 90, "s": -90}.get(facing, -90)
     spun = pygame.transform.rotate(image, angle)
-    xs = [p[1] for p in points]
-    ys = [p[2] for p in points]
+    xs = [pt[1] for pt in points]
+    ys = [pt[2] for pt in points]
     span = max(points[0][3] * 2, 24)
     size = (max(24, int(max(xs) - min(xs) + span)), max(24, int(max(ys) - min(ys) + span)))
     spun = pygame.transform.smoothscale(spun, size)
