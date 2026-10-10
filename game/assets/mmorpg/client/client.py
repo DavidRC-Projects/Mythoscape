@@ -1440,23 +1440,25 @@ class GameClient(ScreensMixin, CameraYaw):
                     else:
                         dx, dy = self.rotate_move_delta(dx, dy)
                     self.try_move(dx, dy)
+            elif event.key in (pygame.K_w, pygame.K_s) and emberdeep_v2_client.fp_active(self):
+                if not self._begin_key_step():
+                    return
+                forward = 1 if event.key == pygame.K_w else -1
+                self._ember_reverse = forward < 0
+                self._ember_strafe = None
+                dx, dy = emberdeep_v2_client.step_delta(self, forward)
+                self.try_move(dx, dy)
             elif event.key == pygame.K_a and emberdeep_v2_client.fp_active(self):
                 if not self._begin_key_step():
                     return
                 dx, dy = emberdeep_v2_client.strafe_delta(self, -1)
-                if abs(dx) > abs(dy):
-                    self._ember_strafe = 1 if dx > 0 else -1
-                else:
-                    self._ember_strafe = "front" if dy > 0 else "back"
+                self._ember_strafe = self._ember_strafe_face(dx, dy)
                 self.try_move(dx, dy)
             elif event.key == pygame.K_d and emberdeep_v2_client.fp_active(self):
                 if not self._begin_key_step():
                     return
                 dx, dy = emberdeep_v2_client.strafe_delta(self, 1)
-                if abs(dx) > abs(dy):
-                    self._ember_strafe = 1 if dx > 0 else -1
-                else:
-                    self._ember_strafe = "front" if dy > 0 else "back"
+                self._ember_strafe = self._ember_strafe_face(dx, dy)
                 self.try_move(dx, dy)
             elif event.key == pygame.K_i:
                 self.sidebar_tab = "inventory"
@@ -2619,12 +2621,41 @@ class GameClient(ScreensMixin, CameraYaw):
         return True
 
     def _poll_held_walk(self):
-        """Keep stepping while an arrow stays down. Key-repeat is unreliable for those keys."""
+        """Keep stepping while a move key stays down. Key-repeat is unreliable for those keys."""
         if self._walk_keys_blocked():
+            return
+        keys = pygame.key.get_pressed()
+        import emberdeep_v2_client
+        if emberdeep_v2_client.fp_active(self):
+            if keys[pygame.K_LEFT] or keys[pygame.KSCAN_LEFT]:
+                emberdeep_v2_client.turn(self, -1)
+            elif keys[pygame.K_RIGHT] or keys[pygame.KSCAN_RIGHT]:
+                emberdeep_v2_client.turn(self, 1)
+            if time.time() < getattr(self, "_next_walk_at", 0):
+                return
+            dx = dy = None
+            if keys[pygame.K_w] or keys[pygame.K_UP] or keys[pygame.KSCAN_UP]:
+                self._ember_reverse = False
+                self._ember_strafe = None
+                dx, dy = emberdeep_v2_client.step_delta(self, 1)
+            elif keys[pygame.K_s] or keys[pygame.K_DOWN] or keys[pygame.KSCAN_DOWN]:
+                self._ember_reverse = True
+                self._ember_strafe = None
+                dx, dy = emberdeep_v2_client.step_delta(self, -1)
+            elif keys[pygame.K_a]:
+                dx, dy = emberdeep_v2_client.strafe_delta(self, -1)
+                self._ember_strafe = self._ember_strafe_face(dx, dy)
+            elif keys[pygame.K_d]:
+                dx, dy = emberdeep_v2_client.strafe_delta(self, 1)
+                self._ember_strafe = self._ember_strafe_face(dx, dy)
+            if dx is None:
+                return
+            if not self._begin_key_step():
+                return
+            self.try_move(dx, dy)
             return
         if time.time() < getattr(self, "_next_walk_at", 0):
             return
-        keys = pygame.key.get_pressed()
         step = None
         if keys[pygame.K_UP] or keys[pygame.KSCAN_UP]:
             step = (0, -1)
@@ -2636,21 +2667,16 @@ class GameClient(ScreensMixin, CameraYaw):
             step = (1, 0)
         if step is None:
             return
-        import emberdeep_v2_client
         dx, dy = step
-        if emberdeep_v2_client.fp_active(self):
-            if dy == 0:
-                return
-            if not self._begin_key_step():
-                return
-            self._ember_reverse = dy > 0
-            self._ember_strafe = None
-            dx, dy = emberdeep_v2_client.step_delta(self, -1 if dy > 0 else 1)
-        else:
-            if not self._begin_key_step():
-                return
-            dx, dy = self.rotate_move_delta(dx, dy)
+        if not self._begin_key_step():
+            return
+        dx, dy = self.rotate_move_delta(dx, dy)
         self.try_move(dx, dy)
+
+    def _ember_strafe_face(self, dx, dy):
+        if abs(dx) > abs(dy):
+            return 1 if dx > 0 else -1
+        return "front" if dy > 0 else "back"
 
     def try_move(self, dx, dy):
         now = time.time()

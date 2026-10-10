@@ -382,10 +382,14 @@ def draw_player(
     """Draw the HD paper doll. False means the body art is missing, so use 2D."""
     sex = "female" if sex == "female" else "male"
     appearance = appearance or get_default_appearance(sex)
-    scale_tag, base = _scale_for(tile)
     final_anim, frame_idx = _frame_for_anim(anim, t, progress, hit_t, death_t)
-    facing_tag = _facing_str(facing)
+    scale_tag, base = _scale_for(tile)
     meta = _load_meta()
+    # 4x sheets are idle previews for the creator and shop. Walk and combat
+    # live at 2x, so a close camera scales those up instead of dropping to 2D.
+    if scale_tag == "4x" and final_anim != "idle":
+        scale_tag, base = "2x", 80
+    facing_tag = _facing_str(facing)
     anim_facings = (meta.get("anims") or {}).get(final_anim, {}).get("facings", ["s", "e", "n"])
     flip_x = False
     if facing_tag not in anim_facings:

@@ -16,6 +16,12 @@ import pygame
 import feature_flags
 import world_map as wm
 
+_LEGS = {
+    "ash_imp": "biped",
+    "magma_knight": "biped",
+    "crucible_beast": "quad",
+    "ember_wolf": "quad",
+}
 _PACK = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "emberdeep_v2_pack"))
 _APRON = (176, 58, 198, 94)  # inclusive world tiles
 _IMAGES = {}
@@ -573,6 +579,12 @@ def _wyrm_glide(client, monster, now):
     return x, y, u < 1.0
 
 
+def _tile_at(tiles, x, y):
+    if y < 0 or x < 0 or y >= len(tiles) or x >= len(tiles[0]):
+        return wm.WALL
+    return tiles[y][x]
+
+
 def _open_between(tiles, x0, y0, x1, y1):
     """True when no wall stands strictly between the two tiles."""
     x0, y0, x1, y1 = int(x0), int(y0), int(x1), int(y1)
@@ -657,29 +669,40 @@ def _draw_monster_sprite(client, m, cx, cy, tile_px, t, face, moving, atk, playe
     breathing = time.time() < (getattr(client, "ember_cone", None) or {}).get("until", 0)
     if m.get("type") == "emberdeep_wyrm" and m.get("facing"):
         face = m["facing"]
-    if moving and m.get("type") in _LEGS:
-        step_x, step_y = _stride(_LEGS[m["type"]], t, ts, face)
-        cx += step_x
-        cy -= step_y
-    # Static preview sheets have no walk or strike. Draw the animated body instead.
-    animated = {"magma_slug": 34, "ash_imp": 46, "crucible_beast": 62}
-    if vis in animated:
-        ts = max(16, min(ts, animated[vis]))
-        sprites.draw_monster(
-            screen, vis, cx, cy, ts, t,
-            hurt=hurt, attacking=atk, facing=face, moving=moving,
-        )
+    import knights_hd_client
+    hit_t = t - client.knight_hit_at.get(m["id"], t - 999) if hasattr(client, "knight_hit_at") else -1.0
+    if knights_hd_client.draw(
+        screen, m["type"], cx, cy, ts, t,
+        facing=face, moving=moving, attacking=atk, hurt=hurt,
+        hit_t=hit_t if 0 <= hit_t < 0.36 else -1.0,
+    ):
+        return
+    lowpoly = lowpoly_on and lowpoly_dragon_sprites.sheet_key_for_monster_type(m["type"])
+    strip = (not lowpoly) and strip_on and anim_strip_sprites.sheet_key_for_monster_type(m["type"])
+    atk_arg = atk if (m["id"] in client.attack_anims or str(m["id"]) in client.attack_anims) else -1.0
+    if lowpoly and lowpoly_dragon_sprites.draw_lowpoly_dragon(
+        screen, vis, cx, cy, ts, t,
+        hurt=hurt, attacking=atk_arg, facing=face, moving=moving,
+        foe_cx=player_sx, drop_down=drop_down,
+    ):
+        return
+    if strip and anim_strip_sprites.draw_anim_strip_monster(
+        screen, vis, cx, cy, ts, t,
+        hurt=hurt, attacking=atk_arg, facing=face, moving=moving,
+        foe_cx=player_sx, drop_down=drop_down,
+    ):
         return
     if emberdeep_creatures_client.draw_creature(
         screen, m["type"], cx, cy, ts, facing=face, breathing=breathing,
         moving=moving, attacking=atk,
     ):
         return
-    lowpoly = lowpoly_on and lowpoly_dragon_sprites.sheet_key_for_monster_type(m["type"])
-    strip = (not lowpoly) and strip_on and anim_strip_sprites.sheet_key_for_monster_type(m["type"])
+    if moving and m.get("type") in _LEGS:
+        step_x, step_y = _stride(_LEGS[m["type"]], t, ts, face)
+        cx += step_x
+        cy -= step_y
     if m.get("frozen"):
         pygame.draw.circle(screen, (140, 210, 255), (cx, cy), ts // 2 + 4, 2)
-    atk_arg = atk if (m["id"] in client.attack_anims or str(m["id"]) in client.attack_anims) else -1.0
     if mdef.get("humanoid"):
         eq = mdef.get("equipment") or {}
         face_h = 1 if client.player["x"] >= m["x"] else -1
@@ -691,18 +714,6 @@ def _draw_monster_sprite(client, m, cx, cy, tile_px, t, face, moving, atk, playe
             moving=moving, t=t, facing=face_h,
             equipment=eq, attacking=atk, gender="male",
         )
-    elif lowpoly and lowpoly_dragon_sprites.draw_lowpoly_dragon(
-        screen, vis, cx, cy, ts, t,
-        hurt=hurt, attacking=atk_arg, facing=face, moving=moving,
-        foe_cx=player_sx, drop_down=drop_down,
-    ):
-        pass
-    elif strip and anim_strip_sprites.draw_anim_strip_monster(
-        screen, vis, cx, cy, ts, t,
-        hurt=hurt, attacking=atk_arg, facing=face, moving=moving,
-        foe_cx=player_sx, drop_down=drop_down,
-    ):
-        pass
     elif feature_flags.USE_NEW_PETS_AND_MONSTERS and legacy_creature_sprites.draw_monster(
         screen, vis, cx, cy, ts, t,
         hurt=hurt, attacking=atk_arg, facing=face, moving=moving,
@@ -773,13 +784,21 @@ def _draw_local_player(client, pose, sx, sy, tile_px, t, player_depth=1.0):
             anim = "ranged" if ranged else "melee"
         else:
             anim = pose["action"] or ("walk" if pose["moving"] else "idle")
+        body_px = int(round(tile_px * 1.1))
         drawn = player_hd_client.draw_player(
-            client.screen, gender, appearance, sx, sy, int(round(tile_px * 1.1)), t,
+            client.screen, gender, appearance, sx, sy, body_px, t,
             anim=anim, progress=pose["atk"] if pose["atk"] > 0 else None, facing=face,
             hit_t=hit_t if 0 <= hit_t < 0.36 else -1.0,
             death_t=death_t if 0 <= death_t < 1.2 else -1.0,
             equipment=eq,
         )
+        if not drawn:
+            drawn = player_hd_client.draw_player(
+                client.screen, gender, appearance, sx, sy, min(80, body_px), t,
+                anim="idle", facing=face, equipment=eq,
+            )
+    if hd_on:
+        return
     if not drawn:
         sprites.draw_humanoid_detailed(
             client.screen, sx, sy, tile_px,
