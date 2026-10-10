@@ -50,6 +50,7 @@ OVERWORLD_HD = {
     "herald_rowan",
     "city_vendor_mira",
     "packer_nell",
+    "outfitter_mae",
 }
 
 _IMAGES = {}
