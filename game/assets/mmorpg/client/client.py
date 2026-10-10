@@ -3323,6 +3323,10 @@ class GameClient(ScreensMixin, CameraYaw):
             radius = max(radius, lowpoly_dragon_sprites.click_radius_tiles(mtype))
         if USE_ANIM_STRIP_MONSTERS:
             radius = max(radius, anim_strip_sprites.click_radius_tiles(mtype))
+        if mtype == "giant":
+            radius = max(radius, 2)
+        elif mtype in ("big_skeleton", "guard", "adamant_duelist", "mythos_champion"):
+            radius = max(radius, 1)
         return radius, bool((MONSTERS.get(mtype) or {}).get("humanoid"))
 
     def _open_context_menu(self, mx, my, rows):

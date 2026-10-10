@@ -1,7 +1,7 @@
-"""HD attackable knights (Mythoscape): 6 knight types with idle/walk/attack/hit/death states.
+"""HD attackable knights and batch-1 monsters.
 
-Permanent always-on. Replaces legacy knight visuals for these IDs:
-knight, shadow_knight, knight_captain_vorn, barrow_knight, sir_aldric, magma_knight
+Permanent always-on. Same draw path for both packs:
+knights_hd/assets/<id> and monsters_hd/<id>.
 """
 from __future__ import annotations
 
@@ -11,8 +11,11 @@ from typing import Optional
 
 import pygame
 
-_DIR = os.path.normpath(os.path.join(
+_KNIGHTS_DIR = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "..", "..", "knights_hd", "assets",
+))
+_MONSTERS_DIR = os.path.normpath(os.path.join(
+    os.path.dirname(__file__), "..", "..", "monsters_hd",
 ))
 
 KNIGHTS_HD = {
@@ -24,6 +27,16 @@ KNIGHTS_HD = {
     "magma_knight",
 }
 
+MONSTERS_HD = {
+    "giant_rat",
+    "big_skeleton",
+    "giant",
+    "wolf",
+    "guard",
+    "adamant_duelist",
+    "mythos_champion",
+}
+
 _META = {}
 _IMAGES = {}
 _CACHE_LIMIT = 512
@@ -31,13 +44,19 @@ _CACHE_LIMIT = 512
 
 def handles(mtype: str) -> bool:
     """Check if this module handles the given monster type."""
-    return mtype in KNIGHTS_HD
+    return mtype in KNIGHTS_HD or mtype in MONSTERS_HD
+
+
+def _asset_root(mtype: str) -> str:
+    if mtype in MONSTERS_HD:
+        return _MONSTERS_DIR
+    return _KNIGHTS_DIR
 
 
 def _load_meta(knight_id: str) -> dict:
-    """Load meta.json for a knight."""
+    """Load meta.json for a knight or batch-1 monster."""
     if knight_id not in _META:
-        path = os.path.join(_DIR, knight_id, "meta.json")
+        path = os.path.join(_asset_root(knight_id), knight_id, "meta.json")
         if not os.path.isfile(path):
             _META[knight_id] = {}
             return {}
@@ -128,8 +147,8 @@ def draw(
     death_t=-1.0,
     alpha=255,
 ) -> bool:
-    """Draw an HD knight. Returns True if drawn, False if not handled."""
-    if mtype not in KNIGHTS_HD:
+    """Draw an HD knight or batch-1 monster. False if this id is not handled."""
+    if not handles(mtype):
         return False
     
     meta = _load_meta(mtype)
@@ -159,7 +178,7 @@ def draw(
     frame = _frame_for_state(meta, state, t, attacking, hit_t, death_t)
     
     # Load sprite
-    sprite_path = os.path.join(_DIR, mtype, f"sprite_{tag}", state, face_str, f"f{frame:02d}.png")
+    sprite_path = os.path.join(_asset_root(mtype), mtype, f"sprite_{tag}", state, face_str, f"f{frame:02d}.png")
     img = _scaled(sprite_path, size, base)
     
     if img is None:
@@ -226,10 +245,10 @@ def anchor(mtype: str, size: int, facing, state: str, frame: int, name: str) -> 
 
 def portrait(mtype: str, height: int = 96):
     """Get a scaled portrait for UI."""
-    if mtype not in KNIGHTS_HD:
+    if not handles(mtype):
         return None
     
-    path = os.path.join(_DIR, mtype, "portrait_bust_512.png")
+    path = os.path.join(_asset_root(mtype), mtype, "portrait_bust_512.png")
     img = _load_image(path)
     if img is None:
         return None

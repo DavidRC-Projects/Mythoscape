@@ -1,0 +1,36 @@
+{
+ "pack": "Mythoscape HD monsters batch 1",
+ "built": "2026-10-10 (Europe/London)",
+ "target_branch": "main",
+ "install_dir": "game/assets/monsters_hd/",
+ "monsters": [
+  "giant_rat",
+  "big_skeleton",
+  "giant",
+  "wolf",
+  "guard",
+  "adamant_duelist",
+  "mythos_champion"
+ ],
+ "feature_flag": null,
+ "feature_flag_policy": "NO feature flags - always on; remove the old 2D/legacy/anim_strip visuals for these ids",
+ "start_here": [
+  ".cursor/rules/MONSTERS_HD_BATCH1_CURSOR_PROMPT.md",
+  "NOTES.md",
+  "previews/monsters_hd_batch1_lineup.png"
+ ],
+ "protect_never_edit": [
+  "pose_walk",
+  "rs_style.py",
+  "rs_humanoid.py",
+  "rs_humanoid_v2.py",
+  "tools/walk_proof.py",
+  "draw_humanoid",
+  "draw_humanoid_detailed"
+ ],
+ "tile_px": {
+  "1x": 40,
+  "2x": 80,
+  "4x": 160
+ }
+}
