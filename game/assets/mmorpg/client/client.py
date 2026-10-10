@@ -6037,10 +6037,30 @@ class GameClient(ScreensMixin, CameraYaw):
                             anim = "ranged" if ranged else "melee"
                         else:
                             anim = action or ("walk" if mov else "idle")
+                        hd_face = face
+                        if is_self and atk > 0 and not action and not gather:
+                            target = None
+                            if self.combat_target_id is not None:
+                                target = (self.monsters or {}).get(self.combat_target_id)
+                            if target and target.get("alive", True):
+                                import hd_combat_facing
+
+                                def _hd_screen(wx, wy, _tile=TILE):
+                                    return wx * _tile, wy * _tile
+
+                                hd_face = hd_combat_facing.choose(
+                                    self,
+                                    (float(p["x"]) + 0.5, float(p["y"]) + 0.5),
+                                    target,
+                                    _hd_screen,
+                                    TILE,
+                                    fallback=face,
+                                )
+                        swing = atk > 0 and not action
                         drawn = player_hd_client.draw_player(
                             self.screen, gender, appearance, cx, cy + TILE // 2, int(round(TILE * 1.1)), t,
-                            anim=anim, progress=atk if atk > 0 else None, facing=face,
-                            hit_t=hit_t if 0 <= hit_t < 0.36 else -1.0,
+                            anim=anim, progress=atk if atk > 0 else None, facing=hd_face,
+                            hit_t=-1.0 if swing else (hit_t if 0 <= hit_t < 0.36 else -1.0),
                             death_t=death_t if 0 <= death_t < 1.2 else -1.0,
                             equipment=eq,
                         )
@@ -6154,6 +6174,13 @@ class GameClient(ScreensMixin, CameraYaw):
                 lift = int((1.0 - min(1.0, age_left / 1.3)) * 36) + slot * 22
                 px = sx * TILE + TILE // 2
                 py = sy * TILE - lift - 10
+                my_id = (self.player or {}).get("id")
+                if follow == my_id and (self.player or {}).get("hd_player", True):
+                    import player_hd_client
+                    chest = (player_hd_client.last_draw or {}).get("chest")
+                    if chest:
+                        px += int(chest[0])
+                        py += int(chest[1])
                 kind = floater.get("kind")
                 if kind in ("hit_red", "hit_green", "hit_blue", "hit_miss", "hit_crit", "hit_thorns", "hit_zero"):
                     self.draw_hit_star(px, py, floater["text"], floater["color"], kind=kind)
@@ -6917,6 +6944,13 @@ class GameClient(ScreensMixin, CameraYaw):
             sx = int(self.map_screen_pos(wx, wy, cam_x, cam_y)[0])
             sy = int(self.map_screen_pos(wx, wy, cam_x, cam_y)[1] - arc * TILE)
             kind = proj.get("kind") or "arrow"
+            my_id = (self.player or {}).get("id")
+            if kind != "dragonfire" and ff == my_id and (self.player or {}).get("hd_player", True):
+                import player_hd_client
+                origin = (player_hd_client.last_draw or {}).get("hand_L")
+                if origin:
+                    sx += int(origin[0] * (1.0 - ease))
+                    sy += int(origin[1] * (1.0 - ease))
             if kind == "dragonfire":
                 # Streaming fire bolt: core + glow + trailing embers
                 for i, (col, r) in enumerate((
