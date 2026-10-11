@@ -74,34 +74,8 @@ def castle_row(castle_id):
 
 
 def claim_kings_castle(conn):
-    """David already holds King's Castle. That keep charges no lease."""
-    player = conn.execute(
-        "SELECT id, char_name FROM players WHERE lower(username) = ?",
-        ("david",),
-    ).fetchone()
-    if player is None:
-        return
-    player_id = int(player["id"])
-    name = player["char_name"] or "David"
-    existing = conn.execute(
-        "SELECT owner_account_id FROM castle_ownership WHERE castle_id = 'king'"
-    ).fetchone()
-    if existing is not None and int(existing["owner_account_id"]) == player_id:
-        return
-    now = time.time()
-    conn.execute(
-        """INSERT INTO castle_ownership
-           (castle_id, owner_account_id, owner_display_name, purchased_at, last_tax_paid_at, tax_weeks_owed)
-           VALUES ('king', ?, ?, ?, ?, 0)
-           ON CONFLICT(castle_id) DO UPDATE SET
-             owner_account_id = excluded.owner_account_id,
-             owner_display_name = excluded.owner_display_name,
-             purchased_at = excluded.purchased_at,
-             last_tax_paid_at = excluded.last_tax_paid_at,
-             tax_weeks_owed = 0""",
-        (player_id, name, now, now),
-    )
-    conn.commit()
+    """King's Castle is not sold yet. A later update will grant it another way."""
+    return
 
 
 def ensure_schema(conn):
@@ -158,7 +132,18 @@ def plaque_states(conn):
     for castle_id, row in load()["castles"].items():
         plaque = row["plaque"]
         owner = owned.get(castle_id)
-        vacant = owner is None
+        vacant = owner is None and castle_id != "king"
+        if castle_id == "king" and owner is None:
+            out.append({
+                "castle_id": castle_id,
+                "x": int(plaque["tile"][0]),
+                "y": int(plaque["tile"][1]),
+                "vacant": False,
+                "title": "King's Castle",
+                "subtitle": "Held by the crown",
+                "sprite": plaque["sprite_owned_example"],
+            })
+            continue
         out.append({
             "castle_id": castle_id,
             "x": int(plaque["tile"][0]),
@@ -183,8 +168,13 @@ def _near(session, seller):
 
 def _node_payload(seller, node_id):
     node = seller["dialogue"][node_id]
-    options = [{"id": opt["id"], "label": opt["label"]} for opt in node.get("options") or []]
+    raw = list(node.get("options") or [])
+    if seller.get("castle_id") == "king":
+        raw = [opt for opt in raw if opt.get("id") != "buy" and opt.get("action") != "BUY_CASTLE"]
+    options = [{"id": opt["id"], "label": opt["label"]} for opt in raw]
     text = node.get("npc_text") or ""
+    if seller.get("castle_id") == "king" and node_id == "root":
+        text = "King's Castle is not for sale. The crown will name its lord another way."
     if seller.get("castle_id") == "king" and node_id == "hire_placeholder":
         text = (
             "The knights of King's Castle already serve their lord. "
@@ -247,6 +237,8 @@ async def _ensure_deed(session, seller):
     owned = owners(_WORLD.db.conn).get(castle_id)
     if not owned or owned["owner_id"] != session.player_id:
         return
+    if castle_id == "king":
+        return
     deed = castle_row(castle_id)["deed_item_id"]
     if _WORLD.count_item(session, deed) > 0:
         return
@@ -282,6 +274,8 @@ async def choose(session, npc_id, node_id, option_id):
 
 
 def can_buy(session, castle_id):
+    if castle_id == "king":
+        return "not_for_sale"
     row = castle_row(castle_id)
     if row is None or _WORLD is None:
         return "missing"
@@ -298,6 +292,12 @@ def can_buy(session, castle_id):
 async def buy(session, seller):
     castle_id = seller["castle_id"]
     reason = can_buy(session, castle_id)
+    if reason == "not_for_sale":
+        await _send(session.ws, "CHAT_MSG", **{
+            "from": seller["display_name"],
+            "text": "King's Castle is not for sale.",
+        })
+        return "root"
     if reason == "already_yours":
         return "buy_fail_already_yours"
     if reason == "owned":
