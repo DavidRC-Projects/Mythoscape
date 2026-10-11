@@ -43,6 +43,9 @@ MONSTERS_HD = {
     "void_imp",
     "obsidian_colossus",
     "void_horror",
+    "gallery_warden",
+    "void_crawler",
+    "rift_wraith",
 }
 
 _META = {}

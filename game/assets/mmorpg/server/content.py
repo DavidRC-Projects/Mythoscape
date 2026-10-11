@@ -1069,7 +1069,6 @@ MONSTERS = {
     "gallery_warden": {
         "name": "Gallery Warden", "level": 68, "hp": 190, "attack": 72, "strength": 76, "defence": 55,
         "def_bonus": 26, "xp": 520, "respawn_ticks": 55, "aggro_range": 6,
-        "visual": "crypt_ghoul", "tint": (255, 200, 90), "scale": 1.2,
         "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.0,
         "drops": [
             ("void_key_amethyst", 1.0, (1, 1)),
@@ -1080,7 +1079,6 @@ MONSTERS = {
     "void_crawler": {
         "name": "Void Crawler", "level": 82, "hp": 170, "attack": 90, "strength": 92, "defence": 70,
         "def_bonus": 36, "xp": 520, "respawn_ticks": 60, "aggro_range": 6,
-        "visual": "void_imp", "tint": (80, 120, 255),
         "force_retaliate": True,
         "drops": [("onyx", 0.10, (1, 1)), ("coins", 0.8, (80, 180))],
     },
@@ -1098,7 +1096,6 @@ MONSTERS = {
     "rift_wraith": {
         "name": "Rift Wraith", "level": 91, "hp": 210, "attack": 108, "strength": 112, "defence": 88,
         "def_bonus": 46, "xp": 700, "respawn_ticks": 80, "aggro_range": 7,
-        "visual": "shade", "tint": (170, 60, 255),
         "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.0,
         "drops": [
             ("void_ring", 0.015, (1, 1)),
