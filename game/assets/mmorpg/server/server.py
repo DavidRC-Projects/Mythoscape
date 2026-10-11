@@ -1050,6 +1050,8 @@ class PlayerSession:
     def pet_public(self):
         if not self.pet_id or self.pet_id not in PETS:
             return None
+        if (self.pet_x, self.pet_y) == (self.x, self.y):
+            _park_pet(self)
         pdef = PETS[self.pet_id]
         return {
             "owner_id": self.player_id,
@@ -1061,6 +1063,7 @@ class PlayerSession:
             "y": self.pet_y,
             "hp": self.pet_hp,
             "max_hp": pdef["hp"],
+            "facing": getattr(self, "pet_facing", None) or "s",
         }
 
     def grant_pet(self, pet_id):
@@ -1081,8 +1084,8 @@ class PlayerSession:
             WORLD.db.save_player_stats(self.player_id, owned_pets=json.dumps(self.owned_pets))
         self.pet_id = pet_id
         self.pet_hp = PETS[pet_id]["hp"]
-        self.pet_x, self.pet_y = self.x, self.y
         self.pet_target_id = None
+        _bring_pet(self)
         WORLD.db.save_player_stats(self.player_id, active_pet=pet_id)
         return True
 
@@ -1919,6 +1922,7 @@ async def handle_stair(session, msg):
         await send(session.ws, "CHAT_MSG", **{"from": "Castle", "text": text})
         return
     castle_realm.move_to_plane(session, stair["to_plane"], stair["arrive"])
+    _bring_pet(session)
     await send(session.ws, "REALM_PLANE", **castle_realm.payload(session))
     import castle_owners
     await castle_owners.send_state(session)
@@ -2007,6 +2011,7 @@ async def _handle_move_body(session, msg):
             return
         if step:
             castle_realm.move_to_plane(session, step["to_plane"], step["arrive"])
+            _bring_pet(session)
             await send(session.ws, "REALM_PLANE", **castle_realm.payload(session))
             import castle_owners
             await castle_owners.send_state(session)
@@ -2142,8 +2147,7 @@ def _build_dungeon_floor(session, floor: int, dungeon_id: str = None):
     session.in_combat_with = None
     session.gathering_node = None
     if session.pet_id:
-        session.pet_x, session.pet_y = session.x, session.y
-        session.pet_target_id = None
+        _bring_pet(session)
 
 
 def _dungeon_payload(session):
@@ -2405,8 +2409,7 @@ def _stand_in_dungeon(session, x, y):
             x, y = session.x, session.y
     session.x, session.y = int(x), int(y)
     if session.pet_id:
-        session.pet_x, session.pet_y = session.x, session.y
-        session.pet_target_id = None
+        _bring_pet(session)
 
 
 async def _relock_dungeon_doors(session):
@@ -2476,6 +2479,7 @@ async def handle_enter_dungeon(session, msg):
             return
         import castle_realm
         castle_realm.enter(session)
+        _bring_pet(session)
         await send(session.ws, "DUNGEON_ENTER", **castle_realm.payload(session))
         import castle_owners
         await castle_owners.send_state(session)
@@ -2503,6 +2507,7 @@ async def handle_enter_dungeon(session, msg):
         explore_dungeons.build(session, dungeon_id, next_id, MonsterInstance, MONSTER_SPAWNS)
         session.dungeon["return_x"] = rx
         session.dungeon["return_y"] = ry
+        _bring_pet(session)
         await send(session.ws, "DUNGEON_ENTER", **_dungeon_payload(session))
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
         await send(
@@ -2530,8 +2535,7 @@ async def handle_leave_dungeon(session, msg=None, silent=False):
         import castle_realm
         castle_realm.leave(session)
         WORLD.db.save_player_position(session.player_id, session.x, session.y)
-        if session.pet_id:
-            session.pet_x, session.pet_y = session.x, session.y
+        _bring_pet(session)
         await send(session.ws, "DUNGEON_EXIT", x=session.x, y=session.y)
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
         if not silent:
@@ -2557,8 +2561,7 @@ async def handle_leave_dungeon(session, msg=None, silent=False):
     session.x = rx if rx is not None else (cave[0] if cave else session.x)
     session.y = ry if ry is not None else (cave[1] if cave else session.y)
     WORLD.db.save_player_position(session.player_id, session.x, session.y)
-    if session.pet_id:
-        session.pet_x, session.pet_y = session.x, session.y
+    _bring_pet(session)
     await send(session.ws, "DUNGEON_EXIT", x=session.x, y=session.y)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     if not silent:
@@ -3612,8 +3615,7 @@ async def handle_teleport(session, msg):
         session.pet_target_id = None
         session.gathering_node = None
         session.house_level = 0
-        if session.pet_id:
-            session.pet_x, session.pet_y = session.x, session.y
+        _bring_pet(session)
         if fresh:
             await send(session.ws, "DUNGEON_ENTER", **castle_realm.payload(session))
             import castle_owners
@@ -3632,8 +3634,7 @@ async def handle_teleport(session, msg):
         session.pet_target_id = None
         session.gathering_node = None
         session.house_level = 0
-        if session.pet_id:
-            session.pet_x, session.pet_y = session.x, session.y
+        _bring_pet(session)
         WORLD.db.save_player_position(session.player_id, session.x, session.y)
         if was_inside:
             await send(session.ws, "DUNGEON_EXIT", x=session.x, y=session.y, map="overworld")
@@ -5964,8 +5965,8 @@ async def process_combat(events):
             else:
                 session.x, session.y = SPAWN_POINT
                 if session.pet_id:
-                    session.pet_x, session.pet_y = SPAWN_POINT
                     session.pet_hp = PETS[session.pet_id]["hp"]
+                    _bring_pet(session)
                 for mon in WORLD.monsters.values():
                     if mon.target_player_id == session.player_id:
                         mon.target_player_id = None
@@ -5985,26 +5986,114 @@ async def process_combat(events):
             pass
 
 
-def _pet_step_toward(session, tx, ty):
-    """Move pet one tile toward (tx, ty) if walkable."""
+def _pet_walkable(session, nx, ny):
+    if session.dungeon and session.dungeon.get("id") == "castle_realm":
+        import castle_realm
+        return castle_realm.walkable(session.dungeon.get("plane"), nx, ny)
+    if session.dungeon:
+        mod = _dungeon_mod(session)
+        return bool(mod and mod.dungeon_walkable(session.dungeon["tiles"], nx, ny))
+    return is_walkable(WORLD.grid, nx, ny)
+
+
+def _pet_preferred_tiles(session):
+    """Free neighbours: behind the player, then beside, else south, west, east, north."""
+    px, py = int(session.x), int(session.y)
+    last = getattr(session, "last_step", None)
+    order = []
+    if last in ((0, 1), (0, -1), (1, 0), (-1, 0)):
+        behind = (-int(last[0]), -int(last[1]))
+        order.append(behind)
+        if behind[0] == 0:
+            order.extend(((1, 0), (-1, 0)))
+        else:
+            order.extend(((0, 1), (0, -1)))
+    order.extend(((0, 1), (-1, 0), (1, 0), (0, -1)))
+    free = []
+    seen = set()
+    for dx, dy in order:
+        cell = (px + dx, py + dy)
+        if cell in seen:
+            continue
+        seen.add(cell)
+        if _pet_walkable(session, cell[0], cell[1]):
+            free.append(cell)
+    if free:
+        return free
+    for dx, dy in ((1, 1), (1, -1), (-1, 1), (-1, -1)):
+        cell = (px + dx, py + dy)
+        if cell not in seen and _pet_walkable(session, cell[0], cell[1]):
+            free.append(cell)
+    return free
+
+
+def _pet_face_owner(session):
+    dx = int(session.x) - int(session.pet_x)
+    dy = int(session.y) - int(session.pet_y)
+    if abs(dx) >= abs(dy) and dx != 0:
+        session.pet_facing = "e" if dx > 0 else "w"
+    elif dy > 0:
+        session.pet_facing = "s"
+    elif dy < 0:
+        session.pet_facing = "n"
+    else:
+        session.pet_facing = getattr(session, "pet_facing", None) or "s"
+
+
+def _park_pet(session):
+    """If the pet shares the player's tile, move it to a free neighbour."""
+    if not getattr(session, "pet_id", None):
+        return
+    if (int(session.pet_x), int(session.pet_y)) != (int(session.x), int(session.y)):
+        _pet_face_owner(session)
+        return
+    free = _pet_preferred_tiles(session)
+    if free:
+        session.pet_x, session.pet_y = free[0]
+    _pet_face_owner(session)
+
+
+def _bring_pet(session):
+    """After a teleport or summon, stand the pet beside the player."""
+    if not getattr(session, "pet_id", None):
+        return
+    session.pet_target_id = None
+    session.pet_x, session.pet_y = session.x, session.y
+    _park_pet(session)
+
+
+def _pet_step_toward(session, tx, ty, avoid=None):
+    """Move pet one tile toward (tx, ty) if walkable. Never onto avoid."""
     px, py = session.pet_x, session.pet_y
     if (px, py) == (tx, ty):
         return
     options = []
     dx = 0 if px == tx else (1 if tx > px else -1)
     dy = 0 if py == ty else (1 if ty > py else -1)
-    if session.dungeon:
-        mod = _dungeon_mod(session)
-        walk = lambda nx, ny, _mod=mod: _mod.dungeon_walkable(session.dungeon["tiles"], nx, ny)
-    else:
-        walk = lambda nx, ny: is_walkable(WORLD.grid, nx, ny)
+    blocked = tuple(avoid) if avoid is not None else None
     for nx, ny in ((px + dx, py), (px, py + dy), (px + dx, py + dy)):
-        if walk(nx, ny):
+        if blocked is not None and (nx, ny) == blocked:
+            continue
+        if _pet_walkable(session, nx, ny):
             options.append((nx, ny))
     if not options:
         return
     options.sort(key=lambda p: max(abs(p[0] - tx), abs(p[1] - ty)))
     session.pet_x, session.pet_y = options[0]
+
+
+def _pet_note_player_step(session):
+    prev = getattr(session, "_pet_seen_xy", None)
+    cur = (int(session.x), int(session.y))
+    moving = prev is not None and prev != cur
+    if moving:
+        dx, dy = cur[0] - prev[0], cur[1] - prev[1]
+        if abs(dx) >= abs(dy) and dx:
+            session.last_step = (1 if dx > 0 else -1, 0)
+        elif dy:
+            session.last_step = (0, 1 if dy > 0 else -1)
+    session._pet_seen_xy = cur
+    return moving
 
 
 def process_pets(events):
@@ -6016,8 +6105,13 @@ def process_pets(events):
         if session.pet_hp <= 0:
             session.pet_hp = pdef["hp"]
 
+        player_moving = _pet_note_player_step(session)
         if max(abs(session.pet_x - session.x), abs(session.pet_y - session.y)) > 10:
-            session.pet_x, session.pet_y = session.x, session.y
+            free = _pet_preferred_tiles(session)
+            if free:
+                session.pet_x, session.pet_y = free[0]
+            else:
+                _park_pet(session)
 
         dungeon_tag = session.player_id if session.dungeon else None
 
@@ -6079,11 +6173,29 @@ def process_pets(events):
                             }})
                         check_quest_progress_on_kill(session, target.type)
             else:
-                _pet_step_toward(session, target.x, target.y)
+                _pet_step_toward(session, target.x, target.y, avoid=(session.x, session.y))
+            if (session.pet_x, session.pet_y) == (session.x, session.y):
+                _park_pet(session)
             continue
 
-        if max(abs(session.pet_x - session.x), abs(session.pet_y - session.y)) > 1:
-            _pet_step_toward(session, session.x, session.y)
+        owner = (session.x, session.y)
+        dist = max(abs(session.pet_x - session.x), abs(session.pet_y - session.y))
+        if (session.pet_x, session.pet_y) == owner:
+            _park_pet(session)
+        elif dist > 1:
+            free = _pet_preferred_tiles(session)
+            if free:
+                goal = min(free, key=lambda c: max(abs(c[0] - session.pet_x), abs(c[1] - session.pet_y)))
+                _pet_step_toward(session, goal[0], goal[1], avoid=owner)
+            if (session.pet_x, session.pet_y) == owner:
+                _park_pet(session)
+        elif not player_moving:
+            free = _pet_preferred_tiles(session)
+            if free and (session.pet_x, session.pet_y) != free[0]:
+                _pet_step_toward(session, free[0][0], free[0][1], avoid=owner)
+            if (session.pet_x, session.pet_y) == owner:
+                _park_pet(session)
+        _pet_face_owner(session)
 
 
 async def process_gathering(events):
