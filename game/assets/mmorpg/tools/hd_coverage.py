@@ -105,6 +105,41 @@ def _source_has(path: Path, needle: str) -> bool:
     return needle in path.read_text(encoding="utf-8")
 
 
+def _pet_drawer_keys(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef) or node.name != "draw_pet":
+            continue
+        for sub in ast.walk(node):
+            if not isinstance(sub, ast.Assign):
+                continue
+            for target in sub.targets:
+                if isinstance(target, ast.Name) and target.id == "drawers" and isinstance(sub.value, ast.Dict):
+                    return _dict_keys(sub.value)
+    return set()
+
+
+def _pet_rows() -> list[tuple]:
+    pets = _string_set(CLIENT / "pets_hd_client.py", "PETS_HD")
+    preview = _assign_value(CLIENT / "legacy_creature_sprites.py", "_PET_PREVIEW")
+    drawers = _pet_drawer_keys(ASSETS / "characters" / "procedural_sprites_finished.py")
+    wired = (
+        _source_has(CLIENT / "client.py", "pets_hd_client.handles")
+        and _source_has(CLIENT / "client.py", "pets_hd_client.draw")
+        and _source_has(CLIENT / "client_screens.py", "pets_hd_client.blit_icon")
+    )
+    rows = []
+    for pet_id in ("pet_cat", "pet_husky"):
+        folder = ASSETS / "pets_hd" / pet_id
+        rel = str(folder.relative_to(ROOT)) if folder.is_dir() else "-"
+        old_ids = {pet_id, pet_id.removeprefix("pet_")}
+        old = "yes" if (old_ids & set(preview)) or (old_ids & drawers) else "no"
+        drawn = pet_id in pets and wired and (folder / "meta.json").is_file()
+        missing = (not drawn) or old == "yes" or not folder.is_dir()
+        rows.append((pet_id, "pet", rel, "yes" if drawn else "no", old, missing))
+    return rows
+
+
 def _pack_rows() -> list[tuple]:
     checks = [
         (
@@ -258,6 +293,7 @@ def main() -> int:
         rows.append((entity_id, "meta", folder, "yes" if drawn else "no", "no", not drawn))
         seen.add(entity_id)
 
+    rows.extend(_pet_rows())
     rows.extend(_pack_rows())
 
     headers = ("id", "kind", "hd_folder", "drawn_hd", "old_2d_path_still_present")
