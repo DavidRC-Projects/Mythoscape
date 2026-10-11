@@ -2772,6 +2772,15 @@ class ScreensMixin:
             "Player look: 3D" if hd_on else "Player look: 2D", True, (232, 226, 210),
         )
         self.screen.blit(look, (self.hd_look_rect.x + 12, self.hd_look_rect.y + 5))
+        follow_on = bool(getattr(self, "ember_follow_behind", False))
+        self.ember_follow_rect = pygame.Rect(box.x + 248, box.y + 66, 310, 28)
+        pygame.draw.rect(self.screen, (32, 42, 68), self.ember_follow_rect, border_radius=14)
+        pygame.draw.rect(self.screen, (212, 175, 90), self.ember_follow_rect, 1, border_radius=14)
+        follow = self.font_small.render(
+            "Camera follows behind: On" if follow_on else "Camera follows behind: Off",
+            True, (232, 226, 210),
+        )
+        self.screen.blit(follow, (self.ember_follow_rect.x + 12, self.ember_follow_rect.y + 5))
 
         sections = [
             ("Start here", [

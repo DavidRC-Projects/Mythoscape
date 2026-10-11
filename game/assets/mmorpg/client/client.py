@@ -178,6 +178,10 @@ class GameClient(ScreensMixin, CameraYaw):
         self._zoom_goal = 100
         self._zoom_drag = False
         self._zoom_toast_until = 0.0
+        self._ember_yaw = 0.0
+        self._ember_yaw_draw = 0.0
+        self._ember_pitch_bias = 0.0
+        self.ember_follow_behind = False
 
         # Readable UI text (slightly larger after skill/UI growth)
         ui = pygame.font.match_font("arial,helvetica,segoe ui,dejavu sans") or None
@@ -3555,6 +3559,10 @@ class GameClient(ScreensMixin, CameraYaw):
         if self.show_help and look and look.collidepoint(mx, my):
             enabled = not bool((self.player or {}).get("hd_player", True))
             self.net.send("TOGGLE_HD_PLAYER", enabled=enabled)
+            return
+        follow = getattr(self, "ember_follow_rect", None)
+        if self.show_help and follow and follow.collidepoint(mx, my):
+            self.ember_follow_behind = not bool(getattr(self, "ember_follow_behind", False))
             return
         if self.context_menu and event.button == 1:
             self._click_context_menu(mx, my)

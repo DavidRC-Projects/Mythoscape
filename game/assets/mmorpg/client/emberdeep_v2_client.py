@@ -554,13 +554,16 @@ def _ease_follow(client, pose, now):
     bx = origin[0] + 0.5 + (tile[0] - origin[0]) * frac
     by = origin[1] + 0.5 + (tile[1] - origin[1]) * frac
     client._ember_body = (bx, by)
+    _note_walk_run(client, tile)
     off_x = off_y = 0.0
+    looking = bool(getattr(client, "_ember_orbit", None)) or (
+        now - float(getattr(client, "_ember_user_rot_at", 0) or 0) < 1.5
+    )
     foe = (getattr(client, "monsters", None) or {}).get(getattr(client, "combat_target_id", None))
-    if foe and foe.get("alive", True):
+    if foe and foe.get("alive", True) and not looking:
         if max(abs(foe["x"] - pose["x"]), abs(foe["y"] - pose["y"])) <= 3:
-            off_x = ((foe["x"] + 0.5) - bx) * 0.35
-            off_y = ((foe["y"] + 0.5) - by) * 0.35
-            zoom = max(zoom, 0.25)
+            off_x = ((foe["x"] + 0.5) - bx) * 0.15
+            off_y = ((foe["y"] + 0.5) - by) * 0.15
     client._ember_zoom_cur = zoom
     kf = 1 - math.exp(-dt / 0.12) if dt else 1.0
     ox, oy = getattr(client, "_ember_combat_off", (0.0, 0.0))
@@ -569,6 +572,7 @@ def _ease_follow(client, pose, now):
     client._ember_combat_off = (ox, oy)
     fx, fy = bx + ox, by + oy
     client._ember_focus = (fx, fy)
+    _maybe_follow_behind(client, now, dt)
     target = float(getattr(client, "_ember_yaw", 0.0))
     yaw = float(getattr(client, "_ember_yaw_draw", target))
     delta = (target - yaw + math.pi) % (2 * math.pi) - math.pi
@@ -576,6 +580,45 @@ def _ease_follow(client, pose, now):
     yaw += delta * ky
     client._ember_yaw_draw = yaw
     return fx, fy, yaw, zoom, dt
+
+
+def _note_walk_run(client, tile):
+    """Count consecutive one-tile steps in the same direction."""
+    prev = getattr(client, "_ember_follow_tile", None)
+    client._ember_follow_tile = tile
+    if prev is None or prev == tile:
+        return
+    step = (int(tile[0]) - int(prev[0]), int(tile[1]) - int(prev[1]))
+    if max(abs(step[0]), abs(step[1])) != 1:
+        client._ember_follow_step = None
+        client._ember_follow_run = 0
+        return
+    if getattr(client, "_ember_follow_step", None) == step:
+        client._ember_follow_run = int(getattr(client, "_ember_follow_run", 0)) + 1
+    else:
+        client._ember_follow_step = step
+        client._ember_follow_run = 1
+
+
+def _maybe_follow_behind(client, now, dt):
+    """Ease the target yaw behind the walk. Off unless the player asked for it."""
+    if not getattr(client, "ember_follow_behind", False):
+        return
+    if getattr(client, "_ember_orbit", None):
+        return
+    if now - float(getattr(client, "_ember_user_rot_at", 0) or 0) < 3.0:
+        return
+    if int(getattr(client, "_ember_follow_run", 0)) < 2:
+        return
+    step = getattr(client, "_ember_follow_step", None)
+    if not step:
+        return
+    dx, dy = step
+    want = round(math.atan2(dx, -dy) / _ROT_STEP) * _ROT_STEP
+    current = float(getattr(client, "_ember_yaw", 0.0))
+    delta = (want - current + math.pi) % (2 * math.pi) - math.pi
+    rate = 1 - math.exp(-dt / 0.6) if dt else 1.0
+    client._ember_yaw = current + delta * rate
 
 
 def _heights_settling(view):
