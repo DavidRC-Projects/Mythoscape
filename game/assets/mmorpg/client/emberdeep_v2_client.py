@@ -905,7 +905,8 @@ def _target_point(client, target):
 def _combat_facing(client, pose, sx, tile_px, player_depth):
     """Face the live target on the dominant screen axis: side, front, or back."""
     del sx, player_depth
-    if client._leaving_fight():
+    leaving = getattr(client, "_leaving_fight", None)
+    if leaving and leaving():
         return pose["face"]
     target = (client.monsters or {}).get(getattr(client, "combat_target_id", None))
     if not target or not target.get("alive", True):
@@ -968,7 +969,8 @@ def _draw_local_player(client, pose, sx, sy, tile_px, t, player_depth=1.0):
         # Progress is exactly 0 on the first beat, while the swing is still in attack_anims.
         pid = p.get("id")
         in_swing = pose["atk"] > 0 or pid in client.attack_anims or str(pid) in client.attack_anims
-        attacking = in_swing and not pose["action"] and not client._leaving_fight()
+        leaving = getattr(client, "_leaving_fight", None)
+        attacking = in_swing and not pose["action"] and not (leaving and leaving())
         if attacking:
             anim = "ranged" if ranged else "melee"
         else:

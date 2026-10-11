@@ -1804,11 +1804,7 @@ class GameClient(ScreensMixin, CameraYaw):
                 if abs(event.pos[0] - self.inv_drag["ox"]) + abs(event.pos[1] - self.inv_drag["oy"]) > 6:
                     self.inv_drag["moved"] = True
         elif event.type == pygame.MOUSEBUTTONUP:
-            orbit = getattr(self, "_ember_orbit", None)
-            if orbit and event.button == orbit.get("button"):
-                if not orbit.get("moved") and event.button == 3:
-                    self.handle_mouse_click(event)
-                self._ember_orbit = None
+            self._release_ember_orbit(event)
             if event.button == 2:
                 self.cam_drag = None
             elif event.button == 1:
@@ -2673,6 +2669,16 @@ class GameClient(ScreensMixin, CameraYaw):
             return
         dx, dy = self.rotate_move_delta(dx, dy)
         self.try_move(dx, dy)
+
+    def _release_ember_orbit(self, event):
+        """End a drag. A right click that never moved still opens the menu."""
+        orbit = getattr(self, "_ember_orbit", None)
+        if not orbit or event.button != orbit.get("button"):
+            return False
+        if not orbit.get("moved") and event.button == 3:
+            self.handle_mouse_click(event)
+        self._ember_orbit = None
+        return True
 
     def _ember_can_orbit(self, mx, my):
         """True when a right or middle press is on the Emberdeep map, not the UI."""
