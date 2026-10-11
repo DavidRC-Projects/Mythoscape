@@ -1773,14 +1773,19 @@ class GameClient(ScreensMixin, CameraYaw):
                     pass
                 else:
                     self.handle_mouse_click(event)
-            elif self.state == "GAME" and event.button == 2:
-                pass  # middle mouse unused (camera is fixed)
+            elif self.state == "GAME" and event.button in (2, 3) and self._ember_can_orbit(*event.pos):
+                mx, my = event.pos
+                self._ember_orbit = {
+                    "x": mx, "y": my, "moved": False, "button": event.button, "travel": 0.0,
+                }
             elif self.state == "GAME" and event.button == 1 and self._inventory_drag_start(event.pos):
                 pass
             else:
                 self.handle_mouse_click(event)
         elif event.type == pygame.MOUSEMOTION:
-            if getattr(self, "_zoom_drag", False):
+            if getattr(self, "_ember_orbit", None):
+                self._ember_orbit_motion(*event.pos)
+            elif getattr(self, "_zoom_drag", False):
                 self._zoom_goal = self._zoom_pct_from_x(event.pos[0])
             elif self.help_drag is not None:
                 self._help_scrollbar_drag(event.pos)
@@ -1795,6 +1800,11 @@ class GameClient(ScreensMixin, CameraYaw):
                 if abs(event.pos[0] - self.inv_drag["ox"]) + abs(event.pos[1] - self.inv_drag["oy"]) > 6:
                     self.inv_drag["moved"] = True
         elif event.type == pygame.MOUSEBUTTONUP:
+            orbit = getattr(self, "_ember_orbit", None)
+            if orbit and event.button == orbit.get("button"):
+                if not orbit.get("moved") and event.button == 3:
+                    self.handle_mouse_click(event)
+                self._ember_orbit = None
             if event.button == 2:
                 self.cam_drag = None
             elif event.button == 1:
@@ -2659,6 +2669,52 @@ class GameClient(ScreensMixin, CameraYaw):
             return
         dx, dy = self.rotate_move_delta(dx, dy)
         self.try_move(dx, dy)
+
+    def _ember_can_orbit(self, mx, my):
+        """True when a right or middle press is on the Emberdeep map, not the UI."""
+        import emberdeep_v2_client
+        if not emberdeep_v2_client.fp_active(self):
+            return False
+        if mx < 0 or my < 0 or mx >= MAP_W or my >= MAP_H:
+            return False
+        if (
+            self.show_help or self.show_skills or self.show_bank or self.show_shop_panel
+            or self.show_equipment or self.dialogue or self.show_travel or self.show_forge
+            or self.show_cook or self.show_fletch or self.show_pets or self.show_world_map
+            or self.show_teleport or self.housing_open or self.stair_prompt
+            or self.show_wish or self.combat_style_prompt
+        ):
+            return False
+        if self.minimap_rect and self.minimap_rect.collidepoint(mx, my):
+            return False
+        ember_map = getattr(self, "_ember_map_rect", None)
+        if ember_map is not None and ember_map.collidepoint(mx, my):
+            return False
+        if self.dungeon_leave_rect and self.dungeon_leave_rect.collidepoint(mx, my):
+            return False
+        for rect, _action in emberdeep_v2_client.zoom_control_layout():
+            if rect.collidepoint(mx, my):
+                return False
+        layout = getattr(emberdeep_v2_client, "rotate_control_layout", None)
+        if layout:
+            for rect, _action in layout():
+                if rect.collidepoint(mx, my):
+                    return False
+        return True
+
+    def _ember_orbit_motion(self, mx, my):
+        drag = self._ember_orbit
+        dx = mx - drag["x"]
+        dy = my - drag["y"]
+        drag["x"], drag["y"] = mx, my
+        import emberdeep_v2_client
+        emberdeep_v2_client.orbit(self, -dx * 0.0085)
+        if getattr(self, "ember_pitch", False):
+            bias = float(getattr(self, "_ember_pitch_bias", 0.0) or 0.0) - dy * 0.15
+            self._ember_pitch_bias = max(-8.0, min(8.0, bias))
+        drag["travel"] = float(drag.get("travel") or 0.0) + abs(dx) + abs(dy)
+        if drag["travel"] > 6:
+            drag["moved"] = True
 
     def _ember_face_intent(self, fwd, right, dx, dy):
         if abs(right) > abs(fwd):
