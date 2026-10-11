@@ -3560,6 +3560,15 @@ class GameClient(ScreensMixin, CameraYaw):
         if self.state == "GAME":
             import emberdeep_v2_client
             if emberdeep_v2_client.fp_active(self):
+                for rect, action in emberdeep_v2_client.rotate_control_layout():
+                    if rect.collidepoint(mx, my):
+                        if action == "left":
+                            emberdeep_v2_client.turn(self, -1)
+                        elif action == "right":
+                            emberdeep_v2_client.turn(self, 1)
+                        else:
+                            emberdeep_v2_client.reset_north(self)
+                        return
                 for rect, action in emberdeep_v2_client.zoom_control_layout():
                     if rect.collidepoint(mx, my):
                         if action == "out":

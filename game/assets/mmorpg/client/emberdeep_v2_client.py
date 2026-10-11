@@ -162,6 +162,63 @@ def zoom_control_layout():
     return items
 
 
+def rotate_control_layout():
+    """Turn buttons and a north compass, just to the right of the zoom row."""
+    zoom = zoom_control_layout()
+    if not zoom:
+        return []
+    last = zoom[-1][0]
+    size = 26
+    x = last.right + 8
+    y = last.bottom - size
+    left = pygame.Rect(x, y, size, size)
+    right = pygame.Rect(x + size + 4, y, size, size)
+    compass = pygame.Rect(0, 0, 40, 40)
+    compass.midbottom = ((left.left + right.right) // 2, left.top - 6)
+    return [(left, "left"), (right, "right"), (compass, "north")]
+
+
+def draw_rotate_controls(client):
+    tips = {
+        "left": "Rotate left (Q)",
+        "right": "Rotate right (E)",
+        "north": "Reset to north",
+    }
+    mouse = pygame.mouse.get_pos()
+    yaw = float(getattr(client, "_ember_yaw_draw", getattr(client, "_ember_yaw", 0.0)))
+    hover = None
+    for rect, action in rotate_control_layout():
+        hot = rect.collidepoint(mouse)
+        if hot:
+            hover = (rect, tips[action])
+        if action == "north":
+            pygame.draw.circle(client.screen, (28, 18, 16), rect.center, rect.w // 2)
+            pygame.draw.circle(client.screen, (230, 150, 70), rect.center, rect.w // 2, 1)
+            ang = -yaw
+            tip = (
+                rect.centerx + int(round(math.sin(ang) * 14)),
+                rect.centery - int(round(math.cos(ang) * 14)),
+            )
+            pygame.draw.line(client.screen, (240, 220, 190), rect.center, tip, 2)
+            mark = client.font_tiny.render("N", True, (240, 220, 190))
+            client.screen.blit(mark, (tip[0] - mark.get_width() // 2, tip[1] - mark.get_height() // 2))
+            continue
+        fill = (72, 42, 28) if hot else (28, 18, 16)
+        edge = (230, 150, 70) if hot else (140, 90, 50)
+        pygame.draw.rect(client.screen, fill, rect, border_radius=5)
+        pygame.draw.rect(client.screen, edge, rect, 1, border_radius=5)
+        label = "⟲" if action == "left" else "⟳"
+        text = client.font_tiny.render(label, True, (240, 220, 190))
+        client.screen.blit(text, (rect.centerx - text.get_width() // 2, rect.centery - text.get_height() // 2))
+    if hover:
+        rect, tip = hover
+        text = client.font_tiny.render(tip, True, (240, 220, 190))
+        box = pygame.Rect(rect.x, rect.y - text.get_height() - 8, text.get_width() + 10, text.get_height() + 4)
+        pygame.draw.rect(client.screen, (28, 18, 16), box, border_radius=4)
+        pygame.draw.rect(client.screen, (140, 90, 50), box, 1, border_radius=4)
+        client.screen.blit(text, (box.x + 5, box.y + 2))
+
+
 def draw_zoom_controls(client):
     import time
     level = zoom_level(client)
@@ -1624,6 +1681,7 @@ def draw_first_person(client):
     client._ember_render = (rw, rh)
     _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, None, rw, rh, mw, mh)
     draw_zoom_controls(client)
+    draw_rotate_controls(client)
     return True
 
 
