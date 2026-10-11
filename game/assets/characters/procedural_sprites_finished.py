@@ -1748,7 +1748,7 @@ def draw_monster(surf, mtype, cx, cy, tile, t, hurt=False, attacking=0.0, facing
         "giant_rat", "guard", "mythos_champion", "adamant_duelist", "giant", "wolf",
         "ossuary_keeper", "morvath", "drowned_dead",
         "shade", "crypt_ghoul", "void_imp", "obsidian_colossus", "void_horror",
-        "gallery_warden", "void_crawler", "rift_wraith",
+        "gallery_warden", "void_crawler", "rift_wraith", "nyxarath",
     ):
         return
     fn = MONSTER_DRAWERS.get(mtype, draw_giant_rat)

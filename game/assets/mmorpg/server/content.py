@@ -1108,7 +1108,7 @@ MONSTERS = {
         "name": "Nyxarath, the Hollow Eclipse", "level": 110, "hp": 900,
         "attack": 135, "strength": 145, "defence": 115,
         "def_bonus": 60, "xp": 4000, "respawn_ticks": 9999, "aggro_range": 12,
-        "visual": "void_horror", "scale": 1.9, "confine_room": True,
+        "confine_room": True,
         "force_retaliate": True, "attack_range": 3, "side_by_side": True, "side_gap": 3, "attack_cooldown": 1.0,
         "drops": [
             ("coins", 1.0, (2000, 5000)),

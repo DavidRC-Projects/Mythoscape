@@ -5854,9 +5854,6 @@ class GameClient(ScreensMixin, CameraYaw):
                             self.screen, _vis, cx, cy, _ts, t,
                             hurt=hurt, attacking=atk, facing=face, moving=m_moving,
                         )
-                    if _mdef.get("visual"):
-                        import void_v2_client
-                        void_v2_client.tint_and_halo(self, m, cx, cy, TILE)
                     anchor_kind = "character" if _mdef.get("humanoid") else "monster"
                     ny, hy = self.entity_anchor(cx, cy, anchor_kind)
                     # HD knights use custom head positioning

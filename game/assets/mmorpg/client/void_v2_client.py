@@ -546,15 +546,3 @@ def minimap_hidden(client, wx, wy):
     if not client.dungeon or not client.dungeon.get("v2"):
         return False
     return (wx, wy) not in (client.dungeon.get("explored") or set())
-
-
-def tint_and_halo(client, m, cx, cy, tile):
-    from content import MONSTERS
-    spec = MONSTERS.get(m.get("type")) or {}
-    tint = spec.get("tint")
-    if tint:
-        glow = pygame.Surface((int(tile * 1.2), int(tile * 0.4)), pygame.SRCALPHA)
-        pygame.draw.ellipse(glow, (*tint, 70), glow.get_rect(), max(1, tile // 16))
-        client.screen.blit(glow, (cx - glow.get_width() // 2, cy - glow.get_height() // 2))
-    if m.get("type") == "nyxarath":
-        pygame.draw.circle(client.screen, (230, 180, 70), (int(cx), int(cy - tile)), max(6, tile // 3), 2)

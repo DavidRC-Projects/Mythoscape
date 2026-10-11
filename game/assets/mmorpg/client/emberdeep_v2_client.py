@@ -733,9 +733,6 @@ def _draw_monster_sprite(client, m, cx, cy, tile_px, t, face, moving, atk, playe
             screen, vis, cx, cy, ts, t,
             hurt=hurt, attacking=atk, facing=face, moving=moving,
         )
-    if dest is None and mdef.get("visual"):
-        import void_v2_client
-        void_v2_client.tint_and_halo(client, m, cx, cy, ts)
 
 
 def _label_anchor(cy, tile_px, kind):
