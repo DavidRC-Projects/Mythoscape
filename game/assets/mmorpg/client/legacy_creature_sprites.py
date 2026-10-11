@@ -21,8 +21,6 @@ _BG_TOL = 28
 
 # sprite argument from draw_pet → preview file
 _PET_PREVIEW = {
-    "pet_cat": "pet_cat",
-    "cat": "pet_cat",
     "pet_dragon_frost": "pet_dragon_frost",
     "dragon_frost": "pet_dragon_frost",
     "pet_dragon_mythic": "pet_dragon_mythic",
@@ -241,8 +239,6 @@ def draw_pet(surf, sprite, cx, cy, tile, t, hurt=False, attacking=-1.0, moving=F
         )
     preview = _PET_PREVIEW.get(sprite)
     if preview:
-        if sprite in ("pet_cat", "cat") and facing in ("front", "back"):
-            return False
         return _blit_preview(surf, preview, cx, cy, tile, facing, hurt, moving=moving, t=t)
     return False
 

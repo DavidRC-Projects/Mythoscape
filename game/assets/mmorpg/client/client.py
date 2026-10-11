@@ -5942,6 +5942,9 @@ class GameClient(ScreensMixin, CameraYaw):
                 if atk > 0:
                     mov = False
                 face = self.facing_for_view(facing_for(pkey, pet["x"], pet["y"], anim_id=f"pet:{pet.get('owner_id')}"))
+                if not mov and atk <= 0 and pet.get("facing") in ("n", "e", "s", "w"):
+                    world_face = {"n": "back", "s": "front", "e": 1, "w": -1}[pet["facing"]]
+                    face = self.facing_for_view(world_face)
                 now_pos[pkey] = (pet["x"], pet["y"])
 
                 def _draw_pet(cx=cx, cy=cy, pet=pet, hurt=hurt, atk=atk, mine=mine, mov=mov, face=face):
@@ -5949,18 +5952,28 @@ class GameClient(ScreensMixin, CameraYaw):
                     swinging = pet_key in self.attack_anims
                     atk_arg = atk if swinging else -1.0
                     sprite_id = pet.get("sprite") or pet["pet_id"]
-                    drawn = USE_NEW_PETS_AND_MONSTERS and legacy_creature_sprites.draw_pet(
-                        self.screen, sprite_id, cx, cy, TILE, t,
-                        hurt=hurt, attacking=atk_arg, moving=mov and not swinging, facing=face,
-                    )
-                    if not drawn:
-                        sprites.draw_pet(
-                            self.screen, sprite_id, cx, cy, TILE, t,
-                            hurt=hurt, attacking=atk, moving=mov, facing=face,
+                    import pets_hd_client
+                    if pets_hd_client.handles(sprite_id):
+                        foot_y = cy + TILE // 2
+                        size = pets_hd_client.baked_px(sprite_id, TILE) or max(8, int(round(TILE * 1.1)))
+                        pets_hd_client.draw(
+                            self.screen, sprite_id, cx, foot_y, size, t,
+                            facing=face, moving=mov and not swinging, attacking=atk_arg,
                         )
-                    top = legacy_creature_sprites.pet_top_y(sprite_id, cy, TILE)
-                    if top is None:
-                        top = cy - int(TILE * 1.7)
+                        top = foot_y + pets_hd_client.head_top_dy(sprite_id, size, facing=face)
+                    else:
+                        drawn = USE_NEW_PETS_AND_MONSTERS and legacy_creature_sprites.draw_pet(
+                            self.screen, sprite_id, cx, cy, TILE, t,
+                            hurt=hurt, attacking=atk_arg, moving=mov and not swinging, facing=face,
+                        )
+                        if not drawn:
+                            sprites.draw_pet(
+                                self.screen, sprite_id, cx, cy, TILE, t,
+                                hurt=hurt, attacking=atk, moving=mov, facing=face,
+                            )
+                        top = legacy_creature_sprites.pet_top_y(sprite_id, cy, TILE)
+                        if top is None:
+                            top = cy - int(TILE * 1.7)
                     # Nameplate hangs a few pixels below the y we pass.
                     if mine or hurt:
                         self.draw_hp_bar(cx, top - 8, pet["hp"], pet["max_hp"])

@@ -2700,7 +2700,11 @@ class ScreensMixin:
             icon = pygame.Rect(row.x + 8, row.y + 6, 44, 44)
             pygame.draw.rect(self.screen, (24, 28, 36), icon)
             sprite_id = entry.get("sprite") or entry.get("pet_id")
-            if not (
+            import pets_hd_client
+            hd_icon = pets_hd_client.handles(sprite_id) and pets_hd_client.blit_icon(
+                self.screen, sprite_id, icon, facing=1,
+            )
+            if not hd_icon and not (
                 USE_NEW_PETS_AND_MONSTERS
                 and legacy_creature_sprites.blit_pet_icon(
                     self.screen, sprite_id, icon, time.time(), facing=1,

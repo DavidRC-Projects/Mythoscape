@@ -4854,11 +4854,9 @@ def draw_pet_dragon_mythic(surf, cx, cy, tile, t, hurt=False, attacking=0.0, mov
 
 
 def draw_pet(surf, sprite, cx, cy, tile, t, hurt=False, attacking=0.0, moving=False, facing=1):
+    if sprite in ("pet_cat", "cat", "pet_husky", "husky"):
+        return
     drawers = {
-        "pet_cat": draw_pet_cat,
-        "cat": draw_pet_cat,
-        "pet_husky": draw_pet_husky,
-        "husky": draw_pet_husky,
         "pet_skeleton": draw_pet_skeleton,
         "skeleton_pet": draw_pet_skeleton,
         "pet_dragon": draw_pet_dragon,
