@@ -1398,6 +1398,8 @@ class GameClient(ScreensMixin, CameraYaw):
                         self.travel_scroll = max(0, self.travel_scroll - step * 5)
                     else:
                         self.travel_scroll = min(max_scroll, self.travel_scroll + step * 5)
+                elif emberdeep_v2_client.fp_active(self) and event.key in (pygame.K_q, pygame.K_e):
+                    emberdeep_v2_client.turn(self, -1 if event.key == pygame.K_q else 1)
                 elif event.key == pygame.K_e:
                     self.show_equipment = not self.show_equipment
                     if self.show_equipment:
@@ -1445,38 +1447,26 @@ class GameClient(ScreensMixin, CameraYaw):
                     self.skills_scroll = max(0, self.skills_scroll - step * 5)
                 else:
                     self.skills_scroll = min(max_scroll, self.skills_scroll + step * 5)
+            elif emberdeep_v2_client.fp_active(self) and event.key == pygame.K_q:
+                emberdeep_v2_client.turn(self, -1)
+            elif emberdeep_v2_client.fp_active(self) and event.key == pygame.K_e:
+                emberdeep_v2_client.turn(self, 1)
             elif (step := self._arrow_step(event)) is not None:
                 dx, dy = step
-                if emberdeep_v2_client.fp_active(self) and dy == 0:
-                    emberdeep_v2_client.turn(self, 1 if dx > 0 else -1)
-                elif self._begin_key_step():
-                    if emberdeep_v2_client.fp_active(self):
-                        self._ember_reverse = dy > 0
-                        self._ember_strafe = None
-                        dx, dy = emberdeep_v2_client.step_delta(self, -1 if dy > 0 else 1)
+                if emberdeep_v2_client.fp_active(self):
+                    if dy == 0:
+                        emberdeep_v2_client.turn(self, 1 if dx > 0 else -1)
                     else:
-                        dx, dy = self.rotate_move_delta(dx, dy)
+                        self._ember_key_move(1 if dy < 0 else -1, 0)
+                elif self._begin_key_step():
+                    dx, dy = self.rotate_move_delta(dx, dy)
                     self.try_move(dx, dy)
             elif event.key in (pygame.K_w, pygame.K_s) and emberdeep_v2_client.fp_active(self):
-                if not self._begin_key_step():
-                    return
-                forward = 1 if event.key == pygame.K_w else -1
-                self._ember_reverse = forward < 0
-                self._ember_strafe = None
-                dx, dy = emberdeep_v2_client.step_delta(self, forward)
-                self.try_move(dx, dy)
+                self._ember_key_move(1 if event.key == pygame.K_w else -1, 0)
             elif event.key == pygame.K_a and emberdeep_v2_client.fp_active(self):
-                if not self._begin_key_step():
-                    return
-                dx, dy = emberdeep_v2_client.strafe_delta(self, -1)
-                self._ember_strafe = self._ember_strafe_face(dx, dy)
-                self.try_move(dx, dy)
+                self._ember_key_move(0, -1)
             elif event.key == pygame.K_d and emberdeep_v2_client.fp_active(self):
-                if not self._begin_key_step():
-                    return
-                dx, dy = emberdeep_v2_client.strafe_delta(self, 1)
-                self._ember_strafe = self._ember_strafe_face(dx, dy)
-                self.try_move(dx, dy)
+                self._ember_key_move(0, 1)
             elif event.key == pygame.K_i:
                 self.sidebar_tab = "inventory"
                 self.show_inventory = True
@@ -2640,32 +2630,16 @@ class GameClient(ScreensMixin, CameraYaw):
         keys = pygame.key.get_pressed()
         import emberdeep_v2_client
         if emberdeep_v2_client.fp_active(self):
-            if keys[pygame.K_LEFT] or keys[pygame.KSCAN_LEFT]:
-                emberdeep_v2_client.turn(self, -1)
-            elif keys[pygame.K_RIGHT] or keys[pygame.KSCAN_RIGHT]:
-                emberdeep_v2_client.turn(self, 1)
             if time.time() < getattr(self, "_next_walk_at", 0):
                 return
-            dx = dy = None
             if keys[pygame.K_w] or keys[pygame.K_UP] or keys[pygame.KSCAN_UP]:
-                self._ember_reverse = False
-                self._ember_strafe = None
-                dx, dy = emberdeep_v2_client.step_delta(self, 1)
+                self._ember_key_move(1, 0)
             elif keys[pygame.K_s] or keys[pygame.K_DOWN] or keys[pygame.KSCAN_DOWN]:
-                self._ember_reverse = True
-                self._ember_strafe = None
-                dx, dy = emberdeep_v2_client.step_delta(self, -1)
+                self._ember_key_move(-1, 0)
             elif keys[pygame.K_a]:
-                dx, dy = emberdeep_v2_client.strafe_delta(self, -1)
-                self._ember_strafe = self._ember_strafe_face(dx, dy)
+                self._ember_key_move(0, -1)
             elif keys[pygame.K_d]:
-                dx, dy = emberdeep_v2_client.strafe_delta(self, 1)
-                self._ember_strafe = self._ember_strafe_face(dx, dy)
-            if dx is None:
-                return
-            if not self._begin_key_step():
-                return
-            self.try_move(dx, dy)
+                self._ember_key_move(0, 1)
             return
         if time.time() < getattr(self, "_next_walk_at", 0):
             return
@@ -2684,6 +2658,37 @@ class GameClient(ScreensMixin, CameraYaw):
         if not self._begin_key_step():
             return
         dx, dy = self.rotate_move_delta(dx, dy)
+        self.try_move(dx, dy)
+
+    def _ember_face_intent(self, fwd, right, dx, dy):
+        if abs(right) > abs(fwd):
+            self._ember_strafe = self._ember_strafe_face(dx, dy)
+            self._ember_reverse = False
+        else:
+            self._ember_strafe = None
+            self._ember_reverse = fwd < 0
+
+    def _ember_key_move(self, fwd, right):
+        """One camera-relative step. A blocked diagonal tries each axis."""
+        if not self._begin_key_step():
+            return
+        import emberdeep_v2_client
+        order = emberdeep_v2_client.camera_step_order(self, fwd, right)
+        dx, dy = order[0]
+        self._ember_face_intent(fwd, right, dx, dy)
+        px, py = self.player_xy()
+        if dx and dy:
+            corner = (
+                not self.tile_walkable(px + dx, py)
+                or not self.tile_walkable(px, py + dy)
+                or not self.tile_walkable(px + dx, py + dy)
+            )
+            if corner:
+                for ox, oy in order[1:]:
+                    if self.tile_walkable(px + ox, py + oy):
+                        self.try_move(ox, oy)
+                        return
+                return
         self.try_move(dx, dy)
 
     def _ember_strafe_face(self, dx, dy):

@@ -1204,10 +1204,12 @@ class ScreensMixin:
 
         # Travel / Bank / Gear
         self.sidebar_action_rects = {}
+        import emberdeep_v2_client
+        gear_key = "" if emberdeep_v2_client.fp_active(self) else "E"
         actions = (
             ("travel", "Travel", "M", (42, 78, 130), (130, 190, 255), self._sb_icon_compass),
             ("bank", "Bank", "B", (40, 100, 70), (120, 230, 150), self._sb_icon_chest),
-            ("gear", "Gear", "E", (110, 72, 42), (240, 180, 100), self._sb_icon_pack),
+            ("gear", "Gear", gear_key, (110, 72, 42), (240, 180, 100), self._sb_icon_pack),
         )
         gap, aw = 6, (w - 12) // 3
         for i, (key, label, hotkey, bgc, bdc, icon_fn) in enumerate(actions):
@@ -2231,8 +2233,14 @@ class ScreensMixin:
             (panel.x + 14, y),
         )
         y += 28
+        import emberdeep_v2_client
+        close_hint = (
+            "Hover a slot for details · Esc to close"
+            if emberdeep_v2_client.fp_active(self)
+            else "Hover a slot for details · Esc / E to close"
+        )
         self.screen.blit(
-            self.font_small.render("Hover a slot for details · Esc / E to close", True, GREY),
+            self.font_small.render(close_hint, True, GREY),
             (box.x + 20, box.y + box.h - 26),
         )
 
@@ -2804,7 +2812,7 @@ class ScreensMixin:
             ("Panels", [
                 ("Travel / Bank / Gear", "Sidebar buttons (also M / B / E)"),
                 ("Inventory / Combat / Magic / Quests", "Sidebar tabs"),
-                ("E", "Equipment paperdoll + Combat tab"),
+                ("E", "Equipment paperdoll + Combat tab (rotate right in Emberdeep)"),
                 ("Magic tab", "Quest-point abilities · Auto/Manual toggle"),
                 ("Manual magic", "Fight buttons under the map (shorter CD)"),
                 ("Auto magic", "Casts strongest ready ability in combat"),
@@ -2816,7 +2824,7 @@ class ScreensMixin:
                 ("H", "This help popup"),
                 ("Tab", "Skills modal (levels, XP, combat & total)"),
                 ("I", "Inventory sidebar tab"),
-                ("Q", "Quests sidebar tab"),
+                ("Q", "Quests sidebar tab (rotate left in Emberdeep)"),
                 ("1–5", "Combat XP style (or first-attack popup)"),
                 ("Enter", "Open / send chat"),
                 ("Scroll chat", "Mouse-wheel over chat to read history"),

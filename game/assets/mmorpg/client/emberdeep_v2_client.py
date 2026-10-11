@@ -375,30 +375,46 @@ def pitch_bias(client):
     return max(-8.0, min(8.0, bias))
 
 
-def step_delta(client, forward):
-    """One tile along the way the player is looking, or back the other way."""
-    yaw = float(getattr(client, "_ember_yaw", 0.0))
+_GRID_DIRS = (
+    (1, 0), (1, 1), (0, 1), (-1, 1),
+    (-1, 0), (-1, -1), (0, -1), (1, -1),
+)
+
+
+def _camera_world(client, fwd, right):
+    """Camera-relative (fwd, right) as a world vector. Yaw is the drawn angle."""
+    yaw = float(getattr(client, "_ember_yaw_draw", getattr(client, "_ember_yaw", 0.0)))
     lx, ly = math.sin(yaw), -math.cos(yaw)
-    if abs(lx) >= abs(ly):
-        dx, dy = (1 if lx > 0 else -1), 0
-    else:
-        dx, dy = 0, (1 if ly > 0 else -1)
-    if forward < 0:
-        dx, dy = -dx, -dy
-    return dx, dy
-
-
-def strafe_delta(client, right):
-    """One tile perpendicular to look direction. Right is +1, left is -1."""
-    yaw = float(getattr(client, "_ember_yaw", 0.0))
     rx, ry = math.cos(yaw), math.sin(yaw)
-    if abs(rx) >= abs(ry):
-        dx, dy = (1 if rx > 0 else -1), 0
-    else:
-        dx, dy = 0, (1 if ry > 0 else -1)
-    if right < 0:
-        dx, dy = -dx, -dy
-    return dx, dy
+    wx = float(fwd) * lx + float(right) * rx
+    wy = float(fwd) * ly + float(right) * ry
+    return wx, wy
+
+
+def camera_step(client, fwd, right):
+    """Nearest of the eight grid steps. Diagonals stay diagonals."""
+    wx, wy = _camera_world(client, fwd, right)
+    if abs(wx) < 1e-9 and abs(wy) < 1e-9:
+        return 0, 0
+
+    def score(step):
+        span = math.hypot(step[0], step[1])
+        return (wx * step[0] + wy * step[1]) / span
+
+    return max(_GRID_DIRS, key=score)
+
+
+def camera_step_order(client, fwd, right):
+    """The grid step, then the closer axis, then the other, when it is diagonal."""
+    dx, dy = camera_step(client, fwd, right)
+    if not dx or not dy:
+        return [(dx, dy)]
+    wx, wy = _camera_world(client, fwd, right)
+    east = (1 if wx >= 0 else -1, 0)
+    south = (0, 1 if wy >= 0 else -1)
+    if abs(wx) >= abs(wy):
+        return [(dx, dy), east, south]
+    return [(dx, dy), south, east]
 
 
 def _local_draw_args(client, t):
