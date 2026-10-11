@@ -38,6 +38,11 @@ MONSTERS_HD = {
     "ossuary_keeper",
     "morvath",
     "drowned_dead",
+    "shade",
+    "crypt_ghoul",
+    "void_imp",
+    "obsidian_colossus",
+    "void_horror",
 }
 
 _META = {}

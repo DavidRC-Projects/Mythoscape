@@ -1736,13 +1736,9 @@ MONSTER_DRAWERS = {
 
     # Stubs / early impls — later MONSTER_DRAWERS.update() overrides with finals.
     "ash_imp": draw_ash_imp,
-    "void_imp": draw_void_imp,
-    "obsidian_colossus": draw_obsidian_colossus,
     "magma_slug": draw_magma_slug,
     "crucible_beast": draw_crucible_beast,
     "ember_wolf": draw_ember_wolf,
-    "crypt_ghoul": draw_crypt_ghoul,
-    "void_horror": draw_void_horror,
 }
 
 
@@ -1751,6 +1747,7 @@ def draw_monster(surf, mtype, cx, cy, tile, t, hurt=False, attacking=0.0, facing
     if mtype in (
         "giant_rat", "guard", "mythos_champion", "adamant_duelist", "giant", "wolf",
         "ossuary_keeper", "morvath", "drowned_dead",
+        "shade", "crypt_ghoul", "void_imp", "obsidian_colossus", "void_horror",
     ):
         return
     fn = MONSTER_DRAWERS.get(mtype, draw_giant_rat)
@@ -5348,12 +5345,7 @@ def draw_void_horror(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing=1,
 draw_rune_golem = draw_obsidian_colossus
 
 MONSTER_DRAWERS.update({
-    "shade": draw_shade,
-    "crypt_ghoul": draw_crypt_ghoul,
-    "void_imp": draw_void_imp,
-    "obsidian_colossus": draw_obsidian_colossus,
     "rune_golem": draw_obsidian_colossus,  # legacy alias
-    "void_horror": draw_void_horror,
 })
 
 

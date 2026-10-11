@@ -19,11 +19,6 @@ TYPE_MAP = {
     "skeleton": "skeleton_warrior",
     "spider": "spider_giant",
     "ember_wolf": "wolf_dire",
-    "shade": "barrow_wraith",
-    "crypt_ghoul": "rot_ghoul",
-    "void_imp": "void_spawn",
-    "void_horror": "void_brute",
-    "obsidian_colossus": "stone_golem",
 }
 
 # Relative height in tiles (player ~2 tiles, dragon sheet ~6.5).
@@ -33,11 +28,6 @@ _DRAW_TILES = {
     "skeleton_warrior": 5.2,
     "spider_giant": 4.6,
     "wolf_dire": 4.8,
-    "barrow_wraith": 5.4,
-    "rot_ghoul": 5.2,
-    "void_spawn": 4.4,
-    "void_brute": 7.6,
-    "stone_golem": 8.0,
 }
 
 FRAMES = 5
