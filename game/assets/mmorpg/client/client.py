@@ -163,6 +163,8 @@ class GameClient(ScreensMixin, CameraYaw):
         pygame.init()
         pygame.display.set_caption("Crownfall")
         self.screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
+        # macOS otherwise keeps a text field active and eats the arrow keys.
+        pygame.key.stop_text_input()
         self.clock = pygame.time.Clock()
         self.camera_yaw = 0  # Fixed north-up view (no camera rotate)
         self.cam_drag = None
@@ -1416,6 +1418,7 @@ class GameClient(ScreensMixin, CameraYaw):
             if event.key == pygame.K_RETURN:
                 self.chat_typing = True
                 self.chat_text = ""
+                pygame.key.start_text_input()
             elif self.show_skills and event.key in (pygame.K_UP, pygame.K_DOWN, pygame.K_PAGEUP, pygame.K_PAGEDOWN):
                 step = 42
                 meta = self.skills_scroll_meta or {}
@@ -2467,9 +2470,11 @@ class GameClient(ScreensMixin, CameraYaw):
                 self.net.send("CHAT", text=self.chat_text.strip())
             self.chat_typing = False
             self.chat_text = ""
+            pygame.key.stop_text_input()
         elif event.key == pygame.K_ESCAPE:
             self.chat_typing = False
             self.chat_text = ""
+            pygame.key.stop_text_input()
         elif event.key == pygame.K_BACKSPACE:
             self.chat_text = self.chat_text[:-1]
         elif event.unicode and event.unicode.isprintable():
@@ -2585,6 +2590,12 @@ class GameClient(ScreensMixin, CameraYaw):
     def _arrow_step(self, event):
         """Screen step for an arrow or keypad key. None when the key is not a direction."""
         key, scan = event.key, event.scancode
+        # macOS sometimes reports the hardware arrow codes instead of SDL's.
+        mac = {126: (0, -1), 125: (0, 1), 123: (-1, 0), 124: (1, 0)}
+        if key in mac:
+            return mac[key]
+        if scan in mac:
+            return mac[scan]
         if key in (pygame.K_UP, pygame.K_KP8, pygame.K_KP_8) or scan in (pygame.KSCAN_UP, pygame.KSCAN_KP8, pygame.KSCAN_KP_8):
             return 0, -1
         if key in (pygame.K_DOWN, pygame.K_KP2, pygame.K_KP_2) or scan in (pygame.KSCAN_DOWN, pygame.KSCAN_KP2, pygame.KSCAN_KP_2):
