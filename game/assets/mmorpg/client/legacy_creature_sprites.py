@@ -46,7 +46,6 @@ _PET_DRAGON_SCALE = 0.55
 
 # content visual → preview file. Magma knight is intentionally absent.
 _MONSTER_PREVIEW = {
-    "crucible_beast": "crucible_beast",
 }
 _HEIGHT = {
     "pet_cat": 1.8,
@@ -54,7 +53,6 @@ _HEIGHT = {
     "pet_dragon_frost": 4.4,
     "pet_dragon_mythic": 4.8,
     "castle_knight": 4.4,
-    "crucible_beast": 5.4,
 }
 
 _cache: dict[str, pygame.Surface] = {}

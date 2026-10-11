@@ -18,7 +18,6 @@ import world_map as wm
 
 _LEGS = {
     "magma_knight": "biped",
-    "crucible_beast": "quad",
 }
 _PACK = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "emberdeep_v2_pack"))
 _APRON = (176, 58, 198, 94)  # inclusive world tiles

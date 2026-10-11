@@ -3327,7 +3327,7 @@ class GameClient(ScreensMixin, CameraYaw):
             radius = max(radius, 2)
         elif mtype in ("big_skeleton", "guard", "adamant_duelist", "mythos_champion"):
             radius = max(radius, 1)
-        if mtype in ("obsidian_colossus", "void_horror", "nyxarath", "morvath"):
+        if mtype in ("obsidian_colossus", "void_horror", "nyxarath", "morvath", "crucible_beast"):
             radius = max(radius, 2)
         elif mtype in (
             "ossuary_keeper", "drowned_dead", "shade", "crypt_ghoul",

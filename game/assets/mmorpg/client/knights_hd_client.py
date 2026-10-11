@@ -50,6 +50,7 @@ MONSTERS_HD = {
     "magma_slug",
     "ash_imp",
     "ember_wolf",
+    "crucible_beast",
 }
 
 _META = {}

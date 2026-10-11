@@ -1735,7 +1735,6 @@ MONSTER_DRAWERS = {
     "skeleton": draw_skeleton,
 
     # Stubs / early impls — later MONSTER_DRAWERS.update() overrides with finals.
-    "crucible_beast": draw_crucible_beast,
 }
 
 
@@ -1747,7 +1746,7 @@ def draw_monster(surf, mtype, cx, cy, tile, t, hurt=False, attacking=0.0, facing
         "ossuary_keeper", "morvath", "drowned_dead",
         "shade", "crypt_ghoul", "void_imp", "obsidian_colossus", "void_horror",
         "gallery_warden", "void_crawler", "rift_wraith", "nyxarath",
-        "magma_slug", "ash_imp", "ember_wolf",
+        "magma_slug", "ash_imp", "ember_wolf", "crucible_beast",
     ):
         return
     fn = MONSTER_DRAWERS.get(mtype, draw_giant_rat)
@@ -5520,7 +5519,6 @@ def draw_crucible_beast(surf, cx, cy, tile, t, hurt=False, attacking=0.0, facing
 
 
 MONSTER_DRAWERS.update({
-    "crucible_beast": draw_crucible_beast,
 })
 
 
