@@ -40,15 +40,52 @@ _cache: dict[str, dict[str, pygame.Surface]] = {}
 _scaled: dict[tuple, pygame.Surface] = {}
 
 
+# Lit red-sheet colours, shifted onto the mythic gold body and purple wings.
+_RED_TO_MYTHIC = (
+    ((0x8C, 0x3B, 0x2A), (0xC4, 0x96, 0x48)),
+    ((0x62, 0x29, 0x1D), (0x7A, 0x4A, 0x28)),
+    ((0xC4, 0x9A, 0x64), (0xE4, 0xCC, 0xA0)),
+    ((0x9E, 0x52, 0x36), (0x5A, 0x32, 0x8C)),
+    ((0xD8, 0xCB, 0xA5), (0xF2, 0xE6, 0xC4)),
+    ((0xF2, 0xC1, 0x4A), (0xF2, 0xC1, 0x4A)),
+    ((0xDC, 0xD0, 0xB2), (0xF0, 0xE4, 0xC8)),
+    ((0x4A, 0x1D, 0x18), (0x3A, 0x18, 0x28)),
+)
+
+
+def _recolor_mythic(sheet: pygame.Surface) -> pygame.Surface:
+    import numpy as np
+    rgb = pygame.surfarray.array3d(sheet).astype(np.int16)
+    alpha = pygame.surfarray.array_alpha(sheet)
+    palette = np.array([src for src, _dst in _RED_TO_MYTHIC], dtype=np.int16)
+    targets = np.array([dst for _src, dst in _RED_TO_MYTHIC], dtype=np.int16)
+    flat = rgb.reshape(-1, 3)
+    dist = ((flat[:, None, :] - palette[None, :, :]) ** 2).sum(axis=2)
+    idx = dist.argmin(axis=1)
+    best = dist.min(axis=1)
+    shifted = np.clip(flat + (targets[idx] - palette[idx]), 0, 255).astype(np.uint8)
+    chosen = np.where(best[:, None] <= 70 * 70, shifted, flat.astype(np.uint8))
+    rgba = np.empty((rgb.shape[0], rgb.shape[1], 4), dtype=np.uint8)
+    rgba[:, :, :3] = chosen.reshape(rgb.shape)
+    rgba[:, :, 3] = alpha
+    packed = np.transpose(rgba, (1, 0, 2))
+    image = pygame.image.frombuffer(packed.tobytes(), sheet.get_size(), "RGBA")
+    return image.convert_alpha()
+
+
 def _load_key(key: str) -> dict[str, pygame.Surface]:
     if key in _cache:
         return _cache[key]
+    source = "dragon_red" if key == "dragon_mythic" else key
     sheets = {}
     for anim in ANIMS:
-        path = os.path.join(_SPRITES_DIR, f"{key}_{anim}.png")
+        path = os.path.join(_SPRITES_DIR, f"{source}_{anim}.png")
         if not os.path.isfile(path):
             continue
-        sheets[anim] = pygame.image.load(path).convert_alpha()
+        image = pygame.image.load(path).convert_alpha()
+        if key == "dragon_mythic":
+            image = _recolor_mythic(image)
+        sheets[anim] = image
     _cache[key] = sheets
     return sheets
 

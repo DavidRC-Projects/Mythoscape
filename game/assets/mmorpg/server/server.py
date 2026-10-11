@@ -34,7 +34,7 @@ import explore_dungeons
 
 from world_map import (
     generate_world, build_resource_nodes, is_walkable, WIDTH, HEIGHT, SPAWN_POINT, get_zone,
-    room_containing, in_room, FLOOR,
+    room_containing, in_room, FLOOR, stamp_emberdeep_mouth, stamp_outfitters_shell,
 )
 import combat
 import dungeon as tidehollow
@@ -1197,6 +1197,8 @@ class World:
         import castle_owners
         castle_owners.bind(self)
         explore_dungeons.capture_and_hide(self.grid)
+        stamp_emberdeep_mouth(self.grid)
+        stamp_outfitters_shell(self.grid)
         self.resource_nodes = build_resource_nodes(self.grid)
         self.monsters = {}
         for mtype, x, y in MONSTER_SPAWNS:
@@ -2000,6 +2002,7 @@ async def _handle_move_body(session, msg):
             return
         session.x, session.y = nx, ny
         session.gathering_node = None
+        _release_monster_fight_on_step(session)
         step = castle_realm.transition_at(session.dungeon.get("plane"), session.x, session.y)
         if step and step.get("to_plane") == "overworld":
             await handle_leave_dungeon(session)
@@ -2033,6 +2036,7 @@ async def _handle_move_body(session, msg):
             return
         session.x, session.y = nx, ny
         session.gathering_node = None
+        _release_monster_fight_on_step(session)
         ex = session.dungeon.get("exit_x")
         ey = session.dungeon.get("exit_y")
         if ex is not None and (session.x, session.y) == (int(ex), int(ey)):
@@ -2051,6 +2055,7 @@ async def _handle_move_body(session, msg):
         return
     session.x, session.y = nx, ny
     session.gathering_node = None
+    _release_monster_fight_on_step(session)
     WORLD.db.save_player_position(session.player_id, nx, ny)
     if feature_flags.USE_PLAYER_HOUSING:
         await _housing.on_step(session)
@@ -2545,7 +2550,7 @@ async def handle_leave_dungeon(session, msg=None, silent=False):
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
         if not silent:
             await send(session.ws, "CHAT_MSG", **{
-                "from": "Castle Realm", "text": "You return south of the wishing well.",
+                "from": "Castle Realm", "text": "You return beside the Castle Realm portal.",
             })
         return
     if session.dungeon.get("v2"):
@@ -2974,15 +2979,42 @@ def chebyshev(ax, ay, bx, by):
 
 
 def _ember_wyrm_can_hit(monster, px, py):
-    """True/False when this is the static wyrm. None for every other monster."""
+    """True/False when this is the static wyrm. None for every other monster.
+
+    Outside the lair the fight is over, even on tiles that touch the body.
+    """
     if getattr(monster, "type", None) != "emberdeep_wyrm":
         return None
+    import emberdeep_creatures
+    lair = (emberdeep_creatures.manifest().get("boss") or {}).get("lair") or {}
+    px, py = int(px), int(py)
+    if lair and not (lair["x0"] <= px <= lair["x1"] and lair["y0"] <= py <= lair["y1"]):
+        return False
     cones = (monster.def_stats() or {}).get("cone_tiles")
     if not cones:
         return None
-    import emberdeep_creatures
     body = emberdeep_creatures.footprint(monster.x, monster.y)
-    return (int(px), int(py)) in emberdeep_creatures.swing_tiles(cones, body)
+    return (px, py) in emberdeep_creatures.swing_tiles(cones, body)
+
+
+def _release_monster_fight_on_step(session):
+    """A step the player chose leaves a monster fight. Duels stay locked.
+
+    Further steps keep the leave window open so the next tick cannot
+    pull them back into swinging while they are still walking away.
+    """
+    if _combat_locked(session):
+        return
+    fighting = session.in_combat_with and session.in_combat_with[0] == "monster"
+    fleeing = time.time() < float(getattr(session, "combat_flee_until", 0) or 0)
+    if not fighting and not fleeing:
+        return
+    if fighting:
+        session.in_combat_with = None
+        session.combat_rounds = 0
+        session.combat_lock_id = None
+        session.pet_target_id = None
+    session.combat_flee_until = time.time() + 1.0
 
 
 def adjacent_or_same(ax, ay, bx, by):
@@ -3971,7 +4003,7 @@ async def handle_set_pet(session, msg):
             "from": "Pets", "text": f"{PETS[pet_id]['name']} is already with you.",
         })
         return
-    WORLD.set_player_pet(session, pet_id)
+    session.activate_pet(pet_id)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     await send(session.ws, "CHAT_MSG", **{
         "from": "Pets", "text": f"{PETS[pet_id]['name']} joins you.",
@@ -5475,6 +5507,18 @@ async def _ember_cones():
             if not monster.alive or not stats.get("static"):
                 continue
             emberdeep_creatures.wyrm_tick(monster, dungeon.get("tiles") or [], players, WORLD.tick_count)
+            lair = (emberdeep_creatures.manifest().get("boss") or {}).get("lair") or {}
+            in_lair = (
+                lair
+                and lair["x0"] <= int(session.x) <= lair["x1"]
+                and lair["y0"] <= int(session.y) <= lair["y1"]
+            )
+            if not in_lair:
+                monster._cone_pending = False
+                monster._cone_strike = False
+                if monster.target_player_id == session.player_id:
+                    monster.target_player_id = None
+                continue
             cones = {tuple(p) for p in (monster.stats or {}).get("cone_tiles") or []}
             if getattr(monster, "_cone_pending", False):
                 monster._cone_pending = False
@@ -6118,6 +6162,7 @@ def _pet_keep_up(session, dx=0, dy=0):
     if dist == 2:
         _pet_face_owner(session)
         return
+    # One tile only, so the walk is not a multi-tile jump.
     free = _pet_preferred_tiles(session)
     if not free:
         return
@@ -6596,14 +6641,18 @@ def process_dungeon_ai():
         engaged = None
         if session.in_combat_with and session.in_combat_with[0] == "monster":
             engaged = session.dungeon["monsters"].get(session.in_combat_with[1])
-        # The wyrm never chases. Leave that fight in place while it is alive.
+        # The wyrm never chases. A step away, or leaving the lair, ends the fight.
         boss_fight = bool(engaged and engaged.alive and (engaged.stats or {}).get("static"))
-        if closest_strike is not None and not boss_fight:
+        fleeing = time.time() < float(getattr(session, "combat_flee_until", 0) or 0)
+        if closest_strike is not None and not boss_fight and not fleeing:
             session.in_combat_with = ("monster", closest_strike)
         elif session.in_combat_with and session.in_combat_with[0] == "monster":
             current = engaged
-            if current and current.alive and (current.stats or {}).get("static"):
-                pass
+            if fleeing:
+                session.in_combat_with = None
+            elif current and current.alive and (current.stats or {}).get("static"):
+                if _ember_wyrm_can_hit(current, session.x, session.y) is False:
+                    session.in_combat_with = None
             elif current is None or not current.alive or current.id not in active_ids:
                 session.in_combat_with = None
 

@@ -53,6 +53,11 @@ OVERWORLD_HD = {
     "outfitter_mae",
 }
 
+# Same sheets as another NPC. The nameplate still uses this character's name.
+SKIN = {
+    "banker_corin": "banker_iris",
+}
+
 _IMAGES = {}
 _META = {}
 
@@ -120,15 +125,16 @@ def _sheet_facing(face, moving):
 def draw_npc(client, n, cx, cy, tile, t, face="s", moving=False):
     """Blit the HD sheet. False means this id has no pack art yet."""
     npc_id = n.get("id")
-    if npc_id not in OVERWORLD_HD:
+    art_id = SKIN.get(npc_id, npc_id)
+    if art_id not in OVERWORLD_HD:
         return False
-    meta = _meta(npc_id)
+    meta = _meta(art_id)
     tag, base = _scale_for(tile)
     frames = max(1, int(meta.get("frames") or 8))
     fps = float(meta.get("fps") or 8)
     idx = int(t * fps) % frames
     facing = _sheet_facing(face, moving)
-    path = os.path.join(_DIR, npc_id, f"sprite_{tag}", facing, f"f{idx:02d}.png")
+    path = os.path.join(_DIR, art_id, f"sprite_{tag}", facing, f"f{idx:02d}.png")
     image = _scaled(path, tile, base)
     if image is None:
         return False
@@ -142,9 +148,10 @@ def draw_npc(client, n, cx, cy, tile, t, face="s", moving=False):
 
 
 def portrait(client, npc_id, height=96):
-    if npc_id not in OVERWORLD_HD:
+    art_id = SKIN.get(npc_id, npc_id)
+    if art_id not in OVERWORLD_HD:
         return None
-    path = os.path.join(_DIR, npc_id, "portrait_bust_512.png")
+    path = os.path.join(_DIR, art_id, "portrait_bust_512.png")
     image = _load(path)
     if image is None:
         return None

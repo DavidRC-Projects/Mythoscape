@@ -284,17 +284,17 @@
   "y1": 188
  },
  "overworld_portal": {
-  "x": 32,
-  "y": 33,
+  "x": 64,
+  "y": 26,
   "approach": [
-   32,
-   34
+   64,
+   27
   ],
   "return_arrival": [
-   32,
-   34
+   64,
+   27
   ],
-  "note": "grass 11 tiles south of the wishing well (32,22), east of the village road. Ten clear tiles between them."
+  "note": "open grass south of the graveyard, where the player was standing."
  },
  "roads": [
   {

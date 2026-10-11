@@ -23,8 +23,6 @@ _BG_TOL = 28
 _PET_PREVIEW = {
     "pet_dragon_frost": "pet_dragon_frost",
     "dragon_frost": "pet_dragon_frost",
-    "pet_dragon_mythic": "pet_dragon_mythic",
-    "dragon_mythic": "pet_dragon_mythic",
 }
 # Existing skeleton warrior sheet, drawn smaller.
 _PET_STRIP = {
@@ -39,6 +37,8 @@ _PET_DRAGON = {
     "dragon_crimson": "dragon_red",
     "pet_dragon_shadow": "dragon_black",
     "dragon_shadow": "dragon_black",
+    "pet_dragon_mythic": "dragon_mythic",
+    "dragon_mythic": "dragon_mythic",
 }
 _PET_DRAGON_SCALE = 0.55
 

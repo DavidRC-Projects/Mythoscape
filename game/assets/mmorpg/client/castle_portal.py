@@ -41,44 +41,50 @@ def _surface(relative: str, scale: float):
         raw = pygame.image.load(str(path)).convert_alpha()
         w = max(1, int(round(raw.get_width() * scale)))
         h = max(1, int(round(raw.get_height() * scale)))
-        image = pygame.transform.smoothscale(raw, (w, h))
+        if w == raw.get_width() and h == raw.get_height():
+            image = raw
+        elif scale > 1.0:
+            # Nearest keeps the ring edges sharp. Smooth upscaling is what blurred it.
+            image = pygame.transform.scale(raw, (w, h))
+        else:
+            image = pygame.transform.smoothscale(raw, (w, h))
         _CACHE[key] = image
     return image
 
 
-def _frame_file(tile: int, t: float) -> tuple[str, tuple[int, int]] | None:
+def _frame_file(t: float) -> tuple[str, tuple[int, int]] | None:
+    """Always the double-resolution frame. Its pixels are already twice the 1x art."""
     meta = _meta()
     images = meta.get("images") or {}
-    hi = tile > 40
-    still_name = "castle_realm_portal_2x.png" if hi else "castle_realm_portal_1x.png"
-    still = images.get(still_name) or {}
+    still = images.get("castle_realm_portal_2x.png") or {}
     origin = still.get("origin_px") or (0, 0)
     anim = meta.get("anim") or {}
     frames = anim.get("glow") or []
     if frames:
         fps = float(anim.get("fps") or 8)
-        index = int(t * fps) % len(frames)
-        name = frames[index]
-        if not hi:
-            stem, dot, ext = name.rpartition(".")
-            name = f"{stem}_1x{dot}{ext}" if dot else name
+        name = frames[int(t * fps) % len(frames)]
         path = _ROOT / "anim" / name
         if path.is_file():
             return f"anim/{name}", (int(origin[0]), int(origin[1]))
     if still:
-        return f"sprites/{still_name}", (int(origin[0]), int(origin[1]))
+        return "sprites/castle_realm_portal_2x.png", (int(origin[0]), int(origin[1]))
     return None
 
 
 def draw(surf, cx, cy, tile, t=0.0):
-    """Blit the portal with its tile-centre origin. Returns the sprite top, or None."""
+    """Blit the portal at twice its original size. Returns the sprite top, or None.
+
+    The 2x artwork is the source, so this is a same-size or smaller blit at the
+    usual zoom steps instead of stretching the small frame.
+    """
     if not ready():
         return None
-    picked = _frame_file(tile, t)
+    picked = _frame_file(t)
     if picked is None:
         return None
     relative, origin = picked
-    scale = float(tile) / (80.0 if tile > 40 else 40.0)
+    # Old size was the 1x frame at tile/40. The 2x frame at that same factor is twice as big.
+    scale = float(tile) / 40.0
     image = _surface(relative, scale)
     if image is None:
         return None

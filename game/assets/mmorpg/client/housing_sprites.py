@@ -201,7 +201,17 @@ def queue(client, draw_list, cam_x, cam_y, tile):
         _queue_interior(client, draw_list, cam_x, cam_y, tile, house, _inside(client, house), screen)
 
 
-def _queue_piece(client, draw_list, cam_x, cam_y, tile, key, x0, y0, x1, y1, inside, label, clip_x=None, screen=None, sign=False):
+def queue_outfitters(client, draw_list, cam_x, cam_y, tile, inside):
+    """Mythos Outfitters uses the King's Folly house art. The door stays at (52, 64)."""
+    _queue_piece(
+        client, draw_list, cam_x, cam_y, tile, "kings_folly",
+        45, 54, 58, 64, inside,
+        label=None if inside else "Mythos Outfitters",
+        floor_style=0,
+    )
+
+
+def _queue_piece(client, draw_list, cam_x, cam_y, tile, key, x0, y0, x1, y1, inside, label, clip_x=None, screen=None, sign=False, floor_style=None):
     meta = _meta(key)
     if not meta:
         return
@@ -221,7 +231,8 @@ def _queue_piece(client, draw_list, cam_x, cam_y, tile, key, x0, y0, x1, y1, ins
     body = layers.get(body_name)
     _sx1, south = client.world_to_view_offset(x0, y1, cam_x, cam_y)
     sort_y = -(10 ** 8) if inside else south * tile + tile
-    floor_style = int((client.player or {}).get("house_level") or 0) if inside else 0
+    if floor_style is None:
+        floor_style = int((client.player or {}).get("house_level") or 0) if inside else 0
 
     def blit(relative, x=left, y=top, n=tile, clip=clip_x, floor_style=floor_style):
         style = floor_style if relative and str(relative).endswith("cutaway.png") else 0

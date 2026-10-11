@@ -111,6 +111,17 @@ def _in_lair(px, py, lair):
     return lair["x0"] <= px <= lair["x1"] and lair["y0"] <= py <= lair["y1"] + 1
 
 
+def face_toward_player(ax, ay, px, py):
+    """Breath meets the player. A foe in front gets the south cone, not a side blast."""
+    dx = int(px) - int(ax)
+    dy = int(py) - int(ay)
+    if dy >= 0 and abs(dx) <= max(2, dy):
+        return "south"
+    if abs(dx) >= abs(dy):
+        return "east" if dx >= 0 else "west"
+    return "south" if dy >= 0 else ("west" if dx < 0 else "east")
+
+
 def wyrm_tick(monster, tiles, players_xy, tick):
     """Step the wyrm between lair posts. Breath telegraph holds it still."""
     if getattr(monster, "_cone_pending", False):
@@ -144,7 +155,7 @@ def wyrm_tick(monster, tiles, players_xy, tick):
                 moved = True
     elif tick % 2 == 0:
         px, py = inside[0]
-        want = "south" if py > ay + 1 else ("east" if px > ax else "west")
+        want = face_toward_player(ax, ay, px, py)
         if want != facing:
             facing = want
             turned = True
@@ -154,7 +165,7 @@ def wyrm_tick(monster, tiles, players_xy, tick):
             for post in posts:
                 if blocked(post):
                     continue
-                face = "south" if py > post[1] + 1 else ("east" if px > post[0] else "west")
+                face = face_toward_player(post[0], post[1], px, py)
                 cone = {(c[0], c[1]) for c in cone_tiles_for(post[0], post[1], face, tiles)}
                 if (px, py) not in cone:
                     continue
@@ -171,9 +182,8 @@ def wyrm_tick(monster, tiles, players_xy, tick):
                 ]
                 if options:
                     nx, ny = options[0]
-                    if nx != ax:
-                        facing = "east" if nx > ax else "west"
                     ax, ay = nx, ny
+                    facing = face_toward_player(ax, ay, px, py)
                     moved = True
     if moved or turned:
         monster.stats["cone_tiles"] = cone_tiles_for(ax, ay, facing, tiles)
@@ -262,6 +272,8 @@ def build(tiles, next_id, monster_cls, stats_for):
         if (x, y) not in used and 0 <= y < len(tiles) and 0 <= x < len(tiles[0]):
             stats = stats_for(int(boss.get("level") or 250))
             stats["hp"] = int(boss.get("hp") or 2500)
+            stats["attack"] = int(stats.get("attack") or 0) + 50
+            stats["strength"] = int(stats.get("strength") or 0) + 50
             stats["name"] = boss["display_name"]
             stats["static"] = True
             stats["speed"] = 0

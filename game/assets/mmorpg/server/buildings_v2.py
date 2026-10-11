@@ -14,8 +14,9 @@ _SHIFT = {
     "cottage_nw": (2, 4),       # (7, 11) -> (9, 15)
     "cottage_ne": (18, 4),      # (27, 11) -> (45, 15)
     "cottage_sw": (2, 15),      # (7, 32) -> (9, 47)
-    "cottage_se": (18, 15),     # (27, 32) -> (45, 47)
-    "bank": (26, 8),            # (38, 20) -> (64, 28)
+    "cottage_se": (14, 15),     # (27, 32) -> (41, 47)
+    "bank": (28, 27),           # (38, 20) -> (66, 47) outfitters' old door
+    "city_bank": (102, 92),     # (38, 20) -> (140, 112) south of the barracks
     "pet_emporium": (30, 16),   # (55, 32) -> (85, 48)
     "harbour_tackle": (39, 0),  # (138, 14) -> (177, 14)
     "harbour_fishmonger": (39, 0),  # (138, 28) -> (177, 28)
@@ -33,6 +34,7 @@ _KEY = {
     "cottage_sw": "resting_ox",
     "cottage_se": "farmhouse",
     "bank": "village_bank",
+    "city_bank": "village_bank",
     "pet_emporium": "pet_emporium",
     "harbour_tackle": "harbour_tackle",
     "harbour_fishmonger": "kais_catch",
@@ -47,8 +49,9 @@ _OLD_SHELL = {
     "cottage_nw": (4, 4, 15, 15),
     "cottage_ne": (40, 4, 51, 15),
     "cottage_sw": (4, 36, 15, 47),
-    "cottage_se": (40, 36, 51, 47),
-    "bank": (58, 18, 70, 28),
+    "cottage_se": (36, 36, 47, 47),
+    "bank": (60, 37, 72, 47),
+    "city_bank": (135, 105, 145, 112),
     "pet_emporium": (78, 36, 92, 48),
     "harbour_tackle": (172, 6, 182, 14),
     "harbour_fishmonger": (172, 20, 182, 28),

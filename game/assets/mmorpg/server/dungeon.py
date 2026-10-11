@@ -27,7 +27,7 @@ TIDEHOLLOW_FLOORS = [
 
 DUNGEON_W, DUNGEON_H = 28, 22
 DUNGEON_SPAWN = (14, 19)
-CAVE_RETURN = (184, 38)  # just south of the cave mouth
+CAVE_RETURN = (189, 54)  # just south of the cave mouth
 
 # Visual monster type by floor band (uses existing drawers)
 _FLOOR_VISUAL = {

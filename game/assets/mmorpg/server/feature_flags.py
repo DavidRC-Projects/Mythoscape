@@ -31,7 +31,7 @@ USE_NEW_VOID_DUNGEON = _on("USE_NEW_VOID_DUNGEON", "1")
 USE_NEW_DEPTHS_DUNGEON = _on("USE_NEW_DEPTHS_DUNGEON", "1")
 NEW_BUILDINGS_ENABLED = {
     "cottage_nw", "cottage_ne", "cottage_sw", "cottage_se",
-    "bank", "pet_emporium",
+    "bank", "city_bank", "pet_emporium",
     "city_house_nw", "city_house_sw", "city_barracks",
     "harbour_tackle", "harbour_fishmonger",
     "smithy",

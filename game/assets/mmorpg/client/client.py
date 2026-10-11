@@ -45,6 +45,7 @@ from content import (
 )  # noqa: E402
 import world_map as wm  # noqa: E402
 import fairy_ground  # noqa: E402
+import village_ground  # noqa: E402
 import combat  # noqa: E402
 import procedural_sprites_finished as sprites  # noqa: E402
 import dungeon_interior_3d  # noqa: E402 — 3D dungeon interior props
@@ -74,10 +75,13 @@ SERVER_URI = f"ws://{SERVER_HOST}:8765"
 SCREEN_W, SCREEN_H = 1200, 800
 MAP_W, MAP_H = 900, 640
 SIDEBAR_X = MAP_W
-# World tile size — RS-era default; player can zoom out (smaller tiles = more world visible)
-TILE_ZOOM_SIZES = (40, 32, 24, 16, 12)  # 100% → 80% → 60% → 40% → 30%
-# Start at 80%.
-TILE = TILE_ZOOM_SIZES[1]
+# World tile size. 40px is 100%. The slider runs from 30% to 150%.
+TILE_ZOOM_BASE = 40
+ZOOM_MIN = 30
+ZOOM_MAX = 150
+ZOOM_STEP = 10
+# Start at 100%.
+TILE = TILE_ZOOM_BASE
 
 # Low-poly dragon visuals (pre-baked sheets). False = original procedural draw_dragon.
 USE_LOWPOLY_DRAGONS = True
@@ -170,7 +174,9 @@ class GameClient(ScreensMixin, CameraYaw):
         self.cam_drag = None
         self._cam_drag_threshold = 56
         self.BUILDING_WORLD_ROTATION_DEG = 0
-        self.zoom_level = 1  # 80%
+        self.zoom_pct = 100
+        self._zoom_goal = 100
+        self._zoom_drag = False
         self._zoom_toast_until = 0.0
 
         # Readable UI text (slightly larger after skill/UI growth)
@@ -407,10 +413,6 @@ class GameClient(ScreensMixin, CameraYaw):
         self.combat_target_id = None  # monster id currently fighting
         self.combat_rounds = 0
         self.fleeing_combat = False  # click-away: don't path back until re-attack
-        self.combat_quick = None  # above-head heal/potion buttons while under attack
-        self.combat_quick_rects = {}
-        self.combat_quick_until = 0.0
-        self.combat_quick_collapsed = False
         self._low_hp_warn_until = 0.0  # pulse timer for sidebar warning
         self.death_banner_until = 0.0
         self.death_banner_text = ""
@@ -439,7 +441,10 @@ class GameClient(ScreensMixin, CameraYaw):
             try:
                 self.handle_network()
                 self.update_walk()
+                self._zoom_latched = False
+                self._ember_zoom_latched = False
                 self.handle_events()
+                self._pump_zoom()
                 self._poll_held_walk()
                 self.update_inventory_hover()
                 area_music.tick(self)
@@ -547,8 +552,6 @@ class GameClient(ScreensMixin, CameraYaw):
             self.ground_items = msg.get("ground_items", {})
             if self.combat_target_id is not None and self.combat_target_id not in self.monsters:
                 self.combat_target_id = None
-                self.combat_quick = None
-                self.combat_quick_until = 0.0
             if "resources" in msg:
                 self.resources = msg["resources"]
             self.fires = set(msg.get("fires") or [])
@@ -661,8 +664,6 @@ class GameClient(ScreensMixin, CameraYaw):
                     "pk_kills": int(self.player.get("pk_kills") or 0),
                 }
             self._announce_new_stat_boosts(prev_boosts, self.player.get("stat_boosts") or {})
-            if self.combat_quick and time.time() < float(getattr(self, "combat_quick_until", 0) or 0):
-                self.refresh_combat_quick_prompt(force=True)
         elif t == "CHAT_MSG":
             style = msg.get("style")
             text = f"{msg['from']}: {msg['text']}"
@@ -1048,14 +1049,18 @@ class GameClient(ScreensMixin, CameraYaw):
         # Track current combat target for the local player
         my_id = (self.player or {}).get("id")
         if kind == "player_hits_monster" and atk_id == my_id:
-            self.fleeing_combat = False
-            self.combat_target_id = def_id
-            # Keep side-on to the dragon while swinging
-            if ax is not None and x is not None:
-                pkey = ("p", my_id)
-                self.face_toward_target(ax, ay, x, y, key=pkey)
+            if self._leaving_fight():
+                self.attack_anims.pop(anim_key, None)
+                self.attack_anim_kind.pop(anim_key, None)
+                self.attack_face.pop(anim_key, None)
+            else:
+                self.fleeing_combat = False
+                self.combat_target_id = def_id
+                # Keep side-on to the dragon while swinging
+                if ax is not None and x is not None:
+                    pkey = ("p", my_id)
+                    self.face_toward_target(ax, ay, x, y, key=pkey)
         elif kind == "monster_hits_player" and def_id == my_id:
-            self.refresh_combat_quick_prompt(force=True)
             mon = self._monster_by_id(atk_id)
             # While fleeing, take the hit but do not re-lock, path back, or turn around
             leaving = self.fleeing_combat or (self.walk_path and (
@@ -1622,8 +1627,6 @@ class GameClient(ScreensMixin, CameraYaw):
                 self.log_prompt = None
                 self.potion_prompt = None
                 self.cook_prompt = None
-                self.combat_quick = None
-                self.combat_quick_until = 0.0
                 self.dungeon_prompt = None
                 self.clear_walk()
         elif event.type == pygame.MOUSEWHEEL:
@@ -1787,7 +1790,9 @@ class GameClient(ScreensMixin, CameraYaw):
             else:
                 self.handle_mouse_click(event)
         elif event.type == pygame.MOUSEMOTION:
-            if self.help_drag is not None:
+            if getattr(self, "_zoom_drag", False):
+                self._zoom_goal = self._zoom_pct_from_x(event.pos[0])
+            elif self.help_drag is not None:
                 self._help_scrollbar_drag(event.pos)
             elif self.skills_drag is not None:
                 self._skills_scrollbar_drag(event.pos)
@@ -1803,6 +1808,9 @@ class GameClient(ScreensMixin, CameraYaw):
             if event.button == 2:
                 self.cam_drag = None
             elif event.button == 1:
+                if getattr(self, "_zoom_drag", False):
+                    self._zoom_drag = False
+                    self._zoom_goal = self._zoom_pct_from_x(event.pos[0])
                 if self.help_drag is not None:
                     self.help_drag = None
                 elif self.skills_drag is not None:
@@ -2307,12 +2315,27 @@ class GameClient(ScreensMixin, CameraYaw):
         except (TypeError, ValueError):
             return None
 
+    def _leaving_fight(self):
+        """True while a step away is still carrying the player out of a fight."""
+        if not self.fleeing_combat:
+            return False
+        if self.walk_path:
+            return True
+        pid = (self.player or {}).get("id")
+        return time.time() < self._entity_moving_until.get(("p", pid), 0.0)
+
     def _clear_combat_target(self, notify_server=False):
         """Stop local auto-flank / combat lock; optionally tell the server we're fleeing."""
         self.combat_target_id = None
         self.fleeing_combat = True
-        self.combat_quick = None
-        self.combat_quick_until = 0.0
+        pid = (self.player or {}).get("id")
+        if pid is not None:
+            self.attack_anims.pop(pid, None)
+            self.attack_anims.pop(str(pid), None)
+            self.attack_anim_kind.pop(pid, None)
+            self.attack_anim_kind.pop(str(pid), None)
+            self.attack_face.pop(pid, None)
+            self.attack_face.pop(str(pid), None)
         # Cancel any in-flight "walk to attack" so we don't path back
         if self.pending_action and self.pending_action.get("type") == "ATTACK":
             self.pending_action = None
@@ -2442,36 +2465,6 @@ class GameClient(ScreensMixin, CameraYaw):
                 if skill in ("attack", "strength", "defence"):
                     opts[skill] = True
         return opts
-
-    def refresh_combat_quick_prompt(self, force=False):
-        """Show above-head Eat / potion buttons when attacked (if supplies exist)."""
-        if not self.player:
-            return
-        opts = self.combat_consumable_options()
-        buttons = []
-        if opts["food"]:
-            buttons.append(("food", "Eat food"))
-        if opts["health"]:
-            buttons.append(("health", "HP potion"))
-        if opts["attack"]:
-            buttons.append(("attack", "Att pot"))
-        if opts["strength"]:
-            buttons.append(("strength", "Str pot"))
-        if opts["defence"]:
-            buttons.append(("defence", "Def pot"))
-        if not buttons:
-            # Nothing to offer — keep quiet rather than a useless prompt
-            if force:
-                self.combat_quick = None
-            return
-        # Prefer not to spam if already showing the same set
-        prev = (self.combat_quick or {}).get("buttons")
-        new_keys = [b[0] for b in buttons]
-        if not force and prev == new_keys and time.time() < float(getattr(self, "combat_quick_until", 0) or 0):
-            self.combat_quick_until = time.time() + 10.0
-            return
-        self.combat_quick = {"buttons": new_keys, "labels": {k: lab for k, lab in buttons}}
-        self.combat_quick_until = time.time() + 10.0
 
     def handle_chat_typing(self, event):
         if event.key == pygame.K_RETURN:
@@ -2713,6 +2706,8 @@ class GameClient(ScreensMixin, CameraYaw):
         nx, ny = int(px) + int(dx), int(py) + int(dy)
         if not self.tile_walkable(nx, ny):
             return
+        if self.combat_target_id is not None:
+            self._clear_combat_target(notify_server=True)
         key = ("p", self.player.get("id"))
         if abs(dx) >= abs(dy) and dx != 0:
             self._entity_facing[key] = 1 if dx > 0 else -1
@@ -2727,7 +2722,7 @@ class GameClient(ScreensMixin, CameraYaw):
             live["x"], live["y"] = nx, ny
         # A world snapshot can still be the tile we just left. Keep this step until it catches up.
         self._predicted_step = (nx, ny, now + 0.75)
-        self._next_walk_at = now + (0.55 if in_ember else 0.16)
+        self._next_walk_at = now + (emberdeep_v2_client.STEP_SECONDS if in_ember else 0.16)
 
     def _capture_home_map(self, force=False):
         """Keep the overworld tiles. Dungeon and Castle Realm swaps must not replace them."""
@@ -2845,8 +2840,6 @@ class GameClient(ScreensMixin, CameraYaw):
         self.combat_target_id = None
         self.combat_rounds = 0
         self.fleeing_combat = False
-        self.combat_quick = None
-        self.combat_quick_until = 0.0
         self.projectiles.clear()
         self.pending_floaters.clear()
         self.attack_anims.clear()
@@ -2973,7 +2966,7 @@ class GameClient(ScreensMixin, CameraYaw):
                 return False
             if m.get("type") == "emberdeep_wyrm":
                 import emberdeep_v2_client
-                return (int(px), int(py)) in emberdeep_v2_client.wyrm_swing_tiles(m)
+                return (int(px), int(py)) in emberdeep_v2_client.wyrm_approach_goals(m)
             # Side-by-side foes: engage once nearby — server only deals damage when lined up
             if self.is_side_by_side_monster(m.get("type")) and not self.player_using_bow():
                 lined = self._humanoid_lineup_ready(m, px, py)
@@ -3088,8 +3081,7 @@ class GameClient(ScreensMixin, CameraYaw):
             if self.combat_flee_locked():
                 self._say_combat_lock()
                 return
-            if not self.player_using_bow():
-                self._clear_combat_target(notify_server=True)
+            self._clear_combat_target(notify_server=True)
         px, py = self.player_xy()
         if action and self.can_do_action(action, px, py):
             self.fire_action(action)
@@ -3195,7 +3187,8 @@ class GameClient(ScreensMixin, CameraYaw):
             self._entity_facing[pkey] = "back" if dy < 0 else "front"
         self._entity_moving_until[pkey] = now + 0.55
         import emberdeep_v2_client
-        self._next_walk_at = now + (0.55 if emberdeep_v2_client.fp_active(self) else 0.2)
+        step = emberdeep_v2_client.STEP_SECONDS if emberdeep_v2_client.fp_active(self) else 0.2
+        self._next_walk_at = now + step
 
         if self.pending_action and self.can_do_action(self.pending_action, nx, ny):
             self.fire_action(self.pending_action)
@@ -3223,23 +3216,31 @@ class GameClient(ScreensMixin, CameraYaw):
         if emberdeep_v2_client.fp_active(self):
             emberdeep_v2_client.adjust_zoom(self, delta)
             return
-        if delta > 0:
-            self.set_zoom(int(self.zoom_level) - 1)
-        elif delta < 0:
-            self.set_zoom(int(self.zoom_level) + 1)
+        if not delta or getattr(self, "_zoom_drag", False) or getattr(self, "_zoom_latched", False):
+            return
+        self._zoom_latched = True
+        self._zoom_goal = self._snap_zoom(self.zoom_pct + (ZOOM_STEP if delta > 0 else -ZOOM_STEP))
 
     def set_zoom(self, level):
-        """Jump to a zoom step. 0 is closest; the last step is the widest view."""
+        """Emberdeep still uses its own preset steps."""
         import emberdeep_v2_client
         if emberdeep_v2_client.fp_active(self):
             emberdeep_v2_client.set_zoom(self, level)
-            return
+
+    def _snap_zoom(self, pct):
+        snapped = int(round(float(pct) / ZOOM_STEP) * ZOOM_STEP)
+        return max(ZOOM_MIN, min(ZOOM_MAX, snapped))
+
+    def _render_tile(self, pct):
+        return max(8, int(round(TILE_ZOOM_BASE * float(pct) / 100.0)))
+
+    def _apply_zoom_tile(self):
+        """Rebuild sprites only when the on-screen tile size actually changes."""
         global TILE
-        level = max(0, min(len(TILE_ZOOM_SIZES) - 1, int(level)))
-        if level == self.zoom_level:
+        tile = self._render_tile(self.zoom_pct)
+        if tile == TILE:
             return
-        self.zoom_level = level
-        TILE = TILE_ZOOM_SIZES[self.zoom_level]
+        TILE = tile
         sprites.set_render_profile(
             tile_size=TILE,
             art=1.0,
@@ -3248,48 +3249,94 @@ class GameClient(ScreensMixin, CameraYaw):
             monster=2.5,
             pet=2.05,
         )
-        self._zoom_toast_until = time.time() + 1.2
 
-    def zoom_control_layout(self):
-        """On-map buttons: zoom out, each step, zoom in. Left is the widest view."""
+    def set_zoom_pct(self, pct, apply_world=True):
+        """Set the overworld zoom. 100 is the normal view, 30 the widest, 150 the closest."""
+        self._zoom_goal = self._snap_zoom(pct)
+        if apply_world:
+            self.zoom_pct = self._zoom_goal
+            self._apply_zoom_tile()
+            self._zoom_toast_until = time.time() + 1.2
+
+    def _pump_zoom(self):
+        """Keep the zoom bar on the pointer, and change the world once per step.
+
+        Dragging only moves the knob. The map updates on release, so a slow
+        frame cannot skip the percentage.
+        """
         import emberdeep_v2_client
         if emberdeep_v2_client.fp_active(self):
-            return emberdeep_v2_client.zoom_control_layout()
-        bh = 26
-        gap = 4
-        y = MAP_H - bh - 10
-        x = 10
-        items = [(pygame.Rect(x, y, 28, bh), "out")]
-        x += 28 + gap
-        for level in range(len(TILE_ZOOM_SIZES) - 1, -1, -1):
-            items.append((pygame.Rect(x, y, 36, bh), level))
-            x += 36 + gap
-        items.append((pygame.Rect(x, y, 28, bh), "in"))
-        return items
+            return
+        goal = getattr(self, "_zoom_goal", self.zoom_pct)
+        if getattr(self, "_zoom_drag", False):
+            if goal != self.zoom_pct:
+                self.zoom_pct = goal
+                self._zoom_toast_until = time.time() + 1.2
+            self._zoom_world_dirty = True
+            return
+        if goal != self.zoom_pct:
+            step = ZOOM_STEP if goal > self.zoom_pct else -ZOOM_STEP
+            self.zoom_pct = self._snap_zoom(self.zoom_pct + step)
+            self._zoom_toast_until = time.time() + 1.2
+            self._apply_zoom_tile()
+            self._zoom_world_dirty = False
+            return
+        if getattr(self, "_zoom_world_dirty", False):
+            self._zoom_world_dirty = False
+            self._apply_zoom_tile()
+
+    def zoom_hud_rects(self):
+        """Title, key hint, and the 30–150 track in the bottom-left of the map."""
+        pad = 8
+        title = self.font_tiny.render("Zoom bar", True, WHITE)
+        keys = self.font_tiny.render("− [ zoom out      + ] zoom in", True, WHITE)
+        panel_w = max(title.get_width(), keys.get_width()) + pad * 2
+        title_h = title.get_height()
+        keys_h = keys.get_height()
+        bar_h = 16
+        panel_h = pad + title_h + 2 + keys_h + 6 + bar_h + pad
+        panel = pygame.Rect(10, MAP_H - panel_h - 10, panel_w, panel_h)
+        track = pygame.Rect(
+            panel.x + pad,
+            panel.bottom - pad - bar_h,
+            panel_w - pad * 2 - 48,
+            bar_h,
+        )
+        return panel, track
+
+    def _zoom_pct_from_x(self, mx):
+        _panel, track = self.zoom_hud_rects()
+        span = max(1, track.w)
+        t = max(0.0, min(1.0, (mx - track.x) / span))
+        return self._snap_zoom(ZOOM_MIN + t * (ZOOM_MAX - ZOOM_MIN))
 
     def draw_zoom_controls(self):
         import emberdeep_v2_client
         if emberdeep_v2_client.fp_active(self):
             emberdeep_v2_client.draw_zoom_controls(self)
             return
-        for rect, action in self.zoom_control_layout():
-            active = isinstance(action, int) and action == self.zoom_level
-            fill = (48, 62, 48) if active else (22, 24, 32)
-            edge = (140, 200, 120) if active else (120, 110, 80)
-            pygame.draw.rect(self.screen, fill, rect, border_radius=5)
-            pygame.draw.rect(self.screen, edge, rect, 1, border_radius=5)
-            if action == "out":
-                label = "−"
-            elif action == "in":
-                label = "+"
-            else:
-                label = str(int(round(100 * TILE_ZOOM_SIZES[action] / TILE_ZOOM_SIZES[0])))
-            text = self.font_tiny.render(label, True, WHITE)
-            self.screen.blit(text, (rect.centerx - text.get_width() // 2, rect.centery - text.get_height() // 2))
+        panel, track = self.zoom_hud_rects()
+        pygame.draw.rect(self.screen, (22, 24, 32), panel, border_radius=6)
+        pygame.draw.rect(self.screen, (120, 110, 80), panel, 1, border_radius=6)
+        title = self.font_tiny.render("Zoom bar", True, (255, 230, 160))
+        keys = self.font_tiny.render("− [ zoom out      + ] zoom in", True, (210, 206, 190))
+        self.screen.blit(title, (panel.x + 8, panel.y + 6))
+        self.screen.blit(keys, (panel.x + 8, panel.y + 6 + title.get_height() + 2))
+        pygame.draw.rect(self.screen, (40, 42, 52), track, border_radius=4)
+        span = max(1, ZOOM_MAX - ZOOM_MIN)
+        t = (self.zoom_pct - ZOOM_MIN) / span
+        fill_w = max(4, int(round(track.w * t)))
+        fill = pygame.Rect(track.x, track.y, fill_w, track.h)
+        pygame.draw.rect(self.screen, (70, 110, 64), fill, border_radius=4)
+        knob_x = track.x + int(round(track.w * t))
+        knob = pygame.Rect(0, 0, 8, track.h + 6)
+        knob.center = (knob_x, track.centery)
+        pygame.draw.rect(self.screen, (230, 220, 170), knob, border_radius=3)
+        pct = self.font_tiny.render(f"{self.zoom_pct}%", True, WHITE)
+        self.screen.blit(pct, (track.right + 8, track.centery - pct.get_height() // 2))
 
     def zoom_label(self):
-        pct = int(100 * TILE_ZOOM_SIZES[self.zoom_level] / TILE_ZOOM_SIZES[0])
-        return f"Zoom {pct}%"
+        return f"Zoom {int(self.zoom_pct)}%"
 
     def camera_origin(self):
         """Center the viewport on the player in *view* space, clamped."""
@@ -3450,14 +3497,23 @@ class GameClient(ScreensMixin, CameraYaw):
             self._click_context_menu(mx, my)
             return
         if self.state == "GAME":
-            for rect, action in self.zoom_control_layout():
-                if rect.collidepoint(mx, my):
-                    if action == "out":
-                        self.adjust_zoom(-1)
-                    elif action == "in":
-                        self.adjust_zoom(1)
-                    else:
-                        self.set_zoom(action)
+            import emberdeep_v2_client
+            if emberdeep_v2_client.fp_active(self):
+                for rect, action in emberdeep_v2_client.zoom_control_layout():
+                    if rect.collidepoint(mx, my):
+                        if action == "out":
+                            self.adjust_zoom(-1)
+                        elif action == "in":
+                            self.adjust_zoom(1)
+                        else:
+                            self.set_zoom(action)
+                        return
+            else:
+                panel, track = self.zoom_hud_rects()
+                if panel.collidepoint(mx, my):
+                    if track.inflate(0, 6).collidepoint(mx, my):
+                        self._zoom_drag = True
+                        self._zoom_goal = self._zoom_pct_from_x(mx)
                     return
         # Leave dungeon button (always on top of the map HUD)
         if self.dungeon and self.dungeon_hud_hidden:
@@ -3516,9 +3572,6 @@ class GameClient(ScreensMixin, CameraYaw):
         if self.cook_prompt:
             self.handle_cook_prompt_click(mx, my)
             return
-        if self.combat_quick and time.time() < float(getattr(self, "combat_quick_until", 0) or 0):
-            if self.handle_combat_quick_click(mx, my):
-                return
         # Manual magic fight bar (below map)
         for aid, rect in (getattr(self, "magic_fight_rects", {}) or {}).items():
             if rect.collidepoint(mx, my):
@@ -4769,28 +4822,6 @@ class GameClient(ScreensMixin, CameraYaw):
         if box and not box.collidepoint(mx, my):
             self.potion_prompt = None
 
-    def handle_combat_quick_click(self, mx, my):
-        rects = self.combat_quick_rects or {}
-        for kind, rect in rects.items():
-            if kind == "dismiss":
-                if rect.collidepoint(mx, my):
-                    self.combat_quick_collapsed = True
-                    return True
-                continue
-            if kind == "expand":
-                if rect.collidepoint(mx, my):
-                    self.combat_quick_collapsed = False
-                    self.combat_quick_until = time.time() + 10.0
-                    return True
-                continue
-            if rect.collidepoint(mx, my):
-                self.net.send("QUICK_CONSUME", kind=kind)
-                # Refresh options after a short delay via next PLAYER_UPDATE;
-                # keep panel up briefly so they can drink another pot
-                self.combat_quick_until = time.time() + 8.0
-                return True
-        return False
-
     def open_fire_prompt(self, slot, item_id):
         name = ITEMS.get(item_id, {}).get("name", "logs")
         has_tinder = False
@@ -5541,9 +5572,9 @@ class GameClient(ScreensMixin, CameraYaw):
                             portal_top = castle_portal.draw(self.screen, cx, cy, TILE, t)
                             if portal_top is None:
                                 sprites.draw_dungeon_entrance(self.screen, cx, cy, TILE, t, yaw=self.camera_yaw)
-                                portal_top = cy - TILE - 4
+                                portal_top = cy - TILE * 2 - 4
                                 pulse = 0.5 + 0.5 * math.sin(t * 3.0)
-                                ring = int(TILE * (0.85 + 0.35 * pulse))
+                                ring = int(TILE * (0.85 + 0.35 * pulse) * 2)
                                 pygame.draw.circle(self.screen, (90, 60, 16), (cx, cy - 2), ring + 2, 3)
                                 pygame.draw.circle(self.screen, (255, 214, 90), (cx, cy - 2), ring, 2)
                             self.blit_nameplate("CASTLE REALM", cx, portal_top - 4, (255, 220, 120))
@@ -6156,8 +6187,6 @@ class GameClient(ScreensMixin, CameraYaw):
                         self.draw_speech_bubble(cx, ny, said.get("text") or "")
                     if is_self and time.time() < self.level_up_until:
                         self.draw_level_up_banner(cx, ny - 18, time.time())
-                    if is_self:
-                        self._combat_quick_anchor = (cx, ny - 22)
                 draw_list.append((cy + TILE // 2, 6 if is_self else 5, _draw_pl))
 
         # Iso cottages — Y-sort at south edge so the player reads in front of the door
@@ -6195,13 +6224,6 @@ class GameClient(ScreensMixin, CameraYaw):
         draw_list.sort(key=lambda item: (item[0], item[1]))
         for _, __, fn in draw_list:
             fn()
-
-        # Combat quick-heal buttons above the local player's head
-        if getattr(self, "_combat_quick_anchor", None):
-            self.draw_combat_quick_prompt(*self._combat_quick_anchor)
-            self._combat_quick_anchor = None
-        else:
-            self.combat_quick_rects = {}
 
         # Flying arrows (world space → screen)
         self._draw_projectiles(cam_x, cam_y, t)
@@ -6541,6 +6563,13 @@ class GameClient(ScreensMixin, CameraYaw):
         """Queue iso cottages / castle into the Y-sort list (south-edge depth)."""
         t = time.time()
         for b in self.buildings:
+            if b.get("id") == "mythos_outfitters":
+                import housing_sprites
+                housing_sprites.queue_outfitters(
+                    self, draw_list, cam_x, cam_y, TILE,
+                    inside=self.player_inside_building(b),
+                )
+                continue
             if USE_NEW_CASTLE and b.get("id") == "stonehaven_castle" and castle_sprites.ready():
                 continue
             if USE_NEW_BUILDINGS and house_sprites.ready(b.get("id")):
@@ -6738,6 +6767,19 @@ class GameClient(ScreensMixin, CameraYaw):
             return
         self.walk_and_act(goals, None)
 
+    def _paint_meadow(self, rect, wx, wy, zone):
+        if not village_ground.paints_grass(zone):
+            return False
+        return village_ground.draw_grass(self.screen, rect, wx, wy)
+
+    def _paint_lane(self, rect, wx, wy, zone):
+        if not village_ground.paints_path(zone):
+            return False
+        if not village_ground.draw_path(self.screen, rect, wx, wy):
+            return False
+        village_ground.draw_edge(self, rect, wx, wy)
+        return True
+
     def draw_terrain_tile(self, rect, tile_id, wx, wy, t):
         if self.dungeon and self.dungeon.get("id") == "castle_realm":
             import castle_realm_renderer
@@ -6760,7 +6802,8 @@ class GameClient(ScreensMixin, CameraYaw):
         if not self.dungeon and fairy_ground.draw_fence(self, rect, wx, wy):
             return
         if tile_id in (wm.TREE, wm.OAK_TREE, wm.WILLOW_TREE, wm.MAPLE_TREE, wm.YEW_TREE, wm.MAGIC_TREE, wm.FISH_SPOT):
-            sprites.draw_grass(self.screen, rect, wx, wy)
+            if not self._paint_meadow(rect, wx, wy, zone):
+                sprites.draw_grass(self.screen, rect, wx, wy)
         elif tile_id in (wm.ORE, wm.IRON_ORE, wm.COAL, wm.MITHRIL_ORE, wm.ADAMANTITE_ORE):
             sprites.draw_floor(self.screen, rect, wx, wy, zone=zone)
         elif tile_id == wm.GRASS:
@@ -6771,7 +6814,9 @@ class GameClient(ScreensMixin, CameraYaw):
             if zone == "shadow_crypt":
                 sprites.draw_void_ground(self.screen, rect, wx, wy)
             else:
-                sprites.draw_grass(self.screen, rect, wx, wy)
+                if not self._paint_meadow(rect, wx, wy, zone):
+                    sprites.draw_grass(self.screen, rect, wx, wy)
+                self._draw_headstone(rect, wx, wy)
         elif tile_id == wm.PATH:
             if self._is_pier_tile(wx, wy):
                 sprites.draw_pier(self.screen, rect, wx, wy)
@@ -6780,7 +6825,8 @@ class GameClient(ScreensMixin, CameraYaw):
                     import fairy_village_client
                     if fairy_village_client.draw_terrain(self.screen, rect, tile_id, wx, wy):
                         return
-                sprites.draw_path(self.screen, rect, wx, wy, zone=zone)
+                if not self._paint_lane(rect, wx, wy, zone):
+                    sprites.draw_path(self.screen, rect, wx, wy, zone=zone)
         elif tile_id == wm.STONE:
             if zone == "fairy_village":
                 import fairy_village_client
@@ -6793,7 +6839,8 @@ class GameClient(ScreensMixin, CameraYaw):
                 if self._shell_underfoot(shell) == "stone":
                     sprites.draw_stone_floor(self.screen, rect, wx, wy)
                 else:
-                    sprites.draw_grass(self.screen, rect, wx, wy)
+                    if not self._paint_meadow(rect, wx, wy, zone):
+                        sprites.draw_grass(self.screen, rect, wx, wy)
             else:
                 sprites.draw_floor(self.screen, rect, wx, wy, zone=zone, interior=True)
         elif tile_id == wm.WALL:
@@ -6803,9 +6850,13 @@ class GameClient(ScreensMixin, CameraYaw):
                 if self._shell_underfoot(shell) == "stone":
                     sprites.draw_stone_floor(self.screen, rect, wx, wy)
                 else:
-                    sprites.draw_grass(self.screen, rect, wx, wy)
+                    if not self._paint_meadow(rect, wx, wy, zone):
+                        sprites.draw_grass(self.screen, rect, wx, wy)
             elif zone in ("village", "fishing_village", "city"):
-                sprites.draw_mountain_rock(self.screen, rect, wx, wy)
+                if wm.is_graveyard_wall(wx, wy):
+                    sprites.draw_dungeon_wall(self.screen, rect, wx, wy)
+                else:
+                    sprites.draw_mountain_rock(self.screen, rect, wx, wy)
             else:
                 sprites.draw_wall(self.screen, rect, zone, wx, wy, material=None)
         elif tile_id == wm.WATER:
@@ -6815,13 +6866,30 @@ class GameClient(ScreensMixin, CameraYaw):
                 shores = self._water_shores(wx, wy)
                 sprites.draw_water_detailed(self.screen, rect, t, wx, wy, shores=shores)
         else:
-            sprites.draw_grass(self.screen, rect, wx, wy)
+            if not self._paint_meadow(rect, wx, wy, zone):
+                sprites.draw_grass(self.screen, rect, wx, wy)
         # Ambient occlusion — skip building-shell neighbors (no flat wall contact)
         if tile_id not in (wm.WALL,) and self.building_at_tile(wx, wy) is None:
             walls = self._wall_neighbors(wx, wy)
             if any(walls.values()):
                 ao_a = 95 if (self.dungeon or zone in ("dungeon", "volcano", "shadow_crypt")) else 68
                 sprites.draw_tile_wall_ao(self.screen, rect, walls, alpha=ao_a)
+
+    def _draw_headstone(self, rect, wx, wy):
+        """World-space grave marker. Drawn with the tile, not turned toward the camera."""
+        if not wm.is_grave(wx, wy):
+            return
+        w, h = rect.w, rect.h
+        sw = max(3, w // 4)
+        sh = max(4, int(h * (0.42 + ((wx + wy) % 3) * 0.08)))
+        sx = rect.x + (w - sw) // 2
+        sy = rect.y + max(1, h // 6)
+        pygame.draw.rect(self.screen, (158, 156, 148), (sx, sy, sw, sh))
+        pygame.draw.rect(self.screen, (96, 94, 88), (sx, sy, sw, sh), 1)
+        pygame.draw.rect(
+            self.screen, (120, 118, 110),
+            (sx - 1, sy + sh - 2, sw + 2, max(2, h // 8)),
+        )
 
     def _wall_neighbors(self, wx, wy):
         """True when adjacent tile is a real WALL (not a cottage building shell)."""
@@ -8848,82 +8916,6 @@ class GameClient(ScreensMixin, CameraYaw):
             py = cy - 8 - abs(_m.sin(ang * 1.3)) * 20 - u * 10
             col = (255, 240, 160) if i % 2 == 0 else (200, 230, 255)
             pygame.draw.circle(self.screen, col, (int(px), int(py)), max(1, 3 - int(u * 2)))
-
-    def draw_combat_quick_prompt(self, cx, top_y):
-        """Compact Eat / potion buttons above the player during combat."""
-        self.combat_quick_rects = {}
-        if not self.combat_quick or time.time() > float(getattr(self, "combat_quick_until", 0) or 0):
-            self.combat_quick = None
-            return
-        if self.combat_quick_collapsed:
-            chip = pygame.Rect(int(cx - 16), int(top_y - 16), 32, 14)
-            chip.x = max(4, min(chip.x, MAP_W - chip.w - 4))
-            chip.y = max(4, chip.y)
-            pygame.draw.rect(self.screen, (28, 36, 32), chip, border_radius=4)
-            pygame.draw.rect(self.screen, (120, 180, 120), chip, 1, border_radius=4)
-            label = self.font_tiny.render("Eat", True, WHITE)
-            self.screen.blit(label, (chip.centerx - label.get_width() // 2, chip.centery - label.get_height() // 2))
-            self.combat_quick_rects["expand"] = chip
-            return
-        # Refresh availability so used-up pots disappear
-        opts = self.combat_consumable_options()
-        order = ("food", "health", "attack", "strength", "defence")
-        labels = {
-            "food": "Eat",
-            "health": "HP",
-            "attack": "Att",
-            "strength": "Str",
-            "defence": "Def",
-        }
-        colors = {
-            "food": ((50, 110, 60), (120, 200, 120)),
-            "health": ((120, 50, 70), (220, 120, 150)),
-            "attack": ((90, 70, 40), (220, 180, 90)),
-            "strength": ((100, 45, 45), (230, 120, 100)),
-            "defence": ((40, 70, 110), (120, 170, 230)),
-        }
-        buttons = [k for k in order if opts.get(k)]
-        if not buttons:
-            self.combat_quick = None
-            return
-        self.combat_quick = {
-            "buttons": buttons,
-            "labels": {k: labels[k] for k in buttons},
-        }
-        btn_h = 16
-        pad = 3
-        # Measure widths
-        surfs = []
-        for k in buttons:
-            surfs.append((k, self.font_tiny.render(labels[k], True, WHITE)))
-        widths = [max(28, s.get_width() + 8) for _, s in surfs]
-        total_w = sum(widths) + pad * (len(widths) - 1) + 16  # + dismiss
-        x0 = int(cx - total_w // 2)
-        y0 = int(top_y - btn_h - 2)
-        # Keep on screen
-        x0 = max(4, min(x0, MAP_W - total_w - 4))
-        y0 = max(4, y0)
-
-        panel = pygame.Rect(x0 - 2, y0 - 2, total_w + 4, btn_h + 4)
-        pygame.draw.rect(self.screen, (18, 22, 30), panel, border_radius=4)
-        pygame.draw.rect(self.screen, (160, 140, 70), panel, 1, border_radius=4)
-
-        x = x0
-        for (k, surf), w in zip(surfs, widths):
-            r = pygame.Rect(x, y0, w, btn_h)
-            bg, edge = colors[k]
-            pygame.draw.rect(self.screen, bg, r, border_radius=3)
-            pygame.draw.rect(self.screen, edge, r, 1, border_radius=3)
-            self.screen.blit(surf, (r.centerx - surf.get_width() // 2, r.centery - surf.get_height() // 2))
-            self.combat_quick_rects[k] = r
-            x = r.right + pad
-
-        dismiss = pygame.Rect(x, y0, 14, btn_h)
-        pygame.draw.rect(self.screen, (70, 40, 40), dismiss, border_radius=3)
-        pygame.draw.rect(self.screen, (180, 90, 80), dismiss, 1, border_radius=3)
-        xt = self.font_tiny.render("×", True, WHITE)
-        self.screen.blit(xt, (dismiss.centerx - xt.get_width() // 2, dismiss.centery - xt.get_height() // 2))
-        self.combat_quick_rects["dismiss"] = dismiss
 
     def hp_tone(self, hp, max_hp):
         """Green above half, orange from half down to a quarter, red below that."""

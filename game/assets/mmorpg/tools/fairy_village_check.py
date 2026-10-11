@@ -43,10 +43,10 @@ MOVED = {
 STANDS = [(8, 86), (20, 85), (37, 65), (28, 66), (33, 80)]
 NPCS = [(24, 67), (25, 57), (39, 66), (31, 78)]
 RATS = [(34, 93), (37, 94), (40, 94), (35, 95), (39, 93), (33, 94)]
-MOUTH = [(53, 79), (54, 79), (55, 79), (53, 80), (54, 80), (55, 80)]
+MOUTH = [(63, 10), (64, 10), (65, 10), (63, 11), (64, 11), (65, 11)]
 BUILDINGS = [(4, 77, 12, 85), (16, 77, 25, 84), (34, 58, 40, 64)]
 # Crypt sprite: ~11 wide, ~10.5 north of the door, apron ~5 south.
-CRYPT = (54 - 5, 80 - 11, 54 + 5, 80 + 5)
+CRYPT = (64 - 5, 11 - 11, 64 + 5, 11 + 5)
 
 
 def _inside(x, y, rects) -> bool:
@@ -237,7 +237,7 @@ def check():
         print("2. no house, castle, or unmoved pin on a changed tile: PASS")
 
     reached = _bfs(live, wm.SPAWN_POINT)
-    goals = NPCS + STANDS + MOUTH + [(54, 81)] + RATS
+    goals = NPCS + STANDS + MOUTH + [(64, 12)] + RATS
     missing = [xy for xy in goals if xy not in reached]
     ores = [(x, y) for y in range(91, 98) for x in range(32, 43)
             if live[y][x] in (wm.ORE, wm.IRON_ORE)]
@@ -279,11 +279,11 @@ def check():
     else:
         print("fountains are WALL, not fishing water: PASS")
 
-    mouth = content.entrance_mouth_tiles(54, 80)
+    mouth = content.entrance_mouth_tiles(64, 11)
     if mouth != set(MOUTH):
         fails.append(f"mouth tiles {sorted(mouth)}")
     else:
-        print("dungeon mouth (53-55, 79-80): PASS")
+        print("dungeon mouth (63-65, 10-11): PASS")
 
     clan = asyncio.run(_clan_round())
     print(clan)

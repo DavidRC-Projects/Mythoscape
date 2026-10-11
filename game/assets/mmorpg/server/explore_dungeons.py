@@ -16,7 +16,9 @@ REGIONS = {
         "name": "The Depths",
         "label": "Dungeon",
         "x0": 44, "y0": 54, "x1": 90, "y1": 143,
-        "pad": (52, 79, 56, 83),
+        # Empty pad: the overworld mouth moved behind the bank.
+        # entrance stays the snapshot door inside this captured rect.
+        "pad": (0, 0, -1, -1),
         "entrance": (46, 71),
     },
     "sanctum": {

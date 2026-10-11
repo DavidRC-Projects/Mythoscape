@@ -229,16 +229,14 @@ def generate_world():
     _building(40, 4, 51, 15, door_x=45)
     # SW inn (Innkeeper Sarah)
     _building(4, 36, 15, 47, door_x=9)
-    # SE cottage (Farmer Tom)
-    _building(40, 36, 51, 47, door_x=45)
-    # Bank (east of crossroads)
-    _building(58, 18, 70, 28, door_x=64)
+    # SE cottage (Farmer Tom), four tiles west of the old plot
+    _building(36, 36, 47, 47, door_x=41)
+    # Bank sits on the old Outfitters plot. The v2 stamp fits the real bank on this shell.
+    _building(60, 37, 72, 47, door_x=66)
     # Smithy — large workshop
     _building(78, 4, 94, 18, door_x=86)
     # Pet Emporium
     _building(78, 36, 92, 48, door_x=85)
-    # Mythos Outfitters — open field south-east of the bank, door onto the road.
-    _building(60, 37, 72, 47, door_x=66)
 
     # Restore village roads (do not punch through walls)
     for x in range(vx0, min(vx1, 94) + 1):
@@ -249,7 +247,7 @@ def generate_world():
             grid[y][road_x] = PATH
     # 3-wide apron tiles outside village doors + wishing-well plaza
     door_aprons = (
-        (9, 16), (45, 16), (9, 48), (45, 48),
+        (9, 16), (45, 16), (9, 48), (41, 48),
         (64, 29), (86, 19), (85, 49), (66, 48),
     )
     for cx, cy in door_aprons:
@@ -432,15 +430,15 @@ def generate_world():
     for x in (176, 177, 178):
         grid[14][x] = PATH  # 3-wide shop door
 
-    # Tidehollow cave — south of the harbour, clear of the shops, room for the mound.
-    _rect(grid, 176, 30, 192, 40, GRASS)
-    for y in range(29, 39):
+    # Tidehollow cave — a little further south of the harbour, clear of the shops.
+    _rect(grid, 176, 38, 192, 48, GRASS)
+    for y in range(37, 47):
         if grid[y][184] != WATER:
             grid[y][184] = PATH
     for dx in (-1, 0, 1):
-        grid[36][184 + dx] = PATH
-        grid[35][184 + dx] = PATH
-    grid[36][184] = FLOOR
+        grid[44][184 + dx] = PATH
+        grid[43][184 + dx] = PATH
+    grid[44][184] = FLOOR
 
     # Harbour / bay on the east shore
     harbour = (184, 8, 197, 26)
@@ -589,6 +587,8 @@ def generate_world():
     _city_building(102, 74, 110, 82, door_x=106)
     # Barracks / armory east of square
     _city_building(130, 74, 138, 84, door_x=134)
+    # Same village bank, three tiles south of the barracks door line.
+    _city_building(135, 105, 145, 112, door_x=140)
     # 3-wide aprons south of city doors
     for cx, cy in ((106, 69), (106, 83), (134, 85)):
         for ox in (-1, 0, 1):
@@ -796,9 +796,10 @@ def generate_world():
 # Building footprints — keep in sync with content.BUILDINGS (avoid import cycle)
 _BUILDING_FOOTPRINTS = [
     # village
-    (4, 4, 15, 15), (40, 4, 51, 15), (4, 36, 15, 47), (40, 36, 51, 47),
-    (58, 18, 70, 28), (78, 4, 94, 18), (78, 36, 92, 48),
-    (60, 37, 72, 47),
+    (4, 4, 15, 15), (40, 4, 51, 15), (4, 36, 15, 47), (37, 38, 49, 47),
+    (60, 37, 72, 47), (78, 4, 94, 18), (78, 36, 92, 48),
+    (45, 54, 58, 64),
+    (135, 105, 145, 112),
     # harbour
     (172, 6, 182, 14), (172, 20, 182, 28),
     # city — tree clearing keeps the old keep rect. The v2 stamp already
@@ -808,11 +809,91 @@ _BUILDING_FOOTPRINTS = [
     (102, 60, 110, 68), (102, 74, 110, 82), (130, 74, 138, 84), (118, 58, 136, 70),
     # void sanctum entrance building
     (166, 102, 176, 108),
-    # tidehollow cave mouth (south of the harbour)
-    (176, 28, 192, 40),
+    # tidehollow cave mouth, south of Harbourreach
+    (186, 49, 194, 56),
     # emberdeep lair mouth
     (180, 78, 194, 90),
+    # crypt graveyard behind the bank, including the west approach
+    (52, 4, 74, 20),
 ]
+
+
+# Graveyard north of the village bank. Inclusive outer wall.
+# The bank footprint starts at y=21, so the yard fits without moving it.
+GRAVEYARD = (54, 4, 74, 18)
+GRAVEYARD_GATE = ((63, 18), (64, 18), (65, 18))
+CRYPT_MOUTH = (64, 11)
+GRAVEYARD_GRAVES = (
+    (56, 7), (56, 10), (56, 13), (56, 16),
+    (57, 8), (57, 15),
+    (71, 8), (71, 15),
+    (72, 7), (72, 10), (72, 13), (72, 16),
+)
+
+
+def is_graveyard_wall(x, y) -> bool:
+    x0, y0, x1, y1 = GRAVEYARD
+    ix, iy = int(x), int(y)
+    if not (x0 <= ix <= x1 and y0 <= iy <= y1):
+        return False
+    if (ix, iy) in GRAVEYARD_GATE:
+        return False
+    return ix in (x0, x1) or iy in (y0, y1)
+
+
+def is_grave(x, y) -> bool:
+    return (int(x), int(y)) in GRAVEYARD_GRAVES
+
+
+# Crater on the open ground south of the castle. The mouth is the tile the
+# player was standing on; the walk-up is the two tiles south of it.
+EMBERDEEP_MOUTH = (67, 78)
+EMBERDEEP_RETURN = (67, 80)
+
+
+def stamp_outfitters_shell(grid):
+    """King's Folly shell on the grass at (52, 64). Redrawn after the dungeon wipe."""
+    x0, y0, x1, y1, door_x = 45, 54, 58, 64, 52
+    _rect(grid, x0, y0, x1, y1, WALL)
+    _rect(grid, x0 + 1, y0 + 1, x1 - 1, y1 - 1, FLOOR)
+    for x in range(x0, x1 + 1):
+        grid[y1][x] = WALL
+    for x in range(door_x - 1, door_x + 2):
+        if x0 < x < x1:
+            grid[y1][x] = PATH
+    for x in range(x0 + 1, x1):
+        grid[y0][x] = GRASS
+
+
+def stamp_emberdeep_mouth(grid):
+    """Paint the volcano mouth after the dungeon field has been cleared to grass."""
+    mx, my = EMBERDEEP_MOUTH
+    for y in range(my, my + 3):
+        for x in range(mx - 1, mx + 2):
+            if 0 <= x < WIDTH and 0 <= y < HEIGHT and grid[y][x] != WATER:
+                grid[y][x] = PATH
+    grid[my][mx] = FLOOR
+
+
+def _stamp_crypt_graveyard(grid):
+    """Stone-walled yard behind the bank, with a south gate and a path to the road."""
+    x0, y0, x1, y1 = GRAVEYARD
+    _border(grid, x0, y0, x1, y1, WALL, skip=set(GRAVEYARD_GATE))
+    for x, y in GRAVEYARD_GATE:
+        grid[y][x] = PATH
+    mx, my = CRYPT_MOUTH
+    for y in range(my, y1 + 3):
+        for x in range(mx - 1, mx + 2):
+            if 0 <= x < WIDTH and 0 <= y < HEIGHT and grid[y][x] != WATER:
+                grid[y][x] = PATH
+    grid[my][mx] = FLOOR
+    # Along the north side of the bank (chests sit on y=19), then west to the road.
+    for x in range(52, mx + 3):
+        if grid[20][x] not in (WATER, WALL):
+            grid[20][x] = PATH
+    for y in range(20, 25):
+        if grid[y][52] not in (WATER, WALL):
+            grid[y][52] = PATH
 
 
 def _clear_trees_near_buildings(grid, margin=2, canopy_south=4):
@@ -876,6 +957,7 @@ def _lay_wayfinder_roads(grid):
         (170, 15, 178, 15),
         (166, 16, 166, 36),
         (166, 36, 184, 36),
+        (184, 36, 184, 44),
         # Mine's east side, down to the dungeon mouth.
         (42, 52, 42, 72),
         (36, 71, 42, 71),
@@ -907,6 +989,13 @@ def _lay_wayfinder_roads(grid):
         for x in (185, 186, 187):
             if grid[y][x] != WATER:
                 grid[y][x] = PATH
+    # Tidehollow mouth on the grass where the player stood.
+    for y in range(52, 55):
+        for x in range(188, 191):
+            if grid[y][x] != WATER:
+                grid[y][x] = PATH
+    grid[52][189] = FLOOR
+    _stamp_crypt_graveyard(grid)
 
 
 def _paint_void_grounds(grid):

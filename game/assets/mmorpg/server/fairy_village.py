@@ -23,9 +23,9 @@ FAIRY_NPCS = {
     "pip_dewdrop",
 }
 
-# Overworld crypt mouth. The interior door stays at (46, 71).
-CRYPT_ENTRANCE = (54, 80)
-CRYPT_PAD = (52, 79, 56, 83)
+# Overworld crypt mouth, in the graveyard behind the bank.
+# The interior door stays at (46, 71).
+CRYPT_ENTRANCE = (64, 11)
 
 _FENCE = None
 
@@ -110,22 +110,18 @@ def is_fence(x, y):
 
 
 def lay_crypt_path(grid):
-    """Walkway from the glade to the crypt. Runs after the dungeon interior is saved."""
+    """Walkway out of the glade. The crypt now stands behind the bank."""
     import world_map as wm
 
     height = len(grid)
     width = len(grid[0]) if height else 0
-    x0, y0, x1, y1 = CRYPT_PAD
 
     def put(x, y):
         if 0 <= x < width and 0 <= y < height and not is_fence(x, y):
             grid[y][x] = wm.PATH
 
     for y in (81, 82, 83):
-        for x in range(30, x1 + 1):
-            put(x, y)
-    for y in range(y0, y1 + 1):
-        for x in range(x0, x1 + 1):
+        for x in range(30, 49):
             put(x, y)
 
 

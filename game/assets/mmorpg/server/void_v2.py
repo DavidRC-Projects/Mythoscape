@@ -939,7 +939,10 @@ def process_ai(session):
         elif dist > 1:
             step_toward(m, session.x, session.y)
     if closest is not None:
-        session.in_combat_with = ("monster", closest)
+        import time
+        fleeing = time.time() < float(getattr(session, "combat_flee_until", 0) or 0)
+        if not fleeing:
+            session.in_combat_with = ("monster", closest)
     elif session.in_combat_with and session.in_combat_with[0] == "monster":
         current = d["monsters"].get(session.in_combat_with[1])
         if current is None or not current.alive or current.id not in active:

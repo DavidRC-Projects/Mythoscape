@@ -20,7 +20,9 @@ _LEGS = {
     "magma_knight": "biped",
 }
 _PACK = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "emberdeep_v2_pack"))
-_APRON = (176, 58, 198, 94)  # inclusive world tiles
+# The crater picture sits on the Emberdeep mouth. The bright core of
+# mountain_topdown.png lands on tile (67, 78).
+_APRON = (48, 67, 84, 103)  # inclusive world tiles
 _IMAGES = {}
 _SCALED = {}
 _TEX_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "emberdeep_hd", "textures"))
@@ -31,6 +33,7 @@ _RENDER_MS = []
 _INTERNAL_SCALE = 0.42
 _PRESETS = (0.0, 0.5, 1.0)
 _PRESET_NAMES = ("Near", "Mid", "Far")
+_DEFAULT_ZOOM = _PRESETS[-1]
 
 
 def _map_size():
@@ -113,18 +116,21 @@ def blit_backdrop(client):
 
 
 def zoom_level(client):
-    z = float(getattr(client, "ember_zoom", 0.35) or 0.0)
+    z = float(getattr(client, "ember_zoom", _DEFAULT_ZOOM) or 0.0)
     return min(range(len(_PRESETS)), key=lambda i: abs(_PRESETS[i] - z))
 
 
 def adjust_zoom(client, delta):
-    """delta < 0 zooms out (raises the camera)."""
+    """delta < 0 zooms out (raises the camera). One notch per frame."""
     import time
-    current = getattr(client, "ember_zoom", 0.35)
+    if not delta or getattr(client, "_ember_zoom_latched", False):
+        return
+    client._ember_zoom_latched = True
+    current = getattr(client, "ember_zoom", _DEFAULT_ZOOM)
     if not isinstance(current, float):
         current = _PRESETS[max(0, min(2, int(current or 0)))]
-    target = max(0.0, min(1.0, float(current) - float(delta) * 0.10))
-    client.ember_zoom = target
+    step = -0.08 if float(delta) > 0 else 0.08
+    client.ember_zoom = max(0.0, min(1.0, float(current) + step))
     client._zoom_toast_until = time.time() + 1.2
 
 
@@ -192,6 +198,8 @@ def _in_emberdeep(client):
 
 # One key press turns the view this far. The drawn yaw eases toward it.
 _YAW_STEP = math.radians(15)
+# How long one dungeon step takes. The camera covers that tile in the same time.
+STEP_SECONDS = 0.16
 
 
 def _look_vector(face):
@@ -330,26 +338,6 @@ def _face_from_vector(lx, ly):
     return "back" if ly < 0 else "front"
 
 
-def _draw_tile_highlight(view, ex, ey, lx, ly, rx, ry, tile_x, tile_y, rw, rh, mw, mh, color, thickness=2):
-    """Outline a floor tile using the follow camera."""
-    cam = _VIEW
-    if cam is None:
-        return
-    screen_pts = []
-    scale_x = mw / float(getattr(cam, "_last", (rw, rh))[0] or rw)
-    scale_y = mh / float(getattr(cam, "_last", (rw, rh))[1] or rh)
-    for cx, cy in ((tile_x, tile_y), (tile_x + 1, tile_y), (tile_x + 1, tile_y + 1), (tile_x, tile_y + 1)):
-        hit = cam.project(cx, cy, 0.02)
-        if hit is None:
-            return
-        _depth, sx, sy, _px = hit
-        screen_pts.append((int(sx * scale_x), int(sy * scale_y)))
-    for i in range(4):
-        p1 = screen_pts[i]
-        p2 = screen_pts[(i + 1) % 4]
-        pygame.draw.line(view, color, p1, p2, thickness)
-
-
 def fp_active(client):
     return _in_emberdeep(client)
 
@@ -360,7 +348,7 @@ def turn(client, direction):
     if now < getattr(client, "_ember_turn_at", 0.0):
         return
     client._ember_yaw = getattr(client, "_ember_yaw", 0.0) + direction * _YAW_STEP
-    client._ember_turn_at = now + 0.16
+    client._ember_turn_at = now + 0.08
 
 
 def step_delta(client, forward):
@@ -444,28 +432,45 @@ def _ensure_view(client):
 
 def _ease_follow(client, pose, now):
     """Smooth focus, yaw and zoom. Returns focus, drawn yaw, zoom and dt."""
-    current = getattr(client, "ember_zoom", 0.35)
+    current = getattr(client, "ember_zoom", _DEFAULT_ZOOM)
     if not isinstance(current, float):
-        current = 0.35
+        current = _DEFAULT_ZOOM
     client.ember_zoom = max(0.0, min(1.0, float(current)))
     prev = float(getattr(client, "_ember_cam_t", now) or now)
     dt = max(0.0, min(0.1, now - prev))
     client._ember_cam_t = now
     zoom = float(getattr(client, "_ember_zoom_cur", client.ember_zoom))
     zoom += (client.ember_zoom - zoom) * (1 - math.exp(-dt * 10.0))
-    want_x, want_y = pose["x"] + 0.5, pose["y"] + 0.5
+    tile = (int(pose["x"]), int(pose["y"]))
+    if getattr(client, "_ember_step_tile", None) != tile:
+        client._ember_step_from = getattr(client, "_ember_step_tile", None) or tile
+        client._ember_step_tile = tile
+        client._ember_step_t = now
+    origin = getattr(client, "_ember_step_from", None) or tile
+    frac = 1.0
+    if max(abs(tile[0] - origin[0]), abs(tile[1] - origin[1])) > 1:
+        origin = tile
+        client._ember_step_from = tile
+    elif origin != tile:
+        elapsed = now - float(getattr(client, "_ember_step_t", now) or now)
+        frac = max(0.0, min(1.0, elapsed / STEP_SECONDS))
+    bx = origin[0] + 0.5 + (tile[0] - origin[0]) * frac
+    by = origin[1] + 0.5 + (tile[1] - origin[1]) * frac
+    client._ember_body = (bx, by)
+    off_x = off_y = 0.0
     foe = (getattr(client, "monsters", None) or {}).get(getattr(client, "combat_target_id", None))
     if foe and foe.get("alive", True):
         if max(abs(foe["x"] - pose["x"]), abs(foe["y"] - pose["y"])) <= 3:
-            want_x = want_x * 0.65 + (foe["x"] + 0.5) * 0.35
-            want_y = want_y * 0.65 + (foe["y"] + 0.5) * 0.35
+            off_x = ((foe["x"] + 0.5) - bx) * 0.35
+            off_y = ((foe["y"] + 0.5) - by) * 0.35
             zoom = max(zoom, 0.25)
     client._ember_zoom_cur = zoom
-    fx, fy = want_x, want_y
-    ox, oy = getattr(client, "_ember_focus", (fx, fy))
     kf = 1 - math.exp(-dt / 0.12) if dt else 1.0
-    fx = ox + (fx - ox) * kf
-    fy = oy + (fy - oy) * kf
+    ox, oy = getattr(client, "_ember_combat_off", (0.0, 0.0))
+    ox += (off_x - ox) * kf
+    oy += (off_y - oy) * kf
+    client._ember_combat_off = (ox, oy)
+    fx, fy = bx + ox, by + oy
     client._ember_focus = (fx, fy)
     target = float(getattr(client, "_ember_yaw", 0.0))
     yaw = float(getattr(client, "_ember_yaw_draw", target))
@@ -758,6 +763,8 @@ def _target_point(client, target):
 def _combat_facing(client, pose, sx, tile_px, player_depth):
     """Face the live target on the dominant screen axis: side, front, or back."""
     del sx, player_depth
+    if client._leaving_fight():
+        return pose["face"]
     target = (client.monsters or {}).get(getattr(client, "combat_target_id", None))
     if not target or not target.get("alive", True):
         return pose["face"]
@@ -819,7 +826,7 @@ def _draw_local_player(client, pose, sx, sy, tile_px, t, player_depth=1.0):
         # Progress is exactly 0 on the first beat, while the swing is still in attack_anims.
         pid = p.get("id")
         in_swing = pose["atk"] > 0 or pid in client.attack_anims or str(pid) in client.attack_anims
-        attacking = in_swing and not pose["action"]
+        attacking = in_swing and not pose["action"] and not client._leaving_fight()
         if attacking:
             anim = "ranged" if ranged else "melee"
         else:
@@ -1081,11 +1088,6 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
         pid = pose.get("key", (None, None))[1]
         anchors[("p", pid)] = (sx, sy, tile_px)
         anchors[("p", str(pid))] = (sx, sy, tile_px)
-        p = client.player or {}
-        import player_hd_client
-        head = (player_hd_client.last_draw or {}).get("head_top")
-        bar_y = sy + int(head[1]) - 8 if head else sy - tile_px - 8
-        client.draw_hp_bar(sx, bar_y, p.get("hp", 1), p.get("max_hp", 1), show_value=True)
     _draw_projectiles(client, ex, ey, lx, ly, rx, ry, rw, rh, mw, mh)
     _draw_hitsplats(client, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, mh)
     prev = dict(getattr(client, "_prev_entity_pos", {}) or {})
@@ -1145,13 +1147,15 @@ def _draw_wyrm_billboard(client, monster, sx, sy, tile_px, now, moving, atk, fla
     _occlude_sprite(client, rect.centerx, rect.bottom, rect.w, rect.h, depth)
     client._ember_sprite_hits.append((rect, (int(monster["x"]), int(monster["y"]))))
     label = tile_px * 3.0
-    anchors = getattr(client, "_ember_screen_anchor", None)
-    if isinstance(anchors, dict):
-        anchors[("m", monster["id"])] = (sx, sy, label)
-        anchors[("m", str(monster["id"]))] = (sx, sy, label)
     bar_y = max(22, min(mh - 28, sy - label - 6))
     if player_screen is not None:
         bar_y = _wyrm_bar_y(bar_y, sx, player_screen[0], player_screen[1], player_screen[2], show)
+    # The body is taller than the view, so the star sits on the chest under the bar.
+    star_y = min(mh - 48, max(56, int(bar_y) + 40))
+    anchors = getattr(client, "_ember_screen_anchor", None)
+    if isinstance(anchors, dict):
+        anchors[("m", monster["id"])] = (sx, star_y + 28, 12)
+        anchors[("m", str(monster["id"]))] = (sx, star_y + 28, 12)
     client.draw_hp_bar(sx, bar_y, monster["hp"], monster["max_hp"])
     if show:
         client.blit_nameplate(monster["name"], sx, bar_y - 14)
@@ -1235,6 +1239,15 @@ def _draw_ember_corpses(client, now, rw, rh, mw, mh):
     client.ember_corpses = keep
 
 
+def _standing_in_lair(x, y):
+    """True on the wyrm's floor. The door threshold does not count."""
+    import emberdeep_creatures
+    lair = (emberdeep_creatures.manifest().get("boss") or {}).get("lair") or {}
+    if not lair:
+        return False
+    return lair["x0"] <= int(x) <= lair["x1"] and lair["y0"] <= int(y) <= lair["y1"]
+
+
 def _draw_breath(client, now, rw, rh, mw, mh):
     cone = getattr(client, "ember_cone", None) or {}
     t0 = cone.get("t0")
@@ -1278,7 +1291,8 @@ def _draw_breath(client, now, rw, rh, mw, mh):
             wyrm = monster
     p = client.player or {}
     src = dst = None
-    if wyrm and p:
+    # The beam stays on the lair floor until the player steps inside.
+    if wyrm and p and _standing_in_lair(p.get("x", -1), p.get("y", -1)):
         src = _project(0, 0, 0, 0, 0, 0, wyrm["x"] + 0.5, wyrm["y"] + 0.5, None, rw, rh, mw, mh)
         dst = _project(0, 0, 0, 0, 0, 0, p.get("x", 0) + 0.5, p.get("y", 0) + 0.5, None, rw, rh, mw, mh)
     if src and dst:
@@ -1422,8 +1436,10 @@ def _draw_hitsplats(client, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, mh):
         age_left = floater["expire"] - now
         lift = int((1.0 - min(1.0, age_left / 1.3)) * 22)
         py = sy - max(28, int(tile_px) + 16) - lift
+        py = max(28, min(mh - 28, py))
+        sx = max(24, min(mw - 24, int(sx)))
         kind = floater.get("kind")
-        if kind in ("hit_red", "hit_green", "hit_blue", "hit_miss", "hit_crit", "hit_thorns"):
+        if kind in ("hit_red", "hit_green", "hit_blue", "hit_miss", "hit_crit", "hit_thorns", "hit_zero", "hit_dodge"):
             client.draw_hit_star(sx, py, floater["text"], floater["color"], kind=kind)
         elif kind == "level_up":
             client.draw_level_up_floater(sx, py - 18, floater["text"], floater["color"], age_left)
@@ -1554,6 +1570,7 @@ def draw_first_person(client):
         return False
     now = time.time()
     fx, fy, yaw, zoom, dt = _ease_follow(client, pose, now)
+    pose["draw_x"], pose["draw_y"] = getattr(client, "_ember_body", (fx, fy))
     view.set_camera(fx, fy, yaw, zoom)
     view.ease(dt)
     mw, mh = _map_size()
@@ -1564,17 +1581,6 @@ def draw_first_person(client):
     scaled = pygame.transform.smoothscale(surf, (mw, mh))
     client.screen.blit(scaled, (ox, oy))
     client._ember_render = (rw, rh)
-    px, py = int(pose["x"]), int(pose["y"])
-    _draw_tile_highlight(client.screen, ex, ey, lx, ly, rx, ry, px, py, rw, rh, mw, mh, (180, 200, 120), 2)
-    if abs(lx) >= abs(ly):
-        next_dx, next_dy = (1 if lx > 0 else -1), 0
-    else:
-        next_dx, next_dy = 0, (1 if ly > 0 else -1)
-    next_x, next_y = px + next_dx, py + next_dy
-    if _tile_at(tiles, next_x, next_y) == wm.FLOOR:
-        _draw_tile_highlight(
-            client.screen, ex, ey, lx, ly, rx, ry, next_x, next_y, rw, rh, mw, mh, (150, 170, 100), 1,
-        )
     _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, None, rw, rh, mw, mh)
     draw_zoom_controls(client)
     return True
