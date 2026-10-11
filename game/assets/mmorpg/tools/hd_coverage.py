@@ -25,10 +25,6 @@ NAMED_EXCLUDED = {
     "skeleton",
     "spider",
     "dragon",
-    "magma_slug",
-    "ash_imp",
-    "ember_wolf",
-    "crucible_beast",
 }
 
 
@@ -194,6 +190,12 @@ def main() -> int:
     legacy = _string_set(CLIENT / "legacy_creature_sprites.py", "_MONSTER_PREVIEW")
     strips = _string_set(CLIENT / "anim_strip_sprites.py", "TYPE_MAP")
     drawers = _drawer_keys(ASSETS / "characters" / "procedural_sprites_finished.py")
+    ember_custom = (
+        _string_set(CLIENT / "emberdeep_v2_client.py", "_LEGS")
+        |         _string_set(CLIENT / "emberdeep_creatures_client.py", "_BODY")
+        | _string_set(CLIENT / "emberdeep_creatures_client.py", "_CAP")
+        | _string_set(CLIENT / "emberdeep_creatures_client.py", "_POSES")
+    )
     wyrm_drawn = _source_has(CLIENT / "emberdeep_creatures_client.py", "def draw_wyrm") and _source_has(
         CLIENT / "emberdeep_v2_client.py", "draw_wyrm"
     )
@@ -218,6 +220,8 @@ def main() -> int:
         if entity_id == "morvath" and _source_has(CLIENT / "depths_v2_client.py", "def draw_bone_crown"):
             custom = True
         if entity_id == "nyxarath" and _source_has(CLIENT / "void_v2_client.py", "def tint_and_halo"):
+            custom = True
+        if entity_id in monsters_hd and entity_id in ember_custom:
             custom = True
         old = "yes" if (
             entity_id in legacy or entity_id in strips or entity_id in drawers or visual or custom
