@@ -3262,6 +3262,8 @@ class GameClient(ScreensMixin, CameraYaw):
             return None
         import emberdeep_v2_client
         picked = emberdeep_v2_client.pick_tile(self, mx, my)
+        if picked is False or (emberdeep_v2_client.fp_active(self) and picked is None):
+            return None
         if picked is not None:
             return picked
         if mx < 0 or my < 0 or mx >= MAP_W or my >= MAP_H:

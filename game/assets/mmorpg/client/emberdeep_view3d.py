@@ -390,8 +390,22 @@ class EmberView3D:
             return None, (x0, y0)
         return depth[y0:y1, x0:x1] < (z - 0.35), (x0, y0)
 
-    def pick(self, sx, sy):
-        """Render-pixel -> floor tile under it (walls resolve to the floor tile in front)."""
+    def pick(self, sx, sy, basis=None):
+        """Render-pixel -> floor tile under it (walls resolve to the floor tile in front).
+
+        basis is the (cam, f, r, u) that produced the cached depth buffer.
+        """
+        saved = None
+        if basis is not None:
+            saved = (self.cam, self.f, self.r, self.u)
+            self.cam, self.f, self.r, self.u = basis
+        try:
+            return self._pick_floor(sx, sy)
+        finally:
+            if saved is not None:
+                self.cam, self.f, self.r, self.u = saved
+
+    def _pick_floor(self, sx, sy):
         rw, rh, tan_h, tan_v, depth = self._last
         x = (sx + 0.5) / rw * 2 - 1
         y = 1 - (sy + 0.5) / rh * 2

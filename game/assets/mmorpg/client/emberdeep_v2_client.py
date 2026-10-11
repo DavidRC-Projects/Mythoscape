@@ -612,6 +612,7 @@ def _render_cached(view, mw, mh, now, fx, fy, yaw, zoom):
     _FRAME["state"] = (fx, fy, yaw, zoom, now)
     _FRAME["rw"] = rw
     _FRAME["rh"] = rh
+    _FRAME["basis"] = (view.cam.copy(), view.f.copy(), view.r.copy(), view.u.copy())
     return surf, rw, rh
 
 
@@ -1693,12 +1694,16 @@ def _sprite_hit(mx, my, sx, sy, tile_px):
 
 
 def pick_tile(client, mx, my):
-    """Map a follow-view click onto a dungeon tile. None keeps the top-down picker."""
+    """Map a follow-view click onto a dungeon tile.
+
+    None means this view is not Emberdeep. False means the cursor is on
+    the Emberdeep view and there is no floor under it.
+    """
     if not _in_emberdeep(client):
         return None
     mw, mh = _map_size()
     if mx < 0 or my < 0 or mx >= mw or my >= mh:
-        return None
+        return False
     box = getattr(client, "_ember_map_rect", None)
     if box is not None and box.collidepoint(mx, my):
         return int(client.player["x"]), int(client.player["y"])
@@ -1707,20 +1712,30 @@ def pick_tile(client, mx, my):
             return tile
     tiles, _pose, ex, ey, lx, ly, rx, ry = _view(client)
     if not tiles:
-        return None
+        return False
     rw, rh = (getattr(client, "_ember_render", None) or (max(160, mw // 2), max(120, mh // 2)))
     best = None
     best_d = 1e9
+    import time
+    now = time.time()
     for mon in (client.monsters or {}).values():
         if not mon.get("alive", True):
             continue
-        wx, wy = _sprite_world(mon)
+        if mon.get("type") == "emberdeep_wyrm":
+            wx, wy, _moving = _wyrm_glide(client, mon, now)
+        else:
+            wx, wy = mon["x"] + 0.5, mon["y"] + 0.5
         proj = _project(ex, ey, lx, ly, rx, ry, wx, wy, None, rw, rh, mw, mh)
         if proj is None:
             continue
         along, sx, sy, tile_px = proj
-        height = _hd_body_height(mon["type"], tile_px)
-        hit = pygame.Rect(sx - height / 2, sy - height, height, height).collidepoint(mx, my)
+        if mon.get("type") == "emberdeep_wyrm":
+            import emberdeep_creatures_client
+            width, height, feet_x, feet_y = emberdeep_creatures_client.wyrm_canvas(tile_px)
+            hit = pygame.Rect(sx - feet_x, sy - feet_y, width, height).collidepoint(mx, my)
+        else:
+            height = _hd_body_height(mon["type"], tile_px)
+            hit = pygame.Rect(sx - height / 2, sy - height, height, height).collidepoint(mx, my)
         if hit and along < best_d:
             best = (int(mon["x"]), int(mon["y"]))
             best_d = along
@@ -1729,5 +1744,8 @@ def pick_tile(client, mx, my):
     cam = _VIEW
     rw, rh = (getattr(client, "_ember_render", None) or (mw, mh))[:2]
     if cam is None or not hasattr(cam, "_last"):
-        return int(client.player["x"]), int(client.player["y"])
-    return cam.pick(mx * rw / float(mw), my * rh / float(mh))
+        return False
+    picked = cam.pick(mx * rw / float(mw), my * rh / float(mh), basis=_FRAME.get("basis"))
+    if picked is None:
+        return False
+    return picked
