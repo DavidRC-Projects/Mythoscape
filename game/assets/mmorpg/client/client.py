@@ -625,6 +625,15 @@ class GameClient(ScreensMixin, CameraYaw):
         elif t == "PLAYER_UPDATE":
             prev_boosts = (self.player or {}).get("stat_boosts") or {}
             self.player = msg["player"]
+            pet = (self.player or {}).get("pet")
+            if pet:
+                owner = pet.get("owner_id")
+                self.pets = [pet if p.get("owner_id") == owner else p for p in self.pets]
+                if not any(p.get("owner_id") == owner for p in self.pets):
+                    self.pets.append(pet)
+            elif self.player and not self.player.get("pet_id"):
+                owner = self.player.get("id")
+                self.pets = [p for p in self.pets if p.get("owner_id") != owner]
             if self.player and self.player.get("appearance_saved"):
                 self.needs_appearance = False
             prompt = self.stair_prompt
@@ -5928,12 +5937,34 @@ class GameClient(ScreensMixin, CameraYaw):
         # Pets
         for pet in self.pets:
             sx, sy = self.world_to_view_offset(pet["x"], pet["y"], cam_x, cam_y)
+            glide = getattr(self, "_pet_glide", None)
+            if glide is None:
+                self._pet_glide = {}
+                glide = self._pet_glide
+            gkey = pet.get("owner_id")
+            goal = (int(pet["x"]), int(pet["y"]))
+            now_g = time.time()
+            state = glide.get(gkey)
+            ox = oy = 0.0
+            if state is None or max(abs(goal[0] - state["x"]), abs(goal[1] - state["y"])) > 2:
+                glide[gkey] = {"x": goal[0], "y": goal[1], "ox": 0.0, "oy": 0.0, "t": now_g}
+            else:
+                if (state["x"], state["y"]) != goal:
+                    old_sx, old_sy = self.world_to_view_offset(state["x"], state["y"], cam_x, cam_y)
+                    elapsed = min(1.0, max(0.0, (now_g - state["t"]) / 0.2))
+                    state["ox"] = (old_sx - sx) * TILE + state["ox"] * (1.0 - elapsed)
+                    state["oy"] = (old_sy - sy) * TILE + state["oy"] * (1.0 - elapsed)
+                    state["x"], state["y"] = goal
+                    state["t"] = now_g
+                elapsed = min(1.0, max(0.0, (now_g - state["t"]) / 0.2))
+                ox = state["ox"] * (1.0 - elapsed)
+                oy = state["oy"] * (1.0 - elapsed)
             if 0 <= sx <= vis_w and 0 <= sy <= vis_h:
                 if self.entity_hidden_by_roof(pet["x"], pet["y"]):
                     owner_id = pet.get("owner_id")
                     if not (self.player and owner_id == self.player["id"] and self.player_inside_any_building()):
                         continue
-                cx, cy = sx * TILE + TILE // 2, sy * TILE + TILE // 2
+                cx, cy = sx * TILE + TILE // 2 + ox, sy * TILE + TILE // 2 + oy
                 hurt = pet["hp"] < pet["max_hp"]
                 atk = self._attack_progress(f"pet:{pet.get('owner_id')}", t)
                 mine = self.player and pet.get("owner_id") == self.player["id"]

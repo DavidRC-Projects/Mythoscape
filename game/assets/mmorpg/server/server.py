@@ -2006,6 +2006,7 @@ async def _handle_move_body(session, msg):
             return
         kind = str((step or {}).get("kind") or "")
         if step and kind.startswith("stair_") and feature_flags.USE_CASTLE_INTERIORS_V2:
+            _pet_keep_up(session, dx, dy)
             await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
             await _send_stair_prompt(session)
             return
@@ -2015,6 +2016,8 @@ async def _handle_move_body(session, msg):
             await send(session.ws, "REALM_PLANE", **castle_realm.payload(session))
             import castle_owners
             await castle_owners.send_state(session)
+        else:
+            _pet_keep_up(session, dx, dy)
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
         return
     if session.dungeon:
@@ -2036,6 +2039,7 @@ async def _handle_move_body(session, msg):
             await handle_leave_dungeon(session)
             return
         _save_dungeon_resume(session)
+        _pet_keep_up(session, dx, dy)
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
         return
     if not is_walkable(WORLD.grid, nx, ny):
@@ -2051,6 +2055,7 @@ async def _handle_move_body(session, msg):
     if feature_flags.USE_PLAYER_HOUSING:
         await _housing.on_step(session)
     await vacuum_ground_loot(session)
+    _pet_keep_up(session, dx, dy)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     # Walking into a dungeon mouth enters it — same as clicking the entrance.
     spot, dungeon_id = _find_dungeon_entrance(session)
@@ -5996,35 +6001,41 @@ def _pet_walkable(session, nx, ny):
     return is_walkable(WORLD.grid, nx, ny)
 
 
-def _pet_preferred_tiles(session):
-    """Free neighbours: behind the player, then beside, else south, west, east, north."""
+def _pet_ring(session, distance):
+    """Free tiles at this Chebyshev distance. Behind the player comes first."""
     px, py = int(session.x), int(session.y)
     last = getattr(session, "last_step", None)
     order = []
     if last in ((0, 1), (0, -1), (1, 0), (-1, 0)):
-        behind = (-int(last[0]), -int(last[1]))
-        order.append(behind)
-        if behind[0] == 0:
-            order.extend(((1, 0), (-1, 0)))
+        bx, by = -int(last[0]) * distance, -int(last[1]) * distance
+        order.append((bx, by))
+        if bx == 0:
+            order.extend(((1, by), (-1, by), (distance, 0), (-distance, 0)))
         else:
-            order.extend(((0, 1), (0, -1)))
-    order.extend(((0, 1), (-1, 0), (1, 0), (0, -1)))
+            order.extend(((bx, 1), (bx, -1), (0, distance), (0, -distance)))
+    order.extend(((0, distance), (-distance, 0), (distance, 0), (0, -distance)))
+    for dy in range(-distance, distance + 1):
+        for dx in range(-distance, distance + 1):
+            if max(abs(dx), abs(dy)) == distance:
+                order.append((dx, dy))
     free = []
     seen = set()
     for dx, dy in order:
         cell = (px + dx, py + dy)
-        if cell in seen:
+        if cell in seen or cell == (px, py):
             continue
         seen.add(cell)
         if _pet_walkable(session, cell[0], cell[1]):
             free.append(cell)
+    return free
+
+
+def _pet_preferred_tiles(session):
+    """Two tiles away: behind, then beside. One tile only if that ring is blocked."""
+    free = _pet_ring(session, 2)
     if free:
         return free
-    for dx, dy in ((1, 1), (1, -1), (-1, 1), (-1, -1)):
-        cell = (px + dx, py + dy)
-        if cell not in seen and _pet_walkable(session, cell[0], cell[1]):
-            free.append(cell)
-    return free
+    return _pet_ring(session, 1)
 
 
 def _pet_face_owner(session):
@@ -6040,12 +6051,9 @@ def _pet_face_owner(session):
         session.pet_facing = getattr(session, "pet_facing", None) or "s"
 
 
-def _park_pet(session):
-    """If the pet shares the player's tile, move it to a free neighbour."""
+def _pet_reappear(session):
+    """Place the pet two tiles away. Used when it must skip the walk."""
     if not getattr(session, "pet_id", None):
-        return
-    if (int(session.pet_x), int(session.pet_y)) != (int(session.x), int(session.y)):
-        _pet_face_owner(session)
         return
     free = _pet_preferred_tiles(session)
     if free:
@@ -6053,13 +6061,22 @@ def _park_pet(session):
     _pet_face_owner(session)
 
 
+def _park_pet(session):
+    """If the pet shares the player's tile, reappear two tiles away."""
+    if not getattr(session, "pet_id", None):
+        return
+    if (int(session.pet_x), int(session.pet_y)) != (int(session.x), int(session.y)):
+        _pet_face_owner(session)
+        return
+    _pet_reappear(session)
+
+
 def _bring_pet(session):
-    """After a teleport or summon, stand the pet beside the player."""
+    """After a teleport or summon, reappear two tiles away."""
     if not getattr(session, "pet_id", None):
         return
     session.pet_target_id = None
-    session.pet_x, session.pet_y = session.x, session.y
-    _park_pet(session)
+    _pet_reappear(session)
 
 
 def _pet_step_toward(session, tx, ty, avoid=None):
@@ -6080,6 +6097,40 @@ def _pet_step_toward(session, tx, ty, avoid=None):
         return
     options.sort(key=lambda p: max(abs(p[0] - tx), abs(p[1] - ty)))
     session.pet_x, session.pet_y = options[0]
+
+
+def _pet_keep_up(session, dx=0, dy=0):
+    """One follow step. The pet walks toward two tiles away, and only snaps there when far."""
+    if dx or dy:
+        if abs(dx) >= abs(dy) and dx:
+            session.last_step = (1 if dx > 0 else -1, 0)
+        elif dy:
+            session.last_step = (0, 1 if dy > 0 else -1)
+    if not getattr(session, "pet_id", None) or session.pet_id not in PETS:
+        return
+    if session.pet_target_id:
+        return
+    owner = (session.x, session.y)
+    dist = max(abs(session.pet_x - session.x), abs(session.pet_y - session.y))
+    if dist > 10 or (session.pet_x, session.pet_y) == owner:
+        _pet_reappear(session)
+        return
+    if dist == 2:
+        _pet_face_owner(session)
+        return
+    free = _pet_preferred_tiles(session)
+    if not free:
+        return
+    if dist < 2:
+        goal = free[0]
+    else:
+        goal = min(free, key=lambda c: max(abs(c[0] - session.pet_x), abs(c[1] - session.pet_y)))
+    if (session.pet_x, session.pet_y) != goal:
+        _pet_step_toward(session, goal[0], goal[1], avoid=owner)
+    if (session.pet_x, session.pet_y) == owner:
+        _pet_reappear(session)
+    else:
+        _pet_face_owner(session)
 
 
 def _pet_note_player_step(session):
@@ -6107,11 +6158,7 @@ def process_pets(events):
 
         player_moving = _pet_note_player_step(session)
         if max(abs(session.pet_x - session.x), abs(session.pet_y - session.y)) > 10:
-            free = _pet_preferred_tiles(session)
-            if free:
-                session.pet_x, session.pet_y = free[0]
-            else:
-                _park_pet(session)
+            _pet_reappear(session)
 
         dungeon_tag = session.player_id if session.dungeon else None
 
@@ -6180,15 +6227,10 @@ def process_pets(events):
 
         owner = (session.x, session.y)
         dist = max(abs(session.pet_x - session.x), abs(session.pet_y - session.y))
-        if (session.pet_x, session.pet_y) == owner:
-            _park_pet(session)
-        elif dist > 1:
-            free = _pet_preferred_tiles(session)
-            if free:
-                goal = min(free, key=lambda c: max(abs(c[0] - session.pet_x), abs(c[1] - session.pet_y)))
-                _pet_step_toward(session, goal[0], goal[1], avoid=owner)
-            if (session.pet_x, session.pet_y) == owner:
-                _park_pet(session)
+        if (session.pet_x, session.pet_y) == owner or dist > 10:
+            _pet_reappear(session)
+        elif dist != 2:
+            _pet_keep_up(session)
         elif not player_moving:
             free = _pet_preferred_tiles(session)
             if free and (session.pet_x, session.pet_y) != free[0]:
