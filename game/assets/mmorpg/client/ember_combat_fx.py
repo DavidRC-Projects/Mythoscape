@@ -59,15 +59,7 @@ def shake_offset(client, now):
 
 
 def flash_surface(surface, strength):
-    if strength <= 0.01:
-        return surface
-    tinted = surface.copy()
-    gain = strength / 0.6
-    tinted.fill(
-        (int(110 * gain), int(40 * gain), int(30 * gain)),
-        special_flags=pygame.BLEND_RGB_ADD,
-    )
-    return tinted
+    return surface
 
 
 def draw_embers(screen, x, y, age):

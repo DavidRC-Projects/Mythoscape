@@ -96,7 +96,7 @@ def _frame_for_state(meta: dict, state: str, t: float, attacking: float, hit_t: 
     if state == "idle":
         return int(((t * 1.5) % 1) * 4) % 4
     if state == "walk":
-        return int(((t * 0.7) % 1) * 8) % 8
+        return int(((t * 1.15) % 1) * 8) % 8
     if state == "attack":
         starts = meta.get("states", {}).get("attack", {}).get(
             "frame_starts", [0, 0.14, 0.30, 0.42, 0.60, 0.80],

@@ -122,10 +122,6 @@ def _blit_preview(surf, key, cx, cy, tile, facing, hurt, moving=False, t=0.0):
     sway = int(math.sin(float(t) * 8.0) * tile * 0.05) if moving else 0
     rect = scaled.get_rect(midbottom=(int(cx + sway), int(cy + tile * 0.35 - bob)))
     surf.blit(scaled, rect)
-    if hurt:
-        tint = scaled.copy()
-        tint.fill((255, 80, 80, 80), special_flags=pygame.BLEND_RGBA_MULT)
-        surf.blit(tint, rect)
     return True
 
 

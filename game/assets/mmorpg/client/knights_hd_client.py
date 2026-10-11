@@ -217,12 +217,6 @@ def draw(
     left = int(cx - fx)
     top = int(foot_y - fy)
     
-    # Apply hurt tint if needed
-    if hurt:
-        hurt_surf = img.copy()
-        hurt_surf.fill((255, 80, 80, 80), special_flags=pygame.BLEND_RGBA_MULT)
-        img = hurt_surf
-    
     # Apply alpha if needed
     if alpha < 255:
         img = img.copy()

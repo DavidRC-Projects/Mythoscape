@@ -749,11 +749,11 @@ class ScreensMixin:
                     self.screen.blit(tscaled, (tx, ty))
             else:
                 # Login form below the title plate so scenery shows behind the logo
-                body_y0 = 170  # below dark title plate / crest band in login_ui.png
-                src = pygame.Rect(98, body_y0, 827, ui.get_height() - body_y0)
+                body_y0 = 128  # include the top gold rail; the old name above it is painted out
+                src = pygame.Rect(98, body_y0, 873, ui.get_height() - body_y0)
                 src.w = min(src.w, ui.get_width() - src.x)
                 src.h = min(src.h, ui.get_height() - src.y)
-                panel_img = ui.subsurface(src)
+                panel_img = self._login_panel(ui, src)
                 dw = max(1, int(src.w * geom["scale"]))
                 dh = max(1, int(src.h * geom["scale"]))
                 scaled = self._scaled_login_piece(("login-body", dw, dh), panel_img, (dw, dh))
@@ -810,6 +810,84 @@ class ScreensMixin:
 
         if self.show_leaderboard:
             self.draw_leaderboard_modal()
+
+    def _reveal_login_backdrop(self, panel):
+        """Hide mockup scenery outside the gold frame so the live backdrop shows.
+
+        The frame is a closed border. Only pixels that can be reached from the
+        crop edge without crossing that border are cleared, so the panel and
+        its buttons stay intact.
+        """
+        import numpy as np
+        from collections import deque
+
+        w, h = panel.get_size()
+        rgb = pygame.surfarray.array3d(panel)
+        r = rgb[:, :, 0].astype(np.int16)
+        gch = rgb[:, :, 1].astype(np.int16)
+        b = rgb[:, :, 2].astype(np.int16)
+        gold = (r > 80) & (gch > 52) & (r > b + 12) & (gch + 8 > b)
+
+        def flood(mask, seeds):
+            seen = np.zeros((w, h), dtype=bool)
+            q = deque()
+            for x, y in seeds:
+                if 0 <= x < w and 0 <= y < h and mask[x, y] and not seen[x, y]:
+                    seen[x, y] = True
+                    q.append((x, y))
+            while q:
+                x, y = q.popleft()
+                for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+                    if 0 <= nx < w and 0 <= ny < h and mask[nx, ny] and not seen[nx, ny]:
+                        seen[nx, ny] = True
+                        q.append((nx, ny))
+            return seen
+
+        midy, midx = h // 2, w // 2
+        xs = np.flatnonzero(gold[:, midy])
+        ys = np.flatnonzero(gold[midx, :])
+        if xs.size == 0 or ys.size == 0:
+            return
+        frame = flood(
+            gold,
+            (
+                (int(xs[0]), midy),
+                (int(xs[-1]), midy),
+                (midx, int(ys[0])),
+                (midx, int(ys[-1])),
+            ),
+        )
+        edge = [(x, 0) for x in range(w)] + [(x, h - 1) for x in range(w)]
+        edge += [(0, y) for y in range(h)] + [(w - 1, y) for y in range(h)]
+        outside = flood(~gold, edge)
+        for _ in range(12):
+            dil = outside.copy()
+            dil[1:, :] |= outside[:-1, :]
+            dil[:-1, :] |= outside[1:, :]
+            dil[:, 1:] |= outside[:, :-1]
+            dil[:, :-1] |= outside[:, 1:]
+            hit = gold & ~frame & dil & ~outside
+            if not hit.any():
+                break
+            outside |= hit
+        alpha = pygame.surfarray.pixels_alpha(panel)
+        alpha[outside] = 0
+        del alpha
+
+    def _login_panel(self, ui, src):
+        """Crop of the login frame, with the old side scenery removed. Cached."""
+        cache = getattr(self, "_login_art_cache", None)
+        if cache is None:
+            cache = {}
+            self._login_art_cache = cache
+        key = ("login-panel", src.x, src.y, src.w, src.h)
+        found = cache.get(key)
+        if found is not None:
+            return found
+        panel = ui.subsurface(src).copy().convert_alpha()
+        self._reveal_login_backdrop(panel)
+        cache[key] = panel
+        return panel
 
     def _fit_login_title(self, title, max_w, max_h):
         """Scale the wordmark into the gap above the form without covering it."""

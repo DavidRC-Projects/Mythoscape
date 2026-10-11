@@ -87,6 +87,35 @@ def _apron_screen_rect(client):
     return pygame.Rect(int(left), int(top), int(right - left), int(bottom - top))
 
 
+def reveal_mine(client):
+    """Draw the rat mine on top of the volcano picture so the pit stays visible."""
+    if client.dungeon or not feature_flags.USE_EMBERDEEP_V2:
+        return
+    box = getattr(wm, "VOLCANO_MINE_REVEAL", None)
+    if not box or not getattr(client, "tiles", None):
+        return
+    import time
+    x0, y0, x1, y1 = box
+    cam_x, cam_y = client.camera_origin()
+    tile = _tile()
+    map_w, map_h = _map_size()
+    vis_w, vis_h = map_w // tile, map_h // tile
+    t = time.time()
+    tiles = client.tiles
+    height = len(tiles)
+    width = len(tiles[0]) if height else 0
+    for sy in range(vis_h + 1):
+        for sx in range(vis_w + 1):
+            vx, vy = cam_x + sx, cam_y + sy
+            wx, wy = client.view_to_world(vx, vy)
+            if not (x0 <= wx <= x1 and y0 <= wy <= y1):
+                continue
+            if not (0 <= wy < height and 0 <= wx < width):
+                continue
+            rect = pygame.Rect(sx * tile, sy * tile, tile, tile)
+            client.draw_terrain_tile(rect, tiles[wy][wx], wx, wy, t)
+
+
 def blit_backdrop(client):
     """Cover the apron. Yaw 0 uses the top-down mesh; any other yaw uses the south view."""
     if client.dungeon or not feature_flags.USE_EMBERDEEP_V2:
@@ -821,7 +850,7 @@ def _draw_monster_sprite(client, m, cx, cy, tile_px, t, face, moving, atk, playe
     main = sys.modules.get("__main__")
     lowpoly_on = getattr(main, "USE_LOWPOLY_DRAGONS", True)
     strip_on = getattr(main, "USE_ANIM_STRIP_MONSTERS", True)
-    hurt = m["hp"] < m["max_hp"]
+    hurt = False
     mdef = MONSTERS.get(m["type"]) or {}
     vis = mdef.get("visual") or m["type"]
     scale = float(mdef.get("scale") or 1.0)
@@ -833,11 +862,10 @@ def _draw_monster_sprite(client, m, cx, cy, tile_px, t, face, moving, atk, playe
     breathing = time.time() < (getattr(client, "ember_cone", None) or {}).get("until", 0)
     if m.get("type") == "emberdeep_wyrm" and m.get("facing"):
         face = m["facing"]
-    hit_t = t - client.knight_hit_at.get(m["id"], t - 999) if hasattr(client, "knight_hit_at") else -1.0
     if knights_hd_client.draw(
         screen, m["type"], cx, cy, hd_ts, t,
         facing=face, moving=moving, attacking=atk, hurt=hurt,
-        hit_t=hit_t if 0 <= hit_t < 0.36 else -1.0,
+        hit_t=-1.0,
     ):
         return
     lowpoly = lowpoly_on and lowpoly_dragon_sprites.sheet_key_for_monster_type(m["type"])

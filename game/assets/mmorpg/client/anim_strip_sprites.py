@@ -147,11 +147,5 @@ def draw_anim_strip_monster(
     foot = int(draw_h * 0.24)
     oy = int(tile * 0.35) if drop_down else 0
     rect = scaled.get_rect(midbottom=(int(cx + ox), int(cy + tile * 0.30 + oy + foot)))
-    if hurt:
-        tint = scaled.copy()
-        tint.fill((255, 80, 80, 70), special_flags=pygame.BLEND_RGBA_MULT)
-        surf.blit(scaled, rect)
-        surf.blit(tint, rect)
-    else:
-        surf.blit(scaled, rect)
+    surf.blit(scaled, rect)
     return True

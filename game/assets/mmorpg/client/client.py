@@ -5418,6 +5418,7 @@ class GameClient(ScreensMixin, CameraYaw):
                     pygame.draw.rect(self.screen, (8, 6, 10), rect)
 
         emberdeep_v2_client.blit_backdrop(self)
+        emberdeep_v2_client.reveal_mine(self)
         fairy_ground.draw_overlays(self, cam_x, cam_y, vis_w, vis_h)
 
         # Click-walk destination + path crumbs
@@ -5876,7 +5877,8 @@ class GameClient(ScreensMixin, CameraYaw):
             sx, sy = self.world_to_view_offset(m["x"], m["y"], cam_x, cam_y)
             if 0 <= sx <= vis_w and 0 <= sy <= vis_h:
                 cx, cy = sx * TILE + TILE // 2, sy * TILE + TILE // 2
-                hurt = m["hp"] < m["max_hp"]
+                wounded = m["hp"] < m["max_hp"]
+                hurt = False
                 atk = self._attack_progress(m["id"], t)
                 mkey = ("m", m["id"])
                 face = self.facing_for_view(facing_for(mkey, m["x"], m["y"], anim_id=m["id"]))
@@ -5943,11 +5945,10 @@ class GameClient(ScreensMixin, CameraYaw):
                     # HD knights first (permanent, always-on)
                     import knights_hd_client
                     import emberdeep_creatures_client
-                    hit_t = t - self.knight_hit_at.get(mid, t - 999) if hasattr(self, 'knight_hit_at') else -1.0
                     if knights_hd_client.draw(
                         self.screen, m["type"], cx, cy + TILE // 2, _hd_ts, t,
                         facing=face, moving=draw_moving, attacking=atk_arg, hurt=hurt,
-                        hit_t=hit_t if 0 <= hit_t < 0.36 else -1.0,
+                        hit_t=-1.0,
                     ):
                         pass
                     elif emberdeep_creatures_client.draw_creature(
@@ -6006,7 +6007,7 @@ class GameClient(ScreensMixin, CameraYaw):
                         ny = hy
                     lvl = int(m.get("level") or 1)
                     lvl_color = self.monster_threat_color(lvl)
-                    if hurt or near or targeted or m.get("frozen") or _mdef.get("humanoid"):
+                    if wounded or near or targeted or m.get("frozen") or _mdef.get("humanoid"):
                         if _mdef.get("humanoid"):
                             self.draw_hp_bar(cx, ny - 36, m["hp"], m["max_hp"])
                         self.blit_nameplate(m["name"], cx, ny)
@@ -6063,7 +6064,8 @@ class GameClient(ScreensMixin, CameraYaw):
             now_g = time.time()
             state = glide.get(gkey)
             ox = oy = 0.0
-            if state is None or max(abs(goal[0] - state["x"]), abs(goal[1] - state["y"])) > 2:
+            snapped = state is None or max(abs(goal[0] - state["x"]), abs(goal[1] - state["y"])) > 2
+            if snapped:
                 glide[gkey] = {"x": goal[0], "y": goal[1], "ox": 0.0, "oy": 0.0, "t": now_g}
             else:
                 if (state["x"], state["y"]) != goal:
@@ -6086,7 +6088,7 @@ class GameClient(ScreensMixin, CameraYaw):
                 atk = self._attack_progress(f"pet:{pet.get('owner_id')}", t)
                 mine = self.player and pet.get("owner_id") == self.player["id"]
                 pkey = ("pet", pet.get("owner_id"), pet.get("pet_id") or pet.get("sprite"))
-                mov = moving_for(pkey, pet["x"], pet["y"])
+                mov = False if snapped else moving_for(pkey, pet["x"], pet["y"])
                 if atk > 0:
                     mov = False
                 face = self.facing_for_view(facing_for(pkey, pet["x"], pet["y"], anim_id=f"pet:{pet.get('owner_id')}"))
@@ -6199,7 +6201,7 @@ class GameClient(ScreensMixin, CameraYaw):
                          "bottom": "bottom_work_trousers" if gender == "male" else "bottom_long_skirt",
                          "shoes": "shoes_leather", "outfit": None, "accessories": []}
                     )
-                    hit_t = t - self.player_hit_at.get(p["id"], t - 999)
+                    hit_t = -1.0 if not is_self else t - self.player_hit_at.get(p["id"], t - 999)
                     death_t = t - self.player_death_at.get(p["id"], t - 999)
                     drawn = False
                     if hd_on:
