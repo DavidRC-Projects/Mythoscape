@@ -37,6 +37,7 @@ MONSTERS_HD = {
     "mythos_champion",
     "ossuary_keeper",
     "morvath",
+    "drowned_dead",
 }
 
 _META = {}

@@ -1141,7 +1141,6 @@ MONSTERS = {
     "drowned_dead": {
         "name": "Drowned Dead", "level": 36, "hp": 68, "attack": 36, "strength": 38, "defence": 20,
         "def_bonus": 10, "xp": 140, "respawn_ticks": 45, "aggro_range": 6,
-        "visual": "skeleton", "tint": (90, 200, 170),
         "force_retaliate": True,
         "drops": [("bones", 1.0, (1, 1)), ("coins", 0.9, (40, 90))],
     },

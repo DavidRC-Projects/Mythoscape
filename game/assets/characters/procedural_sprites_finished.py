@@ -1750,7 +1750,7 @@ def draw_monster(surf, mtype, cx, cy, tile, t, hurt=False, attacking=0.0, facing
     # These ids are HD-only. The function below stays as the unknown-type fallback.
     if mtype in (
         "giant_rat", "guard", "mythos_champion", "adamant_duelist", "giant", "wolf",
-        "ossuary_keeper", "morvath",
+        "ossuary_keeper", "morvath", "drowned_dead",
     ):
         return
     fn = MONSTER_DRAWERS.get(mtype, draw_giant_rat)
