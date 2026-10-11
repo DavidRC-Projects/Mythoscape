@@ -47,6 +47,8 @@ MONSTERS_HD = {
     "void_crawler",
     "rift_wraith",
     "nyxarath",
+    "magma_slug",
+    "ash_imp",
 }
 
 _META = {}

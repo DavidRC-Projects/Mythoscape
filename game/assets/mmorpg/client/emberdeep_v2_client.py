@@ -17,7 +17,6 @@ import feature_flags
 import world_map as wm
 
 _LEGS = {
-    "ash_imp": "biped",
     "magma_knight": "biped",
     "crucible_beast": "quad",
     "ember_wolf": "quad",

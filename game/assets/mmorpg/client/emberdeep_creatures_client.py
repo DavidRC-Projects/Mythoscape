@@ -30,7 +30,6 @@ _BODY = {
     "troll_cook": 1.32,
     "mistress_of_cinders": 1.45,
     "emberdeep_wyrm": 2.05,
-    "magma_slug": 0.42,
 }
 _CAP = {
     "ember_imp": 88,
@@ -40,7 +39,6 @@ _CAP = {
     "troll_cook": 148,
     "mistress_of_cinders": 160,
     "emberdeep_wyrm": 280,
-    "magma_slug": 36,
 }
 
 
