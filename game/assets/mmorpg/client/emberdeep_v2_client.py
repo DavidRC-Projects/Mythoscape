@@ -674,13 +674,14 @@ def _draw_monster_sprite(client, m, cx, cy, tile_px, t, face, moving, atk, playe
     ts = max(8, int(tile_px * scale))
     import time
     import emberdeep_creatures_client
+    import knights_hd_client
+    hd_ts = knights_hd_client.baked_px(m["type"], tile_px) or ts
     breathing = time.time() < (getattr(client, "ember_cone", None) or {}).get("until", 0)
     if m.get("type") == "emberdeep_wyrm" and m.get("facing"):
         face = m["facing"]
-    import knights_hd_client
     hit_t = t - client.knight_hit_at.get(m["id"], t - 999) if hasattr(client, "knight_hit_at") else -1.0
     if knights_hd_client.draw(
-        screen, m["type"], cx, cy, ts, t,
+        screen, m["type"], cx, cy, hd_ts, t,
         facing=face, moving=moving, attacking=atk, hurt=hurt,
         hit_t=hit_t if 0 <= hit_t < 0.36 else -1.0,
     ):

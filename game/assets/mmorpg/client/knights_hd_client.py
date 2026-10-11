@@ -35,6 +35,8 @@ MONSTERS_HD = {
     "guard",
     "adamant_duelist",
     "mythos_champion",
+    "ossuary_keeper",
+    "morvath",
 }
 
 _META = {}
@@ -45,6 +47,15 @@ _CACHE_LIMIT = 512
 def handles(mtype: str) -> bool:
     """Check if this module handles the given monster type."""
     return mtype in KNIGHTS_HD or mtype in MONSTERS_HD
+
+
+def baked_px(mtype: str, tile: int):
+    """On-screen size when the sheet already includes scale. None otherwise."""
+    if not handles(mtype):
+        return None
+    if not _load_meta(mtype).get("scale_baked"):
+        return None
+    return max(8, int(round(float(tile) * 1.1)))
 
 
 def _asset_root(mtype: str) -> str:

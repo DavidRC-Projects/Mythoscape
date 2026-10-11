@@ -1131,7 +1131,6 @@ MONSTERS = {
     "ossuary_keeper": {
         "name": "Ossuary Keeper", "level": 34, "hp": 90, "attack": 34, "strength": 36, "defence": 20,
         "def_bonus": 12, "xp": 220, "respawn_ticks": 9999, "aggro_range": 5,
-        "visual": "big_skeleton", "tint": (255, 220, 150), "scale": 1.15,
         "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.2,
         "drops": [
             ("depths_bone_key", 1.0, (1, 1)),
@@ -1166,7 +1165,7 @@ MONSTERS = {
     "morvath": {
         "name": "Morvath, the Bone King", "level": 70, "hp": 420, "attack": 72, "strength": 76, "defence": 55,
         "def_bonus": 40, "xp": 1800, "respawn_ticks": 9999, "aggro_range": 12,
-        "visual": "big_skeleton", "tint": (120, 255, 160), "scale": 2.0, "confine_room": True,
+        "confine_room": True,
         "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.2,
         "drops": [
             ("big_bones", 1.0, (3, 3)),

@@ -276,17 +276,6 @@ def draw_sarcophagus(surf, cx, cy, tile, state="closed", t=0.0):
             _glow(surf, lid.centerx, lid.centery, int(18 * s), (120, 255, 150), 60)
 
 
-def draw_bone_crown(surf, cx, cy, tile):
-    s = max(0.4, tile / 40.0)
-    base = pygame.Rect(0, 0, int(26 * s), int(6 * s))
-    base.center = (cx, cy)
-    pygame.draw.rect(surf, (220, 186, 80), base)
-    for k in range(5):
-        px = base.x + int(k * base.w / 4)
-        pygame.draw.polygon(surf, (236, 200, 90), [(px - 3 * s, base.y), (px, base.y - 9 * s), (px + 3 * s, base.y)])
-    pygame.draw.circle(surf, (120, 255, 150), (int(cx), int(base.centery)), max(2, int(2.5 * s)))
-
-
 def _prop(client, rect, decor, style, x, y, t):
     surf = client.screen
     cx, cy = rect.centerx, rect.centery

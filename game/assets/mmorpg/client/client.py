@@ -5795,7 +5795,7 @@ class GameClient(ScreensMixin, CameraYaw):
                     _vis = _mdef.get("visual") or m["type"]
                     _scale = float(_mdef.get("scale") or 1.0)
                     _ts = max(8, int(TILE * _scale))
-                    _hd_ts = max(8, int(round(_ts * 1.1)))
+                    _hd_ts = knights_hd_client.baked_px(m["type"], TILE) or max(8, int(round(_ts * 1.1)))
                     # HD knights first (permanent, always-on)
                     import knights_hd_client
                     import emberdeep_creatures_client
@@ -5857,9 +5857,6 @@ class GameClient(ScreensMixin, CameraYaw):
                     if _mdef.get("visual"):
                         import void_v2_client
                         void_v2_client.tint_and_halo(self, m, cx, cy, TILE)
-                    if m.get("type") == "morvath":
-                        import depths_v2_client
-                        depths_v2_client.draw_bone_crown(self.screen, cx, cy - TILE, TILE)
                     anchor_kind = "character" if _mdef.get("humanoid") else "monster"
                     ny, hy = self.entity_anchor(cx, cy, anchor_kind)
                     # HD knights use custom head positioning
@@ -5902,7 +5899,7 @@ class GameClient(ScreensMixin, CameraYaw):
                         cy -= castle_sprites.lift_px(corpse["x"], corpse["y"], TILE)
                     mdef = MONSTERS.get(corpse["type"]) or {}
                     scale = float(mdef.get("scale") or 1.0)
-                    ts = max(8, int(round(TILE * scale * 1.1)))
+                    ts = knights_hd_client.baked_px(corpse["type"], TILE) or max(8, int(round(TILE * scale * 1.1)))
                     knights_hd_client.draw(
                         self.screen, corpse["type"], cx, cy + TILE // 2, ts, t,
                         facing=corpse["facing"], moving=False, attacking=-1.0,
