@@ -49,6 +49,7 @@ MONSTERS_HD = {
     "nyxarath",
     "magma_slug",
     "ash_imp",
+    "ember_wolf",
 }
 
 _META = {}

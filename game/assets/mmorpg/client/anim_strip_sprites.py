@@ -18,7 +18,6 @@ TYPE_MAP = {
     "goblin": "goblin_grunt",
     "skeleton": "skeleton_warrior",
     "spider": "spider_giant",
-    "ember_wolf": "wolf_dire",
 }
 
 # Relative height in tiles (player ~2 tiles, dragon sheet ~6.5).
@@ -27,7 +26,6 @@ _DRAW_TILES = {
     "goblin_grunt": 4.8,
     "skeleton_warrior": 5.2,
     "spider_giant": 4.6,
-    "wolf_dire": 4.8,
 }
 
 FRAMES = 5
