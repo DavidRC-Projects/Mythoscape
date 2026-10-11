@@ -19,24 +19,12 @@ ASSETS = ROOT / "game" / "assets"
 MMORPG = ASSETS / "mmorpg"
 CLIENT = MMORPG / "client"
 
-# Stay as they are. No HD folder, so they are excluded rather than missing.
+# Stay as they are. No HD folder yet, so they are excluded rather than missing.
 NAMED_EXCLUDED = {
     "goblin",
     "skeleton",
     "spider",
     "dragon",
-    "shade",
-    "crypt_ghoul",
-    "void_imp",
-    "obsidian_colossus",
-    "void_horror",
-    "gallery_warden",
-    "void_crawler",
-    "rift_wraith",
-    "nyxarath",
-    "ossuary_keeper",
-    "drowned_dead",
-    "morvath",
     "magma_slug",
     "ash_imp",
     "ember_wolf",
@@ -224,10 +212,25 @@ def main() -> int:
             drawn = wyrm_drawn
         else:
             drawn = entity_id in handled
-        old = "yes" if entity_id in legacy or entity_id in strips or entity_id in drawers else "no"
-        if not folder:
+        spec = content.MONSTERS.get(entity_id) if kind == "monster" else None
+        visual = (spec or {}).get("visual")
+        custom = False
+        if entity_id == "morvath" and _source_has(CLIENT / "depths_v2_client.py", "def draw_bone_crown"):
+            custom = True
+        if entity_id == "nyxarath" and _source_has(CLIENT / "void_v2_client.py", "def tint_and_halo"):
+            custom = True
+        old = "yes" if (
+            entity_id in legacy or entity_id in strips or entity_id in drawers or visual or custom
+        ) else "no"
+        if entity_id in NAMED_EXCLUDED:
             status = "excluded"
             missing = False
+        elif not folder:
+            status = "excluded"
+            missing = False
+        elif drawn and old == "yes":
+            status = "yes"
+            missing = True
         elif drawn:
             status = "yes"
             missing = False

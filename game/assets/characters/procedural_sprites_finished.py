@@ -1746,6 +1746,7 @@ def draw_monster(surf, mtype, cx, cy, tile, t, hurt=False, attacking=0.0, facing
     # These ids are HD-only. The function below stays as the unknown-type fallback.
     if mtype in (
         "giant_rat", "guard", "mythos_champion", "adamant_duelist", "giant", "wolf",
+        "big_skeleton",
         "ossuary_keeper", "morvath", "drowned_dead",
         "shade", "crypt_ghoul", "void_imp", "obsidian_colossus", "void_horror",
         "gallery_warden", "void_crawler", "rift_wraith", "nyxarath",
@@ -4884,7 +4885,6 @@ def draw_pet(surf, sprite, cx, cy, tile, t, hurt=False, attacking=0.0, moving=Fa
 MONSTER_DRAWERS.update({
     "orc": draw_orc,
     "slime": draw_slime,
-    "big_skeleton": draw_big_skeleton,
     "spider": draw_spider,
     "dragon": draw_dragon,
 })
