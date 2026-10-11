@@ -196,8 +196,8 @@ def _in_emberdeep(client):
     )
 
 
-# One key press turns the view this far. The drawn yaw eases toward it.
-_YAW_STEP = math.radians(15)
+# One key press snaps the target to the next multiple of this angle.
+_ROT_STEP = math.radians(45)
 # How long one dungeon step takes. The camera covers that tile in the same time.
 STEP_SECONDS = 0.16
 
@@ -343,12 +343,36 @@ def fp_active(client):
 
 
 def turn(client, direction):
-    """Rotate the Emberdeep view one small step. Left is -1, right is +1."""
+    """Snap the target yaw to the next 45° step. Left is -1, right is +1."""
     now = time_now()
     if now < getattr(client, "_ember_turn_at", 0.0):
         return
-    client._ember_yaw = getattr(client, "_ember_yaw", 0.0) + direction * _YAW_STEP
-    client._ember_turn_at = now + 0.08
+    step = _ROT_STEP
+    yaw = float(getattr(client, "_ember_yaw", 0.0))
+    client._ember_yaw = (round(yaw / step) + int(direction)) * step
+    client._ember_turn_at = now + 0.18
+    client._ember_user_rot_at = now
+
+
+def orbit(client, d_yaw_rad):
+    """Add a mouse-drag delta to the target and the drawn yaw together."""
+    delta = float(d_yaw_rad)
+    yaw = float(getattr(client, "_ember_yaw", 0.0)) + delta
+    client._ember_yaw = yaw
+    client._ember_yaw_draw = float(getattr(client, "_ember_yaw_draw", yaw)) + delta
+    client._ember_user_rot_at = time_now()
+
+
+def reset_north(client):
+    """Ease the drawn yaw back to world north."""
+    client._ember_yaw = 0.0
+    client._ember_user_rot_at = time_now()
+
+
+def pitch_bias(client):
+    """Extra look-down, in degrees, clamped to ±8."""
+    bias = float(getattr(client, "_ember_pitch_bias", 0.0) or 0.0)
+    return max(-8.0, min(8.0, bias))
 
 
 def step_delta(client, forward):
@@ -475,7 +499,8 @@ def _ease_follow(client, pose, now):
     target = float(getattr(client, "_ember_yaw", 0.0))
     yaw = float(getattr(client, "_ember_yaw_draw", target))
     delta = (target - yaw + math.pi) % (2 * math.pi) - math.pi
-    yaw += delta * kf
+    ky = 1 - math.exp(-dt / 0.10) if dt else 1.0
+    yaw += delta * ky
     client._ember_yaw_draw = yaw
     return fx, fy, yaw, zoom, dt
 
@@ -1571,7 +1596,7 @@ def draw_first_person(client):
     now = time.time()
     fx, fy, yaw, zoom, dt = _ease_follow(client, pose, now)
     pose["draw_x"], pose["draw_y"] = getattr(client, "_ember_body", (fx, fy))
-    view.set_camera(fx, fy, yaw, zoom)
+    view.set_camera(fx, fy, yaw, zoom, pitch_bias=pitch_bias(client))
     view.ease(dt)
     mw, mh = _map_size()
     surf, rw, rh = _render_cached(view, mw, mh, now, fx, fy, yaw, zoom)

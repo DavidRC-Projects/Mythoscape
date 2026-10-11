@@ -9,7 +9,7 @@ look = (sin(yaw), -cos(yaw)), so yaw 0 looks north.
 
 API
     view = EmberView3D(tiles, tex_dir, is_wall, is_lava)   # tiles: list[list[int]]
-    view.set_camera(focus_x, focus_y, yaw, zoom)           # zoom float 0..1
+    view.set_camera(focus_x, focus_y, yaw, zoom, pitch_bias=0)  # zoom float 0..1
     rgb, depth = view.render(rw, rh, now)                  # numpy (rh, rw, 3) uint8, (rh, rw) float32
     view.project(wx, wy, wz)  -> (depth, sx, sy, px_per_tile) in render pixels, or None
     view.pick(sx, sy)         -> (tile_x, tile_y) or None  (sx, sy in render pixels)
@@ -146,9 +146,11 @@ class EmberView3D:
         self.floor_ao = (1 - 0.55 * np.exp(-dist / 0.22)).astype(np.float32)
 
     # ---------- camera ----------
-    def set_camera(self, fx, fy, yaw, zoom):
+    def set_camera(self, fx, fy, yaw, zoom, pitch_bias=0.0):
         z = float(np.clip(zoom, 0.0, 1.0))
         pitch = math.radians(self.PITCH[0] + (self.PITCH[1] - self.PITCH[0]) * z ** 0.85)
+        pitch += math.radians(float(pitch_bias))
+        pitch = max(math.radians(25.0), min(math.radians(80.0), pitch))
         dist = self.DIST[0] + (self.DIST[1] - self.DIST[0]) * z ** 1.25
         self.vfov = math.radians(self.VFOV[0] + (self.VFOV[1] - self.VFOV[0]) * z)
         lx, ly = math.sin(yaw), -math.cos(yaw)
