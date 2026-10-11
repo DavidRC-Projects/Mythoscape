@@ -653,6 +653,16 @@ def _monster_pose(client, m, t):
     return face, moving and not swinging, atk, near, bool(side_fight and near)
 
 
+def _hd_body_height(mtype, tile_px):
+    """Pixel height from the feet to the top of the head."""
+    import emberdeep_creatures_client
+    import knights_hd_client
+    if knights_hd_client.handles(mtype):
+        size = knights_hd_client.baked_px(mtype, tile_px) or int(tile_px)
+        return max(8, abs(knights_hd_client.head_top_dy(mtype, size)))
+    return emberdeep_creatures_client.creature_height(mtype, tile_px)
+
+
 def _draw_monster_sprite(client, m, cx, cy, tile_px, t, face, moving, atk, player_sx, drop_down=False, dest=None):
     """The top-down monster chain, drawn at a projected foot point."""
     import procedural_sprites_finished as sprites
@@ -1023,7 +1033,7 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
                 (player_sx + shx, player_sy + shy, player_tile),
             )
             continue
-        height = emberdeep_creatures_client.creature_height(m["type"], tile_px)
+        height = _hd_body_height(m["type"], tile_px)
         if flash > 0.01:
             pad = int(height * 1.4)
             temp = pygame.Surface((pad, pad), pygame.SRCALPHA)
@@ -1058,6 +1068,7 @@ def _draw_billboards(client, pose, ex, ey, lx, ly, rx, ry, depths, rw, rh, mw, m
             level = int(m.get("level") or 1)
             client.blit_combat_level(level, sx, bar_y - 28, client.monster_threat_color(level))
     _draw_ember_corpses(client, t, rw, rh, mw, mh)
+    _draw_hd_corpses(client, t, rw, rh, mw, mh)
     _draw_wyrm_death(client, t, rw, rh, mw, mh)
     _draw_breath(client, t, rw, rh, mw, mh)
     if player_bill is not None:
@@ -1167,6 +1178,33 @@ def _draw_wyrm_death(client, now, rw, rh, mw, mh):
         _occlude_sprite(client, rect.centerx, rect.bottom, rect.w, rect.h, depth)
 
 
+def _draw_hd_corpses(client, now, rw, rh, mw, mh):
+    """HD death sheets in the Emberdeep view. Six frames, then a short fade."""
+    import knights_hd_client
+    keep = []
+    for corpse in getattr(client, "knight_corpses", None) or []:
+        if not knights_hd_client.handles(corpse.get("type")):
+            keep.append(corpse)
+            continue
+        death_t = now - corpse.get("t0", now)
+        if death_t > 1.5:
+            continue
+        hit = _project(0, 0, 0, 0, 0, 0, corpse["x"] + 0.5, corpse["y"] + 0.5, None, rw, rh, mw, mh)
+        if hit is None:
+            keep.append(corpse)
+            continue
+        _depth, sx, sy, tile_px = hit
+        alpha = 255 if death_t < 0.9 else int(255 * (1.0 - (death_t - 0.9) / 0.6))
+        size = knights_hd_client.baked_px(corpse["type"], tile_px) or int(tile_px)
+        knights_hd_client.draw(
+            client.screen, corpse["type"], sx, sy, size, now,
+            facing=corpse.get("facing", 1), moving=False, attacking=-1.0,
+            hit_t=-1.0, death_t=death_t, alpha=alpha,
+        )
+        keep.append(corpse)
+    client.knight_corpses = keep
+
+
 def _draw_ember_corpses(client, now, rw, rh, mw, mh):
     import ember_combat_fx
     import emberdeep_creatures_client
@@ -1181,7 +1219,7 @@ def _draw_ember_corpses(client, now, rw, rh, mw, mh):
         if hit is None:
             continue
         _depth, sx, sy, tile_px = hit
-        height = emberdeep_creatures_client.creature_height(corpse.get("type"), tile_px)
+        height = _hd_body_height(corpse.get("type"), tile_px)
         pad = max(8, int(height * 1.6))
         temp = pygame.Surface((pad, pad), pygame.SRCALPHA)
         emberdeep_creatures_client.draw_creature(
@@ -1576,8 +1614,7 @@ def pick_tile(client, mx, my):
         if proj is None:
             continue
         along, sx, sy, tile_px = proj
-        import emberdeep_creatures_client
-        height = emberdeep_creatures_client.creature_height(mon["type"], tile_px)
+        height = _hd_body_height(mon["type"], tile_px)
         hit = pygame.Rect(sx - height / 2, sy - height, height, height).collidepoint(mx, my)
         if hit and along < best_d:
             best = (int(mon["x"]), int(mon["y"]))
