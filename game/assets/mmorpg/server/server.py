@@ -6,6 +6,7 @@ Requires:  pip install websockets
 """
 import asyncio
 import json
+import os
 import time
 import random
 import itertools
@@ -6228,6 +6229,104 @@ def side_by_side_goal(monster, px, py, can_stand):
     return fallback
 
 
+def _walk_sheet_ids():
+    """Monster ids whose HD pack includes a walk cycle."""
+    found = getattr(_walk_sheet_ids, "ids", None)
+    if found is not None:
+        return found
+    assets = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    ids = set()
+    for root in (
+        os.path.join(assets, "monsters_hd"),
+        os.path.join(assets, "knights_hd", "assets"),
+    ):
+        if not os.path.isdir(root):
+            continue
+        for name in os.listdir(root):
+            walk = os.path.join(root, name, "sprite_1x", "walk")
+            if os.path.isdir(walk):
+                ids.add(name)
+    _walk_sheet_ids.ids = ids
+    return ids
+
+
+def dungeon_idle_patrol(monster, can_step):
+    """Walk a few tiles out from spawn, then back, and repeat.
+
+    Only monsters with a walk sheet do this. Combat chase is unchanged.
+    """
+    if not monster.alive or (monster.stats or {}).get("static"):
+        return False
+    if monster.type not in _walk_sheet_ids():
+        return False
+    mdef = MONSTERS.get(monster.type) or {}
+    radius = int((monster.stats or {}).get("wander_radius", mdef.get("wander_radius") or 0) or 0)
+    if radius <= 0:
+        radius = 3
+    radius = min(radius, 4)
+
+    def inside(nx, ny):
+        return (
+            abs(nx - monster.spawn_x) <= radius
+            and abs(ny - monster.spawn_y) <= radius
+            and can_step(nx, ny)
+        )
+
+    pause = int(getattr(monster, "patrol_pause", 0) or 0)
+    if pause > 0:
+        monster.patrol_pause = pause - 1
+        return False
+
+    if monster.patrol_steps_left > 0:
+        nx = monster.x + monster.patrol_dx
+        ny = monster.y + monster.patrol_dy
+        if inside(nx, ny):
+            monster.x, monster.y = nx, ny
+            monster.patrol_steps_left -= 1
+            if monster.patrol_steps_left == 0 and getattr(monster, "patrol_leg", "") == "out":
+                monster.patrol_dx = -monster.patrol_dx
+                monster.patrol_dy = -monster.patrol_dy
+                monster.patrol_steps_left = int(getattr(monster, "patrol_return", 0) or 0)
+                monster.patrol_leg = "back"
+            elif monster.patrol_steps_left == 0:
+                monster.patrol_leg = ""
+                monster.patrol_pause = 2
+            return True
+        monster.patrol_steps_left = 0
+        monster.patrol_leg = ""
+        monster.patrol_pause = 2
+        return False
+
+    cap = min(3, radius)
+    dirs = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+    random.shuffle(dirs)
+    for dx, dy in dirs:
+        n = 0
+        x, y = monster.x, monster.y
+        while n < cap:
+            tx, ty = x + dx, y + dy
+            if not inside(tx, ty):
+                break
+            x, y = tx, ty
+            n += 1
+        if n < 1:
+            continue
+        monster.x += dx
+        monster.y += dy
+        monster.patrol_return = n
+        if n == 1:
+            monster.patrol_dx, monster.patrol_dy = -dx, -dy
+            monster.patrol_steps_left = 1
+            monster.patrol_leg = "back"
+        else:
+            monster.patrol_dx, monster.patrol_dy = dx, dy
+            monster.patrol_steps_left = n - 1
+            monster.patrol_leg = "out"
+        return True
+    monster.patrol_pause = 2
+    return False
+
+
 def process_dungeon_ai():
     """At most one monster chases, and only while you are still in its area."""
     max_pursuers = 1
@@ -6272,6 +6371,15 @@ def process_dungeon_ai():
                     m.ember_step_tick = WORLD.tick_count
                 return
 
+        def can_patrol_step(me, nx, ny):
+            if (nx, ny) == (session.x, session.y):
+                return False
+            if me.home_room and not in_room(nx, ny, me.home_room):
+                return False
+            if not mod.dungeon_walkable(tiles, nx, ny) or occupied(nx, ny, me):
+                return False
+            return True
+
         eligible = []
         for m in monsters:
             if not m.alive:
@@ -6284,7 +6392,11 @@ def process_dungeon_ai():
                     m.target_player_id = None
                 if session.in_combat_with == ("monster", m.id):
                     session.in_combat_with = None
-                step_toward(m, m.spawn_x, m.spawn_y, stay_in_room=True)
+                if (m.x, m.y) != (m.spawn_x, m.spawn_y):
+                    m.patrol_steps_left = 0
+                    step_toward(m, m.spawn_x, m.spawn_y, stay_in_room=True)
+                else:
+                    dungeon_idle_patrol(m, lambda nx, ny, me=m: can_patrol_step(me, nx, ny))
                 continue
             dist = max(abs(session.x - m.x), abs(session.y - m.y))
             eligible.append((dist, m.id, m))
@@ -6297,7 +6409,10 @@ def process_dungeon_ai():
                     m.target_player_id = None
                 if session.in_combat_with == ("monster", m.id):
                     session.in_combat_with = None
+                dungeon_idle_patrol(m, lambda nx, ny, me=m: can_patrol_step(me, nx, ny))
                 continue
+            m.patrol_steps_left = 0
+            m.patrol_leg = ""
             m.target_player_id = session.player_id
             reach = 1
             mdef = MONSTERS.get(m.type) or {}

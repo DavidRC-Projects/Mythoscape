@@ -879,6 +879,13 @@ def process_ai(session):
             m.x, m.y = nx, ny
             return
 
+    def can_patrol_step(me, nx, ny):
+        if (nx, ny) == (session.x, session.y):
+            return False
+        if me.home_room and not in_room(nx, ny, me.home_room):
+            return False
+        return walkable(nx, ny) and not occupied(nx, ny, me)
+
     eligible = []
     for m in monsters:
         if getattr(m, "concealed", False):
@@ -894,7 +901,11 @@ def process_ai(session):
                 m.target_player_id = None
             if session.in_combat_with == ("monster", m.id):
                 session.in_combat_with = None
-            step_toward(m, m.spawn_x, m.spawn_y)
+            if (m.x, m.y) != (m.spawn_x, m.spawn_y):
+                m.patrol_steps_left = 0
+                step_toward(m, m.spawn_x, m.spawn_y)
+            else:
+                srv.dungeon_idle_patrol(m, lambda nx, ny, me=m: can_patrol_step(me, nx, ny))
             continue
         eligible.append((dist, m.id, m))
     eligible.sort()
@@ -904,7 +915,10 @@ def process_ai(session):
         if mid not in active:
             if m.target_player_id == session.player_id:
                 m.target_player_id = None
+            srv.dungeon_idle_patrol(m, lambda nx, ny, me=m: can_patrol_step(me, nx, ny))
             continue
+        m.patrol_steps_left = 0
+        m.patrol_leg = ""
         m.target_player_id = session.player_id
         reach = max(1, int((m.def_stats() or {}).get("attack_range") or 1))
         if dist <= reach and closest is None:
