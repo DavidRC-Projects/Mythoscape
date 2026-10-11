@@ -3327,6 +3327,13 @@ class GameClient(ScreensMixin, CameraYaw):
             radius = max(radius, 2)
         elif mtype in ("big_skeleton", "guard", "adamant_duelist", "mythos_champion"):
             radius = max(radius, 1)
+        if mtype in ("obsidian_colossus", "void_horror", "nyxarath", "morvath"):
+            radius = max(radius, 2)
+        elif mtype in (
+            "ossuary_keeper", "drowned_dead", "shade", "crypt_ghoul",
+            "gallery_warden", "void_crawler", "rift_wraith",
+        ):
+            radius = max(radius, 1)
         return radius, bool((MONSTERS.get(mtype) or {}).get("humanoid"))
 
     def _open_context_menu(self, mx, my, rows):
