@@ -1,0 +1,50 @@
+{
+ "frame_w": 768,
+ "frame_h": 512,
+ "feet_px": [
+  384,
+  330
+ ],
+ "facings": [
+  "s",
+  "e",
+  "n",
+  "w"
+ ],
+ "w_is_rendered": true,
+ "anims": {
+  "idle": {
+   "frames": 4,
+   "fps": 6,
+   "loop": true
+  },
+  "walk": {
+   "frames": 8,
+   "fps": 10,
+   "loop": true
+  },
+  "breath": {
+   "frames": 8,
+   "fps": 6.667,
+   "loop": false
+  },
+  "hit": {
+   "frames": 3,
+   "fps": 10,
+   "loop": false
+  },
+  "death": {
+   "frames": 8,
+   "fps": 8,
+   "loop": false
+  }
+ },
+ "breath": {
+  "release_frame": 4,
+  "frame_secs": 0.15,
+  "release_at_secs": 0.6,
+  "note": "start on the EMBER_CONE telegraph tick; frame 4 (0.6 s = one server tick) is when the hit lands"
+ },
+ "file": "{anim}_{facing}.png (frames left to right)",
+ "draw": "draw height = WYRM_TILES_H * tile_px for the full 512 px canvas; anchor feet_px on the wyrm's ground point"
+}

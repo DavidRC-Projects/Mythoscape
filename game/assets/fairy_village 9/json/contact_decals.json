@@ -1,0 +1,149 @@
+{
+ "rule": "Draw after terrain/edges and BEFORE the building or fountain sprite. Anchor = footprint NW tile; blit at (x0*TILE - origin_px.x, y0*TILE - origin_px.y) at the matching scale. Visual only.",
+ "contact_decals": [
+  {
+   "id": "queens_tree_hall_skirt",
+   "for": "queens_tree_hall",
+   "anchor_tile": [
+    4,
+    77
+   ],
+   "meta": {
+    "id": "queens_tree_hall_skirt",
+    "footprint_tiles": [
+     9,
+     9
+    ],
+    "tile_px": {
+     "1x": 40,
+     "2x": 80,
+     "4x": 160
+    },
+    "origin_px": {
+     "4x": [
+      160,
+      160
+     ],
+     "2x": [
+      80,
+      80
+     ],
+     "1x": [
+      40,
+      40
+     ]
+    },
+    "origin_note": "pixel of the footprint's NW corner; blit at (x0*TILE - origin.x, y0*TILE - origin.y)",
+    "canvas_tiles": {
+     "left": -1,
+     "right": 10,
+     "top": 1,
+     "bottom": -10
+    },
+    "files": {
+     "4x": "queens_tree_hall_skirt_4x.png",
+     "2x": "queens_tree_hall_skirt_2x.png",
+     "1x": "queens_tree_hall_skirt_1x.png"
+    },
+    "blocking": false,
+    "projection": "oblique el 32 deg, (1, 1/sin32, 1.4) model scale - same as the buildings pack"
+   }
+  },
+  {
+   "id": "moonstone_fountain_rim",
+   "for": "moonstone_fountain",
+   "anchor_tile": [
+    26,
+    61
+   ],
+   "meta": {
+    "id": "moonstone_fountain_rim",
+    "footprint_tiles": [
+     5,
+     5
+    ],
+    "tile_px": {
+     "1x": 40,
+     "2x": 80,
+     "4x": 160
+    },
+    "origin_px": {
+     "4x": [
+      160,
+      160
+     ],
+     "2x": [
+      80,
+      80
+     ],
+     "1x": [
+      40,
+      40
+     ]
+    },
+    "origin_note": "pixel of the footprint's NW corner; blit at (x0*TILE - origin.x, y0*TILE - origin.y)",
+    "canvas_tiles": {
+     "left": -1,
+     "right": 6,
+     "top": 1,
+     "bottom": -6
+    },
+    "files": {
+     "4x": "moonstone_fountain_rim_4x.png",
+     "2x": "moonstone_fountain_rim_2x.png",
+     "1x": "moonstone_fountain_rim_1x.png"
+    },
+    "blocking": false,
+    "projection": "oblique el 32 deg, (1, 1/sin32, 1.4) model scale - same as the buildings pack"
+   }
+  },
+  {
+   "id": "lily_fountain_rim",
+   "for": "lily_fountain",
+   "anchor_tile": [
+    32,
+    77
+   ],
+   "meta": {
+    "id": "lily_fountain_rim",
+    "footprint_tiles": [
+     3,
+     3
+    ],
+    "tile_px": {
+     "1x": 40,
+     "2x": 80,
+     "4x": 160
+    },
+    "origin_px": {
+     "4x": [
+      160,
+      160
+     ],
+     "2x": [
+      80,
+      80
+     ],
+     "1x": [
+      40,
+      40
+     ]
+    },
+    "origin_note": "pixel of the footprint's NW corner; blit at (x0*TILE - origin.x, y0*TILE - origin.y)",
+    "canvas_tiles": {
+     "left": -1,
+     "right": 4,
+     "top": 1,
+     "bottom": -4
+    },
+    "files": {
+     "4x": "lily_fountain_rim_4x.png",
+     "2x": "lily_fountain_rim_2x.png",
+     "1x": "lily_fountain_rim_1x.png"
+    },
+    "blocking": false,
+    "projection": "oblique el 32 deg, (1, 1/sin32, 1.4) model scale - same as the buildings pack"
+   }
+  }
+ ]
+}

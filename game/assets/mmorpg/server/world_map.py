@@ -48,7 +48,7 @@ ZONES = {
     "forest":  (98, 1, 132, 42),
     "mountains": (138, 1, 162, 42),
     "fishing_village": (168, 1, 198, 42),
-    "mine":    (31, 90, 43, 98),
+    "mine":    (50, 99, 84, 132),
     "fairy_village": (1, 56, 40, 88),
     "dungeon": (44, 54, 90, 143),
     "city":    (98, 56, 148, 96),  # flag-off shell. city_bounds() grows it.
@@ -458,22 +458,6 @@ def generate_world():
     # Larger end deck
     _rect(grid, 189, 15, 193, 21, PATH)
 
-    # --- Quarry beside King's Row (the old mine ground is the fairy village) ---
-    _rect(grid, 31, 90, 43, 98, WALL)
-    _rect(grid, 32, 91, 42, 97, FLOOR)
-    for y in (93, 94, 95):
-        grid[y][31] = PATH
-        if grid[y][30] in (GRASS, PATH, FLOOR):
-            grid[y][30] = PATH
-    for x, y, iron in (
-        (32, 91, False), (34, 91, False), (36, 91, True), (38, 91, False),
-        (40, 91, True), (42, 91, False), (35, 92, False), (39, 92, True),
-        (35, 96, True), (39, 96, False), (32, 97, False), (34, 97, False),
-        (36, 97, False), (38, 97, True), (40, 97, False), (42, 97, False),
-        (42, 93, True), (42, 95, False),
-    ):
-        grid[y][x] = IRON_ORE if iron else ORE
-
     # --- Dungeon rooms (upper) ---
     dx0, dy0, dx1, dy1 = ZONES["dungeon"]
     _rect(grid, dx0, dy0, dx1, dy1, WALL)
@@ -850,6 +834,14 @@ def is_grave(x, y) -> bool:
 EMBERDEEP_MOUTH = (67, 78)
 EMBERDEEP_RETURN = (67, 80)
 
+# Giant-rat mine, 17 tiles south of the first volcano pit. The south end is
+# the mithril and adamantite chamber. Painted after the dungeon field is grass.
+VOLCANO_MINE = (50, 99, 84, 132)
+VOLCANO_MINE_FLOOR = (51, 100, 83, 131)
+VOLCANO_MINE_REVEAL = (50, 98, 84, 132)
+VOLCANO_RAT_LEASH = (51, 100, 83, 113)
+VOLCANO_WOLF_LEASH = (51, 114, 83, 131)
+
 
 def stamp_outfitters_shell(grid):
     """King's Folly shell on the grass at (52, 64). Redrawn after the dungeon wipe."""
@@ -873,6 +865,35 @@ def stamp_emberdeep_mouth(grid):
             if 0 <= x < WIDTH and 0 <= y < HEIGHT and grid[y][x] != WATER:
                 grid[y][x] = PATH
     grid[my][mx] = FLOOR
+
+
+def near_volcano_mine(x, y) -> bool:
+    x0, y0, x1, y1 = VOLCANO_MINE
+    return x0 - 2 <= x <= x1 + 2 and y0 - 2 <= y <= y1 + 2
+
+
+def stamp_volcano_mine(grid):
+    """Rat mine south of the volcano, with a wide mithril and adamantite end."""
+    x0, y0, x1, y1 = VOLCANO_MINE
+    _rect(grid, x0, y0, x1, y1, WALL)
+    _rect(grid, x0 + 1, y0 + 1, x1 - 1, y1 - 1, FLOOR)
+    for x in (66, 67, 68):
+        grid[y0][x] = PATH
+        for y in range(81, y0):
+            if grid[y][x] in (GRASS, PATH, FLOOR):
+                grid[y][x] = PATH
+    for x, y, iron in (
+        (59, 101, False), (61, 101, False), (63, 101, False),
+        (71, 101, True), (73, 101, True), (75, 101, True),
+        (59, 105, False), (75, 105, True),
+        (59, 109, True), (75, 109, False),
+    ):
+        grid[y][x] = IRON_ORE if iron else ORE
+    for y in (116, 121, 126, 130):
+        for x in (54, 59, 64):
+            grid[y][x] = MITHRIL_ORE
+        for x in (70, 75, 80):
+            grid[y][x] = ADAMANTITE_ORE
 
 
 def _stamp_crypt_graveyard(grid):

@@ -1324,8 +1324,12 @@ def drops_for_kill(monster_type):
 
 # Fixed monster spawn points: (monster_type, x, y)
 MONSTER_SPAWNS = [
-    ("giant_rat", 34, 93), ("giant_rat", 37, 94), ("giant_rat", 40, 94),
-    ("giant_rat", 35, 95), ("giant_rat", 39, 93), ("giant_rat", 33, 94),
+    ("giant_rat", 62, 103), ("giant_rat", 67, 104), ("giant_rat", 72, 103),
+    ("giant_rat", 64, 107), ("giant_rat", 70, 107), ("giant_rat", 66, 110),
+    ("giant_rat", 73, 110), ("giant_rat", 63, 106),
+    ("wolf", 56, 118), ("wolf", 62, 123), ("wolf", 58, 128),
+    ("wolf", 72, 118), ("wolf", 77, 123), ("wolf", 74, 128),
+    ("wolf", 67, 120), ("wolf", 67, 127),
     # Upper dungeon — goblins (more packed)
     ("goblin", 52, 66), ("goblin", 56, 66), ("goblin", 50, 66),
     ("goblin", 70, 58), ("goblin", 74, 60), ("goblin", 66, 62),
@@ -1551,7 +1555,7 @@ NPCS = [
      "quest_id": "goblin_watch"},
 
     {"id": "guard_aldric", "name": "Guard Aldric", "x": 28, "y": 50,
-     "lines": ["Keep an eye out — the mine mouth is just south of here."]},
+     "lines": ["The rat mine is under the volcano, just south of Emberdeep."]},
 
     {"id": "village_kid_timmy", "name": "Timmy", "x": 28, "y": 22,
      "lines": ["Wanna race? ...no? Okay."]},
@@ -2577,7 +2581,7 @@ TRAVEL_DESTINATIONS = [
      "x": 22, "y": 54, "blurb": "Quest: Silk Harvest"},
     # Monsters (camp centres)
     {"id": "rats", "kind": "monster", "label": "Giant Rats",
-     "x": 36, "y": 94, "monster": "giant_rat", "blurb": "Quarry beside King's Row"},
+     "x": 67, "y": 107, "monster": "giant_rat", "blurb": "Mine under the volcano"},
     {"id": "goblins", "kind": "monster", "label": "Goblins",
      "x": 54, "y": 60, "monster": "goblin", "blurb": "Upper dungeon"},
     {"id": "skeletons", "kind": "monster", "label": "Skeletons",
@@ -2882,9 +2886,9 @@ INTERACTABLES = [
     {"id": "sign_tidehollow", "kind": "signpost", "name": "Tidehollow",
      "x": 192, "y": 54, "facing": "n", "lines": ["↑ Tidehollow"]},
     {"id": "sign_mine", "kind": "signpost", "name": "Mine",
-     "x": 30, "y": 50, "facing": "s", "lines": ["↓ Fairy Village · Mine"]},
+     "x": 30, "y": 50, "facing": "s", "lines": ["↓ Fairy Village"]},
     {"id": "sign_quarry", "kind": "signpost", "name": "Quarry",
-     "x": 30, "y": 92, "facing": "e", "lines": ["→ Mine"]},
+     "x": 71, "y": 98, "facing": "s", "lines": ["↓ Mine"]},
     {"id": "sign_dungeon", "kind": "signpost", "name": "Crypt",
      "x": 67, "y": 20, "facing": "n", "lines": ["↑ Crypt"]},
     {"id": "sign_city", "kind": "signpost", "name": "Stonehaven",

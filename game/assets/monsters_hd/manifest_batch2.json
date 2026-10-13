@@ -1,0 +1,33 @@
+{
+ "pack": "Mythoscape HD monsters batch 2 (Void Sanctum + Depths)",
+ "built": "2026-10-10 (Europe/London)",
+ "target_branch": "main",
+ "install_dir": "game/assets/monsters_hd/",
+ "monsters": [
+  "ossuary_keeper",
+  "morvath",
+  "shade",
+  "crypt_ghoul",
+  "void_imp",
+  "obsidian_colossus",
+  "void_horror",
+  "gallery_warden",
+  "void_crawler",
+  "rift_wraith",
+  "nyxarath",
+  "drowned_dead"
+ ],
+ "feature_flag": null,
+ "feature_flag_policy": "NO feature flags - always on; delete anim_strip / legacy / tinted-reuse / custom boss drawing for these ids",
+ "content_scale_note": "art is modelled at final size: set content.py 'scale' to 1.0 for these ids (gallery_warden 1.2, ossuary_keeper 1.15, nyxarath 1.9, morvath 2.0 are baked in)",
+ "start_here": [
+  ".cursor/rules/MONSTERS_HD_BATCH2_CURSOR_PROMPT.md",
+  "NOTES_BATCH2.md",
+  "previews/monsters_hd_batch2_lineup.png"
+ ],
+ "tile_px": {
+  "1x": 40,
+  "2x": 80,
+  "4x": 160
+ }
+}

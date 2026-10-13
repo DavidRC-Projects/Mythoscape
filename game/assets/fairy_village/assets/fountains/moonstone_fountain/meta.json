@@ -1,0 +1,68 @@
+{
+ "key": "moonstone_fountain",
+ "name": "Moonstone Fountain",
+ "footprint_tiles": [
+  5,
+  5
+ ],
+ "footprint": {
+  "x0": 26,
+  "y0": 61,
+  "x1": 30,
+  "y1": 65,
+  "w": 5,
+  "h": 5
+ },
+ "projection": "oblique: ortho camera el 32 deg az 0 on a (1, 1/sin32, 1.4) scaled model (buildings/housing pack)",
+ "tile_px": {
+  "1x": 40,
+  "2x": 80,
+  "4x": 160
+ },
+ "origin_px": {
+  "4x": [
+   160,
+   320
+  ],
+  "2x": [
+   80,
+   160
+  ],
+  "1x": [
+   40,
+   80
+  ]
+ },
+ "origin_note": "pixel of the footprint's NW corner (tile x0,y0 top-left). Blit at (tile_x0*tile_px - origin_px.x, tile_y0*tile_px - origin_px.y) in world pixels.",
+ "overhang_tiles": {
+  "left": 1.0,
+  "top": 2.0,
+  "right": 1.0,
+  "bottom": 1.0
+ },
+ "canvas_extent_tiles_from_nw_corner_y_up": {
+  "left": -1,
+  "right": 6,
+  "top": 2,
+  "bottom": -6
+ },
+ "collision": "json/collision/moonstone_fountain.json",
+ "interaction_tile": [
+  28,
+  65
+ ],
+ "stand_tile": [
+  28,
+  66
+ ],
+ "door_tile": null,
+ "frames": 10,
+ "fps": 10,
+ "loop": true,
+ "files": {
+  "1x": "frames_1x/f00.png .. f09.png",
+  "2x": "frames_2x/f00.png .. f09.png",
+  "4x": "frames_4x/f00.png .. f09.png"
+ },
+ "hero": "moonstone_fountain_hero_2048.png"
+}

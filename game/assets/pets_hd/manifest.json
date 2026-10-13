@@ -1,0 +1,32 @@
+{
+ "pack": "Mythoscape HD pets (cat + white husky)",
+ "built": "2026-10-11 (Europe/London)",
+ "target_branch": "main",
+ "install_dir": "game/assets/pets_hd/",
+ "pets": [
+  "pet_cat",
+  "pet_husky"
+ ],
+ "feature_flag": null,
+ "feature_flag_policy": "NO feature flags - always on; replace 2D pet drawing for these sprites",
+ "start_here": [
+  ".cursor/rules/PETS_HD_CURSOR_PROMPT.md",
+  "NOTES.md",
+  "previews/pets_hd_lineup.png"
+ ],
+ "tile_px": {
+  "1x": 40,
+  "2x": 80,
+  "4x": 160
+ },
+ "assembled": [
+  {
+   "id": "pet_cat",
+   "frames_4x": 108
+  },
+  {
+   "id": "pet_husky",
+   "frames_4x": 108
+  }
+ ]
+}

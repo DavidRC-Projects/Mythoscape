@@ -1,0 +1,25 @@
+{
+ "pack": "Mythoscape HD monsters batch 3 (Emberdeep)",
+ "built": "2026-10-11 (Europe/London)",
+ "target_branch": "main",
+ "install_dir": "game/assets/monsters_hd/",
+ "monsters": [
+  "magma_slug",
+  "ash_imp",
+  "ember_wolf",
+  "crucible_beast"
+ ],
+ "feature_flag": null,
+ "feature_flag_policy": "NO feature flags - always on; delete anim_strip / legacy / tinted-reuse for these ids",
+ "content_scale_note": "art modelled at final size; magma_slug deliberately small (knee height ~0.45 m)",
+ "start_here": [
+  ".cursor/rules/MONSTERS_HD_BATCH3_CURSOR_PROMPT.md",
+  "NOTES_BATCH3.md",
+  "previews/monsters_hd_batch3_lineup.png"
+ ],
+ "tile_px": {
+  "1x": 40,
+  "2x": 80,
+  "4x": 160
+ }
+}

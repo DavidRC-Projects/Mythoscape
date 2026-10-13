@@ -42,7 +42,7 @@ MOVED = {
 }
 STANDS = [(8, 86), (20, 85), (37, 65), (28, 66), (33, 80)]
 NPCS = [(24, 67), (25, 57), (39, 66), (31, 78)]
-RATS = [(34, 93), (37, 94), (40, 94), (35, 95), (39, 93), (33, 94)]
+RATS = [(62, 103), (67, 104), (72, 103), (64, 107), (70, 107), (66, 110), (73, 110), (63, 106)]
 MOUTH = [(63, 10), (64, 10), (65, 10), (63, 11), (64, 11), (65, 11)]
 BUILDINGS = [(4, 77, 12, 85), (16, 77, 25, 84), (34, 58, 40, 64)]
 # Crypt sprite: ~11 wide, ~10.5 north of the door, apron ~5 south.
@@ -67,6 +67,8 @@ def _grid(stamp):
     finally:
         fairy_village.stamp = real
     explore_dungeons.capture_and_hide(grid)
+    wm.stamp_emberdeep_mouth(grid)
+    wm.stamp_volcano_mine(grid)
     return grid
 
 
@@ -239,14 +241,17 @@ def check():
     reached = _bfs(live, wm.SPAWN_POINT)
     goals = NPCS + STANDS + MOUTH + [(64, 12)] + RATS
     missing = [xy for xy in goals if xy not in reached]
-    ores = [(x, y) for y in range(91, 98) for x in range(32, 43)
-            if live[y][x] in (wm.ORE, wm.IRON_ORE)]
+    mx0, my0, mx1, my1 = wm.VOLCANO_MINE
+    ores = [(x, y) for y in range(my0, my1 + 1) for x in range(mx0, mx1 + 1)
+            if live[y][x] in (wm.ORE, wm.IRON_ORE, wm.MITHRIL_ORE, wm.ADAMANTITE_ORE)]
     ore_miss = []
     for x, y in ores:
         if not any((x + dx, y + dy) in reached for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
             ore_miss.append((x, y))
-    if len(ores) != 18:
-        fails.append(f"expected 18 ores, found {len(ores)}")
+    mith = sum(1 for x, y in ores if live[y][x] == wm.MITHRIL_ORE)
+    adam = sum(1 for x, y in ores if live[y][x] == wm.ADAMANTITE_ORE)
+    if len(ores) != 34 or mith != 12 or adam != 12:
+        fails.append(f"expected 34 ores (12 mith, 12 adamant), found {len(ores)} mith {mith} adam {adam}")
     if missing or ore_miss:
         fails.append(f"unreachable {missing} ores {ore_miss}")
     else:

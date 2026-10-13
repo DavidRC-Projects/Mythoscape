@@ -1,0 +1,1661 @@
+{
+ "id": "ossuary_keeper",
+ "name": "Ossuary Keeper",
+ "level": 34,
+ "sex": "-",
+ "region": "Depths - Ossuary Halls (Bone Key)",
+ "boss": true,
+ "look": "2.3 m pale-bone skeleton sexton: hooded cowl + mantle, leather apron, the carved Bone Key on the belt, candle lantern, bone club",
+ "content_scale": 1.0,
+ "scale_note": "modelled at final in-game size (175.6 px/m at 4x). Draw at TILE*1.1 like batch 1; content.py 'scale'/'visual'/'tint' for this id are removed (see batch 2 prompt)",
+ "canvas": {
+  "1x": [
+   160,
+   168
+  ],
+  "2x": [
+   320,
+   336
+  ],
+  "4x": [
+   640,
+   672
+  ]
+ },
+ "feet_px": {
+  "1x": [
+   80,
+   156
+  ],
+  "2x": [
+   160,
+   312
+  ],
+  "4x": [
+   320,
+   624
+  ]
+ },
+ "facings": {
+  "s": "front / toward camera",
+  "e": "screen right (game facing 1)",
+  "n": "back / away",
+  "w": "screen left (game facing -1)"
+ },
+ "game_facing_map": {
+  "front": "s",
+  "back": "n",
+  "1": "e",
+  "-1": "w"
+ },
+ "combat": {
+  "attack_range": 2,
+  "side_by_side": true,
+  "side_gap": 2,
+  "attack_cooldown": 1.2,
+  "aggro_range": 5,
+  "scale": 1.0,
+  "force_retaliate": true,
+  "attack_facing": "client face_toward_target forces +-1 while swinging -> e/w frames; s/n attack frames exist for completeness"
+ },
+ "states": {
+  "idle": {
+   "frames": 4,
+   "loop": true,
+   "runtime": "frame = int(((t * 1.5) % 1.0) * 4)"
+  },
+  "walk": {
+   "frames": 8,
+   "loop": true,
+   "runtime": "frame = int(((t * 1.15) % 1.0) * 8)   # same cadence as the HD player walk"
+  },
+  "attack": {
+   "frames": 6,
+   "loop": false,
+   "frame_starts": [
+    0.0,
+    0.14,
+    0.3,
+    0.42,
+    0.6,
+    0.8
+   ],
+   "impact_frame": 3,
+   "impact_progress": 0.48,
+   "phases": {
+    "windup": [
+     0,
+     1
+    ],
+    "strike": [
+     2
+    ],
+    "impact": [
+     3
+    ],
+    "follow_through": [
+     4
+    ],
+    "recovery": [
+     5
+    ]
+   },
+   "runtime": "progress = client._attack_progress(mid) (0..1 over ATTACK_ANIM_SECS=1.05); frame = max(i for i, s in enumerate(frame_starts) if progress >= s)  -> f03 spans 0.42-0.60 so the hitsplat released at strike_t=0.48 lands on the impact frame"
+  },
+  "hit": {
+   "frames": 3,
+   "loop": false,
+   "duration_s": 0.36,
+   "runtime": "start when the queued hitsplat for a player_hits_monster hit (damage>0) on this knight is released (event time + 0.48*ATTACK_ANIM_SECS melee / 0.58*RANGED_ANIM_SECS ranged); frame = min(2, int(elapsed/0.12)); attack frames win if the knight is mid-swing; keep the red hurt tint on top"
+  },
+  "death": {
+   "frames": 6,
+   "loop": false,
+   "duration_s": 0.9,
+   "hold_fade_s": 0.6,
+   "runtime": "on DEATH (entity_kind monster) snapshot type/x/y/facing into a client corpse list (the server drops the monster from state); frame = min(5, int(elapsed/0.15)); after 0.9 s hold f05 and fade alpha to 0 over 0.6 s"
+  }
+ },
+ "files": "sprite_{1x,2x,4x}/{idle,walk,attack,hit,death}/{s,e,n,w}/fNN.png",
+ "anchors_note": "per-frame pixel anchors in the 4x canvas (divide by 2 for 2x, 4 for 1x). head_top = top of the silhouette above the head (health bar / hitsplat), weapon_tip = blade/club tip or, for wolf + giant_rat, the mouth (bite point), weapon_hand = grip (mouth for beasts). Screen pos = (cx - feet_x + ax) * draw_scale, same as the sprite blit.",
+ "shadow": "soft contact shadow baked into every frame (semi-transparent, no dark block)",
+ "hero": "ossuary_keeper_hero_2048.png (+ _bg.jpg)",
+ "portrait": "portrait_bust.png (1024, transparent) + portrait_bust_512.png + portrait_bust_bg.jpg",
+ "anchors_4x": {
+  "idle/s/00": {
+   "head_top": [
+    320.0,
+    219.0
+   ],
+   "weapon_tip": [
+    237.8,
+    288.1
+   ],
+   "weapon_hand": [
+    237.8,
+    441.1
+   ]
+  },
+  "idle/s/01": {
+   "head_top": [
+    320.0,
+    220.0
+   ],
+   "weapon_tip": [
+    238.0,
+    291.2
+   ],
+   "weapon_hand": [
+    237.8,
+    440.4
+   ]
+  },
+  "idle/s/02": {
+   "head_top": [
+    320.0,
+    219.0
+   ],
+   "weapon_tip": [
+    237.8,
+    288.1
+   ],
+   "weapon_hand": [
+    237.8,
+    441.1
+   ]
+  },
+  "idle/s/03": {
+   "head_top": [
+    320.0,
+    219.0
+   ],
+   "weapon_tip": [
+    237.6,
+    284.8
+   ],
+   "weapon_hand": [
+    237.7,
+    441.6
+   ]
+  },
+  "walk/s/00": {
+   "head_top": [
+    320.0,
+    224.0
+   ],
+   "weapon_tip": [
+    237.8,
+    313.6
+   ],
+   "weapon_hand": [
+    237.8,
+    442.9
+   ]
+  },
+  "walk/s/01": {
+   "head_top": [
+    320.4,
+    227.0
+   ],
+   "weapon_tip": [
+    241.8,
+    254.4
+   ],
+   "weapon_hand": [
+    239.4,
+    436.3
+   ]
+  },
+  "walk/s/02": {
+   "head_top": [
+    320.5,
+    228.0
+   ],
+   "weapon_tip": [
+    243.7,
+    231.2
+   ],
+   "weapon_hand": [
+    240.1,
+    431.9
+   ]
+  },
+  "walk/s/03": {
+   "head_top": [
+    320.4,
+    225.0
+   ],
+   "weapon_tip": [
+    241.8,
+    252.0
+   ],
+   "weapon_hand": [
+    239.4,
+    433.9
+   ]
+  },
+  "walk/s/04": {
+   "head_top": [
+    320.0,
+    224.0
+   ],
+   "weapon_tip": [
+    237.8,
+    313.6
+   ],
+   "weapon_hand": [
+    237.8,
+    442.9
+   ]
+  },
+  "walk/s/05": {
+   "head_top": [
+    319.6,
+    227.0
+   ],
+   "weapon_tip": [
+    234.3,
+    382.2
+   ],
+   "weapon_hand": [
+    235.9,
+    451.4
+   ]
+  },
+  "walk/s/06": {
+   "head_top": [
+    319.5,
+    228.0
+   ],
+   "weapon_tip": [
+    232.9,
+    410.1
+   ],
+   "weapon_hand": [
+    235.1,
+    453.0
+   ]
+  },
+  "walk/s/07": {
+   "head_top": [
+    319.6,
+    225.0
+   ],
+   "weapon_tip": [
+    234.3,
+    379.8
+   ],
+   "weapon_hand": [
+    235.9,
+    449.0
+   ]
+  },
+  "attack/s/00": {
+   "head_top": [
+    323.1,
+    177.0
+   ],
+   "weapon_tip": [
+    343.1,
+    138.8
+   ],
+   "weapon_hand": [
+    257.5,
+    314.5
+   ]
+  },
+  "attack/s/01": {
+   "head_top": [
+    330.1,
+    205.0
+   ],
+   "weapon_tip": [
+    266.6,
+    343.2
+   ],
+   "weapon_hand": [
+    326.4,
+    224.3
+   ]
+  },
+  "attack/s/02": {
+   "head_top": [
+    322.3,
+    127.0
+   ],
+   "weapon_tip": [
+    266.6,
+    48.4
+   ],
+   "weapon_hand": [
+    284.3,
+    314.6
+   ]
+  },
+  "attack/s/03": {
+   "head_top": [
+    343.0,
+    258.0
+   ],
+   "weapon_tip": [
+    366.7,
+    724.5
+   ],
+   "weapon_hand": [
+    292.1,
+    475.1
+   ]
+  },
+  "attack/s/04": {
+   "head_top": [
+    334.8,
+    246.0
+   ],
+   "weapon_tip": [
+    319.7,
+    731.1
+   ],
+   "weapon_hand": [
+    273.3,
+    468.3
+   ]
+  },
+  "attack/s/05": {
+   "head_top": [
+    321.3,
+    223.0
+   ],
+   "weapon_tip": [
+    263.4,
+    347.2
+   ],
+   "weapon_hand": [
+    247.8,
+    452.1
+   ]
+  },
+  "hit/s/00": {
+   "head_top": [
+    318.9,
+    210.0
+   ],
+   "weapon_tip": [
+    315.5,
+    142.0
+   ],
+   "weapon_hand": [
+    239.3,
+    390.7
+   ]
+  },
+  "hit/s/01": {
+   "head_top": [
+    318.1,
+    186.0
+   ],
+   "weapon_tip": [
+    338.3,
+    117.6
+   ],
+   "weapon_hand": [
+    246.0,
+    368.0
+   ]
+  },
+  "hit/s/02": {
+   "head_top": [
+    319.7,
+    212.0
+   ],
+   "weapon_tip": [
+    273.7,
+    208.3
+   ],
+   "weapon_hand": [
+    234.7,
+    421.6
+   ]
+  },
+  "death/s/00": {
+   "head_top": [
+    314.7,
+    207.0
+   ],
+   "weapon_tip": [
+    329.0,
+    208.9
+   ],
+   "weapon_hand": [
+    218.4,
+    409.3
+   ]
+  },
+  "death/s/01": {
+   "head_top": [
+    267.5,
+    273.0
+   ],
+   "weapon_tip": [
+    208.2,
+    541.9
+   ],
+   "weapon_hand": [
+    221.8,
+    474.2
+   ]
+  },
+  "death/s/02": {
+   "head_top": [
+    174.3,
+    280.0
+   ],
+   "weapon_tip": [
+    190.1,
+    304.0
+   ],
+   "weapon_hand": [
+    189.3,
+    507.7
+   ]
+  },
+  "death/s/03": {
+   "head_top": [
+    109.4,
+    385.0
+   ],
+   "weapon_tip": [
+    129.7,
+    648.1
+   ],
+   "weapon_hand": [
+    248.0,
+    625.1
+   ]
+  },
+  "death/s/04": {
+   "head_top": [
+    93.6,
+    401.0
+   ],
+   "weapon_tip": [
+    175.7,
+    687.2
+   ],
+   "weapon_hand": [
+    274.2,
+    613.0
+   ]
+  },
+  "death/s/05": {
+   "head_top": [
+    92.7,
+    484.0
+   ],
+   "weapon_tip": [
+    103.1,
+    470.3
+   ],
+   "weapon_hand": [
+    194.6,
+    668.8
+   ]
+  },
+  "idle/e/00": {
+   "head_top": [
+    344.3,
+    217.0
+   ],
+   "weapon_tip": [
+    512.3,
+    233.0
+   ],
+   "weapon_hand": [
+    399.4,
+    442.5
+   ]
+  },
+  "idle/e/01": {
+   "head_top": [
+    346.2,
+    217.0
+   ],
+   "weapon_tip": [
+    513.1,
+    235.7
+   ],
+   "weapon_hand": [
+    396.0,
+    443.5
+   ]
+  },
+  "idle/e/02": {
+   "head_top": [
+    344.3,
+    217.0
+   ],
+   "weapon_tip": [
+    512.3,
+    233.0
+   ],
+   "weapon_hand": [
+    399.4,
+    442.5
+   ]
+  },
+  "idle/e/03": {
+   "head_top": [
+    342.4,
+    217.0
+   ],
+   "weapon_tip": [
+    511.4,
+    230.3
+   ],
+   "weapon_hand": [
+    402.8,
+    441.3
+   ]
+  },
+  "walk/e/00": {
+   "head_top": [
+    359.9,
+    215.0
+   ],
+   "weapon_tip": [
+    531.8,
+    248.8
+   ],
+   "weapon_hand": [
+    394.3,
+    446.9
+   ]
+  },
+  "walk/e/01": {
+   "head_top": [
+    359.9,
+    218.0
+   ],
+   "weapon_tip": [
+    486.2,
+    210.4
+   ],
+   "weapon_hand": [
+    408.0,
+    432.6
+   ]
+  },
+  "walk/e/02": {
+   "head_top": [
+    359.9,
+    219.0
+   ],
+   "weapon_tip": [
+    464.3,
+    197.2
+   ],
+   "weapon_hand": [
+    412.3,
+    425.7
+   ]
+  },
+  "walk/e/03": {
+   "head_top": [
+    359.9,
+    216.0
+   ],
+   "weapon_tip": [
+    486.2,
+    208.0
+   ],
+   "weapon_hand": [
+    408.0,
+    430.2
+   ]
+  },
+  "walk/e/04": {
+   "head_top": [
+    359.9,
+    215.0
+   ],
+   "weapon_tip": [
+    531.8,
+    248.8
+   ],
+   "weapon_hand": [
+    394.3,
+    446.9
+   ]
+  },
+  "walk/e/05": {
+   "head_top": [
+    359.9,
+    219.0
+   ],
+   "weapon_tip": [
+    565.1,
+    302.5
+   ],
+   "weapon_hand": [
+    376.5,
+    465.2
+   ]
+  },
+  "walk/e/06": {
+   "head_top": [
+    359.9,
+    220.0
+   ],
+   "weapon_tip": [
+    574.7,
+    326.3
+   ],
+   "weapon_hand": [
+    368.0,
+    471.4
+   ]
+  },
+  "walk/e/07": {
+   "head_top": [
+    359.9,
+    217.0
+   ],
+   "weapon_tip": [
+    565.1,
+    300.2
+   ],
+   "weapon_hand": [
+    376.5,
+    462.8
+   ]
+  },
+  "attack/e/00": {
+   "head_top": [
+    335.8,
+    213.0
+   ],
+   "weapon_tip": [
+    126.9,
+    223.9
+   ],
+   "weapon_hand": [
+    372.2,
+    319.7
+   ]
+  },
+  "attack/e/01": {
+   "head_top": [
+    321.2,
+    209.0
+   ],
+   "weapon_tip": [
+    124.4,
+    467.7
+   ],
+   "weapon_hand": [
+    265.3,
+    248.5
+   ]
+  },
+  "attack/e/02": {
+   "head_top": [
+    366.0,
+    128.0
+   ],
+   "weapon_tip": [
+    300.3,
+    84.9
+   ],
+   "weapon_hand": [
+    437.9,
+    273.5
+   ]
+  },
+  "attack/e/03": {
+   "head_top": [
+    419.6,
+    218.0
+   ],
+   "weapon_tip": [
+    625.0,
+    548.6
+   ],
+   "weapon_hand": [
+    449.2,
+    424.4
+   ]
+  },
+  "attack/e/04": {
+   "head_top": [
+    404.1,
+    215.0
+   ],
+   "weapon_tip": [
+    537.7,
+    622.3
+   ],
+   "weapon_hand": [
+    400.9,
+    451.2
+   ]
+  },
+  "attack/e/05": {
+   "head_top": [
+    358.8,
+    215.0
+   ],
+   "weapon_tip": [
+    576.4,
+    247.3
+   ],
+   "weapon_hand": [
+    416.7,
+    439.9
+   ]
+  },
+  "hit/e/00": {
+   "head_top": [
+    281.8,
+    209.0
+   ],
+   "weapon_tip": [
+    344.9,
+    131.8
+   ],
+   "weapon_hand": [
+    417.1,
+    382.5
+   ]
+  },
+  "hit/e/01": {
+   "head_top": [
+    261.2,
+    190.0
+   ],
+   "weapon_tip": [
+    280.7,
+    128.1
+   ],
+   "weapon_hand": [
+    410.6,
+    359.7
+   ]
+  },
+  "hit/e/02": {
+   "head_top": [
+    314.3,
+    222.0
+   ],
+   "weapon_tip": [
+    441.6,
+    170.7
+   ],
+   "weapon_hand": [
+    413.4,
+    417.6
+   ]
+  },
+  "death/e/00": {
+   "head_top": [
+    274.1,
+    233.0
+   ],
+   "weapon_tip": [
+    446.6,
+    141.1
+   ],
+   "weapon_hand": [
+    427.9,
+    406.1
+   ]
+  },
+  "death/e/01": {
+   "head_top": [
+    348.3,
+    232.0
+   ],
+   "weapon_tip": [
+    549.3,
+    379.6
+   ],
+   "weapon_hand": [
+    319.4,
+    499.5
+   ]
+  },
+  "death/e/02": {
+   "head_top": [
+    138.0,
+    317.0
+   ],
+   "weapon_tip": [
+    219.0,
+    161.3
+   ],
+   "weapon_hand": [
+    311.4,
+    405.7
+   ]
+  },
+  "death/e/03": {
+   "head_top": [
+    38.5,
+    474.0
+   ],
+   "weapon_tip": [
+    173.3,
+    338.9
+   ],
+   "weapon_hand": [
+    242.2,
+    585.4
+   ]
+  },
+  "death/e/04": {
+   "head_top": [
+    23.8,
+    541.0
+   ],
+   "weapon_tip": [
+    119.1,
+    413.9
+   ],
+   "weapon_hand": [
+    210.9,
+    651.8
+   ]
+  },
+  "death/e/05": {
+   "head_top": [
+    22.4,
+    397.0
+   ],
+   "weapon_tip": [
+    32.8,
+    366.8
+   ],
+   "weapon_hand": [
+    124.3,
+    520.1
+   ]
+  },
+  "idle/n/00": {
+   "head_top": [
+    320.0,
+    174.0
+   ],
+   "weapon_tip": [
+    402.2,
+    95.8
+   ],
+   "weapon_hand": [
+    402.2,
+    361.7
+   ]
+  },
+  "idle/n/01": {
+   "head_top": [
+    320.0,
+    177.0
+   ],
+   "weapon_tip": [
+    402.0,
+    98.1
+   ],
+   "weapon_hand": [
+    402.2,
+    364.4
+   ]
+  },
+  "idle/n/02": {
+   "head_top": [
+    320.0,
+    174.0
+   ],
+   "weapon_tip": [
+    402.2,
+    95.8
+   ],
+   "weapon_hand": [
+    402.2,
+    361.7
+   ]
+  },
+  "idle/n/03": {
+   "head_top": [
+    320.0,
+    171.0
+   ],
+   "weapon_tip": [
+    402.4,
+    93.4
+   ],
+   "weapon_hand": [
+    402.3,
+    358.8
+   ]
+  },
+  "walk/n/00": {
+   "head_top": [
+    320.0,
+    181.0
+   ],
+   "weapon_tip": [
+    402.2,
+    101.8
+   ],
+   "weapon_hand": [
+    402.2,
+    368.6
+   ]
+  },
+  "walk/n/01": {
+   "head_top": [
+    319.6,
+    163.0
+   ],
+   "weapon_tip": [
+    398.2,
+    88.2
+   ],
+   "weapon_hand": [
+    400.6,
+    348.3
+   ]
+  },
+  "walk/n/02": {
+   "head_top": [
+    319.5,
+    157.0
+   ],
+   "weapon_tip": [
+    396.3,
+    86.9
+   ],
+   "weapon_hand": [
+    399.9,
+    339.6
+   ]
+  },
+  "walk/n/03": {
+   "head_top": [
+    319.6,
+    160.0
+   ],
+   "weapon_tip": [
+    398.2,
+    85.8
+   ],
+   "weapon_hand": [
+    400.6,
+    345.9
+   ]
+  },
+  "walk/n/04": {
+   "head_top": [
+    320.0,
+    181.0
+   ],
+   "weapon_tip": [
+    402.2,
+    101.8
+   ],
+   "weapon_hand": [
+    402.2,
+    368.6
+   ]
+  },
+  "walk/n/05": {
+   "head_top": [
+    320.4,
+    211.0
+   ],
+   "weapon_tip": [
+    405.7,
+    137.1
+   ],
+   "weapon_hand": [
+    404.1,
+    395.0
+   ]
+  },
+  "walk/n/06": {
+   "head_top": [
+    320.5,
+    212.0
+   ],
+   "weapon_tip": [
+    407.1,
+    155.4
+   ],
+   "weapon_hand": [
+    404.9,
+    405.0
+   ]
+  },
+  "walk/n/07": {
+   "head_top": [
+    320.4,
+    208.0
+   ],
+   "weapon_tip": [
+    405.7,
+    134.7
+   ],
+   "weapon_hand": [
+    404.1,
+    392.6
+   ]
+  },
+  "attack/n/00": {
+   "head_top": [
+    316.9,
+    218.0
+   ],
+   "weapon_tip": [
+    296.9,
+    332.0
+   ],
+   "weapon_hand": [
+    382.5,
+    262.4
+   ]
+  },
+  "attack/n/01": {
+   "head_top": [
+    309.9,
+    223.0
+   ],
+   "weapon_tip": [
+    373.4,
+    538.8
+   ],
+   "weapon_hand": [
+    313.6,
+    279.0
+   ]
+  },
+  "attack/n/02": {
+   "head_top": [
+    317.7,
+    90.0
+   ],
+   "weapon_tip": [
+    373.4,
+    68.0
+   ],
+   "weapon_hand": [
+    355.7,
+    196.8
+   ]
+  },
+  "attack/n/03": {
+   "head_top": [
+    297.0,
+    186.0
+   ],
+   "weapon_tip": [
+    273.3,
+    419.5
+   ],
+   "weapon_hand": [
+    347.9,
+    345.9
+   ]
+  },
+  "attack/n/04": {
+   "head_top": [
+    305.2,
+    189.0
+   ],
+   "weapon_tip": [
+    320.3,
+    513.4
+   ],
+   "weapon_hand": [
+    366.7,
+    387.4
+   ]
+  },
+  "attack/n/05": {
+   "head_top": [
+    318.7,
+    168.0
+   ],
+   "weapon_tip": [
+    376.6,
+    90.8
+   ],
+   "weapon_hand": [
+    392.2,
+    355.4
+   ]
+  },
+  "hit/n/00": {
+   "head_top": [
+    321.1,
+    156.0
+   ],
+   "weapon_tip": [
+    324.5,
+    117.1
+   ],
+   "weapon_hand": [
+    400.7,
+    293.5
+   ]
+  },
+  "hit/n/01": {
+   "head_top": [
+    321.9,
+    176.0
+   ],
+   "weapon_tip": [
+    301.7,
+    156.9
+   ],
+   "weapon_hand": [
+    394.0,
+    277.4
+   ]
+  },
+  "hit/n/02": {
+   "head_top": [
+    320.3,
+    151.0
+   ],
+   "weapon_tip": [
+    366.3,
+    86.7
+   ],
+   "weapon_hand": [
+    405.3,
+    328.2
+   ]
+  },
+  "death/n/00": {
+   "head_top": [
+    325.3,
+    137.0
+   ],
+   "weapon_tip": [
+    311.0,
+    82.3
+   ],
+   "weapon_hand": [
+    421.6,
+    301.4
+   ]
+  },
+  "death/n/01": {
+   "head_top": [
+    372.5,
+    205.0
+   ],
+   "weapon_tip": [
+    431.8,
+    267.6
+   ],
+   "weapon_hand": [
+    418.2,
+    457.0
+   ]
+  },
+  "death/n/02": {
+   "head_top": [
+    465.7,
+    202.0
+   ],
+   "weapon_tip": [
+    449.9,
+    133.4
+   ],
+   "weapon_hand": [
+    450.7,
+    384.6
+   ]
+  },
+  "death/n/03": {
+   "head_top": [
+    530.6,
+    342.0
+   ],
+   "weapon_tip": [
+    510.3,
+    379.9
+   ],
+   "weapon_hand": [
+    392.0,
+    574.7
+   ]
+  },
+  "death/n/04": {
+   "head_top": [
+    546.4,
+    407.0
+   ],
+   "weapon_tip": [
+    464.3,
+    413.2
+   ],
+   "weapon_hand": [
+    365.8,
+    581.0
+   ]
+  },
+  "death/n/05": {
+   "head_top": [
+    547.3,
+    365.0
+   ],
+   "weapon_tip": [
+    536.9,
+    305.3
+   ],
+   "weapon_hand": [
+    445.4,
+    537.3
+   ]
+  },
+  "idle/w/00": {
+   "head_top": [
+    295.7,
+    217.0
+   ],
+   "weapon_tip": [
+    127.7,
+    150.8
+   ],
+   "weapon_hand": [
+    240.6,
+    360.3
+   ]
+  },
+  "idle/w/01": {
+   "head_top": [
+    293.8,
+    217.0
+   ],
+   "weapon_tip": [
+    126.9,
+    153.7
+   ],
+   "weapon_hand": [
+    244.0,
+    361.3
+   ]
+  },
+  "idle/w/02": {
+   "head_top": [
+    295.7,
+    217.0
+   ],
+   "weapon_tip": [
+    127.7,
+    150.8
+   ],
+   "weapon_hand": [
+    240.6,
+    360.3
+   ]
+  },
+  "idle/w/03": {
+   "head_top": [
+    297.6,
+    217.0
+   ],
+   "weapon_tip": [
+    128.6,
+    147.9
+   ],
+   "weapon_hand": [
+    237.2,
+    359.1
+   ]
+  },
+  "walk/w/00": {
+   "head_top": [
+    280.1,
+    215.0
+   ],
+   "weapon_tip": [
+    108.2,
+    166.6
+   ],
+   "weapon_hand": [
+    245.7,
+    364.7
+   ]
+  },
+  "walk/w/01": {
+   "head_top": [
+    280.1,
+    219.0
+   ],
+   "weapon_tip": [
+    153.8,
+    132.2
+   ],
+   "weapon_hand": [
+    232.0,
+    352.0
+   ]
+  },
+  "walk/w/02": {
+   "head_top": [
+    280.1,
+    186.0
+   ],
+   "weapon_tip": [
+    175.7,
+    120.9
+   ],
+   "weapon_hand": [
+    227.7,
+    345.8
+   ]
+  },
+  "walk/w/03": {
+   "head_top": [
+    280.1,
+    217.0
+   ],
+   "weapon_tip": [
+    153.8,
+    129.8
+   ],
+   "weapon_hand": [
+    232.0,
+    349.6
+   ]
+  },
+  "walk/w/04": {
+   "head_top": [
+    280.1,
+    215.0
+   ],
+   "weapon_tip": [
+    108.2,
+    166.6
+   ],
+   "weapon_hand": [
+    245.7,
+    364.7
+   ]
+  },
+  "walk/w/05": {
+   "head_top": [
+    280.1,
+    218.0
+   ],
+   "weapon_tip": [
+    74.9,
+    216.8
+   ],
+   "weapon_hand": [
+    263.5,
+    381.2
+   ]
+  },
+  "walk/w/06": {
+   "head_top": [
+    280.1,
+    219.0
+   ],
+   "weapon_tip": [
+    65.3,
+    239.2
+   ],
+   "weapon_hand": [
+    272.0,
+    386.5
+   ]
+  },
+  "walk/w/07": {
+   "head_top": [
+    280.1,
+    216.0
+   ],
+   "weapon_tip": [
+    74.9,
+    214.4
+   ],
+   "weapon_hand": [
+    263.5,
+    378.8
+   ]
+  },
+  "attack/w/00": {
+   "head_top": [
+    304.2,
+    222.0
+   ],
+   "weapon_tip": [
+    513.1,
+    246.9
+   ],
+   "weapon_hand": [
+    267.8,
+    257.2
+   ]
+  },
+  "attack/w/01": {
+   "head_top": [
+    318.8,
+    226.0
+   ],
+   "weapon_tip": [
+    515.6,
+    414.3
+   ],
+   "weapon_hand": [
+    374.7,
+    254.9
+   ]
+  },
+  "attack/w/02": {
+   "head_top": [
+    274.0,
+    81.0
+   ],
+   "weapon_tip": [
+    339.7,
+    31.5
+   ],
+   "weapon_hand": [
+    202.1,
+    237.8
+   ]
+  },
+  "attack/w/03": {
+   "head_top": [
+    220.4,
+    226.0
+   ],
+   "weapon_tip": [
+    15.0,
+    595.3
+   ],
+   "weapon_hand": [
+    190.8,
+    396.6
+   ]
+  },
+  "attack/w/04": {
+   "head_top": [
+    235.9,
+    218.0
+   ],
+   "weapon_tip": [
+    102.3,
+    622.1
+   ],
+   "weapon_hand": [
+    239.1,
+    404.5
+   ]
+  },
+  "attack/w/05": {
+   "head_top": [
+    281.2,
+    213.0
+   ],
+   "weapon_tip": [
+    63.6,
+    190.7
+   ],
+   "weapon_hand": [
+    223.3,
+    367.6
+   ]
+  },
+  "hit/w/00": {
+   "head_top": [
+    358.2,
+    175.0
+   ],
+   "weapon_tip": [
+    295.1,
+    127.4
+   ],
+   "weapon_hand": [
+    222.9,
+    301.7
+   ]
+  },
+  "hit/w/01": {
+   "head_top": [
+    378.8,
+    172.0
+   ],
+   "weapon_tip": [
+    359.3,
+    146.4
+   ],
+   "weapon_hand": [
+    229.4,
+    285.7
+   ]
+  },
+  "hit/w/02": {
+   "head_top": [
+    325.7,
+    222.0
+   ],
+   "weapon_tip": [
+    198.4,
+    124.4
+   ],
+   "weapon_hand": [
+    226.6,
+    332.2
+   ]
+  },
+  "death/w/00": {
+   "head_top": [
+    365.9,
+    227.0
+   ],
+   "weapon_tip": [
+    193.4,
+    150.1
+   ],
+   "weapon_hand": [
+    212.1,
+    304.5
+   ]
+  },
+  "death/w/01": {
+   "head_top": [
+    291.7,
+    232.0
+   ],
+   "weapon_tip": [
+    90.7,
+    282.0
+   ],
+   "weapon_hand": [
+    320.6,
+    396.8
+   ]
+  },
+  "death/w/02": {
+   "head_top": [
+    502.0,
+    317.0
+   ],
+   "weapon_tip": [
+    421.0,
+    235.4
+   ],
+   "weapon_hand": [
+    328.6,
+    310.3
+   ]
+  },
+  "death/w/03": {
+   "head_top": [
+    601.5,
+    419.0
+   ],
+   "weapon_tip": [
+    466.7,
+    249.8
+   ],
+   "weapon_hand": [
+    397.8,
+    438.5
+   ]
+  },
+  "death/w/04": {
+   "head_top": [
+    616.2,
+    439.0
+   ],
+   "weapon_tip": [
+    520.9,
+    299.1
+   ],
+   "weapon_hand": [
+    429.1,
+    486.4
+   ]
+  },
+  "death/w/05": {
+   "head_top": [
+    617.6,
+    466.0
+   ],
+   "weapon_tip": [
+    607.2,
+    543.2
+   ],
+   "weapon_hand": [
+    515.7,
+    448.0
+   ]
+  }
+ },
+ "hit_point_4x": {
+  "s": [
+   366.7,
+   724.5
+  ],
+  "e": [
+   625.0,
+   548.6
+  ],
+  "n": [
+   273.3,
+   419.5
+  ],
+  "w": [
+   15.0,
+   595.3
+  ]
+ },
+ "head_top_idle_4x": 219.0,
+ "healthbar_y_offset_1x": -105.2,
+ "impact_reach_tiles": 1.91,
+ "complete": true,
+ "scale_baked": true
+}

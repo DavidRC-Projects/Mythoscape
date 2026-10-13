@@ -1,0 +1,79 @@
+{
+ "key": "lily_fountain",
+ "name": "Lily Fountain",
+ "footprint": {
+  "x0": 32,
+  "y0": 77,
+  "x1": 34,
+  "y1": 79,
+  "w": 3,
+  "h": 3
+ },
+ "round_corners": 0,
+ "walk_mask_rows_north_to_south": [
+  [
+   0,
+   0,
+   0
+  ],
+  [
+   0,
+   0,
+   0
+  ],
+  [
+   0,
+   0,
+   0
+  ]
+ ],
+ "mask_legend": "0 = blocked (stamp WALL), 1 = walkable (leave terrain)",
+ "blocked_tiles": [
+  [
+   32,
+   77
+  ],
+  [
+   33,
+   77
+  ],
+  [
+   34,
+   77
+  ],
+  [
+   32,
+   78
+  ],
+  [
+   33,
+   78
+  ],
+  [
+   34,
+   78
+  ],
+  [
+   32,
+   79
+  ],
+  [
+   33,
+   79
+  ],
+  [
+   34,
+   79
+  ]
+ ],
+ "interaction_tile": [
+  33,
+  79
+ ],
+ "stand_tile": [
+  33,
+  80
+ ],
+ "interaction": "'Drink Moonwater': restore a little HP/prayer, flavour text. Fountain is WALL (not WATER) so it is not a fishing spot.",
+ "sprite": "fairy_village/fountains/lily_fountain/"
+}

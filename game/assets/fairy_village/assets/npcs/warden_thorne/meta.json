@@ -1,0 +1,50 @@
+{
+ "id": "warden_thorne",
+ "name": "Warden Thorne Briarwing",
+ "tile": [
+  25,
+  57
+ ],
+ "role": "fairy elder / gate guard",
+ "facings": {
+  "s": "toward camera (south)",
+  "e": "east / screen right",
+  "n": "away (north)",
+  "w": "west / screen left"
+ },
+ "canvas": {
+  "1x": [
+   96,
+   128
+  ],
+  "2x": [
+   192,
+   256
+  ],
+  "4x": [
+   384,
+   512
+  ]
+ },
+ "feet_px": {
+  "1x": [
+   48,
+   118
+  ],
+  "2x": [
+   96,
+   236
+  ],
+  "4x": [
+   192,
+   472
+  ]
+ },
+ "scale_note": "constant 175.6 px per metre at 4x (43.9 at 1x) for every NPC, so the gnome and child read smaller",
+ "frames": 8,
+ "fps": 8,
+ "loop": true,
+ "idle_frame": 0,
+ "files": "sprite_{1x,2x,4x}/{s,e,n,w}/f00.png .. f07.png",
+ "hero": "warden_thorne_hero_2048.png"
+}

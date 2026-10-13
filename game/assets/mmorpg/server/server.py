@@ -35,6 +35,7 @@ import explore_dungeons
 from world_map import (
     generate_world, build_resource_nodes, is_walkable, WIDTH, HEIGHT, SPAWN_POINT, get_zone,
     room_containing, in_room, FLOOR, stamp_emberdeep_mouth, stamp_outfitters_shell,
+    stamp_volcano_mine, near_volcano_mine, VOLCANO_RAT_LEASH, VOLCANO_WOLF_LEASH,
 )
 import combat
 import dungeon as tidehollow
@@ -1198,14 +1199,21 @@ class World:
         castle_owners.bind(self)
         explore_dungeons.capture_and_hide(self.grid)
         stamp_emberdeep_mouth(self.grid)
+        stamp_volcano_mine(self.grid)
         stamp_outfitters_shell(self.grid)
         self.resource_nodes = build_resource_nodes(self.grid)
         self.monsters = {}
         for mtype, x, y in MONSTER_SPAWNS:
-            if explore_dungeons.contains_region(x, y):
+            camp = mtype in ("giant_rat", "wolf") and near_volcano_mine(x, y)
+            if explore_dungeons.contains_region(x, y) and not camp:
                 continue
             mid = next_id()
-            self.monsters[mid] = MonsterInstance(mid, mtype, x, y)
+            monster = MonsterInstance(mid, mtype, x, y)
+            if mtype == "giant_rat" and camp:
+                monster.home_room = VOLCANO_RAT_LEASH
+            elif mtype == "wolf" and camp:
+                monster.home_room = VOLCANO_WOLF_LEASH
+            self.monsters[mid] = monster
         self.sessions = {}     # player_id -> PlayerSession
         self.ground_items = {}  # (x, y) -> [{"item_id","qty"}]
         # Quest prop — Lira's Lost Locket near the wishing well
@@ -6095,6 +6103,14 @@ def _pet_face_owner(session):
         session.pet_facing = getattr(session, "pet_facing", None) or "s"
 
 
+def _pet_off_screen(session):
+    """The pet has left the view around the player. Further than two tiles is fine."""
+    dx = abs(int(session.pet_x) - int(session.x))
+    dy = abs(int(session.pet_y) - int(session.y))
+    # Default camera: 900x640 at 40px tiles, player in the middle.
+    return dx > 11 or dy > 8
+
+
 def _pet_reappear(session):
     """Place the pet two tiles away. Used when it must skip the walk."""
     if not getattr(session, "pet_id", None):
@@ -6144,7 +6160,7 @@ def _pet_step_toward(session, tx, ty, avoid=None):
 
 
 def _pet_keep_up(session, dx=0, dy=0):
-    """One follow step. The pet walks toward two tiles away, and only snaps there when far."""
+    """Let the pet fall behind. It only returns once it has left the screen."""
     if dx or dy:
         if abs(dx) >= abs(dy) and dx:
             session.last_step = (1 if dx > 0 else -1, 0)
@@ -6154,28 +6170,10 @@ def _pet_keep_up(session, dx=0, dy=0):
         return
     if session.pet_target_id:
         return
-    owner = (session.x, session.y)
-    dist = max(abs(session.pet_x - session.x), abs(session.pet_y - session.y))
-    if dist > 10 or (session.pet_x, session.pet_y) == owner:
+    if _pet_off_screen(session) or (session.pet_x, session.pet_y) == (session.x, session.y):
         _pet_reappear(session)
         return
-    if dist == 2:
-        _pet_face_owner(session)
-        return
-    # One tile only, so the walk is not a multi-tile jump.
-    free = _pet_preferred_tiles(session)
-    if not free:
-        return
-    if dist < 2:
-        goal = free[0]
-    else:
-        goal = min(free, key=lambda c: max(abs(c[0] - session.pet_x), abs(c[1] - session.pet_y)))
-    if (session.pet_x, session.pet_y) != goal:
-        _pet_step_toward(session, goal[0], goal[1], avoid=owner)
-    if (session.pet_x, session.pet_y) == owner:
-        _pet_reappear(session)
-    else:
-        _pet_face_owner(session)
+    _pet_face_owner(session)
 
 
 def _pet_note_player_step(session):
@@ -6201,8 +6199,8 @@ def process_pets(events):
         if session.pet_hp <= 0:
             session.pet_hp = pdef["hp"]
 
-        player_moving = _pet_note_player_step(session)
-        if max(abs(session.pet_x - session.x), abs(session.pet_y - session.y)) > 10:
+        _pet_note_player_step(session)
+        if _pet_off_screen(session):
             _pet_reappear(session)
 
         dungeon_tag = session.player_id if session.dungeon else None
@@ -6270,19 +6268,10 @@ def process_pets(events):
                 _park_pet(session)
             continue
 
-        owner = (session.x, session.y)
-        dist = max(abs(session.pet_x - session.x), abs(session.pet_y - session.y))
-        if (session.pet_x, session.pet_y) == owner or dist > 10:
+        if _pet_off_screen(session) or (session.pet_x, session.pet_y) == (session.x, session.y):
             _pet_reappear(session)
-        elif dist != 2:
-            _pet_keep_up(session)
-        elif not player_moving:
-            free = _pet_preferred_tiles(session)
-            if free and (session.pet_x, session.pet_y) != free[0]:
-                _pet_step_toward(session, free[0][0], free[0][1], avoid=owner)
-            if (session.pet_x, session.pet_y) == owner:
-                _park_pet(session)
-        _pet_face_owner(session)
+        else:
+            _pet_face_owner(session)
 
 
 async def process_gathering(events):
