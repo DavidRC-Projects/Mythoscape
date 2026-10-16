@@ -72,7 +72,7 @@ catalogue = {
         "leg armour (*_legs, *_chainlegs, leather_chaps): hide bottom AND outfit; plate *_legs also draws arm_sabatons (hides shoes)",
         "if an outfit is hidden by armour on one half only, draw the player's saved top/bottom (or the starter top/bottom) on the uncovered half",
         "shield slot -> arm_kiteshield (kite/sq/wooden all use it, tinted by tier; wooden uses 'wood')",
-        "weapon slot -> weapon layer by rs_style weapon kind: sword/dagger/longsword->wpn_sword, axe/battleaxe->wpn_axe, pickaxe->wpn_pickaxe, bow->wpn_bow, staff/wand->wpn_staff (carried head-up; swung head-first in melee)",
+        "weapon slot -> weapon layer by rs_style weapon kind: sword/longsword->wpn_sword, axe/battleaxe->wpn_axe, pickaxe->wpn_pickaxe, bow->wpn_bow, staff/wand->wpn_staff (carried head-up; swung head-first in melee)",
         "skilling: chop shows wpn_axe, mine shows wpn_pickaxe, fish shows wpn_rod (replacing the wielded weapon for that anim only)",
         "leather_cowl / leather_body / leather_chaps / goblin_mail: use the matching steel layer tinted 'leather' until bespoke leather layers exist (documented gap)"],
 }

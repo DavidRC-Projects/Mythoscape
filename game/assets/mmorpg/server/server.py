@@ -1710,6 +1710,7 @@ async def handle_login(ws, msg, is_register):
     session.bank = WORLD.db.get_bank(row["id"])
     session.quests = WORLD.db.get_quest_progress(row["id"])
     WORLD.sessions[session.player_id] = session
+    migrate_removed_daggers(session)
     enforce_bound_items(session)
     import void_v2
     # Keys stay in the bag when the visit itself is still going.
@@ -1863,6 +1864,23 @@ def session_has_item(session, item_id):
     if item_id in (session.equipment or {}).values():
         return True
     return any(e.get("item_id") == item_id for e in session.inventory.values())
+
+
+def migrate_removed_daggers(session):
+    """Daggers were removed: swap any saved dagger for the same-tier sword and persist."""
+    from item_migrations import migrate_daggers
+    inv, bank, eq = migrate_daggers(session.inventory, session.bank, session.equipment)
+    for slot in inv:
+        e = session.inventory[slot]
+        WORLD.db.add_item_to_slot(session.player_id, slot, e["item_id"], e["qty"])
+    for slot in bank:
+        e = session.bank[slot]
+        WORLD.db.set_bank_slot(session.player_id, slot, e["item_id"], e["qty"])
+    for slot in eq:
+        WORLD.db.set_equipment(session.player_id, slot, session.equipment[slot])
+    if inv or bank or eq:
+        log.info("Replaced daggers with swords for %s (inv %d, bank %d, equipped %d)",
+                 session.username, len(inv), len(bank), len(eq))
 
 
 def enforce_bound_items(session):
@@ -2821,21 +2839,21 @@ WISH_WELL_POS = _wish_well_pos()
 WISH_GEAR_POOL = [
     # Common / uncommon armour & weapons
     "leather_body", "leather_chaps", "leather_cowl",
-    "bronze_sword", "bronze_dagger", "bronze_battleaxe",
+    "bronze_sword", "bronze_battleaxe",
     "bronze_helmet", "bronze_sq_shield", "bronze_body", "bronze_legs",
     "bronze_chainbody", "bronze_chainlegs",
-    "iron_sword", "iron_dagger", "iron_battleaxe",
+    "iron_sword", "iron_battleaxe",
     "iron_helmet", "iron_sq_shield", "iron_body", "iron_legs",
     "iron_chainbody", "iron_chainlegs",
-    "steel_longsword", "steel_dagger", "steel_battleaxe",
+    "steel_longsword", "steel_battleaxe",
     "steel_helmet", "steel_sq_shield", "steel_body", "steel_legs",
     "steel_chainbody", "steel_chainlegs",
-    "mithril_dagger", "mithril_sword", "mithril_helmet",
+    "mithril_sword", "mithril_helmet",
     "mithril_sq_shield", "mithril_chainbody", "mithril_chainlegs",
 ]
 
 WISH_MYTHOS_POOL = [
-    "mythos_dagger", "mythos_longsword", "mythos_body",
+    "mythos_longsword", "mythos_body",
     "mythos_helmet", "mythos_legs", "mythos_shield",
 ]
 
@@ -2843,7 +2861,7 @@ WISH_MYTHOS_POOL = [
 WISH_GEAR_BETTER = [
     "steel_longsword", "steel_battleaxe", "steel_body", "steel_legs",
     "steel_helmet", "steel_shield", "steel_chainbody", "steel_chainlegs",
-    "mithril_dagger", "mithril_sword", "mithril_helmet",
+    "mithril_sword", "mithril_helmet",
     "mithril_sq_shield", "mithril_chainbody", "mithril_chainlegs",
     "mithril_body", "mithril_legs", "mithril_battleaxe", "mithril_shield",
 ]

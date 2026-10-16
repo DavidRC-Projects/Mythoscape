@@ -13,6 +13,7 @@ import sys
 
 import pygame
 
+import eclipse_fx
 import feature_flags
 import world_map as wm
 
@@ -405,8 +406,6 @@ def _weapon_style(item_id):
     text = str(item_id)
     if "bow" in text:
         return "bow"
-    if "dagger" in text:
-        return "dagger"
     if "pickaxe" in text:
         return "pickaxe"
     if "battleaxe" in text or "cleaver" in text:
@@ -1011,12 +1010,13 @@ def _draw_local_player(client, pose, sx, sy, tile_px, t, player_depth=1.0):
             anim=anim, progress=pose["atk"] if attacking else None, facing=face,
             hit_t=swing_hit,
             death_t=death_t if 0 <= death_t < 1.2 else -1.0,
-            equipment=eq,
+            equipment=eq, fx_seed=eclipse_fx.player_seed(p.get("id")),
         )
         if not drawn:
             drawn = player_hd_client.draw_player(
                 client.screen, gender, appearance, sx, sy, min(80, body_px), t,
                 anim="idle", facing=face, equipment=eq,
+                fx_seed=eclipse_fx.player_seed(p.get("id")),
             )
     if hd_on:
         return

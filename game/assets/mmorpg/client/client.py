@@ -59,6 +59,7 @@ import castle_sprites  # noqa: E402 — pre-rendered castle layers
 import castle_v2  # noqa: E402 — castle v2 footprint (shifted onto the live keep)
 import house_sprites  # noqa: E402 — pre-rendered unique houses
 import buildings_v2  # noqa: E402 — house footprints shifted onto live doors
+import eclipse_fx  # noqa: E402 — worn-gear sparkle overlay
 from feature_flags import (  # noqa: E402
     USE_NEW_CASTLE, USE_NEW_BUILDINGS, USE_NEW_CHARACTERS, USE_NEW_EQUIPMENT_UI,
     USE_NEW_HUD, USE_HUD_MOCKUP_PLATES, USE_HUD_DRAWN_PANELS, USE_NEW_CASTLE_PORTAL,
@@ -149,8 +150,6 @@ def weapon_style(item_id):
         return None
     if is_bow(item_id) or "bow" in item_id:
         return "bow"
-    if "dagger" in item_id:
-        return "dagger"
     if "pickaxe" in item_id:
         return "pickaxe"
     if "battleaxe" in item_id or "cleaver" in item_id:
@@ -6237,7 +6236,7 @@ class GameClient(ScreensMixin, CameraYaw):
                             anim=anim, progress=atk if atk > 0 else None, facing=hd_face,
                             hit_t=-1.0 if swing else (hit_t if 0 <= hit_t < 0.36 else -1.0),
                             death_t=death_t if 0 <= death_t < 1.2 else -1.0,
-                            equipment=eq,
+                            equipment=eq, fx_seed=eclipse_fx.player_seed(p.get("id")),
                         )
                     if not drawn:
                         sprites.draw_humanoid_detailed(
@@ -10092,7 +10091,7 @@ class GameClient(ScreensMixin, CameraYaw):
         out = str(recipe.get("output", ("",))[0]).lower()
         name = str(recipe.get("name", "")).lower()
         blob = f"{rid} {out} {name}"
-        if any(k in blob for k in ("dagger", "sword", "battleaxe", "axe", "scimitar", "cleaver", "arrowtip")):
+        if any(k in blob for k in ("sword", "battleaxe", "axe", "scimitar", "cleaver", "arrowtip")):
             return "weapon"
         if "shield" in blob:
             return "shield"

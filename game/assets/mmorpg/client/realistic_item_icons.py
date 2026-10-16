@@ -62,6 +62,11 @@ def draw_ground(surf, tile_rect, item_id) -> bool:
     """Same icon as inventory, sitting on the tile with a soft shadow. No loot pad."""
     if _keep_old(item_id):
         return False
+    ground = _fit(f"{item_id}_ground", max(8, int(tile_rect.w * 1.1)), max(8, int(tile_rect.h * 1.1)))
+    if ground is not None:
+        # 3/4 ground render with its own contact shadow: centred, no ellipse.
+        surf.blit(ground, ground.get_rect(center=tile_rect.center))
+        return True
     side = max(8, int(tile_rect.w * 0.78))
     image = _fit(item_id, side, side)
     if image is None:

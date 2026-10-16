@@ -243,13 +243,36 @@ def _slot_item(appearance, slot, sex, item_map):
     return None
 
 
+# Eclipse gear has its own untinted HD layers (art carries its own black + gold).
+_ECLIPSE_WEAPONS = {
+    "eclipse_cleaver": "wpn_axe_eclipse",
+    "eclipse_sword": "wpn_sword_eclipse",
+}
+_ECLIPSE_BODY = {"eclipse_body": [("arm_platebody_eclipse", None), ("arm_gauntlets_eclipse", None)]}
+_ECLIPSE_LEGS = {"eclipse_legs": [("arm_platelegs_eclipse", None), ("arm_sabatons_eclipse", None)]}
+_ECLIPSE_HELMS = {"eclipse_helmet": ("arm_helm_eclipse", None)}
+
+
+def base_layer(layer_name):
+    """Generic layer a tier-specific layer derives from (wpn_axe_eclipse -> wpn_axe).
+
+    Anchors and swing smears are keyed by the generic weapon layer.
+    """
+    name = str(layer_name or "")
+    if name.endswith("_eclipse"):
+        return name[: -len("_eclipse")]
+    return name
+
+
 def _weapon_spec(item_id):
     if not item_id:
         return None, None
     iid = str(item_id)
-    if iid == "eclipse_cleaver" or iid.endswith("_battleaxe") or iid.endswith("_axe"):
+    if iid in _ECLIPSE_WEAPONS:
+        return _ECLIPSE_WEAPONS[iid], None
+    if iid.endswith("_battleaxe") or iid.endswith("_axe"):
         return "wpn_axe", _tier_rgb(iid)
-    if iid.endswith("_longsword") or iid.endswith("_sword") or iid.endswith("_dagger"):
+    if iid.endswith("_longsword") or iid.endswith("_sword"):
         return "wpn_sword", _tier_rgb(iid)
     if iid.endswith("_pickaxe"):
         return "wpn_pickaxe", _tier_rgb(iid)
@@ -264,6 +287,8 @@ def _body_spec(item_id):
     if not item_id:
         return None
     iid = str(item_id)
+    if iid in _ECLIPSE_BODY:
+        return list(_ECLIPSE_BODY[iid])
     if iid in ("leather_body", "goblin_mail"):
         return [("arm_chainbody", _tier_rgb(iid, "leather"))]
     if iid.endswith("_chainbody"):
@@ -278,6 +303,8 @@ def _legs_spec(item_id):
     if not item_id:
         return None
     iid = str(item_id)
+    if iid in _ECLIPSE_LEGS:
+        return list(_ECLIPSE_LEGS[iid])
     if iid == "leather_chaps":
         return [("arm_platelegs", _tier_rgb(iid, "leather"))]
     if iid.endswith("_chainlegs"):
@@ -292,6 +319,8 @@ def _helm_spec(item_id):
     if not item_id:
         return None
     iid = str(item_id)
+    if iid in _ECLIPSE_HELMS:
+        return _ECLIPSE_HELMS[iid]
     if iid == "leather_cowl":
         return ("arm_helm", _tier_rgb(iid, "leather"))
     if iid == "bone_crown":
@@ -355,8 +384,8 @@ def _apply_covers(layers, equipment, anim):
     hide = set()
     if helm:
         hide.add("hair")
-    plate_body = any(name == "arm_platebody" for name, _tint in body)
-    plate_legs = any(name == "arm_sabatons" for name, _tint in legs)
+    plate_body = any(base_layer(name) == "arm_platebody" for name, _tint in body)
+    plate_legs = any(base_layer(name) == "arm_sabatons" for name, _tint in legs)
     if body:
         hide.add("top")
         hide.add("outfit")
@@ -410,9 +439,21 @@ def _blit_tinted(dest, tint_surf, rgb, pos):
 def draw_player(
     surf, sex, appearance, cx, cy_feet, tile, t,
     anim="idle", progress=None, facing=1,
-    hit_t=-1.0, death_t=-1.0, equipment=None,
+    hit_t=-1.0, death_t=-1.0, equipment=None, fx_seed=None,
 ):
-    """Draw the HD paper doll. False means the body art is missing, so use 2D."""
+    """Draw the HD paper doll. False means the body art is missing, so use 2D.
+
+    fx_seed (players only): enables the worn-gear sparkle overlay (eclipse_fx)
+    when the equipment qualifies. NPCs, monsters and pets leave it None.
+    """
+    if fx_seed is not None:
+        import eclipse_fx
+        tier = eclipse_fx.fx_tier(equipment)
+        if tier:
+            return _draw_player_fx(
+                surf, sex, appearance, cx, cy_feet, tile, t, anim, progress, facing,
+                hit_t, death_t, equipment, fx_seed, tier,
+            )
     sex = "female" if sex == "female" else "male"
     appearance = appearance or get_default_appearance(sex)
     final_anim, frame_idx = _frame_for_anim(anim, t, progress, hit_t, death_t)
@@ -443,7 +484,7 @@ def draw_player(
     visible.insert(0, ("shadow", None, {"s": 0, "e": 0, "n": 0, "w": 0}))
     if final_anim == "melee" and frame_idx in (4, 5) and swing_layer:
         visible.append((
-            f"fx_swing_{swing_layer}", None,
+            f"fx_swing_{base_layer(swing_layer)}", None,
             {"s": 91, "e": 91, "n": 91, "w": 91},
         ))
     visible.sort(key=lambda row: _effective_z(row[0], row[2], final_anim, facing_tag))
@@ -503,6 +544,43 @@ def draw_player(
     return body_ok
 
 
+def _draw_player_fx(surf, sex, appearance, cx, cy_feet, tile, t, anim, progress, facing,
+                    hit_t, death_t, equipment, fx_seed, tier):
+    """Composite offscreen, then aura behind + sparkles in front."""
+    import eclipse_fx
+    scale_tag, base = _scale_for(tile)
+    canvas = (_load_meta().get("canvas") or {}).get(scale_tag, [144, 144])
+    k = tile / float(base)
+    cw, ch = int(canvas[0] * k), int(canvas[1] * k)
+    pad = max(8, int(tile * 0.4))
+    w, h = cw * 2 + pad * 2, ch + pad * 2
+    off = pygame.Surface((w, h), pygame.SRCALPHA)
+    ox = w // 2
+    feet_y = ((_load_meta().get("feet_px") or {}).get(scale_tag, [72, 124])[1]) * k
+    oy = int(pad + feet_y)
+    ok = draw_player(
+        off, sex, appearance, ox, oy, tile, t, anim=anim, progress=progress, facing=facing,
+        hit_t=hit_t, death_t=death_t, equipment=equipment,
+    )
+    if not ok:
+        return ok
+    zoom = tile / 40.0
+    key = (
+        sex, tile, last_draw.get("anim"), last_draw.get("facing"), last_draw.get("frame"),
+        bool(last_draw.get("flip")), repr(sorted((equipment or {}).items(), key=str)),
+        repr(sorted((appearance or {}).items(), key=str)), hit_t >= 0, death_t >= 0,
+    )
+    aura = eclipse_fx.aura_surface(off, zoom, tier, key=key)
+    dest = (int(cx - ox), int(cy_feet - oy))
+    surf.blit(aura, dest)
+    surf.blit(off, dest)
+    bb = pygame.mask.from_surface(off, 170).get_bounding_rects()
+    if bb:
+        r = bb[0].unionall(bb[1:]) if len(bb) > 1 else bb[0]
+        eclipse_fx.draw_sparkles(surf, (r.x + dest[0], r.y + dest[1], r.w, r.h), t, zoom, fx_seed, tier)
+    return ok
+
+
 def head_top_dy(sex, tile):
     return -int(tile * 4.5)
 
@@ -549,6 +627,7 @@ def _store_combat_anchors(sex, anim, facing, frame, tile, equipment):
     weapon = None
     if equipment:
         weapon, _tint = _weapon_spec(equipment.get("weapon"))
+        weapon = base_layer(weapon) if weapon else None
     for name in ("head_top", "chest", "hand_L", "hand_R"):
         off = anchor_offset(sex, anim, facing, frame, name, tile, weapon)
         if off is not None:

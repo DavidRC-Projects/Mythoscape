@@ -33,23 +33,14 @@ ITEMS = {
     "bronze_sword":     {"name": "Bronze Sword",       "type": "weapon", "stackable": False, "value": 20,  "equip_slot": "weapon", "str_bonus": 5,  "att_bonus": 4},
     "iron_sword":       {"name": "Iron Sword",         "type": "weapon", "stackable": False, "value": 60,  "equip_slot": "weapon", "str_bonus": 11, "att_bonus": 10},
     "steel_longsword":  {"name": "Steel Longsword",    "type": "weapon", "stackable": False, "value": 140, "equip_slot": "weapon", "str_bonus": 18, "att_bonus": 16},
-    "iron_dagger":      {"name": "Iron Dagger",        "type": "weapon", "stackable": False, "value": 35,  "equip_slot": "weapon", "str_bonus": 6,  "att_bonus": 13},
-    "bronze_dagger":    {"name": "Bronze Dagger",      "type": "weapon", "stackable": False, "value": 12,  "equip_slot": "weapon", "str_bonus": 3,  "att_bonus": 5},
-    "steel_dagger":     {"name": "Steel Dagger",       "type": "weapon", "stackable": False, "value": 80,  "equip_slot": "weapon", "str_bonus": 10, "att_bonus": 18},
     "bronze_battleaxe": {"name": "Bronze Battleaxe",   "type": "weapon", "stackable": False, "value": 35,  "equip_slot": "weapon", "str_bonus": 9,  "att_bonus": 3},
     "iron_battleaxe":   {"name": "Iron Battleaxe",     "type": "weapon", "stackable": False, "value": 85,  "equip_slot": "weapon", "str_bonus": 16, "att_bonus": 6},
     "steel_battleaxe":  {"name": "Steel Battleaxe",    "type": "weapon", "stackable": False, "value": 180, "equip_slot": "weapon", "str_bonus": 24, "att_bonus": 9},
-    "mithril_dagger":   {"name": "Mithril Dagger",     "type": "weapon", "stackable": False, "value": 160, "equip_slot": "weapon", "str_bonus": 15, "att_bonus": 26},
     "mithril_sword":    {"name": "Mithril Sword",      "type": "weapon", "stackable": False, "value": 280, "equip_slot": "weapon", "str_bonus": 28, "att_bonus": 26},
     "mithril_battleaxe":{"name": "Mithril Battleaxe",  "type": "weapon", "stackable": False, "value": 360, "equip_slot": "weapon", "str_bonus": 36, "att_bonus": 14},
-    "adamant_dagger":   {"name": "Adamantite Dagger",  "type": "weapon", "stackable": False, "value": 320, "equip_slot": "weapon", "str_bonus": 22, "att_bonus": 35},
     "adamant_sword":    {"name": "Adamantite Sword",   "type": "weapon", "stackable": False, "value": 520, "equip_slot": "weapon", "str_bonus": 40, "att_bonus": 38},
     "adamant_battleaxe":{"name": "Adamantite Battleaxe","type": "weapon","stackable": False, "value": 680, "equip_slot": "weapon", "str_bonus": 50, "att_bonus": 20},
     # Mythos set — dragon drops; top public gear (100 bonuses)
-    "mythos_dagger": {
-        "name": "Mythos Dagger", "type": "weapon", "stackable": False, "value": 2500,
-        "equip_slot": "weapon", "str_bonus": 100, "att_bonus": 100,
-    },
     "mythos_longsword": {
         "name": "Mythos Longsword", "type": "weapon", "stackable": False, "value": 8000,
         "equip_slot": "weapon", "str_bonus": 100, "att_bonus": 100,
@@ -93,6 +84,13 @@ ITEMS = {
         "name": "Eclipse Cleaver", "type": "weapon", "stackable": False, "value": 0,
         "equip_slot": "weapon", "str_bonus": 200, "att_bonus": 200, "def_bonus": 8,
         "tradeable": False, "sellable": False, "bound_username": "david",
+    },
+    # Bound unique sword twin of the cleaver: more accuracy, less power (swords = accuracy, axes = power)
+    "eclipse_sword": {
+        "name": "Eclipse Sword", "type": "weapon", "stackable": False, "value": 0,
+        "equip_slot": "weapon", "str_bonus": 194, "att_bonus": 206, "def_bonus": 8,
+        "tradeable": False, "sellable": False, "bound_username": "david",
+        "desc": "A black blade edged in gold, an eclipse disc set in its guard.",
     },
     # Bound unique companion shield — future monster drop (not on any table yet)
     "eclipse_shield": {
@@ -651,7 +649,7 @@ MONSTERS = {
             ("coins", 0.95, (4, 18)),
             ("goblin_mail", 0.35, (1, 1)),
             # 1 in 10 — one random bronze weapon or armour piece
-            (("bronze_dagger", "bronze_sword", "bronze_helmet", "bronze_sq_shield",
+            (("bronze_sword", "bronze_helmet", "bronze_sq_shield",
               "bronze_chainbody", "bronze_chainlegs"), 0.10, (1, 1)),
             ("spider_silk", 0.10, (1, 1)),
             ("feather", 0.45, (1, 4)),
@@ -679,7 +677,7 @@ MONSTERS = {
             ("coins", 0.95, (10, 32)),
             ("iron_ore", 0.22, (1, 2)),
             # 1 in 10 — one random iron weapon or armour piece
-            (("iron_dagger", "iron_sword", "iron_helmet", "iron_sq_shield",
+            (("iron_sword", "iron_helmet", "iron_sq_shield",
               "iron_chainbody", "iron_chainlegs"), 0.10, (1, 1)),
             ("gold_ring", 0.05, (1, 1)),
             ("feather", 0.25, (2, 6)),
@@ -731,7 +729,7 @@ MONSTERS = {
             ("bones", 1.0, (1, 1)),
             ("coins", 0.95, (20, 60)),
             ("mithril_ore", 0.28, (1, 2)),
-            (("mithril_dagger", "mithril_helmet", "mithril_sq_shield",
+            (("mithril_sword", "mithril_helmet", "mithril_sq_shield",
               "mithril_chainbody", "mithril_chainlegs"), 0.10, (1, 1)),
             ("gold_ring", 0.08, (1, 1)),
             ("bread", 0.30, (1, 2)),
@@ -759,7 +757,7 @@ MONSTERS = {
             ("feather", 0.70, (3, 12)),
             ("mithril_arrow", 0.20, (5, 15)),
             ("mithril_ore", 0.18, (1, 2)),
-            (("mithril_dagger", "mithril_sword", "mithril_helmet"), 0.08, (1, 1)),
+            (("mithril_sword", "mithril_helmet"), 0.08, (1, 1)),
             ("health_potion", 0.18, (1, 1)),
             ("bread", 0.25, (1, 2)),
             ("cooked_sardine", 0.20, (1, 2)),
@@ -784,7 +782,6 @@ MONSTERS = {
             ("coins", 1.0, (250, 900)),
             ("adamantite_ore", 0.55, (1, 3)),
             ("adamantite_bar", 0.12, (1, 1)),
-            ("mythos_dagger", 0.02, (1, 1)),       # 1 in 50
             ("mythos_longsword", 0.012, (1, 1)),   # 1 in ~83
             ("mythos_helmet", 0.01, (1, 1)),       # 1 in 100
             ("mythos_legs", 0.008, (1, 1)),        # 1 in 125
@@ -914,7 +911,7 @@ MONSTERS = {
         "drops": [
             ("bones", 1.0, (1, 1)),
             ("coins", 1.0, (300, 900)),
-            (("mythos_dagger", "mythos_helmet"), 0.06, (1, 1)),
+            (("mythos_longsword", "mythos_helmet"), 0.06, (1, 1)),
             (("mythos_legs", "mythos_shield"), 0.04, (1, 1)),
             ("mythos_longsword", 0.03, (1, 1)),
             ("mythos_body", 0.02, (1, 1)),
@@ -1023,7 +1020,7 @@ MONSTERS = {
         "drops": [
             ("bones", 1.0, (1, 1)),
             ("coins", 1.0, (200, 500)),
-            (("mythos_dagger", "mythos_helmet"), 0.04, (1, 1)),
+            (("mythos_longsword", "mythos_helmet"), 0.04, (1, 1)),
             ("adamantite_bar", 0.10, (1, 1)),
             ("super_attack_potion", 0.12, (1, 1)),
             ("super_strength_potion", 0.12, (1, 1)),
@@ -1089,7 +1086,7 @@ MONSTERS = {
         "force_retaliate": True,
         "drops": [
             ("void_rift_sigil", 1.0, (1, 1)),
-            (("mythos_dagger", "mythos_helmet"), 0.06, (1, 1)),
+            (("mythos_longsword", "mythos_helmet"), 0.06, (1, 1)),
             ("coins", 1.0, (600, 1200)),
         ],
     },
@@ -1233,7 +1230,7 @@ MONSTERS = {
         "drops": [
             ("bones", 1.0, (1, 1)), ("coins", 1.0, (300, 800)),
             ("diamond", 0.18, (1, 2)), ("onyx", 0.08, (1, 1)),
-            ("mythos_dagger", 0.04, (1, 1)),
+            ("mythos_longsword", 0.04, (1, 1)),
         ],
         "wander_radius": 2, "aggro_range": 9,
     },
@@ -1786,7 +1783,6 @@ SHOPS = {
     "blacksmith_shop": {
         "name": "Gareth's Smithy",
         "stock": {
-            "mithril_dagger": {"price": 160, "qty": 2},
             "mithril_sword": {"price": 280, "qty": 2},
             "mithril_battleaxe": {"price": 360, "qty": 1},
             "mithril_helmet": {"price": 170, "qty": 2},
@@ -1799,7 +1795,6 @@ SHOPS = {
             "bronze_sword": {"price": 20, "qty": 5},
             "bronze_battleaxe": {"price": 35, "qty": 3},
             "iron_sword": {"price": 60, "qty": 3},
-            "iron_dagger": {"price": 35, "qty": 3},
             "iron_battleaxe": {"price": 85, "qty": 2},
             "wooden_shield": {"price": 12, "qty": 5},
             "bronze_sq_shield": {"price": 22, "qty": 4},
@@ -1819,8 +1814,6 @@ SHOPS = {
             "iron_chainlegs": {"price": 55, "qty": 2},
             "iron_body": {"price": 110, "qty": 2},
             "iron_legs": {"price": 85, "qty": 2},
-            "bronze_dagger": {"price": 12, "qty": 5},
-            "steel_dagger": {"price": 80, "qty": 3},
             "steel_longsword": {"price": 140, "qty": 3},
             "steel_battleaxe": {"price": 180, "qty": 2},
             "steel_sq_shield": {"price": 95, "qty": 3},
@@ -3026,10 +3019,6 @@ CRAFT_RECIPES = {
         "name": "Smelt Steel Bar", "category": "smelt", "skill": "smithing", "level_req": 30, "xp": 45,
         "inputs": {"iron_ore": 1, "coal": 1}, "output": ("steel_bar", 1),
     },
-    "smith_bronze_dagger": {
-        "name": "Bronze Dagger", "category": "smith", "skill": "smithing", "level_req": 1, "xp": 20,
-        "inputs": {"bronze_bar": 1}, "output": ("bronze_dagger", 1),
-    },
     "smith_bronze_helmet": {
         "name": "Bronze Helmet", "category": "smith", "skill": "smithing", "level_req": 3, "xp": 22,
         "inputs": {"bronze_bar": 1}, "output": ("bronze_helmet", 1),
@@ -3070,10 +3059,6 @@ CRAFT_RECIPES = {
         "name": "Bronze Arrowtips", "category": "smith", "skill": "smithing", "level_req": 5, "xp": 25,
         "inputs": {"bronze_bar": 1}, "output": ("bronze_arrowtips", 15),
     },
-    "smith_iron_dagger": {
-        "name": "Iron Dagger", "category": "smith", "skill": "smithing", "level_req": 15, "xp": 35,
-        "inputs": {"iron_bar": 1}, "output": ("iron_dagger", 1),
-    },
     "smith_iron_helmet": {
         "name": "Iron Helmet", "category": "smith", "skill": "smithing", "level_req": 16, "xp": 38,
         "inputs": {"iron_bar": 1}, "output": ("iron_helmet", 1),
@@ -3113,10 +3098,6 @@ CRAFT_RECIPES = {
     "smith_iron_arrowtips": {
         "name": "Iron Arrowtips", "category": "smith", "skill": "smithing", "level_req": 20, "xp": 40,
         "inputs": {"iron_bar": 1}, "output": ("iron_arrowtips", 15),
-    },
-    "smith_steel_dagger": {
-        "name": "Steel Dagger", "category": "smith", "skill": "smithing", "level_req": 30, "xp": 55,
-        "inputs": {"steel_bar": 1}, "output": ("steel_dagger", 1),
     },
     "smith_steel_helmet": {
         "name": "Steel Helmet", "category": "smith", "skill": "smithing", "level_req": 30, "xp": 58,
@@ -3166,10 +3147,6 @@ CRAFT_RECIPES = {
         "name": "Smelt Adamantite Bar", "category": "smelt", "skill": "smithing", "level_req": 46, "xp": 120,
         "inputs": {"adamantite_ore": 1, "coal": 6}, "output": ("adamantite_bar", 1),
     },
-    "smith_mithril_dagger": {
-        "name": "Mithril Dagger", "category": "smith", "skill": "smithing", "level_req": 40, "xp": 90,
-        "inputs": {"mithril_bar": 1}, "output": ("mithril_dagger", 1),
-    },
     "smith_mithril_helmet": {
         "name": "Mithril Helmet", "category": "smith", "skill": "smithing", "level_req": 40, "xp": 95,
         "inputs": {"mithril_bar": 1}, "output": ("mithril_helmet", 1),
@@ -3209,10 +3186,6 @@ CRAFT_RECIPES = {
     "smith_mithril_arrowtips": {
         "name": "Mithril Arrowtips", "category": "smith", "skill": "smithing", "level_req": 42, "xp": 110,
         "inputs": {"mithril_bar": 1}, "output": ("mithril_arrowtips", 15),
-    },
-    "smith_adamant_dagger": {
-        "name": "Adamantite Dagger", "category": "smith", "skill": "smithing", "level_req": 46, "xp": 140,
-        "inputs": {"adamantite_bar": 1}, "output": ("adamant_dagger", 1),
     },
     "smith_adamant_helmet": {
         "name": "Adamantite Helmet", "category": "smith", "skill": "smithing", "level_req": 46, "xp": 145,
@@ -3717,3 +3690,41 @@ def _castle_realm_portal():
 
 
 _castle_realm_portal()
+
+
+# ---------------------------------------------------------------------------
+# WEAPON CLASS STATS (shown in the Equipment & Stats hover detail)
+# ---------------------------------------------------------------------------
+# Swords: faster, higher crit. Axes (axe / battleaxe / cleaver): slower, heavier hits.
+# Lower speed = faster. Item defs may override with attack_speed / crit_chance / heavy_bonus.
+# Combat does not use these yet (UI only).
+WEAPON_CLASS_STATS = {
+    "sword": {"attack_speed": 4, "crit_chance": 0.08, "heavy_bonus": 0.10},
+    "axe": {"attack_speed": 5, "crit_chance": 0.05, "heavy_bonus": 0.25},
+}
+ECLIPSE_WEAPON_EXTRA = {"crit_chance": 0.02, "heavy_bonus": 0.05}
+
+
+def weapon_class(item_id):
+    iid = str(item_id or "")
+    if iid.endswith("_cleaver") or iid.endswith("_battleaxe") or (iid.endswith("_axe") and not iid.endswith("_pickaxe")):
+        return "axe"
+    if iid.endswith("_sword") or iid.endswith("_longsword"):
+        return "sword"
+    return None
+
+
+def weapon_stats(item_id):
+    """{attack_speed, crit_chance, heavy_bonus} for a sword/axe, else None."""
+    item = ITEMS.get(item_id) or {}
+    cls = weapon_class(item_id)
+    if item.get("equip_slot") != "weapon" or (cls is None and "attack_speed" not in item):
+        return None
+    out = dict(WEAPON_CLASS_STATS.get(cls) or {"attack_speed": 4, "crit_chance": 0.0, "heavy_bonus": 0.0})
+    if str(item_id).startswith("eclipse_"):
+        for k, v in ECLIPSE_WEAPON_EXTRA.items():
+            out[k] += v
+    for k in ("attack_speed", "crit_chance", "heavy_bonus"):
+        if k in item:
+            out[k] = item[k]
+    return out

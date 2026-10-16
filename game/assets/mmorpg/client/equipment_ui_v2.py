@@ -27,6 +27,7 @@ DOLL = {
     "body": (0.14, 0.63), "legs": (0.86, 0.63),
     "ring": (0.5, 0.925),
 }
+DOLL_SCALE = 1.75  # 2x paper doll scaled to fill the oval; feet stay on the plinth
 # where each slot's guide line lands on the doll (fraction of stage)
 ANCHOR = {"helmet": (0.5, 0.25), "amulet": (0.5, 0.33), "ammo": (0.58, 0.36), "weapon": (0.36, 0.52),
           "shield": (0.64, 0.52), "body": (0.46, 0.45), "legs": (0.54, 0.65), "ring": (0.62, 0.64)}
@@ -86,14 +87,32 @@ def _silhouette(surf, slot, r, col=(78, 70, 58)):
         pygame.draw.circle(surf, col, P(0, -3.6), int(1.8 * u))
 
 
-def _icon(surf, rect, item_id, items, sprites):
-    try:
-        import gear_v2
-        if gear_v2.draw_icon(surf, rect, item_id, items):
-            return
-    except Exception:
-        pass
-    sprites.draw_item_icon(surf, rect, item_id, items)
+def _icon(surf, rect, item_id):
+    import realistic_item_icons
+    realistic_item_icons.draw_icon(surf, rect, item_id)
+
+
+def _draw_doll(self, scr, stage, eq, gender):
+    """Player's HD paper doll (same compositor + sparkle as the world), feet on the plinth."""
+    import time
+    import player_hd_client
+    import eclipse_fx
+    p = self.player or {}
+    sex = "female" if gender == "female" else "male"
+    appearance = p.get("appearance") or player_hd_client.get_default_appearance(sex)
+    # 2x for the whole stack: generic 4x layers are single portrait frames, so a
+    # 4x stack would not animate in sync. Draw 2x at 1:1 (tile 80) offscreen,
+    # then scale the doll (sparkle included) up to fill the oval.
+    off = pygame.Surface((300, 300), pygame.SRCALPHA)
+    feet = (150, 280)
+    player_hd_client.draw_player(
+        off, sex, appearance, feet[0], feet[1], 80, time.time(),
+        anim="idle", facing="s", equipment=eq,
+        fx_seed=eclipse_fx.player_seed(p.get("id")),
+    )
+    k = DOLL_SCALE
+    big = pygame.transform.smoothscale(off, (int(300 * k), int(300 * k)))
+    scr.blit(big, (int(stage.centerx - feet[0] * k), int(stage.y + 306 - feet[1] * k)))
 
 
 def draw(self, ITEMS, karma_slot_bonus, sprites, weapon_style):
@@ -152,14 +171,8 @@ def draw(self, ITEMS, karma_slot_bonus, sprites, weapon_style):
         ax, ay = ANCHOR[slot]
         pygame.draw.line(scr, (62, 56, 46), r.center, (int(stage.x + ax * stage.w), int(stage.y + ay * stage.h)), 1)
 
-    # character (same call as the old preview; smaller so slots fit around it)
-    body, skin, hair = (70, 210, 90), (235, 195, 150), (70, 45, 30)
     gender = (self.player or {}).get("gender") or "male"
-    sprites.draw_humanoid_detailed(
-        scr, stage.centerx, stage.y + 196, 80, body, skin, hair,
-        weapon=weapon_style(eq.get("weapon")), shield=bool(eq.get("shield")),
-        moving=False, t=0.0, facing=1, equipment=eq, attacking=0.0, action="stand", gender=gender,
-    )
+    _draw_doll(self, scr, stage, eq, gender)
 
     hover_slot = None
     inv = self.player.get("inventory") or {}
@@ -171,7 +184,7 @@ def draw(self, ITEMS, karma_slot_bonus, sprites, weapon_style):
         _bevel(scr, r, (70, 62, 50) if item_id else (52, 47, 39), STONE_L, STONE_D, 2)
         inner = r.inflate(-8, -8)
         if item_id:
-            _icon(scr, inner, item_id, ITEMS, sprites)
+            _icon(scr, inner, item_id)
             if slot == "ammo":
                 if item_id == "arrow_quiver":
                     qn = int((self.player or {}).get("quiver_total") or 0)
@@ -204,7 +217,7 @@ def draw(self, ITEMS, karma_slot_bonus, sprites, weapon_style):
         if item:
             ic = pygame.Rect(det.x + 8, det.y + 11, 48, 48)
             _bevel(scr, ic, (70, 62, 50), STONE_L, STONE_D, 2)
-            _icon(scr, ic.inflate(-8, -8), item_id, ITEMS, sprites)
+            _icon(scr, ic.inflate(-8, -8), item_id)
             label_name = item["name"]
             if detail_slot == "ammo" and item_id == "arrow_quiver":
                 qtot = int((self.player or {}).get("quiver_total") or 0)
@@ -225,8 +238,17 @@ def draw(self, ITEMS, karma_slot_bonus, sprites, weapon_style):
                 detail = (f"Att +{item.get('att_bonus', 0)}(+{kb['att_bonus']}k)   "
                           f"Str +{item.get('str_bonus', 0)}(+{kb['str_bonus']}k)   "
                           f"Def +{item.get('def_bonus', 0)}(+{kb['def_bonus']}k)")
-            scr.blit(self.font_tiny.render(detail, True, TEXT), (det.x + 64, det.y + 28))
-            scr.blit(self.font_tiny.render(f"{detail_slot.title()} slot  ·  Click slot to unequip", True, MUTED), (det.x + 64, det.y + 47))
+            from content import weapon_stats
+            ws = weapon_stats(item_id) if detail_slot == "weapon" else None
+            if ws:
+                scr.blit(self.font_tiny.render(detail, True, TEXT), (det.x + 64, det.y + 24))
+                line2 = (f"Speed {ws['attack_speed']}   Crit {round(ws['crit_chance'] * 100)}%   "
+                         f"Heavy +{round(ws['heavy_bonus'] * 100)}%")
+                scr.blit(self.font_tiny.render(line2, True, (230, 200, 120)), (det.x + 64, det.y + 38))
+                scr.blit(self.font_tiny.render(f"{detail_slot.title()} slot  ·  Click slot to unequip", True, MUTED), (det.x + 64, det.y + 53))
+            else:
+                scr.blit(self.font_tiny.render(detail, True, TEXT), (det.x + 64, det.y + 28))
+                scr.blit(self.font_tiny.render(f"{detail_slot.title()} slot  ·  Click slot to unequip", True, MUTED), (det.x + 64, det.y + 47))
         else:
             scr.blit(self.font_small.render(f"{detail_slot.title()}: empty", True, MUTED), (det.x + 12, det.y + 24))
     else:

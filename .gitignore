@@ -225,3 +225,6 @@ __marimo__/
 *.db-journal
 *.db-wal
 *.db-shm
+
+# Local Cursor implementation prompts (rules such as *.mdc stay tracked)
+.cursor/rules/*.md

@@ -989,7 +989,7 @@ ARMOUR = [
     ("arm_kiteshield", "shield", arm_kiteshield, "shield", [], "*_shield | *_sq_shield (fallback) | wooden_shield"),
 ]
 WEAPONS = [
-    ("wpn_sword", wpn_sword, "*_sword | *_longsword | *_dagger (fallback)", ("idle", "walk", "melee", "hit", "death")),
+    ("wpn_sword", wpn_sword, "*_sword | *_longsword", ("idle", "walk", "melee", "hit", "death")),
     ("wpn_axe", wpn_axe, "*_axe | *_battleaxe (fallback) | woodcutting tool", ("idle", "walk", "melee", "chop", "hit", "death")),
     ("wpn_pickaxe", wpn_pickaxe, "*_pickaxe | mining tool", ("idle", "walk", "melee", "mine", "hit", "death")),
     ("wpn_bow", wpn_bow, "*bow*", ("idle", "walk", "ranged", "hit", "death")),
