@@ -100,3 +100,31 @@ def combat_level(attack, strength, defence, hitpoints=1, archery=1):
         reverse=True,
     )
     return max(1, scores[0] + scores[1] + scores[2])
+
+
+# Monsters with a dragonfire breath or boss mechanics: stands in for the player's karma term.
+ABILITY_MONSTERS = frozenset(("dragon", "nyxarath"))
+ABILITY_MULT = 1.10
+
+
+def monster_combat_level(mdef, monster_type=None):
+    """A monster's combat level on the same scale as players (gear never counts).
+
+    base = attack + strength + defence (players: top three of att/str/def/archery; monsters have no archery)
+    + round((hp - base) / 10)   tankier or squishier than a player of that level
+    + round(def_bonus / 4)      natural hide or armour is the monster's own stat
+    x 1 / attack_cooldown       when the cooldown is 1.0 s or more (slower swings = weaker)
+    x 1.10                      dragonfire / boss mechanics (ABILITY_MONSTERS, "boss" or "ability_mult")
+    A "level_override" wins outright.
+    """
+    mdef = mdef or {}
+    if mdef.get("level_override") is not None:
+        return int(mdef["level_override"])
+    base = int(mdef.get("attack") or 0) + int(mdef.get("strength") or 0) + int(mdef.get("defence") or 0)
+    hp = int(mdef.get("hp") or base)
+    raw = base + round((hp - base) / 10) + round(int(mdef.get("def_bonus") or 0) / 4)
+    cd = mdef.get("attack_cooldown")
+    speed = 1.0 / float(cd) if cd is not None and float(cd) >= 1.0 else 1.0
+    ability = float(mdef.get("ability_mult") or 0) or (
+        ABILITY_MULT if (mdef.get("boss") or monster_type in ABILITY_MONSTERS) else 1.0)
+    return max(1, int(round(raw * speed * ability)))

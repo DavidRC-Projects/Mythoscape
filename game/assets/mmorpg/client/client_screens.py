@@ -9,6 +9,23 @@ direct `python client.py` and an import see the same values.
 _BOUND = False
 
 
+def _shop_buy_tax(cost, rate):
+    """Mirror of royal_treasury.buy_tax for display (ceil, min 1 when cost > 0)."""
+    import math
+    cost, rate = int(cost or 0), float(rate or 0)
+    if cost <= 0 or rate <= 0:
+        return 0
+    return max(1, int(math.ceil(cost * rate - 1e-9)))
+
+
+def _shop_sell_tax(value, rate):
+    import math
+    value, rate = int(value or 0), float(rate or 0)
+    if value <= 0 or rate <= 0:
+        return 0
+    return int(math.floor(value * rate + 1e-9))
+
+
 def _bind_client_globals():
     global _BOUND
     if _BOUND:
@@ -554,6 +571,17 @@ class ScreensMixin:
             elif action == "forge" and self.dialogue.get("forge"):
                 self.dialogue = None
                 self.open_forge_at()
+            elif action.startswith("optx:"):
+                why = next((o.get("why") for o in self.dialogue.get("options") or [] if o["id"] == action[5:]), "")
+                self.chat_log.append("[!] " + (why or "You can't choose that."))
+                self.chat_log = self.chat_log[-8:]
+            elif action.startswith("opt:") and self.dialogue.get("npc_id") == "court_event":
+                self.net.send("COURT_CHOOSE", choice=action[4:])
+                self.dialogue = None
+            elif action.startswith("opt:"):
+                self.net.send("NPC_OPTION", npc_id=self.dialogue["npc_id"], option=action[4:])
+            elif action == "persuade" and self.dialogue.get("persuade"):
+                self.net.send("PERSUADE", npc_id=self.dialogue["npc_id"])
             elif action == "close":
                 self.dialogue = None
             return
@@ -1662,6 +1690,9 @@ class ScreensMixin:
             bx = add_btn("bank", "Bank (B)", (50, 90, 130), bx)
         if self.dialogue.get("forge"):
             bx = add_btn("forge", "Forge (S)", (140, 80, 40), bx)
+        persuade = self.dialogue.get("persuade")
+        if persuade:
+            bx = add_btn("persuade", f"[Persuade (Charisma {int(persuade.get('req') or 1)})]", (110, 60, 120), bx)
         pages = self.dialogue.get("pages") or []
         page_i = int(self.dialogue.get("page") or 0)
         if pages and page_i > 0:
@@ -1670,8 +1701,34 @@ class ScreensMixin:
             bx = add_btn("next", "Next", (70, 90, 120), bx)
         add_btn("close", "Close", (60, 60, 70), box.right - 80)
 
+        # Menu options (apprentice masters, estate office) wrap in rows above the buttons
+        opts_top = btn_y
+        options = self.dialogue.get("options") or []
+        if options:
+            rows, row, row_w = [], [], 0
+            for opt in options:
+                w = max(72, self.font_small.size(opt["label"])[0] + 18) + 8
+                if row and text_x + row_w + w > box.right - 12:
+                    rows.append(row)
+                    row, row_w = [], 0
+                row.append(opt)
+                row_w += w
+            if row:
+                rows.append(row)
+            saved_y = btn_y
+            for r_i, row in enumerate(rows):
+                btn_y = saved_y - 32 * (len(rows) - r_i)
+                ox = text_x
+                for opt in row:
+                    if opt.get("ok", True):
+                        ox = add_btn("opt:" + opt["id"], opt["label"], (60, 80, 70), ox)
+                    else:
+                        ox = add_btn("optx:" + opt["id"], opt["label"], (62, 62, 62), ox)
+            opts_top = saved_y - 32 * len(rows)
+            btn_y = saved_y
+
         # Body text — clipped above buttons
-        text_bottom = btn_y - 8
+        text_bottom = opts_top - 8
         y = box.y + 36
         max_w = box.right - 12 - text_x
         prev_clip = self.screen.get_clip()
@@ -1790,7 +1847,9 @@ class ScreensMixin:
                 sprites.draw_item_icon(self.screen, icon, item_id, ITEMS)
                 name = self.font_small.render(info["name"], True, WHITE)
                 self.screen.blit(name, (row.x + 42, row.y + 4))
-                meta = self.font_small.render(f"{info['price']}c   stock {info['qty']}", True, (180, 200, 140))
+                btax = _shop_buy_tax(info["price"], self.shop.get("tax_rate", 0))
+                meta = self.font_small.render(
+                    f"{info['price']} gp (+{btax} tax)   stock {info['qty']}", True, (180, 200, 140))
                 self.screen.blit(meta, (row.x + 42, row.y + 18))
                 self.shop_buy_rects.append((row, item_id))
             y += row_h
@@ -1871,7 +1930,8 @@ class ScreensMixin:
                         qty = entry.get("qty", 1)
                         name = self.font_small.render(f"{label}  x{qty}", True, WHITE)
                         self.screen.blit(name, (row.x + 42, row.y + 4))
-                        meta = self.font_small.render(f"sell {price}c each", True, (255, 200, 120))
+                        stax = _shop_sell_tax(price, self.shop.get("tax_rate", 0))
+                        meta = self.font_small.render(f"sell {price} gp (\u2212{stax} tax) each", True, (255, 200, 120))
                         self.screen.blit(meta, (row.x + 42, row.y + 18))
                         self.shop_sell_rects.append((row, slot, item_id))
                     y += row_h
@@ -1900,6 +1960,17 @@ class ScreensMixin:
 
         hint = self.font_small.render("Esc or click X / outside to close", True, GREY)
         self.screen.blit(hint, (box.x + 18, box.bottom - 26))
+        rate = float(self.shop.get("tax_rate") or 0)
+        rmult = float(self.shop.get("rep_mult") or 1.0)
+        rpct = int(round((rmult - 1.0) * 100))
+        sign = "+" if rpct > 0 else ("\u2212" if rpct < 0 else "")
+        rtxt = f"{sign}{abs(rpct)}%"
+        ndisc = float(self.shop.get("noble_discount") or 0)
+        ntxt = f" · Rank: {self.shop.get('noble_title')} (\u2212{int(round(ndisc * 100))}%)" if ndisc > 0 else ""
+        tax_line = self.font_small.render(
+            f"Standing: {self.shop.get('rep_tier', 'Neutral')} ({rtxt}){ntxt}   Royal sales tax: {int(round(rate * 100))}%",
+            True, YELLOW)
+        self.screen.blit(tax_line, (box.right - tax_line.get_width() - 18, box.bottom - 26))
 
     def draw_bank(self):
         """Bank vault: deposit/withdraw items and coins — scrollable inv + paged vault grid."""
@@ -2067,260 +2138,8 @@ class ScreensMixin:
 
     def draw_equipment_modal(self):
         _bind_client_globals()
-        if USE_NEW_EQUIPMENT_UI:
-            import equipment_ui_v2
-            equipment_ui_v2.draw(self, ITEMS, karma_slot_bonus, sprites, weapon_style)
-            return
-        box = pygame.Rect(90, 36, 760, 560)
-        pygame.draw.rect(self.screen, (16, 18, 26), box, border_radius=8)
-        pygame.draw.rect(self.screen, YELLOW, box, 2, border_radius=8)
-        title = self.font_big.render("Equipment & Stats", True, WHITE)
-        self.screen.blit(title, (box.x + 18, box.y + 12))
-        name = (self.player or {}).get("name") or "You"
-        cmb = self.player_combat_level()
-        self.screen.blit(
-            self.font.render(f"{name}  ·  Combat {cmb}", True, (180, 210, 255)),
-            (box.x + 280, box.y + 18),
-        )
-
-        eq = self.player.get("equipment") or {}
-        karma_lvl = (self.player.get("levels") or {}).get("karma", 1)
-        bonuses = {"att_bonus": 0, "str_bonus": 0, "def_bonus": 0}
-        for slot in ("helmet", "amulet", "ring", "weapon", "ammo", "shield", "body", "legs"):
-            item_id = eq.get(slot)
-            if not item_id:
-                continue
-            item = ITEMS.get(item_id) or {}
-            kb = karma_slot_bonus(slot, karma_lvl)
-            for k in bonuses:
-                bonuses[k] += int(item.get(k, 0) or 0) + int(kb.get(k, 0) or 0)
-
-        # --- Paperdoll stage (left) ---
-        stage = pygame.Rect(box.x + 18, box.y + 52, 340, 460)
-        pygame.draw.rect(self.screen, (24, 28, 38), stage, border_radius=8)
-        pygame.draw.rect(self.screen, (70, 90, 120), stage, 1, border_radius=8)
-
-        # Slot column on the left of the stage
-        slot_size = 40
-        slot_order = ("helmet", "amulet", "ring", "weapon", "body", "shield", "legs", "ammo")
-        self.equip_slot_rects = {}
-        inv = self.player.get("inventory") or {}
-        slot_y0 = stage.y + 10
-        for i, slot in enumerate(slot_order):
-            item_id = eq.get(slot)
-            sx = stage.x + 14
-            sy = slot_y0 + i * (slot_size + 4)
-            row = pygame.Rect(sx, sy, slot_size, slot_size)
-            filled = bool(item_id)
-            pygame.draw.rect(self.screen, (48, 54, 70) if filled else (30, 34, 44), row, border_radius=6)
-            pygame.draw.rect(
-                self.screen,
-                (140, 190, 255) if filled else (70, 78, 95),
-                row, 2 if filled else 1, border_radius=6,
-            )
-            self.equip_slot_rects[slot] = row
-            tag = self.font_tiny.render(slot[:3].upper(), True, (130, 140, 160))
-            self.screen.blit(tag, (row.x + 3, row.y + 1))
-            if item_id:
-                icon = pygame.Rect(row.x + 5, row.y + 11, 30, 26)
-                sprites.draw_item_icon(self.screen, icon, item_id, ITEMS)
-                if slot == "ammo" and item_id == "arrow_quiver":
-                    qtot = int((self.player or {}).get("quiver_total") or 0)
-                    qty = self.font_tiny.render(str(qtot), True, YELLOW)
-                    self.screen.blit(qty, (row.x + 4, row.y + 26))
-            else:
-                empty = self.font_tiny.render("—", True, (80, 88, 100))
-                self.screen.blit(empty, (row.centerx - empty.get_width() // 2, row.centery - 2))
-            name_lbl = self.font_tiny.render(slot.title(), True, (160, 168, 185))
-            self.screen.blit(name_lbl, (row.right + 8, row.y + 2))
-            if item_id:
-                short = (ITEMS.get(item_id) or {}).get("name", item_id)
-                if len(short) > 14:
-                    short = short[:13] + "…"
-                self.screen.blit(
-                    self.font_tiny.render(short, True, WHITE),
-                    (row.right + 8, row.y + 16),
-                )
-
-        # Character preview on the right side of the stage
-        preview_tile = 118
-        cx = stage.x + 230
-        cy = stage.y + 250
-        floor = pygame.Rect(cx - 72, cy + 78, 144, 30)
-        pygame.draw.ellipse(self.screen, (38, 48, 62), floor)
-        pygame.draw.ellipse(self.screen, (55, 70, 90), floor, 1)
-        body, skin, hair = (70, 210, 90), (235, 195, 150), (70, 45, 30)
-        gender = (self.player or {}).get("gender") or "male"
-        sprites.draw_humanoid_detailed(
-            self.screen, cx, cy, preview_tile, body, skin, hair,
-            weapon=weapon_style(eq.get("weapon")),
-            shield=bool(eq.get("shield")),
-            moving=False, t=0.0, facing=1,
-            equipment=eq, attacking=0.0, action="stand",
-            gender=gender,
-        )
-        self.draw_hp_bar(cx, floor.bottom + 4, self.player["hp"], self.player["max_hp"])
-
-        # Hover / selected slot detail
-        hover_slot = None
-        mx, my = pygame.mouse.get_pos()
-        for slot, rect in self.equip_slot_rects.items():
-            if rect.collidepoint(mx, my):
-                hover_slot = slot
-                break
-        detail_slot = hover_slot
-        if detail_slot is None:
-            for prefer in ("weapon", "body", "helmet", "shield", "legs", "amulet", "ring", "ammo"):
-                if eq.get(prefer):
-                    detail_slot = prefer
-                    break
-        detail_y = stage.bottom - 72
-        pygame.draw.rect(self.screen, (20, 24, 34), (stage.x + 10, detail_y, stage.w - 20, 58), border_radius=6)
-        if detail_slot:
-            item_id = eq.get(detail_slot)
-            item = ITEMS.get(item_id) if item_id else None
-            if item:
-                label_name = item["name"]
-                if detail_slot == "ammo" and item_id == "arrow_quiver":
-                    qtot = int((self.player or {}).get("quiver_total") or 0)
-                    label_name = f"Arrow Quiver  ·  {qtot} arrows"
-                elif detail_slot == "ammo":
-                    qty = sum(int(e.get("qty") or 0) for e in inv.values() if e and e.get("item_id") == item_id)
-                    label_name = f"{item['name']}  ×{qty}"
-                self.screen.blit(
-                    self.font_small.render(f"{detail_slot.title()}: {label_name}", True, WHITE),
-                    (stage.x + 18, detail_y + 6),
-                )
-                kb = karma_slot_bonus(detail_slot, karma_lvl)
-                if detail_slot == "ammo" and item_id == "arrow_quiver":
-                    best = (self.player or {}).get("quiver_best")
-                    best_item = ITEMS.get(best) or {}
-                    detail = (
-                        f"Fires best first · next: {best_item.get('name', '—')}  "
-                        f"(+{best_item.get('ranged_att', 0)} att / +{best_item.get('ranged_str', 0)} str)"
-                    )
-                elif detail_slot == "ammo":
-                    detail = (
-                        f"Ranged +{item.get('ranged_att', 0)} att / "
-                        f"+{item.get('ranged_str', 0)} str"
-                    )
-                else:
-                    detail = (
-                        f"Att +{item.get('att_bonus', 0)}(+{kb['att_bonus']}k)   "
-                        f"Str +{item.get('str_bonus', 0)}(+{kb['str_bonus']}k)   "
-                        f"Def +{item.get('def_bonus', 0)}(+{kb['def_bonus']}k)"
-                    )
-                self.screen.blit(
-                    self.font_tiny.render(detail, True, (170, 175, 190)),
-                    (stage.x + 18, detail_y + 26),
-                )
-                self.screen.blit(
-                    self.font_tiny.render("Click slot to unequip", True, (120, 130, 150)),
-                    (stage.x + 18, detail_y + 40),
-                )
-            else:
-                self.screen.blit(
-                    self.font_small.render(f"{detail_slot.title()}: empty", True, GREY),
-                    (stage.x + 18, detail_y + 20),
-                )
-        else:
-            self.screen.blit(
-                self.font_small.render("No gear equipped — wear items from inventory", True, GREY),
-                (stage.x + 18, detail_y + 20),
-            )
-
-        # --- Stats panel (right) ---
-        panel = pygame.Rect(box.x + 372, box.y + 52, 370, 460)
-        pygame.draw.rect(self.screen, (22, 26, 36), panel, border_radius=8)
-        pygame.draw.rect(self.screen, (70, 90, 120), panel, 1, border_radius=8)
-
-        levels = self.player.get("levels") or {}
-        wb = self.player.get("gear_bonuses") or bonuses
-        kb_tot = self.player.get("karma_bonuses") or {"att_bonus": 0, "str_bonus": 0, "def_bonus": 0}
-        pot = self.player.get("stat_boosts") or {}
-        y = panel.y + 14
-        self.screen.blit(self.font.render("Worn bonuses", True, YELLOW), (panel.x + 14, y))
-        y += 26
-        for label, key, color in (
-            ("Attack", "att_bonus", (255, 160, 120)),
-            ("Strength", "str_bonus", (255, 200, 100)),
-            ("Defence", "def_bonus", (140, 190, 255)),
-        ):
-            val = int(wb.get(key, 0))
-            bar_bg = pygame.Rect(panel.x + 14, y + 16, panel.w - 28, 8)
-            pygame.draw.rect(self.screen, (35, 40, 52), bar_bg, border_radius=3)
-            fill_w = min(bar_bg.w, int(bar_bg.w * min(1.0, val / 200.0)))
-            if fill_w > 0:
-                pygame.draw.rect(self.screen, color, (bar_bg.x, bar_bg.y, fill_w, bar_bg.h), border_radius=3)
-            self.screen.blit(self.font_small.render(f"{label}  +{val}", True, WHITE), (panel.x + 14, y))
-            y += 36
-
-        y += 4
-        self.screen.blit(self.font.render("Combat levels", True, YELLOW), (panel.x + 14, y))
-        y += 24
-
-        def combat_line(label, skill, gear_key):
-            base = int(levels.get(skill, 1))
-            b = pot.get(skill) or {}
-            amt = int(b.get("amount") or 0)
-            gear = int(wb.get(gear_key, 0))
-            if amt > 0:
-                return f"{label}  {base + amt}", f"base {base}  pot +{amt}  gear +{gear}"
-            return f"{label}  {base}", f"gear +{gear}"
-
-        for skill_label, skill, gkey in (
-            ("Attack", "attack", "att_bonus"),
-            ("Strength", "strength", "str_bonus"),
-            ("Defence", "defence", "def_bonus"),
-            ("Archery", "archery", "att_bonus"),
-            ("Hitpoints", "hitpoints", "def_bonus"),
-        ):
-            if skill == "hitpoints":
-                main = f"Hitpoints  {self.player['hp']} / {self.player['max_hp']}"
-                sub = "three highest of Attack, Strength, Defence, Archery"
-            elif skill == "archery":
-                base = int(levels.get("archery", 1))
-                main = f"Archery  {base}"
-                ranged_att = int(wb.get("ranged_att", 0) or 0)
-                ranged_str = int(wb.get("ranged_str", 0) or 0)
-                sub = f"ranged +{ranged_att} att / +{ranged_str} str"
-            else:
-                main, sub = combat_line(skill_label, skill, gkey)
-            self.screen.blit(self.font_small.render(main, True, WHITE), (panel.x + 18, y))
-            self.screen.blit(self.font_tiny.render(sub, True, (150, 155, 170)), (panel.x + 18, y + 16))
-            y += 34
-
-        y += 2
-        divider = pygame.Rect(panel.x + 14, y, panel.w - 28, 1)
-        pygame.draw.rect(self.screen, (55, 65, 85), divider)
-        y += 10
-        self.screen.blit(
-            self.font_small.render(
-                f"Karma {levels.get('karma', 1)}   "
-                f"(+{kb_tot.get('att_bonus', 0)}a / +{kb_tot.get('str_bonus', 0)}s / +{kb_tot.get('def_bonus', 0)}d)",
-                True, (200, 190, 255),
-            ),
-            (panel.x + 14, y),
-        )
-        y += 22
-        self.screen.blit(
-            self.font_small.render(
-                f"Combat {self.player_combat_level()}   ·   Total {self.player_total_level()}",
-                True, (180, 255, 180),
-            ),
-            (panel.x + 14, y),
-        )
-        y += 28
-        import emberdeep_v2_client
-        close_hint = (
-            "Hover a slot for details · Esc to close"
-            if emberdeep_v2_client.fp_active(self)
-            else "Hover a slot for details · Esc / E to close"
-        )
-        self.screen.blit(
-            self.font_small.render(close_hint, True, GREY),
-            (box.x + 20, box.y + box.h - 26),
-        )
+        import equipment_ui_v2
+        equipment_ui_v2.draw(self, ITEMS, karma_slot_bonus, sprites, weapon_style)
 
     def draw_forge_modal(self):
         _bind_client_globals()
@@ -2629,6 +2448,29 @@ class ScreensMixin:
             True, YELLOW,
         )
         self.screen.blit(header, (box.x + 20, box.y + 48))
+        standing = self.font_small.render(
+            f"Standing: {self.player.get('rep_tier', 'Neutral')} ({int(self.player.get('reputation') or 0)})",
+            True, (200, 180, 240),
+        )
+        self.screen.blit(standing, (box.right - standing.get_width() - 24, box.y + 52))
+        # Work & Property (phase 4)
+        work = self.player.get("work") or {}
+        job, prop = work.get("job"), work.get("property")
+        wy = box.y + 72
+        for text in (
+            f"Work: {job['workplace']} {job['today']}/{job['cap']} today · wages {job['last_wages']}"
+            if job else "Work: none",
+            f"Property: {prop['kind']} {prop['workers']}/{prop['slots']} · {prop['fee']}/day"
+            f" · +{prop['last_income']}" if prop else "Property: none",
+        ):
+            surf = self.font_tiny.render(text, True, (190, 210, 180))
+            self.screen.blit(surf, (box.right - surf.get_width() - 24, wy))
+            wy += 13
+        if self.player.get("kingdom"):
+            ksurf = self.font_tiny.render(self.player["kingdom"] + "  (click for details)", True, (200, 180, 240))
+            kpos = (box.x + 20, box.y + 86)
+            self.screen.blit(ksurf, kpos)
+            self._kingdom_rect = pygame.Rect(kpos, ksurf.get_size())
         hint = self.font_tiny.render(
             "Scroll wheel / ↑↓ / drag bar  ·  Esc / Tab closes",
             True, GREY,

@@ -107,16 +107,19 @@ def scaled_monster_stats(level: int) -> dict:
     att = max(3, int(level * 0.72)) + 10
     strength = max(3, int(level * 0.75)) + 10
     defence = max(2, int(level * 0.62))
-    return {
-        "level": level,
+    import combat
+    stats = {
+        "tier": level,
         "hp": hp,
         "attack": att,
         "strength": strength,
         "defence": defence,
         "def_bonus": max(0, level // 5),
         "xp": max(20, int(level * 4.5)),
-        "name": f"Cavern Beast (lvl {level})",
     }
+    stats["level"] = combat.monster_combat_level(stats)
+    stats["name"] = f"Cavern Beast (lvl {stats['level']})"
+    return stats
 
 
 def generate_floor_tiles(floor: int, rng=None):

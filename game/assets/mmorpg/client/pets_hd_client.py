@@ -127,7 +127,7 @@ def draw(
     meta = _load_meta(sprite)
     if not meta or not meta.get("complete"):
         return False
-    tag, base = ("2x", 80) if size >= 80 else ("1x", 40)
+    tag, base = ("2x", 80) if size > 40 else ("1x", 40)
     k = size / float(base)
     if attacking >= 0:
         state = "attack"
@@ -160,7 +160,7 @@ def head_top_dy(sprite: str, size: int, facing=1, state: str = "idle", frame: in
     feet = (meta.get("feet_px") or {}).get("4x") or [256, 528]
     if not head:
         return -max(8, size // 2)
-    tag, base = ("2x", 80) if size >= 80 else ("1x", 40)
+    tag, base = ("2x", 80) if size > 40 else ("1x", 40)
     div = 4 if tag == "1x" else 2
     k = size / float(base)
     return int(round((head[1] - feet[1]) / div * k))

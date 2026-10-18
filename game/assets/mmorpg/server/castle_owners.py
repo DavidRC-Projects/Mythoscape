@@ -10,6 +10,8 @@ import time
 from pathlib import Path
 
 import feature_flags
+import reputation
+import royal_treasury
 
 WEEK = 7 * 24 * 3600
 _ROOT = Path(__file__).resolve().parent.parent / "client" / "assets" / "castle_realm" / "owners"
@@ -89,6 +91,9 @@ def ensure_schema(conn):
             tax_weeks_owed INTEGER DEFAULT 0
         )"""
     )
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(castle_ownership)").fetchall()}
+    if "guild_id" not in cols:          # set when the deed was bought from a guild bank
+        conn.execute("ALTER TABLE castle_ownership ADD COLUMN guild_id INTEGER")
     conn.commit()
 
 
@@ -108,9 +113,15 @@ def install_items():
 
 
 def owners(conn):
-    rows = conn.execute(
-        "SELECT castle_id, owner_account_id, owner_display_name, purchased_at, last_tax_paid_at, tax_weeks_owed FROM castle_ownership"
-    ).fetchall()
+    try:
+        rows = conn.execute(
+            "SELECT castle_id, owner_account_id, owner_display_name, purchased_at, last_tax_paid_at, tax_weeks_owed, "
+            "guild_id FROM castle_ownership"
+        ).fetchall()
+    except Exception:                    # table made before the guild_id column existed
+        rows = [tuple(r) + (None,) for r in conn.execute(
+            "SELECT castle_id, owner_account_id, owner_display_name, purchased_at, last_tax_paid_at, tax_weeks_owed "
+            "FROM castle_ownership").fetchall()]
     return {
         row[0]: {
             "owner_id": row[1],
@@ -118,6 +129,7 @@ def owners(conn):
             "purchased_at": row[3],
             "last_tax_paid_at": row[4],
             "tax_weeks_owed": int(row[5] or 0),
+            "guild_id": row[6],
         }
         for row in rows
     }
@@ -273,6 +285,16 @@ async def choose(session, npc_id, node_id, option_id):
     )
 
 
+def _leader_guild(session):
+    """The guild id when this player leads a guild, else None."""
+    try:
+        import clans
+        cid = clans.clan_of(session.player_id)
+        return cid if cid and clans.rank_of(session.player_id) == "Leader" else None
+    except Exception:
+        return None
+
+
 def can_buy(session, castle_id):
     if castle_id == "king":
         return "not_for_sale"
@@ -284,9 +306,14 @@ def can_buy(session, castle_id):
         return "already_yours"
     if owned:
         return "owned"
-    if int(session.bank_coins) < int(row["deed_price"]):
-        return "funds"
-    return "ok"
+    if int(session.bank_coins) >= int(row["deed_price"]):
+        return "ok"
+    cid = _leader_guild(session)
+    if cid:
+        import clans
+        if clans.bank_balance(cid) >= int(row["deed_price"]):
+            return "guild"           # the guild bank pays; the Leader holds the deed
+    return "funds"
 
 
 async def buy(session, seller):
@@ -302,20 +329,28 @@ async def buy(session, seller):
         return "buy_fail_already_yours"
     if reason == "owned":
         return "buy_fail_owned"
-    if reason != "ok":
+    if reason not in ("ok", "guild"):
         return "buy_fail_funds"
     row = castle_row(castle_id)
     price = int(row["deed_price"])
-    session.bank_coins -= price
-    _WORLD.db.save_player_stats(session.player_id, bank_coins=session.bank_coins)
+    guild_id = None
+    if reason == "guild":
+        import clans
+        guild_id = _leader_guild(session)
+        if not guild_id or not clans._bank_move(guild_id, -price):
+            return "buy_fail_funds"
+        clans._log(guild_id, session.player_id, "castle_deed", -price)
+    else:
+        session.bank_coins -= price
+        _WORLD.db.save_player_stats(session.player_id, bank_coins=session.bank_coins)
     now = time.time()
     name = getattr(session, "char_name", None) or "Owner"
     conn = _WORLD.db.conn
     conn.execute(
         """INSERT INTO castle_ownership
-           (castle_id, owner_account_id, owner_display_name, purchased_at, last_tax_paid_at, tax_weeks_owed)
-           VALUES (?, ?, ?, ?, ?, 0)""",
-        (castle_id, session.player_id, name, now, now),
+           (castle_id, owner_account_id, owner_display_name, purchased_at, last_tax_paid_at, tax_weeks_owed, guild_id)
+           VALUES (?, ?, ?, ?, ?, 0, ?)""",
+        (castle_id, session.player_id, name, now, now, guild_id),
     )
     conn.commit()
     install_items()
@@ -328,10 +363,22 @@ async def buy(session, seller):
     await _send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     await _send(session.ws, "CHAT_MSG", **{
         "from": seller["display_name"],
-        "text": f"You are now the lord of {row['display_name']}.",
+        "text": f"You are now the lord of {row['display_name']}."
+                + (f" Your guild bank paid {price:,}; you hold the deed as its Leader." if guild_id else ""),
     })
     await broadcast()
     return "buy_success"
+
+
+def _guild_pays(guild_id, player_id, amount):
+    try:
+        import clans
+        if clans._bank_move(guild_id, -int(amount)):
+            clans._log(guild_id, player_id, "castle_upkeep", -int(amount))
+            return True
+    except Exception:
+        pass
+    return False
 
 
 async def settle_taxes(session, quiet=False):
@@ -351,9 +398,25 @@ async def settle_taxes(session, quiet=False):
         if now < last + WEEK:
             continue
         tax = int(row["weekly_tax"])
-        if int(session.bank_coins) >= tax:
+        if owner.get("guild_id") and _guild_pays(owner["guild_id"], session.player_id, tax):
+            royal_treasury.credit(conn, "castle_upkeep", session.player_id, tax)
+            conn.execute(
+                "UPDATE castle_ownership SET last_tax_paid_at = ?, tax_weeks_owed = 0 WHERE castle_id = ?",
+                (last + WEEK, castle_id),
+            )
+            if not quiet:
+                await _send(session.ws, "CHAT_MSG", **{
+                    "from": "Castle Realm",
+                    "text": f"Weekly upkeep of {tax:,} coins leaves your guild bank for {row['display_name']}.",
+                })
+        elif int(session.bank_coins) >= tax:
             session.bank_coins -= tax
             _WORLD.db.save_player_stats(session.player_id, bank_coins=session.bank_coins)
+            royal_treasury.credit(conn, "castle_upkeep", session.player_id, tax)
+            await reputation.social_event(
+                _WORLD, _send, session, "castle_upkeep", rep=reputation.REP_WEEKLY_PAID,
+                xp={"etiquette": reputation.ETIQUETTE_WEEKLY_XP},
+            )
             conn.execute(
                 "UPDATE castle_ownership SET last_tax_paid_at = ?, tax_weeks_owed = 0 WHERE castle_id = ?",
                 (last + WEEK, castle_id),

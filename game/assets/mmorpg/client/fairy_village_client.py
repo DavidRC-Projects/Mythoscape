@@ -43,9 +43,10 @@ def _load(path):
 
 
 def _scale_for(tile):
-    if tile >= 80:
-        return "2x", 80
-    return "1x", 40
+    """Smallest source >= the target tile, then smoothscale down only."""
+    if tile <= 40:
+        return "1x", 40
+    return "2x", 80
 
 
 def _building(key, tile):

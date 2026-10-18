@@ -1,0 +1,807 @@
+{
+ "armour_layers": [
+  {
+   "id": "arm_helm_eclipse",
+   "equip_slot": "helmet",
+   "z_class": "armour_head",
+   "covers": [
+    "hair"
+   ],
+   "matches": "eclipse_helmet",
+   "layer": "arm_helm_eclipse",
+   "z": {
+    "s": 80,
+    "e": 80,
+    "w": 80,
+    "n": 80
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "arm_helm_eclipse_hide",
+   "equip_slot": "helmet",
+   "z_class": "mask_head",
+   "covers": [
+    "hair",
+    "head"
+   ],
+   "matches": "eclipse_helmet",
+   "layer": "arm_helm_eclipse_hide",
+   "z": {
+    "s": 80,
+    "e": 80,
+    "w": 80,
+    "n": 80
+   },
+   "tintable": false,
+   "files": {
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   },
+   "role": "erase_mask",
+   "mask_for": "arm_helm_eclipse",
+   "kinds": [
+    "female"
+   ],
+   "note": "Not drawn. Female only: erase body/head/hair pixels under this mask's alpha (BLEND_RGBA_MULT with inverted alpha) before drawing arm_helm_eclipse. See FEMALE_HELM_MASK_CODE.md."
+  },
+  {
+   "id": "arm_platebody_eclipse",
+   "equip_slot": "body",
+   "z_class": "armour_body",
+   "covers": [
+    "top",
+    "outfit"
+   ],
+   "matches": "eclipse_body",
+   "layer": "arm_platebody_eclipse",
+   "z": {
+    "s": 58,
+    "e": 58,
+    "w": 58,
+    "n": 58
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "arm_platelegs_eclipse",
+   "equip_slot": "legs",
+   "z_class": "armour_legs",
+   "covers": [
+    "bottom",
+    "outfit"
+   ],
+   "matches": "eclipse_legs",
+   "layer": "arm_platelegs_eclipse",
+   "z": {
+    "s": 52,
+    "e": 52,
+    "w": 52,
+    "n": 52
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "arm_gauntlets_eclipse",
+   "equip_slot": "body",
+   "z_class": "armour_hands",
+   "covers": [
+    "accessory:acc_leather_gloves"
+   ],
+   "matches": "eclipse_body",
+   "layer": "arm_gauntlets_eclipse",
+   "z": {
+    "s": 60,
+    "e": 60,
+    "w": 60,
+    "n": 60
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "arm_sabatons_eclipse",
+   "equip_slot": "legs",
+   "z_class": "armour_feet",
+   "covers": [
+    "shoes"
+   ],
+   "matches": "eclipse_legs",
+   "layer": "arm_sabatons_eclipse",
+   "z": {
+    "s": 54,
+    "e": 54,
+    "w": 54,
+    "n": 54
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  }
+ ],
+ "weapon_layers": [
+  {
+   "id": "wpn_sword_eclipse",
+   "matches": "eclipse_sword",
+   "anims": [
+    "idle",
+    "walk",
+    "melee",
+    "hit",
+    "death"
+   ],
+   "layer": "wpn_sword_eclipse",
+   "z": {
+    "s": 90,
+    "e": 90,
+    "w": 90,
+    "n": 8
+   },
+   "z_anim": {
+    "melee": {
+     "n": 90
+    },
+    "ranged": {
+     "n": 90
+    }
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "wpn_axe_eclipse",
+   "matches": "eclipse_cleaver",
+   "anims": [
+    "idle",
+    "walk",
+    "melee",
+    "chop",
+    "hit",
+    "death"
+   ],
+   "layer": "wpn_axe_eclipse",
+   "z": {
+    "s": 90,
+    "e": 90,
+    "w": 90,
+    "n": 8
+   },
+   "z_anim": {
+    "melee": {
+     "n": 90
+    },
+    "ranged": {
+     "n": 90
+    }
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  }
+ ]
+}

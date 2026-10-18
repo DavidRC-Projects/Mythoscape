@@ -8,6 +8,10 @@ import pygame
 _DIR = os.path.join(os.path.dirname(__file__), "..", "assets", "items", "realistic")
 _RAW = {}
 _SCALED = {}
+# Items whose pack icon hasn't been painted yet: (source icon, RGB multiply). Real files win.
+_STAND_IN = {
+    "mythos_battleaxe": ("adamant_battleaxe", (255, 120, 110)),
+}
 
 
 def _raw(item_id):
@@ -15,6 +19,20 @@ def _raw(item_id):
         return _RAW[item_id]
     path = os.path.join(_DIR, f"{item_id}.png")
     image = pygame.image.load(path).convert_alpha() if os.path.isfile(path) else None
+    if image is None and item_id in _STAND_IN:
+        src_id, rgb = _STAND_IN[item_id]
+        src = _raw(src_id)
+        if src is not None:
+            image = src.copy()
+            image.fill((*rgb, 255), special_flags=pygame.BLEND_RGBA_MULT)
+    if image is None:
+        try:
+            from content import ITEMS as _items
+            base = (_items.get(item_id) or {}).get("art_as")
+        except Exception:
+            base = None
+        if base and base != item_id:
+            image = _raw(base)          # e.g. the Recruit's Bronze kit uses the bronze icons
     _RAW[item_id] = image
     return image
 

@@ -6,6 +6,8 @@ import time
 from pathlib import Path
 
 import feature_flags
+import reputation
+import royal_treasury
 
 # Houses are re-laid on open grass. The office is the northernmost building
 # so it is the first thing you reach. Gaps between footprints are 5 or 6 tiles.
@@ -137,6 +139,7 @@ def attach(npcs):
         "lines": [
             "King's Row. The office is the building to the north. Homes are south of it, and more stand along the south road.",
             "The weekly lease is 50,000 gold. Miss it, and you have a week of grace.",
+            "The King also takes a land fee of 500 gold a day.",
             "Press B to see what is still for sale.",
         ],
         "housing": True,
@@ -170,6 +173,9 @@ def ensure_schema(conn):
             grace_until REAL
         )"""
     )
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(housing_deeds)")}
+    if "land_fee_paid_through" not in cols:
+        conn.execute("ALTER TABLE housing_deeds ADD COLUMN land_fee_paid_through REAL")
     conn.commit()
 
 
@@ -278,6 +284,7 @@ async def on_login(session):
     if not enabled() or _WORLD is None:
         return
     await settle_lease(session, quiet=False)
+    await settle_land_fee(session, quiet=False)
     await _send(session.ws, "HOUSING_OWNERS", owners=public_owners(_WORLD.db.conn))
 
 
@@ -418,6 +425,11 @@ async def settle_lease(session, quiet=False):
     if int(session.bank_coins) >= LEASE_GOLD:
         session.bank_coins -= LEASE_GOLD
         _WORLD.db.save_player_stats(session.player_id, bank_coins=session.bank_coins)
+        royal_treasury.credit(conn, "house_lease", session.player_id, LEASE_GOLD)
+        await reputation.social_event(
+            _WORLD, _send, session, "house_lease", rep=reputation.REP_WEEKLY_PAID,
+            xp={"etiquette": reputation.ETIQUETTE_WEEKLY_XP},
+        )
         nxt = float(paid_through) + WEEK
         while nxt < now:
             nxt += WEEK
@@ -437,6 +449,7 @@ async def settle_lease(session, quiet=False):
         grace = now + WEEK
         conn.execute("UPDATE housing_deeds SET grace_until = ? WHERE house_key = ?", (grace, key))
         conn.commit()
+        await reputation.social_event(_WORLD, _send, session, "lease_missed", rep=reputation.REP_LEASE_MISSED)
         await _send(session.ws, "CHAT_MSG", **{
             "from": "Estate",
             "text": f"Your bank cannot pay the lease on {house['name']}. You have seven days of grace.",
@@ -461,5 +474,65 @@ async def tick_leases():
     for session in list(_WORLD.sessions.values()):
         try:
             await settle_lease(session)
+            await settle_land_fee(session)
         except Exception:
             pass
+
+
+def settle_land_fee_rows(conn, player_id, purse, bank, now=None):
+    """Charge the daily land fee on every house the player owns (pure DB maths).
+
+    Returns (purse, bank, results) where results is [(house_key, days_paid, days_passed)].
+    Never partial, never below 0, unpaid days are forgiven (no debt).
+    """
+    now = time.time() if now is None else float(now)
+    results = []
+    rows = conn.execute(
+        "SELECT house_key, land_fee_paid_through FROM housing_deeds WHERE owner_id = ?", (player_id,),
+    ).fetchall()
+    for key, paid_through in rows:
+        if paid_through is None:
+            conn.execute("UPDATE housing_deeds SET land_fee_paid_through = ? WHERE house_key = ?", (now, key))
+            continue
+        paid, days, new_through, purse, bank = royal_treasury.land_fee_due(paid_through, now, purse, bank)
+        if days <= 0:
+            continue
+        conn.execute("UPDATE housing_deeds SET land_fee_paid_through = ? WHERE house_key = ?", (new_through, key))
+        royal_treasury.credit(conn, "land_fee", player_id, paid * royal_treasury.land_fee_daily())
+        results.append((key, paid, days))
+    conn.commit()
+    return purse, bank, results
+
+
+async def settle_land_fee(session, quiet=False):
+    if not enabled() or _WORLD is None:
+        return
+    conn = _WORLD.db.conn
+    purse, bank, results = settle_land_fee_rows(
+        conn, session.player_id, int(session.coins), int(session.bank_coins),
+    )
+    if not results:
+        return
+    if (purse, bank) != (session.coins, session.bank_coins):
+        session.coins, session.bank_coins = purse, bank
+        _WORLD.db.save_player_stats(session.player_id, coins=purse, bank_coins=bank)
+    for _key, paid, days in results:
+        missed = min(days, royal_treasury.LAND_FEE_MAX_DAYS) - paid
+        await reputation.social_event(
+            _WORLD, _send, session, "land_fee",
+            rep=reputation.REP_LAND_FEE_PAID * paid + reputation.REP_LAND_FEE_MISSED * missed,
+            xp={"etiquette": reputation.ETIQUETTE_FEE_XP * paid} if paid else None,
+            xp_cap_key="fee_xp", xp_cap=reputation.ETIQUETTE_FEE_DAILY_CAP,
+        )
+    if quiet:
+        return
+    fee = royal_treasury.land_fee_daily()
+    for key, paid, _days in results:
+        house = house_by_key(key) or {}
+        name = house.get("name") or key
+        if paid:
+            text = f"The King's land fee of {fee * paid:,} coins for {name} is paid."
+        else:
+            text = f"You couldn't cover the King's land fee for {name} today. No debt is kept."
+        await _send(session.ws, "CHAT_MSG", **{"from": "Royal Tax Collector", "text": text})
+    await _send(session.ws, "PLAYER_UPDATE", player=session.full_state())

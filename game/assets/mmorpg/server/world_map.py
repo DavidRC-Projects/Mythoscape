@@ -769,6 +769,9 @@ def generate_world():
     buildings_v2.apply_stamp(grid, sys.modules[__name__])
     import housing
     housing.stamp(grid, sys.modules[__name__])
+    if housing.enabled():
+        import property as _property
+        _property.stamp(grid, sys.modules[__name__])
     import fairy_village
     fairy_village.stamp(grid)
     _clear_trees_near_buildings(grid)

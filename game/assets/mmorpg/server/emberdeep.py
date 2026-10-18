@@ -81,16 +81,19 @@ def scaled_monster_stats(level: int) -> dict:
     att = max(5, int(level * 0.78)) + 10
     strength = max(5, int(level * 0.80)) + 10
     defence = max(4, int(level * 0.68))
-    return {
-        "level": level,
+    import combat
+    stats = {
+        "tier": level,
         "hp": hp,
         "attack": att,
         "strength": strength,
         "defence": defence,
         "def_bonus": max(0, level // 4),
         "xp": max(30, int(level * 5.2)),
-        "name": f"Ember Beast (lvl {level})",
     }
+    stats["level"] = combat.monster_combat_level(stats)
+    stats["name"] = f"Ember Beast (lvl {stats['level']})"
+    return stats
 
 
 _V2_MARKS = {}

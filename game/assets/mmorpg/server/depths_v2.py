@@ -442,7 +442,7 @@ def _spawn_ambush(session, x, y):
             stats = None
             if mtype == "skeleton":
                 stats = dict(MONSTERS["skeleton"])
-                stats["level"] = 40
+                stats["tier"] = 40
                 stats["hp"] = 80
             m = srv.MonsterInstance(mid, mtype, sx, sy, stats=stats, no_respawn=True)
             m.home_room = (x - 4, y - 4, x + 4, y + 4)
@@ -687,7 +687,7 @@ def _raise_dead(session, d):
             return
         mid = srv.next_id()
         stats = dict(MONSTERS["skeleton"])
-        stats["level"] = 40
+        stats["tier"] = 40
         stats["hp"] = 70
         m = srv.MonsterInstance(mid, "skeleton", tx, ty + 1, stats=stats, no_respawn=True)
         m.home_room = ARENA

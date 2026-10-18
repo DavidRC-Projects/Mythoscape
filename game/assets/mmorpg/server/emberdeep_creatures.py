@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 
+import combat
 import feature_flags
 from world_map import FLOOR
 
@@ -246,6 +247,7 @@ def build(tiles, next_id, monster_cls, stats_for):
         stats = stats_for(int(creature["level"]))
         stats["name"] = creature["display_name"]
         stats["attack_cooldown"] = 1.2
+        stats["level"] = combat.monster_combat_level(stats)
         for spot in creature.get("spawns") or []:
             x, y = int(spot["x"]), int(spot["y"])
             if (x, y) in used or not _tile_ok(tiles, chars, x, y, forbid_bridge=bridge):
@@ -275,6 +277,8 @@ def build(tiles, next_id, monster_cls, stats_for):
             stats["attack"] = int(stats.get("attack") or 0) + 50
             stats["strength"] = int(stats.get("strength") or 0) + 50
             stats["name"] = boss["display_name"]
+            stats["boss"] = True
+            stats["level"] = combat.monster_combat_level(stats)
             stats["static"] = True
             stats["speed"] = 0
             stats["wander_radius"] = 0

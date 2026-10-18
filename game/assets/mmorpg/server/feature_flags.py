@@ -16,10 +16,6 @@ USE_NEW_BUILDINGS = _on("USE_NEW_BUILDINGS")
 # Set USE_NEW_CHARACTERS=0 to keep today's figures.
 USE_NEW_CHARACTERS = _on("USE_NEW_CHARACTERS", "1")
 
-# Redesigned Equipment & Stats screen.
-# Set USE_NEW_EQUIPMENT_UI=0 to keep today's panel.
-USE_NEW_EQUIPMENT_UI = _on("USE_NEW_EQUIPMENT_UI", "1")
-
 # Separate castle plane (realm map + Duskspire Keep). On by default.
 # Set USE_CASTLE_REALM=0 to hide the overworld portal.
 USE_CASTLE_REALM = _on("USE_CASTLE_REALM", "1")

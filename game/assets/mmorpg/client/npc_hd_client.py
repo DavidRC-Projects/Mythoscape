@@ -56,6 +56,28 @@ OVERWORLD_HD = {
 # Same sheets as another NPC. The nameplate still uses this character's name.
 SKIN = {
     "banker_corin": "banker_iris",
+    "master_hollis": "farmer_tom",
+    "master_wren": "fletcher_elena",
+    "master_doran": "blacksmith_gareth",
+    "guildmaster_ysolde": "elder_miriam",
+    "chamberlain_aric": "herald_rowan",
+    "royal_herald": "herald_rowan",
+    "mistress_celia": "innkeeper_sarah",
+    "chaplain_mirelle": "priest_cedric",
+    "old_king_prisoner": "king",
+    "old_king_aldous": "king",
+    "keeper_records": "elder_miriam",
+    # Crownfall phase 9: envoys, criers, protesters
+    "envoy_valcrest": "innkeeper_sarah",
+    "envoy_thornmere": "city_vendor_mira",
+    "envoy_ironhold": "blacksmith_gareth",
+    "envoy_commons": "farmer_tom",
+    "crier_square": "herald_rowan",
+    "crier_village": "packer_nell",
+    "protester_0": "farmer_tom",
+    "protester_1": "blacksmith_gareth",
+    "protester_2": "packer_nell",
+    "warden_tamsin": "mine_scout",          # welcome guide by the spawn crossroads
 }
 
 _IMAGES = {}
@@ -86,9 +108,10 @@ def _meta(npc_id):
 
 
 def _scale_for(tile):
-    if tile >= 80:
-        return "2x", 80
-    return "1x", 40
+    """Smallest source >= the target tile, then smoothscale down only."""
+    if tile <= 40:
+        return "1x", 40
+    return "2x", 80
 
 
 def _scaled(path, tile, base):

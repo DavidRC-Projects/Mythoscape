@@ -1,5 +1,5 @@
 {
- "version": 1,
+ "version": 2,
  "currency": "coins",
  "slots": [
   "skin",
@@ -9,33 +9,153 @@
   "bottom",
   "shoes",
   "outfit",
-  "accessory"
+  "accessory",
+  "cloak",
+  "head",
+  "jewellery",
+  "held"
  ],
  "accessory_max": 2,
  "hair_colour_change_price": 20,
  "defaults": {
   "male": {
-   "skin": "skin_light",
+   "skin": "skin_base",
    "hair": "hair_side_part",
    "hair_colour": "dark_brown",
    "top": "top_linen_shirt",
    "bottom": "bottom_work_trousers",
    "shoes": "shoes_leather",
    "outfit": null,
-   "accessories": []
+   "accessories": [],
+   "skin_tone": "tone_3",
+   "head": null,
+   "cloak": null,
+   "held": null,
+   "palette": null,
+   "jewellery": [],
+   "outfit_level": 1
   },
   "female": {
-   "skin": "skin_light",
+   "skin": "skin_base",
    "hair": "hair_ponytail",
    "hair_colour": "chestnut",
    "top": "top_linen_shirt",
    "bottom": "bottom_long_skirt",
    "shoes": "shoes_leather",
    "outfit": null,
-   "accessories": []
+   "accessories": [],
+   "skin_tone": "tone_3",
+   "head": null,
+   "cloak": null,
+   "held": null,
+   "palette": null,
+   "jewellery": [],
+   "outfit_level": 1
   }
  },
  "items": [
+  {
+   "id": "skin_base",
+   "slot": "skin",
+   "name": "Skin",
+   "price": 0,
+   "starter": true,
+   "tintable": true,
+   "layer": "body_light",
+   "art_layer": "body_base",
+   "z": {
+    "s": 10,
+    "e": 10,
+    "w": 10,
+    "n": 10
+   },
+   "sex": null,
+   "tier": 0,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
   {
    "id": "skin_light",
    "slot": "skin",
@@ -133,7 +253,11 @@
       ]
      }
     }
-   }
+   },
+   "legacy": true,
+   "alias_of": "tone_3",
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "skin_tan",
@@ -232,7 +356,11 @@
       ]
      }
     }
-   }
+   },
+   "legacy": true,
+   "alias_of": "tone_6",
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "skin_deep",
@@ -331,7 +459,11 @@
       ]
      }
     }
-   }
+   },
+   "legacy": true,
+   "alias_of": "tone_9",
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "hair_crop",
@@ -430,7 +562,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "hair_side_part",
@@ -529,7 +663,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "hair_shoulder_wavy",
@@ -628,7 +764,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "hair_long_straight",
@@ -727,7 +865,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "hair_ponytail",
@@ -826,7 +966,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "hair_braid",
@@ -925,7 +1067,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "top_linen_shirt",
@@ -1024,7 +1168,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "top_wool_tunic",
@@ -1123,7 +1269,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "top_leather_jerkin",
@@ -1222,7 +1370,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "top_ranger_tunic",
@@ -1321,7 +1471,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "top_gambeson",
@@ -1420,7 +1572,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "top_noble_doublet",
@@ -1519,7 +1673,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "bottom_work_trousers",
@@ -1618,7 +1774,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "bottom_long_skirt",
@@ -1717,7 +1875,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "bottom_leather_breeches",
@@ -1816,7 +1976,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "bottom_kilt",
@@ -1915,7 +2077,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "bottom_noble_hose",
@@ -2014,7 +2178,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "shoes_leather",
@@ -2113,7 +2279,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "shoes_sandals",
@@ -2212,7 +2380,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "shoes_riding_boots",
@@ -2311,7 +2481,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "shoes_fur_boots",
@@ -2410,7 +2582,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "outfit_hunter",
@@ -2509,7 +2683,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "outfit_festival",
@@ -2608,7 +2784,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "outfit_mage_robe",
@@ -2707,7 +2885,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "outfit_noble",
@@ -2806,7 +2986,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "acc_scarf",
@@ -2905,7 +3087,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "acc_leather_gloves",
@@ -3004,7 +3188,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "acc_satchel",
@@ -3103,7 +3289,9 @@
       ]
      }
     }
-   }
+   },
+   "sex": null,
+   "tier": 0
   },
   {
    "id": "acc_travel_cloak",
@@ -3202,6 +3390,1712 @@
       ]
      }
     }
+   },
+   "sex": null,
+   "tier": 0
+  },
+  {
+   "id": "village_lady_gown",
+   "slot": "outfit",
+   "name": "Village Lady's Bodice & Skirt",
+   "price": 420,
+   "starter": false,
+   "tintable": true,
+   "layer": "outfit_festival",
+   "art_layer": "outfit_village_lady",
+   "sex": "female",
+   "set": "set_village_lady",
+   "tier": 1,
+   "unlock": null,
+   "palettes": [
+    "t1_moss",
+    "t1_earth",
+    "t1_cornflower"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 45,
+    "e": 45,
+    "w": 45,
+    "n": 45
+   },
+   "upgrade": {
+    "levels": [
+     "Plain",
+     "Fine",
+     "Regal"
+    ],
+    "overlays": [
+     "outfit_village_lady_l2",
+     "outfit_village_lady_l3"
+    ]
+   }
+  },
+  {
+   "id": "village_lady_flower_crown",
+   "slot": "head",
+   "name": "Flower Crown",
+   "price": 140,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "head_village_lady_flower_crown",
+   "sex": "female",
+   "set": "set_village_lady",
+   "tier": 1,
+   "unlock": null,
+   "palettes": [
+    "t1_moss",
+    "t1_earth",
+    "t1_cornflower"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 72,
+    "e": 72,
+    "w": 72,
+    "n": 72
+   }
+  },
+  {
+   "id": "village_lady_bead_necklace",
+   "slot": "jewellery",
+   "name": "Wooden-bead Necklace",
+   "price": 70,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "jwl_village_lady_bead_necklace",
+   "sex": "female",
+   "set": "set_village_lady",
+   "tier": 1,
+   "unlock": null,
+   "palettes": [
+    "t1_moss",
+    "t1_earth",
+    "t1_cornflower"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 46,
+    "e": 46,
+    "w": 46,
+    "n": 46
+   }
+  },
+  {
+   "id": "village_lady_basket",
+   "slot": "held",
+   "name": "Basket Purse",
+   "price": 70,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "held_village_lady_basket",
+   "sex": "female",
+   "set": "set_village_lady",
+   "tier": 1,
+   "unlock": null,
+   "palettes": [
+    "t1_moss",
+    "t1_earth",
+    "t1_cornflower"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 85,
+    "e": 85,
+    "w": 85,
+    "n": 85
+   }
+  },
+  {
+   "id": "court_gown_gown",
+   "slot": "outfit",
+   "name": "Blue Court Gown",
+   "price": 1960,
+   "starter": false,
+   "tintable": true,
+   "layer": "outfit_festival",
+   "art_layer": "outfit_court_gown",
+   "sex": "female",
+   "set": "set_court_gown",
+   "tier": 2,
+   "unlock": {
+    "rep": "Respected"
+   },
+   "palettes": [
+    "t2_royal_blue",
+    "t2_forest",
+    "t2_chestnut"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 45,
+    "e": 45,
+    "w": 45,
+    "n": 45
+   },
+   "upgrade": {
+    "levels": [
+     "Plain",
+     "Fine",
+     "Regal"
+    ],
+    "overlays": [
+     "outfit_court_gown_l2",
+     "outfit_court_gown_l3"
+    ]
+   }
+  },
+  {
+   "id": "court_gown_slim_tiara",
+   "slot": "head",
+   "name": "Slim Tiara",
+   "price": 650,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "head_court_gown_slim_tiara",
+   "sex": "female",
+   "set": "set_court_gown",
+   "tier": 2,
+   "unlock": {
+    "rep": "Respected"
+   },
+   "palettes": [
+    "t2_royal_blue",
+    "t2_forest",
+    "t2_chestnut"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 72,
+    "e": 72,
+    "w": 72,
+    "n": 72
+   }
+  },
+  {
+   "id": "court_gown_pearl_earrings",
+   "slot": "jewellery",
+   "name": "Pearl Drop Earrings",
+   "price": 330,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "jwl_court_gown_pearl_earrings",
+   "sex": "female",
+   "set": "set_court_gown",
+   "tier": 2,
+   "unlock": {
+    "rep": "Respected"
+   },
+   "palettes": [
+    "t2_royal_blue",
+    "t2_forest",
+    "t2_chestnut"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 46,
+    "e": 46,
+    "w": 46,
+    "n": 46
+   }
+  },
+  {
+   "id": "noble_lady_gown",
+   "slot": "outfit",
+   "name": "Purple Velvet Gown",
+   "price": 5880,
+   "starter": false,
+   "tintable": true,
+   "layer": "outfit_noble",
+   "art_layer": "outfit_noble_lady",
+   "sex": "female",
+   "set": "set_noble_lady",
+   "tier": 3,
+   "unlock": {
+    "rank": 2
+   },
+   "palettes": [
+    "t3_plum",
+    "t3_blue",
+    "t3_black"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 45,
+    "e": 45,
+    "w": 45,
+    "n": 45
+   },
+   "upgrade": {
+    "levels": [
+     "Plain",
+     "Fine",
+     "Regal"
+    ],
+    "overlays": [
+     "outfit_noble_lady_l2",
+     "outfit_noble_lady_l3"
+    ]
+   }
+  },
+  {
+   "id": "noble_lady_amethyst_necklace",
+   "slot": "jewellery",
+   "name": "Amethyst Necklace",
+   "price": 1960,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "jwl_noble_lady_amethyst_necklace",
+   "sex": "female",
+   "set": "set_noble_lady",
+   "tier": 3,
+   "unlock": {
+    "rank": 2
+   },
+   "palettes": [
+    "t3_plum",
+    "t3_blue",
+    "t3_black"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 46,
+    "e": 46,
+    "w": 46,
+    "n": 46
+   }
+  },
+  {
+   "id": "noble_lady_hair_pins",
+   "slot": "jewellery",
+   "name": "Gold Hair Pins",
+   "price": 980,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "jwl_noble_lady_hair_pins",
+   "sex": "female",
+   "set": "set_noble_lady",
+   "tier": 3,
+   "unlock": {
+    "rank": 2
+   },
+   "palettes": [
+    "t3_plum",
+    "t3_blue",
+    "t3_black"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 46,
+    "e": 46,
+    "w": 46,
+    "n": 46
+   }
+  },
+  {
+   "id": "countess_gown",
+   "slot": "outfit",
+   "name": "Countess Gown",
+   "price": 16040,
+   "starter": false,
+   "tintable": true,
+   "layer": "outfit_noble",
+   "art_layer": "outfit_countess",
+   "sex": "female",
+   "set": "set_countess",
+   "tier": 4,
+   "unlock": {
+    "rank": 4
+   },
+   "palettes": [
+    "t4_crimson",
+    "t4_green",
+    "t4_purple"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 45,
+    "e": 45,
+    "w": 45,
+    "n": 45
+   },
+   "upgrade": {
+    "levels": [
+     "Plain",
+     "Fine",
+     "Regal"
+    ],
+    "overlays": [
+     "outfit_countess_l2",
+     "outfit_countess_l3"
+    ]
+   }
+  },
+  {
+   "id": "countess_fur_mantle",
+   "slot": "cloak",
+   "name": "Fur Mantle",
+   "price": 5350,
+   "starter": false,
+   "tintable": true,
+   "layer": "acc_travel_cloak",
+   "art_layer": "cloak_countess",
+   "sex": "female",
+   "set": "set_countess",
+   "tier": 4,
+   "unlock": {
+    "rank": 4
+   },
+   "palettes": [
+    "t4_crimson",
+    "t4_green",
+    "t4_purple"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 2,
+    "e": 2,
+    "w": 2,
+    "n": 66
+   }
+  },
+  {
+   "id": "countess_coronet",
+   "slot": "head",
+   "name": "Countess Coronet",
+   "price": 5350,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "head_countess_coronet",
+   "sex": "female",
+   "set": "set_countess",
+   "tier": 4,
+   "unlock": {
+    "rank": 4
+   },
+   "palettes": [
+    "t4_crimson",
+    "t4_green",
+    "t4_purple"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 72,
+    "e": 72,
+    "w": 72,
+    "n": 72
+   }
+  },
+  {
+   "id": "countess_ruby_choker",
+   "slot": "jewellery",
+   "name": "Ruby Choker",
+   "price": 2670,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "jwl_countess_ruby_choker",
+   "sex": "female",
+   "set": "set_countess",
+   "tier": 4,
+   "unlock": {
+    "rank": 4
+   },
+   "palettes": [
+    "t4_crimson",
+    "t4_green",
+    "t4_purple"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 46,
+    "e": 46,
+    "w": 46,
+    "n": 46
+   }
+  },
+  {
+   "id": "royal_favourite_gown",
+   "slot": "outfit",
+   "name": "Ivory Off-shoulder Gown",
+   "price": 42350,
+   "starter": false,
+   "tintable": true,
+   "layer": "outfit_noble",
+   "art_layer": "outfit_royal_favourite",
+   "sex": "female",
+   "set": "set_royal_favourite",
+   "tier": 5,
+   "unlock": {
+    "any": [
+     {
+      "courtier_favour": 500
+     },
+     {
+      "rank": 5,
+      "rep": "Revered"
+     }
+    ]
+   },
+   "palettes": [
+    "t5_ivory",
+    "t5_pale_blue",
+    "t5_blush"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 45,
+    "e": 45,
+    "w": 45,
+    "n": 45
+   },
+   "upgrade": {
+    "levels": [
+     "Plain",
+     "Fine",
+     "Regal"
+    ],
+    "overlays": [
+     "outfit_royal_favourite_l2",
+     "outfit_royal_favourite_l3"
+    ]
+   }
+  },
+  {
+   "id": "royal_favourite_gold_tiara",
+   "slot": "head",
+   "name": "Gold Tiara",
+   "price": 14120,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "head_royal_favourite_gold_tiara",
+   "sex": "female",
+   "set": "set_royal_favourite",
+   "tier": 5,
+   "unlock": {
+    "any": [
+     {
+      "courtier_favour": 500
+     },
+     {
+      "rank": 5,
+      "rep": "Revered"
+     }
+    ]
+   },
+   "palettes": [
+    "t5_ivory",
+    "t5_pale_blue",
+    "t5_blush"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 72,
+    "e": 72,
+    "w": 72,
+    "n": 72
+   }
+  },
+  {
+   "id": "royal_favourite_fan",
+   "slot": "held",
+   "name": "Lace Fan",
+   "price": 7060,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "held_royal_favourite_fan",
+   "sex": "female",
+   "set": "set_royal_favourite",
+   "tier": 5,
+   "unlock": {
+    "any": [
+     {
+      "courtier_favour": 500
+     },
+     {
+      "rank": 5,
+      "rep": "Revered"
+     }
+    ]
+   },
+   "palettes": [
+    "t5_ivory",
+    "t5_pale_blue",
+    "t5_blush"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 85,
+    "e": 85,
+    "w": 85,
+    "n": 85
+   }
+  },
+  {
+   "id": "royal_favourite_pearl_drop",
+   "slot": "jewellery",
+   "name": "Pearl Pendant",
+   "price": 7060,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "jwl_royal_favourite_pearl_drop",
+   "sex": "female",
+   "set": "set_royal_favourite",
+   "tier": 5,
+   "unlock": {
+    "any": [
+     {
+      "courtier_favour": 500
+     },
+     {
+      "rank": 5,
+      "rep": "Revered"
+     }
+    ]
+   },
+   "palettes": [
+    "t5_ivory",
+    "t5_pale_blue",
+    "t5_blush"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 46,
+    "e": 46,
+    "w": 46,
+    "n": 46
+   }
+  },
+  {
+   "id": "princess_consort_gown",
+   "slot": "outfit",
+   "name": "Pale Blue Consort Gown",
+   "price": 77010,
+   "starter": false,
+   "tintable": true,
+   "layer": "outfit_noble",
+   "art_layer": "outfit_princess_consort",
+   "sex": "female",
+   "set": "set_princess_consort",
+   "tier": 6,
+   "unlock": {
+    "any": [
+     {
+      "title": [
+       "Queen Consort",
+       "Queen"
+      ]
+     },
+     {
+      "courtier_favour": 1000
+     }
+    ]
+   },
+   "palettes": [
+    "t6_pale_blue",
+    "t6_ivory",
+    "t6_purple"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 45,
+    "e": 45,
+    "w": 45,
+    "n": 45
+   },
+   "upgrade": {
+    "levels": [
+     "Plain",
+     "Fine",
+     "Regal"
+    ],
+    "overlays": [
+     "outfit_princess_consort_l2",
+     "outfit_princess_consort_l3"
+    ]
+   }
+  },
+  {
+   "id": "princess_consort_veil",
+   "slot": "cloak",
+   "name": "Long Sheer Veil",
+   "price": 25670,
+   "starter": false,
+   "tintable": true,
+   "layer": "acc_travel_cloak",
+   "art_layer": "cloak_princess_consort",
+   "sex": "female",
+   "set": "set_princess_consort",
+   "tier": 6,
+   "unlock": {
+    "any": [
+     {
+      "title": [
+       "Queen Consort",
+       "Queen"
+      ]
+     },
+     {
+      "courtier_favour": 1000
+     }
+    ]
+   },
+   "palettes": [
+    "t6_pale_blue",
+    "t6_ivory",
+    "t6_purple"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 2,
+    "e": 2,
+    "w": 2,
+    "n": 66
+   }
+  },
+  {
+   "id": "princess_consort_consort_tiara",
+   "slot": "head",
+   "name": "Consort Tiara",
+   "price": 25670,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "head_princess_consort_consort_tiara",
+   "sex": "female",
+   "set": "set_princess_consort",
+   "tier": 6,
+   "unlock": {
+    "any": [
+     {
+      "title": [
+       "Queen Consort",
+       "Queen"
+      ]
+     },
+     {
+      "courtier_favour": 1000
+     }
+    ]
+   },
+   "palettes": [
+    "t6_pale_blue",
+    "t6_ivory",
+    "t6_purple"
+   ],
+   "regalia": true,
+   "z": {
+    "s": 72,
+    "e": 72,
+    "w": 72,
+    "n": 72
+   }
+  },
+  {
+   "id": "princess_consort_sapphire_parure",
+   "slot": "jewellery",
+   "name": "Sapphire Parure",
+   "price": 12830,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "jwl_princess_consort_sapphire_parure",
+   "sex": "female",
+   "set": "set_princess_consort",
+   "tier": 6,
+   "unlock": {
+    "any": [
+     {
+      "title": [
+       "Queen Consort",
+       "Queen"
+      ]
+     },
+     {
+      "courtier_favour": 1000
+     }
+    ]
+   },
+   "palettes": [
+    "t6_pale_blue",
+    "t6_ivory",
+    "t6_purple"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 46,
+    "e": 46,
+    "w": 46,
+    "n": 46
+   }
+  },
+  {
+   "id": "queen_gown",
+   "slot": "outfit",
+   "name": "Black-and-Gold Gown",
+   "price": 160430,
+   "starter": false,
+   "tintable": true,
+   "layer": "outfit_noble",
+   "art_layer": "outfit_queen",
+   "sex": "female",
+   "set": "set_queen",
+   "tier": 7,
+   "unlock": {
+    "title": [
+     "Queen"
+    ]
+   },
+   "palettes": [
+    "t7_black",
+    "t7_crimson",
+    "t7_royal_blue"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 45,
+    "e": 45,
+    "w": 45,
+    "n": 45
+   },
+   "upgrade": {
+    "levels": [
+     "Plain",
+     "Fine",
+     "Regal"
+    ],
+    "overlays": [
+     "outfit_queen_l2",
+     "outfit_queen_l3"
+    ]
+   }
+  },
+  {
+   "id": "queen_train_cloak",
+   "slot": "cloak",
+   "name": "Ermine Train Cloak",
+   "price": 53480,
+   "starter": false,
+   "tintable": true,
+   "layer": "acc_travel_cloak",
+   "art_layer": "cloak_queen",
+   "sex": "female",
+   "set": "set_queen",
+   "tier": 7,
+   "unlock": {
+    "title": [
+     "Queen"
+    ]
+   },
+   "palettes": [
+    "t7_black",
+    "t7_crimson",
+    "t7_royal_blue"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 2,
+    "e": 2,
+    "w": 2,
+    "n": 66
+   }
+  },
+  {
+   "id": "queen_queens_crown",
+   "slot": "head",
+   "name": "Queen's Crown",
+   "price": 53480,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "head_queen_queens_crown",
+   "sex": "female",
+   "set": "set_queen",
+   "tier": 7,
+   "unlock": {
+    "title": [
+     "Queen"
+    ]
+   },
+   "palettes": [
+    "t7_black",
+    "t7_crimson",
+    "t7_royal_blue"
+   ],
+   "regalia": true,
+   "z": {
+    "s": 72,
+    "e": 72,
+    "w": 72,
+    "n": 72
+   }
+  },
+  {
+   "id": "queen_gold_collar",
+   "slot": "jewellery",
+   "name": "Gold Collar",
+   "price": 26740,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "jwl_queen_gold_collar",
+   "sex": "female",
+   "set": "set_queen",
+   "tier": 7,
+   "unlock": {
+    "title": [
+     "Queen"
+    ]
+   },
+   "palettes": [
+    "t7_black",
+    "t7_crimson",
+    "t7_royal_blue"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 46,
+    "e": 46,
+    "w": 46,
+    "n": 46
+   }
+  },
+  {
+   "id": "villager_coat",
+   "slot": "outfit",
+   "name": "Green Jerkin & Shirt",
+   "price": 470,
+   "starter": false,
+   "tintable": true,
+   "layer": "outfit_festival",
+   "art_layer": "outfit_villager",
+   "sex": "male",
+   "set": "set_villager",
+   "tier": 1,
+   "unlock": null,
+   "palettes": [
+    "t1_moss",
+    "t1_earth",
+    "t1_cornflower"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 45,
+    "e": 45,
+    "w": 45,
+    "n": 45
+   },
+   "upgrade": {
+    "levels": [
+     "Plain",
+     "Fine",
+     "Regal"
+    ],
+    "overlays": [
+     "outfit_villager_l2",
+     "outfit_villager_l3"
+    ]
+   }
+  },
+  {
+   "id": "villager_cap",
+   "slot": "head",
+   "name": "Cloth Cap",
+   "price": 160,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "head_villager_cap",
+   "sex": "male",
+   "set": "set_villager",
+   "tier": 1,
+   "unlock": null,
+   "palettes": [
+    "t1_moss",
+    "t1_earth",
+    "t1_cornflower"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 72,
+    "e": 72,
+    "w": 72,
+    "n": 72
+   }
+  },
+  {
+   "id": "villager_belt_pouch",
+   "slot": "held",
+   "name": "Belt Pouch",
+   "price": 80,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "held_villager_belt_pouch",
+   "sex": "male",
+   "set": "set_villager",
+   "tier": 1,
+   "unlock": null,
+   "palettes": [
+    "t1_moss",
+    "t1_earth",
+    "t1_cornflower"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 85,
+    "e": 85,
+    "w": 85,
+    "n": 85
+   }
+  },
+  {
+   "id": "squire_coat",
+   "slot": "outfit",
+   "name": "Blue Tabard-Doublet",
+   "price": 1760,
+   "starter": false,
+   "tintable": true,
+   "layer": "outfit_festival",
+   "art_layer": "outfit_squire",
+   "sex": "male",
+   "set": "set_squire",
+   "tier": 2,
+   "unlock": {
+    "rep": "Respected"
+   },
+   "palettes": [
+    "t2_royal_blue",
+    "t2_forest",
+    "t2_chestnut"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 45,
+    "e": 45,
+    "w": 45,
+    "n": 45
+   },
+   "upgrade": {
+    "levels": [
+     "Plain",
+     "Fine",
+     "Regal"
+    ],
+    "overlays": [
+     "outfit_squire_l2",
+     "outfit_squire_l3"
+    ]
+   }
+  },
+  {
+   "id": "squire_hair_band",
+   "slot": "head",
+   "name": "Silver Hair Band",
+   "price": 290,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "head_squire_hair_band",
+   "sex": "male",
+   "set": "set_squire",
+   "tier": 2,
+   "unlock": {
+    "rep": "Respected"
+   },
+   "palettes": [
+    "t2_royal_blue",
+    "t2_forest",
+    "t2_chestnut"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 72,
+    "e": 72,
+    "w": 72,
+    "n": 72
+   }
+  },
+  {
+   "id": "squire_short_cape",
+   "slot": "cloak",
+   "name": "Short Riding Cape",
+   "price": 590,
+   "starter": false,
+   "tintable": true,
+   "layer": "acc_travel_cloak",
+   "art_layer": "cloak_squire",
+   "sex": "male",
+   "set": "set_squire",
+   "tier": 2,
+   "unlock": {
+    "rep": "Respected"
+   },
+   "palettes": [
+    "t2_royal_blue",
+    "t2_forest",
+    "t2_chestnut"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 2,
+    "e": 2,
+    "w": 2,
+    "n": 66
+   }
+  },
+  {
+   "id": "squire_signet",
+   "slot": "jewellery",
+   "name": "Signet Ring",
+   "price": 290,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "jwl_squire_signet",
+   "sex": "male",
+   "set": "set_squire",
+   "tier": 2,
+   "unlock": {
+    "rep": "Respected"
+   },
+   "palettes": [
+    "t2_royal_blue",
+    "t2_forest",
+    "t2_chestnut"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 46,
+    "e": 46,
+    "w": 46,
+    "n": 46
+   }
+  },
+  {
+   "id": "noble_lord_coat",
+   "slot": "outfit",
+   "name": "Purple Long Coat",
+   "price": 5880,
+   "starter": false,
+   "tintable": true,
+   "layer": "outfit_noble",
+   "art_layer": "outfit_noble_lord",
+   "sex": "male",
+   "set": "set_noble_lord",
+   "tier": 3,
+   "unlock": {
+    "rank": 2
+   },
+   "palettes": [
+    "t3_plum",
+    "t3_blue",
+    "t3_black"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 45,
+    "e": 45,
+    "w": 45,
+    "n": 45
+   },
+   "upgrade": {
+    "levels": [
+     "Plain",
+     "Fine",
+     "Regal"
+    ],
+    "overlays": [
+     "outfit_noble_lord_l2",
+     "outfit_noble_lord_l3"
+    ]
+   }
+  },
+  {
+   "id": "noble_lord_half_cape",
+   "slot": "cloak",
+   "name": "Velvet Half-cape",
+   "price": 1960,
+   "starter": false,
+   "tintable": true,
+   "layer": "acc_travel_cloak",
+   "art_layer": "cloak_noble_lord",
+   "sex": "male",
+   "set": "set_noble_lord",
+   "tier": 3,
+   "unlock": {
+    "rank": 2
+   },
+   "palettes": [
+    "t3_plum",
+    "t3_blue",
+    "t3_black"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 2,
+    "e": 2,
+    "w": 2,
+    "n": 66
+   }
+  },
+  {
+   "id": "noble_lord_amethyst_brooch",
+   "slot": "jewellery",
+   "name": "Amethyst Brooch",
+   "price": 980,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "jwl_noble_lord_amethyst_brooch",
+   "sex": "male",
+   "set": "set_noble_lord",
+   "tier": 3,
+   "unlock": {
+    "rank": 2
+   },
+   "palettes": [
+    "t3_plum",
+    "t3_blue",
+    "t3_black"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 46,
+    "e": 46,
+    "w": 46,
+    "n": 46
+   }
+  },
+  {
+   "id": "count_coat",
+   "slot": "outfit",
+   "name": "Crimson Doublet & Robe",
+   "price": 16040,
+   "starter": false,
+   "tintable": true,
+   "layer": "outfit_noble",
+   "art_layer": "outfit_count",
+   "sex": "male",
+   "set": "set_count",
+   "tier": 4,
+   "unlock": {
+    "rank": 4
+   },
+   "palettes": [
+    "t4_crimson",
+    "t4_green",
+    "t4_purple"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 45,
+    "e": 45,
+    "w": 45,
+    "n": 45
+   },
+   "upgrade": {
+    "levels": [
+     "Plain",
+     "Fine",
+     "Regal"
+    ],
+    "overlays": [
+     "outfit_count_l2",
+     "outfit_count_l3"
+    ]
+   }
+  },
+  {
+   "id": "count_fur_cape",
+   "slot": "cloak",
+   "name": "Fur-trimmed Half-cape",
+   "price": 5350,
+   "starter": false,
+   "tintable": true,
+   "layer": "acc_travel_cloak",
+   "art_layer": "cloak_count",
+   "sex": "male",
+   "set": "set_count",
+   "tier": 4,
+   "unlock": {
+    "rank": 4
+   },
+   "palettes": [
+    "t4_crimson",
+    "t4_green",
+    "t4_purple"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 2,
+    "e": 2,
+    "w": 2,
+    "n": 66
+   }
+  },
+  {
+   "id": "count_coronet",
+   "slot": "head",
+   "name": "Count's Coronet",
+   "price": 5350,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "head_count_coronet",
+   "sex": "male",
+   "set": "set_count",
+   "tier": 4,
+   "unlock": {
+    "rank": 4
+   },
+   "palettes": [
+    "t4_crimson",
+    "t4_green",
+    "t4_purple"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 72,
+    "e": 72,
+    "w": 72,
+    "n": 72
+   }
+  },
+  {
+   "id": "count_ruby_signet",
+   "slot": "jewellery",
+   "name": "Ruby Signet",
+   "price": 2670,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "jwl_count_ruby_signet",
+   "sex": "male",
+   "set": "set_count",
+   "tier": 4,
+   "unlock": {
+    "rank": 4
+   },
+   "palettes": [
+    "t4_crimson",
+    "t4_green",
+    "t4_purple"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 46,
+    "e": 46,
+    "w": 46,
+    "n": 46
+   }
+  },
+  {
+   "id": "kings_champion_coat",
+   "slot": "outfit",
+   "name": "Ceremonial Surcoat",
+   "price": 42350,
+   "starter": false,
+   "tintable": true,
+   "layer": "outfit_noble",
+   "art_layer": "outfit_kings_champion",
+   "sex": "male",
+   "set": "set_kings_champion",
+   "tier": 5,
+   "unlock": {
+    "rank": 4,
+    "rep": "Revered",
+    "challenge_guild": true
+   },
+   "palettes": [
+    "t5_ivory",
+    "t5_pale_blue",
+    "t5_blush"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 45,
+    "e": 45,
+    "w": 45,
+    "n": 45
+   },
+   "upgrade": {
+    "levels": [
+     "Plain",
+     "Fine",
+     "Regal"
+    ],
+    "overlays": [
+     "outfit_kings_champion_l2",
+     "outfit_kings_champion_l3"
+    ]
+   }
+  },
+  {
+   "id": "kings_champion_champion_circlet",
+   "slot": "head",
+   "name": "Champion's Circlet",
+   "price": 14120,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "head_kings_champion_champion_circlet",
+   "sex": "male",
+   "set": "set_kings_champion",
+   "tier": 5,
+   "unlock": {
+    "rank": 4,
+    "rep": "Revered",
+    "challenge_guild": true
+   },
+   "palettes": [
+    "t5_ivory",
+    "t5_pale_blue",
+    "t5_blush"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 72,
+    "e": 72,
+    "w": 72,
+    "n": 72
+   }
+  },
+  {
+   "id": "kings_champion_gorget_chain",
+   "slot": "jewellery",
+   "name": "Gold Gorget Chain",
+   "price": 7060,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "jwl_kings_champion_gorget_chain",
+   "sex": "male",
+   "set": "set_kings_champion",
+   "tier": 5,
+   "unlock": {
+    "rank": 4,
+    "rep": "Revered",
+    "challenge_guild": true
+   },
+   "palettes": [
+    "t5_ivory",
+    "t5_pale_blue",
+    "t5_blush"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 46,
+    "e": 46,
+    "w": 46,
+    "n": 46
+   }
+  },
+  {
+   "id": "kings_champion_sash_knot",
+   "slot": "held",
+   "name": "Champion's Sword-knot",
+   "price": 7060,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "held_kings_champion_sash_knot",
+   "sex": "male",
+   "set": "set_kings_champion",
+   "tier": 5,
+   "unlock": {
+    "rank": 4,
+    "rep": "Revered",
+    "challenge_guild": true
+   },
+   "palettes": [
+    "t5_ivory",
+    "t5_pale_blue",
+    "t5_blush"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 85,
+    "e": 85,
+    "w": 85,
+    "n": 85
+   }
+  },
+  {
+   "id": "prince_consort_coat",
+   "slot": "outfit",
+   "name": "Pale Blue Court Coat",
+   "price": 77010,
+   "starter": false,
+   "tintable": true,
+   "layer": "outfit_noble",
+   "art_layer": "outfit_prince_consort",
+   "sex": "male",
+   "set": "set_prince_consort",
+   "tier": 6,
+   "unlock": {
+    "title": [
+     "Prince Consort",
+     "King"
+    ]
+   },
+   "palettes": [
+    "t6_pale_blue",
+    "t6_ivory",
+    "t6_purple"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 45,
+    "e": 45,
+    "w": 45,
+    "n": 45
+   },
+   "upgrade": {
+    "levels": [
+     "Plain",
+     "Fine",
+     "Regal"
+    ],
+    "overlays": [
+     "outfit_prince_consort_l2",
+     "outfit_prince_consort_l3"
+    ]
+   }
+  },
+  {
+   "id": "prince_consort_consort_circlet",
+   "slot": "head",
+   "name": "Consort Circlet",
+   "price": 25670,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "head_prince_consort_consort_circlet",
+   "sex": "male",
+   "set": "set_prince_consort",
+   "tier": 6,
+   "unlock": {
+    "title": [
+     "Prince Consort",
+     "King"
+    ]
+   },
+   "palettes": [
+    "t6_pale_blue",
+    "t6_ivory",
+    "t6_purple"
+   ],
+   "regalia": true,
+   "z": {
+    "s": 72,
+    "e": 72,
+    "w": 72,
+    "n": 72
+   }
+  },
+  {
+   "id": "prince_consort_coat_tails",
+   "slot": "cloak",
+   "name": "Silver-frogged Cape",
+   "price": 25670,
+   "starter": false,
+   "tintable": true,
+   "layer": "acc_travel_cloak",
+   "art_layer": "cloak_prince_consort",
+   "sex": "male",
+   "set": "set_prince_consort",
+   "tier": 6,
+   "unlock": {
+    "title": [
+     "Prince Consort",
+     "King"
+    ]
+   },
+   "palettes": [
+    "t6_pale_blue",
+    "t6_ivory",
+    "t6_purple"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 2,
+    "e": 2,
+    "w": 2,
+    "n": 66
+   }
+  },
+  {
+   "id": "prince_consort_order_star",
+   "slot": "jewellery",
+   "name": "Sapphire Order Star",
+   "price": 12830,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "jwl_prince_consort_order_star",
+   "sex": "male",
+   "set": "set_prince_consort",
+   "tier": 6,
+   "unlock": {
+    "title": [
+     "Prince Consort",
+     "King"
+    ]
+   },
+   "palettes": [
+    "t6_pale_blue",
+    "t6_ivory",
+    "t6_purple"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 46,
+    "e": 46,
+    "w": 46,
+    "n": 46
+   }
+  },
+  {
+   "id": "king_coat",
+   "slot": "outfit",
+   "name": "Black-and-Gold Robes",
+   "price": 160430,
+   "starter": false,
+   "tintable": true,
+   "layer": "outfit_noble",
+   "art_layer": "outfit_king",
+   "sex": "male",
+   "set": "set_king",
+   "tier": 7,
+   "unlock": {
+    "title": [
+     "King"
+    ]
+   },
+   "palettes": [
+    "t7_black",
+    "t7_crimson",
+    "t7_royal_blue"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 45,
+    "e": 45,
+    "w": 45,
+    "n": 45
+   },
+   "upgrade": {
+    "levels": [
+     "Plain",
+     "Fine",
+     "Regal"
+    ],
+    "overlays": [
+     "outfit_king_l2",
+     "outfit_king_l3"
+    ]
+   }
+  },
+  {
+   "id": "king_ermine_mantle",
+   "slot": "cloak",
+   "name": "Ermine Mantle",
+   "price": 53480,
+   "starter": false,
+   "tintable": true,
+   "layer": "acc_travel_cloak",
+   "art_layer": "cloak_king",
+   "sex": "male",
+   "set": "set_king",
+   "tier": 7,
+   "unlock": {
+    "title": [
+     "King"
+    ]
+   },
+   "palettes": [
+    "t7_black",
+    "t7_crimson",
+    "t7_royal_blue"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 2,
+    "e": 2,
+    "w": 2,
+    "n": 66
+   }
+  },
+  {
+   "id": "king_kings_crown",
+   "slot": "head",
+   "name": "King's Crown",
+   "price": 53480,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "head_king_kings_crown",
+   "sex": "male",
+   "set": "set_king",
+   "tier": 7,
+   "unlock": {
+    "title": [
+     "King"
+    ]
+   },
+   "palettes": [
+    "t7_black",
+    "t7_crimson",
+    "t7_royal_blue"
+   ],
+   "regalia": true,
+   "z": {
+    "s": 72,
+    "e": 72,
+    "w": 72,
+    "n": 72
+   }
+  },
+  {
+   "id": "king_sceptre_chain",
+   "slot": "held",
+   "name": "Sceptre-chain",
+   "price": 26740,
+   "starter": false,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "held_king_sceptre_chain",
+   "sex": "male",
+   "set": "set_king",
+   "tier": 7,
+   "unlock": {
+    "title": [
+     "King"
+    ]
+   },
+   "palettes": [
+    "t7_black",
+    "t7_crimson",
+    "t7_royal_blue"
+   ],
+   "regalia": false,
+   "z": {
+    "s": 85,
+    "e": 85,
+    "w": 85,
+    "n": 85
    }
   }
  ],
@@ -4558,6 +6452,2549 @@
      }
     }
    }
+  },
+  {
+   "id": "arm_helm_eclipse_hide",
+   "equip_slot": "helmet",
+   "z_class": "mask_head",
+   "covers": [
+    "hair",
+    "head"
+   ],
+   "matches": "eclipse_helmet",
+   "layer": "arm_helm_eclipse_hide",
+   "z": {
+    "s": 80,
+    "e": 80,
+    "w": 80,
+    "n": 80
+   },
+   "tintable": false,
+   "files": {
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   },
+   "role": "erase_mask",
+   "mask_for": "arm_helm_eclipse",
+   "kinds": [
+    "female"
+   ],
+   "note": "Not drawn. Female only: erase body/head/hair pixels under this mask's alpha (BLEND_RGBA_MULT with inverted alpha) before drawing arm_helm_eclipse. See FEMALE_HELM_MASK_CODE.md."
+  },
+  {
+   "id": "arm_helm_bronze",
+   "equip_slot": "helmet",
+   "z_class": "armour_head",
+   "covers": [
+    "hair"
+   ],
+   "matches": "bronze_helmet",
+   "layer": "arm_helm_bronze",
+   "z": {
+    "s": 80,
+    "e": 80,
+    "w": 80,
+    "n": 80
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "arm_helm_bronze_hide",
+   "equip_slot": "helmet",
+   "z_class": "mask_head",
+   "covers": [
+    "hair",
+    "head"
+   ],
+   "matches": "bronze_helmet",
+   "layer": "arm_helm_bronze_hide",
+   "z": {
+    "s": 80,
+    "e": 80,
+    "w": 80,
+    "n": 80
+   },
+   "tintable": false,
+   "files": {
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   },
+   "role": "erase_mask",
+   "mask_for": "arm_helm_bronze",
+   "kinds": [
+    "female"
+   ],
+   "note": "Not drawn. Female only: erase body/head/hair pixels under this mask's alpha before drawing arm_helm_bronze. Same rule as arm_helm_eclipse_hide (FEMALE_HELM_MASK_CODE.md)."
+  },
+  {
+   "id": "arm_platebody_bronze",
+   "equip_slot": "body",
+   "z_class": "armour_body",
+   "covers": [
+    "top",
+    "outfit"
+   ],
+   "matches": "bronze_body",
+   "layer": "arm_platebody_bronze",
+   "z": {
+    "s": 58,
+    "e": 58,
+    "w": 58,
+    "n": 58
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "arm_platelegs_bronze",
+   "equip_slot": "legs",
+   "z_class": "armour_legs",
+   "covers": [
+    "bottom",
+    "outfit"
+   ],
+   "matches": "bronze_legs",
+   "layer": "arm_platelegs_bronze",
+   "z": {
+    "s": 52,
+    "e": 52,
+    "w": 52,
+    "n": 52
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "arm_gauntlets_bronze",
+   "equip_slot": "body",
+   "z_class": "armour_hands",
+   "covers": [
+    "accessory:acc_leather_gloves"
+   ],
+   "matches": "shown with bronze_body",
+   "layer": "arm_gauntlets_bronze",
+   "z": {
+    "s": 60,
+    "e": 60,
+    "w": 60,
+    "n": 60
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "arm_sabatons_bronze",
+   "equip_slot": "legs",
+   "z_class": "armour_feet",
+   "covers": [
+    "shoes"
+   ],
+   "matches": "shown with bronze_legs",
+   "layer": "arm_sabatons_bronze",
+   "z": {
+    "s": 54,
+    "e": 54,
+    "w": 54,
+    "n": 54
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "arm_helm_iron",
+   "equip_slot": "helmet",
+   "z_class": "armour_head",
+   "covers": [
+    "hair"
+   ],
+   "matches": "iron_helmet",
+   "layer": "arm_helm_iron",
+   "z": {
+    "s": 80,
+    "e": 80,
+    "w": 80,
+    "n": 80
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "arm_helm_iron_hide",
+   "equip_slot": "helmet",
+   "z_class": "mask_head",
+   "covers": [
+    "hair",
+    "head"
+   ],
+   "matches": "iron_helmet",
+   "layer": "arm_helm_iron_hide",
+   "z": {
+    "s": 80,
+    "e": 80,
+    "w": 80,
+    "n": 80
+   },
+   "tintable": false,
+   "files": {
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   },
+   "role": "erase_mask",
+   "mask_for": "arm_helm_iron",
+   "kinds": [
+    "female"
+   ],
+   "note": "Not drawn. Female only: erase body/head/hair pixels under this mask's alpha before drawing arm_helm_iron. Same rule as arm_helm_eclipse_hide (FEMALE_HELM_MASK_CODE.md)."
+  },
+  {
+   "id": "arm_platebody_iron",
+   "equip_slot": "body",
+   "z_class": "armour_body",
+   "covers": [
+    "top",
+    "outfit"
+   ],
+   "matches": "iron_body",
+   "layer": "arm_platebody_iron",
+   "z": {
+    "s": 58,
+    "e": 58,
+    "w": 58,
+    "n": 58
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "arm_platelegs_iron",
+   "equip_slot": "legs",
+   "z_class": "armour_legs",
+   "covers": [
+    "bottom",
+    "outfit"
+   ],
+   "matches": "iron_legs",
+   "layer": "arm_platelegs_iron",
+   "z": {
+    "s": 52,
+    "e": 52,
+    "w": 52,
+    "n": 52
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "arm_gauntlets_iron",
+   "equip_slot": "body",
+   "z_class": "armour_hands",
+   "covers": [
+    "accessory:acc_leather_gloves"
+   ],
+   "matches": "shown with iron_body",
+   "layer": "arm_gauntlets_iron",
+   "z": {
+    "s": 60,
+    "e": 60,
+    "w": 60,
+    "n": 60
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "arm_sabatons_iron",
+   "equip_slot": "legs",
+   "z_class": "armour_feet",
+   "covers": [
+    "shoes"
+   ],
+   "matches": "shown with iron_legs",
+   "layer": "arm_sabatons_iron",
+   "z": {
+    "s": 54,
+    "e": 54,
+    "w": 54,
+    "n": 54
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "arm_helm_steel",
+   "equip_slot": "helmet",
+   "z_class": "armour_head",
+   "covers": [
+    "hair"
+   ],
+   "matches": "steel_helmet",
+   "layer": "arm_helm_steel",
+   "z": {
+    "s": 80,
+    "e": 80,
+    "w": 80,
+    "n": 80
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "arm_helm_steel_hide",
+   "equip_slot": "helmet",
+   "z_class": "mask_head",
+   "covers": [
+    "hair",
+    "head"
+   ],
+   "matches": "steel_helmet",
+   "layer": "arm_helm_steel_hide",
+   "z": {
+    "s": 80,
+    "e": 80,
+    "w": 80,
+    "n": 80
+   },
+   "tintable": false,
+   "files": {
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   },
+   "role": "erase_mask",
+   "mask_for": "arm_helm_steel",
+   "kinds": [
+    "female"
+   ],
+   "note": "Not drawn. Female only: erase body/head/hair pixels under this mask's alpha before drawing arm_helm_steel. Same rule as arm_helm_eclipse_hide (FEMALE_HELM_MASK_CODE.md)."
+  },
+  {
+   "id": "arm_platebody_steel",
+   "equip_slot": "body",
+   "z_class": "armour_body",
+   "covers": [
+    "top",
+    "outfit"
+   ],
+   "matches": "steel_body",
+   "layer": "arm_platebody_steel",
+   "z": {
+    "s": 58,
+    "e": 58,
+    "w": 58,
+    "n": 58
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "arm_platelegs_steel",
+   "equip_slot": "legs",
+   "z_class": "armour_legs",
+   "covers": [
+    "bottom",
+    "outfit"
+   ],
+   "matches": "steel_legs",
+   "layer": "arm_platelegs_steel",
+   "z": {
+    "s": 52,
+    "e": 52,
+    "w": 52,
+    "n": 52
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "arm_gauntlets_steel",
+   "equip_slot": "body",
+   "z_class": "armour_hands",
+   "covers": [
+    "accessory:acc_leather_gloves"
+   ],
+   "matches": "shown with steel_body",
+   "layer": "arm_gauntlets_steel",
+   "z": {
+    "s": 60,
+    "e": 60,
+    "w": 60,
+    "n": 60
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "arm_sabatons_steel",
+   "equip_slot": "legs",
+   "z_class": "armour_feet",
+   "covers": [
+    "shoes"
+   ],
+   "matches": "shown with steel_legs",
+   "layer": "arm_sabatons_steel",
+   "z": {
+    "s": 54,
+    "e": 54,
+    "w": 54,
+    "n": 54
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "arm_helm_mithril",
+   "equip_slot": "helmet",
+   "z_class": "armour_head",
+   "covers": [
+    "hair"
+   ],
+   "matches": "mithril_helmet",
+   "layer": "arm_helm_mithril",
+   "z": {
+    "s": 80,
+    "e": 80,
+    "w": 80,
+    "n": 80
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "arm_helm_mithril_hide",
+   "equip_slot": "helmet",
+   "z_class": "mask_head",
+   "covers": [
+    "hair",
+    "head"
+   ],
+   "matches": "mithril_helmet",
+   "layer": "arm_helm_mithril_hide",
+   "z": {
+    "s": 80,
+    "e": 80,
+    "w": 80,
+    "n": 80
+   },
+   "tintable": false,
+   "files": {
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   },
+   "role": "erase_mask",
+   "mask_for": "arm_helm_mithril",
+   "kinds": [
+    "female"
+   ],
+   "note": "Not drawn. Female only: erase body/head/hair pixels under this mask's alpha before drawing arm_helm_mithril. Same rule as arm_helm_eclipse_hide (FEMALE_HELM_MASK_CODE.md)."
+  },
+  {
+   "id": "arm_platebody_mithril",
+   "equip_slot": "body",
+   "z_class": "armour_body",
+   "covers": [
+    "top",
+    "outfit"
+   ],
+   "matches": "mithril_body",
+   "layer": "arm_platebody_mithril",
+   "z": {
+    "s": 58,
+    "e": 58,
+    "w": 58,
+    "n": 58
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "arm_platelegs_mithril",
+   "equip_slot": "legs",
+   "z_class": "armour_legs",
+   "covers": [
+    "bottom",
+    "outfit"
+   ],
+   "matches": "mithril_legs",
+   "layer": "arm_platelegs_mithril",
+   "z": {
+    "s": 52,
+    "e": 52,
+    "w": 52,
+    "n": 52
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "arm_gauntlets_mithril",
+   "equip_slot": "body",
+   "z_class": "armour_hands",
+   "covers": [
+    "accessory:acc_leather_gloves"
+   ],
+   "matches": "shown with mithril_body",
+   "layer": "arm_gauntlets_mithril",
+   "z": {
+    "s": 60,
+    "e": 60,
+    "w": 60,
+    "n": 60
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "arm_sabatons_mithril",
+   "equip_slot": "legs",
+   "z_class": "armour_feet",
+   "covers": [
+    "shoes"
+   ],
+   "matches": "shown with mithril_legs",
+   "layer": "arm_sabatons_mithril",
+   "z": {
+    "s": 54,
+    "e": 54,
+    "w": 54,
+    "n": 54
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "chop": [
+       "e"
+      ],
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "fish": [
+       "e"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "mine": [
+       "e"
+      ],
+      "ranged": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
   }
  ],
  "weapon_layers": [
@@ -5212,6 +9649,738 @@
      }
     }
    }
+  },
+  {
+   "id": "wpn_sword_bronze",
+   "matches": "bronze_sword",
+   "anims": [
+    "idle",
+    "walk",
+    "melee",
+    "hit",
+    "death"
+   ],
+   "layer": "wpn_sword_bronze",
+   "z": {
+    "s": 90,
+    "e": 90,
+    "w": 90,
+    "n": 8
+   },
+   "z_anim": {
+    "melee": {
+     "n": 90
+    },
+    "ranged": {
+     "n": 90
+    }
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "wpn_axe_bronze",
+   "matches": "bronze_battleaxe",
+   "anims": [
+    "idle",
+    "walk",
+    "melee",
+    "chop",
+    "hit",
+    "death"
+   ],
+   "layer": "wpn_axe_bronze",
+   "z": {
+    "s": 90,
+    "e": 90,
+    "w": 90,
+    "n": 8
+   },
+   "z_anim": {
+    "melee": {
+     "n": 90
+    },
+    "ranged": {
+     "n": 90
+    }
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "wpn_sword_iron",
+   "matches": "iron_sword",
+   "anims": [
+    "idle",
+    "walk",
+    "melee",
+    "hit",
+    "death"
+   ],
+   "layer": "wpn_sword_iron",
+   "z": {
+    "s": 90,
+    "e": 90,
+    "w": 90,
+    "n": 8
+   },
+   "z_anim": {
+    "melee": {
+     "n": 90
+    },
+    "ranged": {
+     "n": 90
+    }
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "wpn_axe_iron",
+   "matches": "iron_battleaxe",
+   "anims": [
+    "idle",
+    "walk",
+    "melee",
+    "chop",
+    "hit",
+    "death"
+   ],
+   "layer": "wpn_axe_iron",
+   "z": {
+    "s": 90,
+    "e": 90,
+    "w": 90,
+    "n": 8
+   },
+   "z_anim": {
+    "melee": {
+     "n": 90
+    },
+    "ranged": {
+     "n": 90
+    }
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "wpn_sword_steel",
+   "matches": "steel_longsword",
+   "anims": [
+    "idle",
+    "walk",
+    "melee",
+    "hit",
+    "death"
+   ],
+   "layer": "wpn_sword_steel",
+   "z": {
+    "s": 90,
+    "e": 90,
+    "w": 90,
+    "n": 8
+   },
+   "z_anim": {
+    "melee": {
+     "n": 90
+    },
+    "ranged": {
+     "n": 90
+    }
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "wpn_axe_steel",
+   "matches": "steel_battleaxe",
+   "anims": [
+    "idle",
+    "walk",
+    "melee",
+    "chop",
+    "hit",
+    "death"
+   ],
+   "layer": "wpn_axe_steel",
+   "z": {
+    "s": 90,
+    "e": 90,
+    "w": 90,
+    "n": 8
+   },
+   "z_anim": {
+    "melee": {
+     "n": 90
+    },
+    "ranged": {
+     "n": 90
+    }
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "wpn_sword_mithril",
+   "matches": "mithril_sword",
+   "anims": [
+    "idle",
+    "walk",
+    "melee",
+    "hit",
+    "death"
+   ],
+   "layer": "wpn_sword_mithril",
+   "z": {
+    "s": 90,
+    "e": 90,
+    "w": 90,
+    "n": 8
+   },
+   "z_anim": {
+    "melee": {
+     "n": 90
+    },
+    "ranged": {
+     "n": 90
+    }
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "wpn_axe_mithril",
+   "matches": "mithril_battleaxe",
+   "anims": [
+    "idle",
+    "walk",
+    "melee",
+    "chop",
+    "hit",
+    "death"
+   ],
+   "layer": "wpn_axe_mithril",
+   "z": {
+    "s": 90,
+    "e": 90,
+    "w": 90,
+    "n": 8
+   },
+   "z_anim": {
+    "melee": {
+     "n": 90
+    },
+    "ranged": {
+     "n": 90
+    }
+   },
+   "tintable": false,
+   "files": {
+    "male": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    },
+    "female": {
+     "fixed": true,
+     "tint": false,
+     "anims": {
+      "death": [
+       "e",
+       "n",
+       "s"
+      ],
+      "hit": [
+       "e",
+       "n",
+       "s"
+      ],
+      "idle": [
+       "e",
+       "n",
+       "s"
+      ],
+      "melee": [
+       "e",
+       "n",
+       "s"
+      ],
+      "walk": [
+       "e",
+       "n",
+       "s"
+      ]
+     }
+    }
+   }
   }
  ],
  "tier_tints": {
@@ -5272,6 +10441,710 @@
   "shield slot -> arm_kiteshield (kite/sq/wooden all use it, tinted by tier; wooden uses 'wood')",
   "weapon slot -> weapon layer by rs_style weapon kind: sword/longsword->wpn_sword, axe/battleaxe->wpn_axe, pickaxe->wpn_pickaxe, bow->wpn_bow, staff/wand->wpn_staff (carried head-up; swung head-first in melee)",
   "skilling: chop shows wpn_axe, mine shows wpn_pickaxe, fish shows wpn_rod (replacing the wielded weapon for that anim only)",
-  "leather_cowl / leather_body / leather_chaps / goblin_mail: use the matching steel layer tinted 'leather' until bespoke leather layers exist (documented gap)"
- ]
+  "leather_cowl / leather_body / leather_chaps / goblin_mail: use the matching steel layer tinted 'leather' until bespoke leather layers exist (documented gap)",
+  "helmet hides head (tiara/crown/circlet/hat) as well as hair",
+  "a drawn weapon or shield (and skilling tools) hides the held slot (fan, purse, sceptre-chain)",
+  "regalia (T6 consort tiara/circlet, T7 crowns) are worn only while the royal title is held"
+ ],
+ "skin_palette": [
+  {
+   "id": "tone_1",
+   "name": "Porcelain",
+   "hex": "#F6E3D6"
+  },
+  {
+   "id": "tone_2",
+   "name": "Very fair",
+   "hex": "#F1D3BE"
+  },
+  {
+   "id": "tone_3",
+   "name": "Fair",
+   "hex": "#E8C0A0"
+  },
+  {
+   "id": "tone_4",
+   "name": "Light",
+   "hex": "#DCAA84"
+  },
+  {
+   "id": "tone_5",
+   "name": "Medium",
+   "hex": "#C9946A"
+  },
+  {
+   "id": "tone_6",
+   "name": "Tan",
+   "hex": "#B98458"
+  },
+  {
+   "id": "tone_7",
+   "name": "Olive brown",
+   "hex": "#9C6B45"
+  },
+  {
+   "id": "tone_8",
+   "name": "Brown",
+   "hex": "#7E5034"
+  },
+  {
+   "id": "tone_9",
+   "name": "Dark brown",
+   "hex": "#603B25"
+  },
+  {
+   "id": "tone_10",
+   "name": "Deep brown",
+   "hex": "#45291A"
+  }
+ ],
+ "skin_aliases": {
+  "skin_light": "tone_3",
+  "skin_tan": "tone_6",
+  "skin_deep": "tone_9"
+ },
+ "skin_placeholder_ref": "#E8C0A0",
+ "garment_palettes": {
+  "t1_moss": {
+   "id": "t1_moss",
+   "name": "Moss green / brass",
+   "base": "#4E6B34",
+   "trim": "#A8823A",
+   "tier": 1,
+   "price": 100
+  },
+  "t1_earth": {
+   "id": "t1_earth",
+   "name": "Earth brown",
+   "base": "#6B4A2E",
+   "trim": "#A8823A",
+   "tier": 1,
+   "price": 100
+  },
+  "t1_cornflower": {
+   "id": "t1_cornflower",
+   "name": "Cornflower",
+   "base": "#4F6FA8",
+   "trim": "#A8823A",
+   "tier": 1,
+   "price": 100
+  },
+  "t2_royal_blue": {
+   "id": "t2_royal_blue",
+   "name": "Royal blue / gold",
+   "base": "#24479A",
+   "trim": "#C9A03E",
+   "tier": 2,
+   "price": 400
+  },
+  "t2_forest": {
+   "id": "t2_forest",
+   "name": "Forest green",
+   "base": "#2F5A3A",
+   "trim": "#C9A03E",
+   "tier": 2,
+   "price": 400
+  },
+  "t2_chestnut": {
+   "id": "t2_chestnut",
+   "name": "Chestnut",
+   "base": "#6E3B22",
+   "trim": "#C9A03E",
+   "tier": 2,
+   "price": 400
+  },
+  "t3_plum": {
+   "id": "t3_plum",
+   "name": "Plum / gold",
+   "base": "#4E2470",
+   "trim": "#C9A03E",
+   "tier": 3,
+   "price": 1000
+  },
+  "t3_blue": {
+   "id": "t3_blue",
+   "name": "Blue / silver",
+   "base": "#2C4E8F",
+   "trim": "#C8CED6",
+   "tier": 3,
+   "price": 1000
+  },
+  "t3_black": {
+   "id": "t3_black",
+   "name": "Black / silver",
+   "base": "#1A1A1F",
+   "trim": "#C8CED6",
+   "tier": 3,
+   "price": 1000
+  },
+  "t4_crimson": {
+   "id": "t4_crimson",
+   "name": "Crimson / gold",
+   "base": "#8E1A20",
+   "trim": "#C9A03E",
+   "tier": 4,
+   "price": 3000
+  },
+  "t4_green": {
+   "id": "t4_green",
+   "name": "Green / gold",
+   "base": "#2E5A3E",
+   "trim": "#C9A03E",
+   "tier": 4,
+   "price": 3000
+  },
+  "t4_purple": {
+   "id": "t4_purple",
+   "name": "Purple / gold",
+   "base": "#4E2A6E",
+   "trim": "#C9A03E",
+   "tier": 4,
+   "price": 3000
+  },
+  "t5_ivory": {
+   "id": "t5_ivory",
+   "name": "Ivory / gold",
+   "base": "#EDE3CC",
+   "trim": "#C9A03E",
+   "tier": 5,
+   "price": 6000
+  },
+  "t5_pale_blue": {
+   "id": "t5_pale_blue",
+   "name": "Pale blue / silver",
+   "base": "#B9CFE6",
+   "trim": "#C8CED6",
+   "tier": 5,
+   "price": 6000
+  },
+  "t5_blush": {
+   "id": "t5_blush",
+   "name": "Blush / gold",
+   "base": "#D9A9A6",
+   "trim": "#C9A03E",
+   "tier": 5,
+   "price": 6000
+  },
+  "t6_pale_blue": {
+   "id": "t6_pale_blue",
+   "name": "Pale blue / silver",
+   "base": "#A9C4E2",
+   "trim": "#C8CED6",
+   "tier": 6,
+   "price": 10000
+  },
+  "t6_ivory": {
+   "id": "t6_ivory",
+   "name": "Ivory / gold",
+   "base": "#EFE6D2",
+   "trim": "#C9A03E",
+   "tier": 6,
+   "price": 10000
+  },
+  "t6_purple": {
+   "id": "t6_purple",
+   "name": "Purple / silver",
+   "base": "#4E2A6E",
+   "trim": "#C8CED6",
+   "tier": 6,
+   "price": 10000
+  },
+  "t7_black": {
+   "id": "t7_black",
+   "name": "Black / gold",
+   "base": "#141418",
+   "trim": "#C9A03E",
+   "tier": 7,
+   "price": 20000
+  },
+  "t7_crimson": {
+   "id": "t7_crimson",
+   "name": "Crimson / gold",
+   "base": "#7E1418",
+   "trim": "#C9A03E",
+   "tier": 7,
+   "price": 20000
+  },
+  "t7_royal_blue": {
+   "id": "t7_royal_blue",
+   "name": "Royal blue / gold",
+   "base": "#1F3A78",
+   "trim": "#C9A03E",
+   "tier": 7,
+   "price": 20000
+  }
+ },
+ "sets": {
+  "set_village_lady": {
+   "id": "set_village_lady",
+   "name": "Village Lady",
+   "sex": "female",
+   "tier": 1,
+   "pieces": [
+    "village_lady_gown",
+    "village_lady_flower_crown",
+    "village_lady_bead_necklace",
+    "village_lady_basket"
+   ],
+   "hair": "hair_braid",
+   "palettes": [
+    "t1_moss",
+    "t1_earth",
+    "t1_cornflower"
+   ],
+   "price": 600,
+   "upgrade_prices": [
+    300,
+    600
+   ],
+   "palette_price": 100,
+   "unlock": null,
+   "back_hint": false
+  },
+  "set_court_gown": {
+   "id": "set_court_gown",
+   "name": "Court Gown",
+   "sex": "female",
+   "tier": 2,
+   "pieces": [
+    "court_gown_gown",
+    "court_gown_slim_tiara",
+    "court_gown_pearl_earrings"
+   ],
+   "hair": "hair_long_straight",
+   "palettes": [
+    "t2_royal_blue",
+    "t2_forest",
+    "t2_chestnut"
+   ],
+   "price": 2500,
+   "upgrade_prices": [
+    1250,
+    2500
+   ],
+   "palette_price": 400,
+   "unlock": {
+    "rep": "Respected"
+   },
+   "back_hint": false
+  },
+  "set_noble_lady": {
+   "id": "set_noble_lady",
+   "name": "Noble Lady",
+   "sex": "female",
+   "tier": 3,
+   "pieces": [
+    "noble_lady_gown",
+    "noble_lady_amethyst_necklace",
+    "noble_lady_hair_pins"
+   ],
+   "hair": "hair_shoulder_wavy",
+   "palettes": [
+    "t3_plum",
+    "t3_blue",
+    "t3_black"
+   ],
+   "price": 7500,
+   "upgrade_prices": [
+    3750,
+    7500
+   ],
+   "palette_price": 1000,
+   "unlock": {
+    "rank": 2
+   },
+   "back_hint": false
+  },
+  "set_countess": {
+   "id": "set_countess",
+   "name": "Countess",
+   "sex": "female",
+   "tier": 4,
+   "pieces": [
+    "countess_gown",
+    "countess_fur_mantle",
+    "countess_coronet",
+    "countess_ruby_choker"
+   ],
+   "hair": "hair_long_straight",
+   "palettes": [
+    "t4_crimson",
+    "t4_green",
+    "t4_purple"
+   ],
+   "price": 25000,
+   "upgrade_prices": [
+    12500,
+    25000
+   ],
+   "palette_price": 3000,
+   "unlock": {
+    "rank": 4
+   },
+   "back_hint": true
+  },
+  "set_royal_favourite": {
+   "id": "set_royal_favourite",
+   "name": "Royal Favourite",
+   "sex": "female",
+   "tier": 5,
+   "pieces": [
+    "royal_favourite_gown",
+    "royal_favourite_gold_tiara",
+    "royal_favourite_fan",
+    "royal_favourite_pearl_drop"
+   ],
+   "hair": "hair_shoulder_wavy",
+   "palettes": [
+    "t5_ivory",
+    "t5_pale_blue",
+    "t5_blush"
+   ],
+   "price": 60000,
+   "upgrade_prices": [
+    30000,
+    60000
+   ],
+   "palette_price": 6000,
+   "unlock": {
+    "any": [
+     {
+      "courtier_favour": 500
+     },
+     {
+      "rank": 5,
+      "rep": "Revered"
+     }
+    ]
+   },
+   "back_hint": false
+  },
+  "set_princess_consort": {
+   "id": "set_princess_consort",
+   "name": "Princess Consort",
+   "sex": "female",
+   "tier": 6,
+   "pieces": [
+    "princess_consort_gown",
+    "princess_consort_veil",
+    "princess_consort_consort_tiara",
+    "princess_consort_sapphire_parure"
+   ],
+   "hair": "hair_long_straight",
+   "palettes": [
+    "t6_pale_blue",
+    "t6_ivory",
+    "t6_purple"
+   ],
+   "price": 120000,
+   "upgrade_prices": [
+    60000,
+    120000
+   ],
+   "palette_price": 10000,
+   "unlock": {
+    "any": [
+     {
+      "title": [
+       "Queen Consort",
+       "Queen"
+      ]
+     },
+     {
+      "courtier_favour": 1000
+     }
+    ]
+   },
+   "back_hint": true
+  },
+  "set_queen": {
+   "id": "set_queen",
+   "name": "Queen",
+   "sex": "female",
+   "tier": 7,
+   "pieces": [
+    "queen_gown",
+    "queen_train_cloak",
+    "queen_queens_crown",
+    "queen_gold_collar"
+   ],
+   "hair": "hair_long_straight",
+   "palettes": [
+    "t7_black",
+    "t7_crimson",
+    "t7_royal_blue"
+   ],
+   "price": 250000,
+   "upgrade_prices": [
+    125000,
+    250000
+   ],
+   "palette_price": 20000,
+   "unlock": {
+    "title": [
+     "Queen"
+    ]
+   },
+   "back_hint": true
+  },
+  "set_villager": {
+   "id": "set_villager",
+   "name": "Villager",
+   "sex": "male",
+   "tier": 1,
+   "pieces": [
+    "villager_coat",
+    "villager_cap",
+    "villager_belt_pouch"
+   ],
+   "hair": "hair_crop",
+   "palettes": [
+    "t1_moss",
+    "t1_earth",
+    "t1_cornflower"
+   ],
+   "price": 600,
+   "upgrade_prices": [
+    300,
+    600
+   ],
+   "palette_price": 100,
+   "unlock": null,
+   "back_hint": false
+  },
+  "set_squire": {
+   "id": "set_squire",
+   "name": "Squire",
+   "sex": "male",
+   "tier": 2,
+   "pieces": [
+    "squire_coat",
+    "squire_hair_band",
+    "squire_short_cape",
+    "squire_signet"
+   ],
+   "hair": "hair_side_part",
+   "palettes": [
+    "t2_royal_blue",
+    "t2_forest",
+    "t2_chestnut"
+   ],
+   "price": 2500,
+   "upgrade_prices": [
+    1250,
+    2500
+   ],
+   "palette_price": 400,
+   "unlock": {
+    "rep": "Respected"
+   },
+   "back_hint": false
+  },
+  "set_noble_lord": {
+   "id": "set_noble_lord",
+   "name": "Noble Lord",
+   "sex": "male",
+   "tier": 3,
+   "pieces": [
+    "noble_lord_coat",
+    "noble_lord_half_cape",
+    "noble_lord_amethyst_brooch"
+   ],
+   "hair": "hair_side_part",
+   "palettes": [
+    "t3_plum",
+    "t3_blue",
+    "t3_black"
+   ],
+   "price": 7500,
+   "upgrade_prices": [
+    3750,
+    7500
+   ],
+   "palette_price": 1000,
+   "unlock": {
+    "rank": 2
+   },
+   "back_hint": false
+  },
+  "set_count": {
+   "id": "set_count",
+   "name": "Count",
+   "sex": "male",
+   "tier": 4,
+   "pieces": [
+    "count_coat",
+    "count_fur_cape",
+    "count_coronet",
+    "count_ruby_signet"
+   ],
+   "hair": "hair_side_part",
+   "palettes": [
+    "t4_crimson",
+    "t4_green",
+    "t4_purple"
+   ],
+   "price": 25000,
+   "upgrade_prices": [
+    12500,
+    25000
+   ],
+   "palette_price": 3000,
+   "unlock": {
+    "rank": 4
+   },
+   "back_hint": true
+  },
+  "set_kings_champion": {
+   "id": "set_kings_champion",
+   "name": "King's Champion",
+   "sex": "male",
+   "tier": 5,
+   "pieces": [
+    "kings_champion_coat",
+    "kings_champion_champion_circlet",
+    "kings_champion_gorget_chain",
+    "kings_champion_sash_knot"
+   ],
+   "hair": "hair_crop",
+   "palettes": [
+    "t5_ivory",
+    "t5_pale_blue",
+    "t5_blush"
+   ],
+   "price": 60000,
+   "upgrade_prices": [
+    30000,
+    60000
+   ],
+   "palette_price": 6000,
+   "unlock": {
+    "rank": 4,
+    "rep": "Revered",
+    "challenge_guild": true
+   },
+   "back_hint": false
+  },
+  "set_prince_consort": {
+   "id": "set_prince_consort",
+   "name": "Prince Consort",
+   "sex": "male",
+   "tier": 6,
+   "pieces": [
+    "prince_consort_coat",
+    "prince_consort_consort_circlet",
+    "prince_consort_coat_tails",
+    "prince_consort_order_star"
+   ],
+   "hair": "hair_side_part",
+   "palettes": [
+    "t6_pale_blue",
+    "t6_ivory",
+    "t6_purple"
+   ],
+   "price": 120000,
+   "upgrade_prices": [
+    60000,
+    120000
+   ],
+   "palette_price": 10000,
+   "unlock": {
+    "title": [
+     "Prince Consort",
+     "King"
+    ]
+   },
+   "back_hint": false
+  },
+  "set_king": {
+   "id": "set_king",
+   "name": "King",
+   "sex": "male",
+   "tier": 7,
+   "pieces": [
+    "king_coat",
+    "king_ermine_mantle",
+    "king_kings_crown",
+    "king_sceptre_chain"
+   ],
+   "hair": "hair_side_part",
+   "palettes": [
+    "t7_black",
+    "t7_crimson",
+    "t7_royal_blue"
+   ],
+   "price": 250000,
+   "upgrade_prices": [
+    125000,
+    250000
+   ],
+   "palette_price": 20000,
+   "unlock": {
+    "title": [
+     "King"
+    ]
+   },
+   "back_hint": true
+  }
+ },
+ "set_order": {
+  "female": [
+   "set_village_lady",
+   "set_court_gown",
+   "set_noble_lady",
+   "set_countess",
+   "set_royal_favourite",
+   "set_princess_consort",
+   "set_queen"
+  ],
+  "male": [
+   "set_villager",
+   "set_squire",
+   "set_noble_lord",
+   "set_count",
+   "set_kings_champion",
+   "set_prince_consort",
+   "set_king"
+  ]
+ },
+ "set_bundle_discount": 0.15,
+ "jewellery_max": 3,
+ "saved_outfit_slots": 6,
+ "tier_colours": {
+  "1": [
+   120,
+   150,
+   90
+  ],
+  "2": [
+   80,
+   120,
+   200
+  ],
+  "3": [
+   150,
+   100,
+   200
+  ],
+  "4": [
+   200,
+   60,
+   70
+  ],
+  "5": [
+   235,
+   220,
+   180
+  ],
+  "6": [
+   170,
+   200,
+   235
+  ],
+  "7": [
+   212,
+   175,
+   90
+  ]
+ }
 }

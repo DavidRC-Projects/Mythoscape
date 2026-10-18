@@ -1,4 +1,5 @@
-"""Seven-page comic shown once, before a new game enters the world.
+"""Seven-page comic shown once, before a new game enters the world, then a
+CROWNFALL title card (TITLE_PAGE).
 
 Off unless USE_OPENING_COMIC is set. page_01.ogg … page_07.ogg in the
 same folder play with that page. A page_NN.wav is used when the ogg
@@ -24,6 +25,8 @@ LINES = (
     "Give the guild a table, then a castle, then a flag. Do that and he can't call you a villager any more. The king has a problem.",
     "Not today. The road in front of you is for learning, and for gathering the clan. When they're ready, it runs straight at his gates, and the war begins.",
 )
+TITLE_PAGE = len(LINES)   # Crownfall title card after the 7 comic pages
+_TITLE_FONT = None
 _PAGES = []
 _VOICE = None
 _BAR_MIN = 84
@@ -52,8 +55,12 @@ def handle_event(client, event):
 
 def advance(client):
     page = int(getattr(client, "opening_comic_page", 0))
-    if page >= len(LINES) - 1:
+    if page >= TITLE_PAGE:
         finish(client)
+        return
+    if page >= len(LINES) - 1:
+        _stop()
+        client.opening_comic_page = TITLE_PAGE
         return
     client.opening_comic_page = page + 1
     _play(page + 2)
@@ -75,8 +82,11 @@ def draw(client):
     screen.fill((6, 5, 8))
     _load()
     page = int(getattr(client, "opening_comic_page", 0))
-    page = max(0, min(len(LINES) - 1, page))
+    page = max(0, min(TITLE_PAGE, page))
     sw, sh = screen.get_size()
+    if page == TITLE_PAGE:
+        _draw_title(client, sw, sh)
+        return
     lines = _wrap(client, LINES[page], sw - 160)
     bar_h = max(_BAR_MIN, 28 + len(lines) * 26)
     img = _PAGES[page] if page < len(_PAGES) else None
@@ -96,6 +106,37 @@ def draw(client):
     )
     screen.blit(mark, (28, bar.bottom - 22))
     skip = pygame.Rect(sw - 118, bar.y + 8, 96, 36)
+    client.opening_comic_skip = skip
+    pygame.draw.rect(screen, (36, 28, 22), skip)
+    pygame.draw.rect(screen, (180, 140, 70), skip, 2)
+    label = client.font.render("Skip", True, (240, 220, 180))
+    screen.blit(label, (skip.centerx - label.get_width() // 2, skip.centery - label.get_height() // 2))
+
+
+def _draw_title(client, sw, sh):
+    global _TITLE_FONT
+    screen = client.screen
+    img = _PAGES[-1] if _PAGES else None
+    if img is not None:
+        placed = _fitted(TITLE_PAGE, img, sw, sh)
+        if placed is not None:
+            scaled, origin = placed
+            screen.blit(scaled, origin)
+    shade = pygame.Surface((sw, sh), pygame.SRCALPHA)
+    shade.fill((0, 0, 0, 150))
+    screen.blit(shade, (0, 0))
+    if _TITLE_FONT is None:
+        _TITLE_FONT = pygame.font.SysFont("georgia,timesnewroman,serif", 96, bold=True)
+    shadow = _TITLE_FONT.render("CROWNFALL", True, (20, 14, 8))
+    title = _TITLE_FONT.render("CROWNFALL", True, (232, 196, 110))
+    tx, ty = (sw - title.get_width()) // 2, sh // 2 - title.get_height()
+    screen.blit(shadow, (tx + 2, ty + 2))
+    screen.blit(title, (tx, ty))
+    sub = client.font.render("Your story begins...", True, (220, 205, 170))
+    screen.blit(sub, ((sw - sub.get_width()) // 2, ty + title.get_height() + 14))
+    hint = client.font_tiny.render("Click or Space to begin", True, (180, 160, 120))
+    screen.blit(hint, ((sw - hint.get_width()) // 2, sh - 40))
+    skip = pygame.Rect(sw - 118, sh - 56, 96, 36)
     client.opening_comic_skip = skip
     pygame.draw.rect(screen, (36, 28, 22), skip)
     pygame.draw.rect(screen, (180, 140, 70), skip, 2)

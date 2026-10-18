@@ -148,14 +148,18 @@ def oath_progress(session):
         if (quest_status_for(session, qid) or {}).get("status") == "complete"
     )
     clan_id = clans.clan_of(session.player_id)
-    members = clans.member_count(clan_id) if clan_id else 0
+    if clan_id:
+        _players, _active, members, guild_ok = clans.royal_challenge_strength(clan_id)
+    else:
+        members, guild_ok = 0, False
     lines = [
         ("✓ " if combat >= 100 else "") + f"Combat {combat}/100",
         ("✓ " if owned else "") + f"Castle {owned}/1",
         ("✓ " if others and done_q >= len(others) else "") + f"Quests {done_q}/{len(others)}",
-        ("✓ " if members >= 25 else "") + f"{members}/25 members",
+        ("✓ " if guild_ok else "") + f"Guild {min(members, clans.ROYAL_CHALLENGE_MEMBERS)}/"
+        f"{clans.ROYAL_CHALLENGE_MEMBERS} members ({clans.ROYAL_CHALLENGE_MIN_PLAYERS}+ players)",
     ]
-    ready = combat >= 100 and owned >= 1 and others and done_q >= len(others) and members >= 25
+    ready = combat >= 100 and owned >= 1 and others and done_q >= len(others) and guild_ok
     return lines, ready
 
 

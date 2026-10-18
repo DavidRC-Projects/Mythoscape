@@ -19,6 +19,7 @@ from content import (
     CRAFT_RECIPES, INTERACTABLES, BUILDINGS, PETS, entrance_mouth_tiles,
     MAX_PURSE_COINS, MAX_BANK_COINS, MAX_ORES, ORE_ITEM_IDS, BANK_SLOTS,
     karma_total_bonus, FIRE_LOGS, cook_burn_chance, is_bow, bow_attack_range,
+    weapon_stats, SWING_SECONDS_PER_SPEED,
     MAGIC_ABILITIES, MAGIC_ABILITY_ORDER, MANUAL_MAGIC_CD_FACTOR,
     QUIVER_CAPACITY, TIP_BOX_CAPACITY, FOOD_BAG_CAPACITY, RAW_BAG_CAPACITY,
     RESOURCE_BAG_CAPACITY, RAW_FISH_IDS, COOKED_FISH_IDS, FLETCH_POUCH_IDS,
@@ -31,6 +32,7 @@ from content import (
 )
 from database import Database
 import explore_dungeons
+import fishing_spots
 
 from world_map import (
     generate_world, build_resource_nodes, is_walkable, WIDTH, HEIGHT, SPAWN_POINT, get_zone,
@@ -85,12 +87,57 @@ DUNGEON_META = {
 }
 
 TICK_SECONDS = 0.6
+# Idle logout (server-tracked). Only real player actions count; INPUT_PING may credit local input (a click that
+# sends nothing) but never more than INPUT_PING_GRACE_TICKS past the last real action.
+IDLE_WARN_TICKS = 450            # 4:30
+IDLE_LOGOUT_TICKS = 500          # 5:00
+COMBAT_LINGER_TICKS = 17         # 10 s after the last hit
+PK_LINGER_TICKS = 100            # 60 s when PK-flagged
+INPUT_PING_GRACE_TICKS = 50      # 30 s
+PASSIVE_MESSAGE_TYPES = frozenset(("INPUT_PING",))
 HOST = "0.0.0.0"
 PORT = 8765
 
 NPC_BY_ID = {n["id"]: n for n in NPCS}
 import housing as _housing
+import royal_treasury
+import reputation
+import apprentice
+import property as _property
+import nobility
+import throne
+import throne_live
+import ruling
+import politics
+import politics_live
+import outfits
+import gear_rules
+import welcome_kit
+import copy as _copy
+for _e in politics.ENVOYS:
+    NPCS.append({"id": _e["id"], "name": _e["name"], "x": _e["x"], "y": _e["y"], "house": _e["house"],
+                 "options": politics.ENVOY_OPTIONS, "lines": [politics.HOUSE_BLURB[_e["house"]]]})
+for _c in politics.CRIERS:
+    NPCS.append({"id": _c["id"], "name": _c["name"], "x": _c["x"], "y": _c["y"], "crier": True,
+                 "lines": ["Hear ye! The notice boards carry the kingdom's news. Say /news for the latest."]})
+for _b in politics.BOARDS:
+    INTERACTABLES.append({"id": _b["id"], "kind": "signpost", "name": "Notice Board", "x": _b["x"], "y": _b["y"],
+                          "facing": "s", "lines": ["Notice Board"]})
+_SHOP_STOCK_START = {sid: {iid: info.get("qty") for iid, info in shop["stock"].items()} for sid, shop in SHOPS.items()}
 _housing.attach(NPCS)
+for _n in NPCS:
+    if _n.get("apprentice"):
+        _n["options"] = apprentice.MASTER_OPTIONS
+    elif _n.get("id") == "royal_herald":
+        _n["options"] = throne.HERALD_OPTIONS
+    elif _n.get("id") == "mistress_celia":
+        _n["options"] = throne.CELIA_OPTIONS
+    elif _n.get("id") == "chaplain_mirelle":
+        _n["options"] = throne.CHAPLAIN_OPTIONS
+    elif _n.get("id") == "chamberlain_aric":
+        _n["options"] = nobility.CHAMBERLAIN_OPTIONS
+    elif _n.get("id") == "estate_agent_mira":
+        _n["options"] = _property.OFFICE_OPTIONS
 NPC_BY_ID = {n["id"]: n for n in NPCS}
 _next_id = itertools.count(1)
 
@@ -131,6 +178,8 @@ class PlayerSession:
             "fletching": row["fletching_xp"] if "fletching_xp" in row.keys() else 0,
             "archery": row["archery_xp"] if "archery_xp" in row.keys() else 0,
             "karma": row["karma_xp"] if "karma_xp" in row.keys() else 0,
+            "charisma": row["charisma_xp"] if "charisma_xp" in row.keys() else 0,
+            "etiquette": row["etiquette_xp"] if "etiquette_xp" in row.keys() else 0,
         }
         # A full life under the old hitpoints skill fills the new pool.
         # A wounded life stays wounded, and never sits above the new max.
@@ -141,6 +190,14 @@ class PlayerSession:
             self.hp = min(int(self.hp), pool)
         self.coins = min(int(row["coins"]), MAX_PURSE_COINS)
         self.bank_coins = int(row["bank_coins"]) if "bank_coins" in row.keys() else 0
+        self.tax_notice_seen = bool(row["tax_notice_seen"]) if "tax_notice_seen" in row.keys() else False
+        self.reputation = int(row["reputation"] or 0) if "reputation" in row.keys() else 0
+        self.noble_rank = int(row["noble_rank"] or 0) if "noble_rank" in row.keys() else 0
+        self.royal_title = row["royal_title"] if "royal_title" in row.keys() else None
+        try:
+            self.house_suffix = politics.title_suffix(royal_treasury._SETTINGS_CONN, self.player_id)
+        except Exception:
+            self.house_suffix = ""
         self.bank = {}  # slot -> {item_id, qty}
         self.equipment = {
             "weapon": row["equip_weapon"], "shield": row["equip_shield"],
@@ -154,6 +211,14 @@ class PlayerSession:
         self.quests = {}     # quest_id -> {"status":, "progress":}
         self.quest_log_dirty = False  # push QUEST_LOG on next tick flush
         self.in_combat_with = None   # ("monster", instance_id) or ("player", player_id)
+        self.last_input_tick = None        # tick of the last counted input (idle logout)
+        self.last_real_input_tick = None   # tick of the last real action message
+        self.last_combat_tick = -10 ** 9   # last tick in combat or taking damage
+        self.idle_warned = False
+        self.idle_kicked = False
+        self.idle_exempt = False           # ::idle off (dev testing)
+        self.linger_until = None           # body left in the world after a mid-fight disconnect
+        self._idle_hp = None
         # After STOP_ATTACK / flee-click, skip auto-retaliate until this time
         self.combat_flee_until = 0.0
         self.combat_rounds = 0
@@ -835,6 +900,7 @@ class PlayerSession:
             "x": gx,
             "y": gy,
             "resource": node["type"],
+            "tool": WORLD.gather_tool_id(self, ydef["skill"], ydef.get("tools")),
         }
 
     def _row_val(self, key, default=None):
@@ -857,16 +923,21 @@ class PlayerSession:
         if appearance is None and self.stats_allocated:
             if self.gender == "female":
                 appearance = {
-                    "skin": "skin_light", "hair": "hair_ponytail", "hair_colour": "chestnut",
+                    "skin": "skin_base", "skin_tone": "tone_3", "hair": "hair_ponytail", "hair_colour": "chestnut",
                     "top": "top_linen_shirt", "bottom": "bottom_long_skirt", "shoes": "shoes_leather",
                     "outfit": None, "accessories": [],
                 }
             else:
                 appearance = {
-                    "skin": "skin_light", "hair": "hair_side_part", "hair_colour": "dark_brown",
+                    "skin": "skin_base", "skin_tone": "tone_3", "hair": "hair_side_part", "hair_colour": "dark_brown",
                     "top": "top_linen_shirt", "bottom": "bottom_work_trousers", "shoes": "shoes_leather",
                     "outfit": None, "accessories": [],
                 }
+        if isinstance(appearance, dict):
+            try:
+                appearance = outfits.strip_regalia(self, outfits.normalise(appearance))
+            except Exception:
+                logging.getLogger("outfits").exception("appearance normalise failed")
         return appearance
 
     def appearance_saved(self):
@@ -891,6 +962,11 @@ class PlayerSession:
             "equipment": self.equipment,  # client uses this for sprite weapons/armor
             "gathering": self.gathering_public(),
             "gender": self.gender,
+            "noble_rank": int(getattr(self, "noble_rank", 0) or 0),
+            "noble_title": nobility.title_prefix(getattr(self, "noble_rank", 0), self.gender,
+                                                 getattr(self, "royal_title", None)),
+            "royal_title": getattr(self, "royal_title", None),
+            "house_suffix": getattr(self, "house_suffix", ""),
             "player_killer": bool(self.player_killer),
             "pk_kills": int(self.pk_kills or 0),
             "appearance": self.appearance_state(),
@@ -920,6 +996,16 @@ class PlayerSession:
             "id": self.player_id, "name": self.char_name, "x": self.x, "y": self.y,
             "hp": self.hp, "max_hp": self.max_hp(), "coins": self.coins,
             "bank_coins": self.bank_coins,
+            "reputation": int(getattr(self, "reputation", 0) or 0),
+            "rep_tier": reputation.tier(getattr(self, "reputation", 0)),
+            "work": _work_state(self.player_id),
+            "noble_rank": int(getattr(self, "noble_rank", 0) or 0),
+            "noble_title": nobility.title_prefix(getattr(self, "noble_rank", 0), self.gender,
+                                                 getattr(self, "royal_title", None)),
+            "noble_rank_name": nobility.rank_name(getattr(self, "noble_rank", 0), self.gender),
+            "royal_title": getattr(self, "royal_title", None),
+            "house_suffix": getattr(self, "house_suffix", ""),
+            "kingdom": politics.hud_line(WORLD.db.conn),
             "levels": levels,
             "xp": {s: self.xp[s] for s in XP_SKILLS if s in self.xp},
             "total_level": sum(levels.values()),
@@ -945,7 +1031,9 @@ class PlayerSession:
             "appearance": appearance,
             "appearance_saved": self.appearance_saved(),
             "owned_cosmetics": self._json_list("owned_cosmetics"),
-            "saved_outfits": (self._json_list("saved_outfits") + [None, None, None])[:3],
+            "saved_outfits": outfits.saved_slots(self._json_list("saved_outfits")),
+            "outfit_unlocks": outfits.unlocks(self, WORLD.db.conn),
+            "outfit_pricing": _outfit_pricing(self),
             "hd_player": bool(self._row_val("hd_player", 1)),
             "wish_available": self.can_wish(),
             "unlimited_wishes": self.has_unlimited_wishes(),
@@ -1173,7 +1261,7 @@ class MonsterInstance:
         frozen = self.is_frozen()
         state = {
             "id": self.id, "type": self.type, "name": name,
-            "level": mdef.get("level", 1),
+            "level": combat.monster_combat_level(mdef, self.type),
             "x": self.x, "y": self.y, "hp": self.hp, "max_hp": self.max_hp, "alive": self.alive,
             "frozen": frozen,
         }
@@ -1202,6 +1290,10 @@ class World:
         stamp_volcano_mine(self.grid)
         stamp_outfitters_shell(self.grid)
         self.resource_nodes = build_resource_nodes(self.grid)
+        for _pos, _node in self.resource_nodes.items():
+            if fishing_spots.is_spot(_node, RESOURCE_YIELDS.get(_node["type"])):
+                fishing_spots.init_spot(_node, _pos, RESOURCE_YIELDS.get(_node["type"]))
+        self.moving_fish_spots = []      # spots between tiles (server only)
         self.monsters = {}
         for mtype, x, y in MONSTER_SPAWNS:
             camp = mtype in ("giant_rat", "wolf") and near_volcano_mine(x, y)
@@ -1355,6 +1447,23 @@ class World:
     def count_item(self, session, item_id):
         return sum(e["qty"] for e in session.inventory.values() if e["item_id"] == item_id)
 
+    def gather_tool_id(self, session, skill, allowed_tools=None):
+        """The tool item in use: the equipped weapon if it qualifies, else the first one in the pack."""
+        def ok(item_id):
+            if not item_id:
+                return False
+            if allowed_tools:
+                return item_id in allowed_tools
+            return ITEMS.get(item_id, {}).get("tool_for") == skill
+
+        weapon = session.equipment.get("weapon")
+        if ok(weapon):
+            return weapon
+        for entry in session.inventory.values():
+            if ok(entry["item_id"]):
+                return entry["item_id"]
+        return None
+
     def has_gather_tool(self, session, skill, allowed_tools=None):
         """True if inventory or equipped weapon is a valid gather tool.
 
@@ -1495,6 +1604,13 @@ async def broadcast(msg_type, **fields):
     ], return_exceptions=True)
 
 
+async def broadcast_player_state(session):
+    """A changed look reaches everyone on the next world-state tick (public_state carries appearance).
+    Called by the appearance handlers; this was referenced but never defined, so they raised NameError
+    after saving."""
+    return None
+
+
 def quest_status_for(session, quest_id):
     info = dict(session.quests.get(quest_id, {"status": "not_started", "progress": 0}))
     if quest_id == "fairy_oath":
@@ -1615,6 +1731,11 @@ def quest_objective_line(session, qdef, prog):
             have = session.available_craft_input(iid) if session is not None else 0
             parts.append(f"{min(have, need)}/{need} {name}")
         return " · ".join(parts)
+    if qdef["type"] == "guild":
+        if status in ("ready", "complete"):
+            return "Return to Guildmaster Ysolde" if status == "ready" else "Done"
+        return " · ".join([("✓ " if progress & 1 else "") + "Create or join a guild",
+                           ("✓ " if progress & 2 else "") + "/guild deposit any amount"])
     if qdef["type"] == "find_npc":
         npc = NPC_BY_ID.get(qdef["target"]) or {}
         name = npc.get("name") or qdef["target"].replace("_", " ").title()
@@ -1629,7 +1750,23 @@ def quest_objective_line(session, qdef, prog):
     return qdef.get("description", "")
 
 
+def _bounty_hook(session, monster_type):
+    """Event hook only: a royal bounty pays the first killer's bank."""
+    try:
+        paid = ruling.claim_bounty(WORLD.db.conn, monster_type, session.player_id)
+    except Exception:
+        log.exception("bounty hook failed")
+        return
+    if paid:
+        politics.note_bounty_paid(WORLD.db.conn)
+        session.bank_coins = apprentice.bank_get(WORLD.db.conn, session.player_id)
+        name = (MONSTERS.get(monster_type) or {}).get("name", monster_type)
+        asyncio.ensure_future(broadcast("CHAT_MSG", **{"from": "Royal Marshal",
+                              "text": f"{session.char_name} claims the royal bounty on a {name}: {paid:,} coins!"}))
+
+
 def check_quest_progress_on_kill(session, monster_type):
+    _bounty_hook(session, monster_type)
     changed = False
     for qid, qdef in QUESTS.items():
         if qdef["type"] != "kill" or qdef["target"] != monster_type:
@@ -1697,7 +1834,11 @@ async def handle_login(ws, msg, is_register):
             await send(ws, "LOGIN_FAIL", reason="Invalid username or password.")
             return
     if row["id"] in WORLD.sessions:
-        await send(ws, "LOGIN_FAIL", reason="That character is already logged in.")
+        ghost = WORLD.sessions[row["id"]]
+        if getattr(ghost, "linger_until", None) is not None:
+            await send(ws, "LOGIN_FAIL", reason="Your character is still in a fight. Try again in a few seconds.")
+        else:
+            await send(ws, "LOGIN_FAIL", reason="That character is already logged in.")
         return
 
     session = PlayerSession(ws, row)
@@ -1756,6 +1897,8 @@ async def send_world_join(session):
     import clans
     await clans.on_login(session)
     await send_starter_tips(session)
+    await welcome_on_join(session)
+    await settle_work(session, login=True)
     if feature_flags.USE_PLAYER_HOUSING:
         await _housing.on_login(session)
         import castle_owners
@@ -1765,7 +1908,7 @@ async def send_world_join(session):
 async def send_starter_tips(session):
     """Short first-session pointers — H for the full help list."""
     tips = [
-        "Welcome to Mythoscape! Press H anytime for controls · Esc closes popups.",
+        "Welcome to Crownfall! Press H anytime for controls · Esc closes popups.",
         "Talk to Elder Miriam (NW) for a quest, Elena (east) for a free bow kit, Lira for jewelry (B = shop).",
         "Bank (B): Deposit inventory, shift-click vault to withdraw 1. Purse max 65k — keep coins in the vault.",
         "Gareth smelts & smiths (F) — jewelry too. Mira sells food. Tidehollow Cave is at Harbourreach.",
@@ -1809,7 +1952,7 @@ async def handle_allocate_stats(session, msg):
     session.stats_allocated = True
     await send(session.ws, "CHAT_MSG", **{
         "from": "World",
-        "text": "Your starting stats are set. Welcome to Mythoscape!",
+        "text": "Your starting stats are set. Welcome to Crownfall!",
     })
     await send_world_join(session)
     log.info("%s allocated starting stats %s", session.username, alloc)
@@ -2133,7 +2276,7 @@ def _build_dungeon_floor(session, floor: int, dungeon_id: str = None):
     stats = mod.scaled_monster_stats(info["level"])
     visual = mod.visual_type_for_floor(floor)
     if hasattr(mod, "monster_display_name"):
-        stats["name"] = mod.monster_display_name(visual, info["level"])
+        stats["name"] = mod.monster_display_name(visual, stats["level"])
     monsters = {}
     for sx, sy in spots:
         mid = next_id()
@@ -2529,6 +2672,10 @@ async def handle_enter_dungeon(session, msg):
     if not dungeon_id:
         await send(session.ws, "ERROR", message="Stand at a dungeon entrance.")
         return
+    missing = gear_rules.gate_missing(session)
+    if missing:
+        await send(session.ws, "ERROR", message=gear_rules.gate_message(missing))
+        return
     mod = DUNGEON_MODS.get(dungeon_id, tidehollow)
     meta = _dungeon_meta(dungeon_id)
     # Step back off the mouth so leaving doesn't drop you straight back inside.
@@ -2816,13 +2963,82 @@ async def handle_chat(session, msg):
     text = (msg.get("text") or "").strip()[:200]
     if not text:
         return
-    if text.lower().startswith("/clan"):
+    if text.startswith("::"):
+        await handle_dev_command(session, text)
+        return
+    if text.lower().startswith("/news"):
+        for line in politics.latest_news(WORLD.db.conn, politics.NEWS_CMD_LINES) or ["No news yet."]:
+            await send(session.ws, "CHAT_MSG", **{"from": "Notice Board", "text": line})
+        return
+    if text.lower().startswith("/house"):
+        parts = text.split()
+        conn = WORLD.db.conn
+        if len(parts) >= 2 and parts[1].lower() in ("support", "oppose"):
+            _ok, msg_ = politics.support(conn, session.player_id, parts[1].lower())
+            await send(session.ws, "CHAT_MSG", **{"from": "Noble Houses", "text": msg_})
+            return
+        for line in politics.house_lines(conn, session.player_id):
+            await send(session.ws, "CHAT_MSG", **{"from": "Noble Houses", "text": line})
+        return
+    if text.lower().startswith("/kingdom"):
+        await handle_politics_msg(session, "KINGDOM_STATE", {})
+        return
+    if text.lower().startswith("/court"):
+        parts = text.split()
+        if len(parts) >= 2:
+            await handle_politics_msg(session, "COURT_CHOOSE", {"choice": parts[1].lower()})
+            return
+        ev = politics.event_payload(WORLD.db.conn, session.player_id)
+        if not ev:
+            await send(session.ws, "CHAT_MSG", **{"from": "Royal Herald", "text": "No court matter is open."})
+        else:
+            await send(session.ws, "COURT_EVENT", event=ev)
+        return
+    if text.lower().startswith("/reigns"):
+        for line in ruling.reign_lines(WORLD.db.conn):
+            await send(session.ws, "CHAT_MSG", **{"from": "Keeper of Records", "text": line})
+        return
+    if text.lower().startswith("/treasury"):
+        parts = text.split()
+        sub = parts[1].lower() if len(parts) > 1 else ""
+        if sub == "bounty" and len(parts) >= 4:
+            await handle_rule(session, "RULE_POST_BOUNTY", {"monster": parts[2], "amount": parts[3]})
+        elif sub == "cancel" and len(parts) >= 3:
+            await handle_rule(session, "RULE_CANCEL_BOUNTY", {"id": parts[2].lstrip("#")})
+        elif sub == "appoint" and len(parts) >= 4:
+            post, _sep, who = text.split(None, 2)[2].rpartition(" ")
+            await handle_rule(session, "RULE_APPOINT", {"post": post.strip().title(), "player": who})
+        elif sub == "dismiss" and len(parts) >= 3:
+            await handle_rule(session, "RULE_DISMISS", {"post": " ".join(parts[2:]).title()})
+        elif sub == "tax" and len(parts) >= 4:
+            await handle_rule(session, "RULE_SET_TAX", {"key": parts[2], "value": parts[3]})
+        elif sub == "fund" and len(parts) >= 3:
+            await handle_rule(session, "RULE_FUND_WORK", {"key": parts[2]})
+        elif sub == "announce":
+            await handle_rule(session, "RULE_ANNOUNCE", {"text": text.split(None, 2)[2] if len(parts) > 2 else ""})
+        elif sub == "free":
+            await handle_rule(session, "RULE_FREE_KING", {})
+        elif sub == "recall":
+            await handle_rule(session, "RULE_RECALL_KING", {})
+        else:
+            await handle_rule(session, "RULE_STATE", {})
+        return
+    if text.lower().startswith("/throne"):
+        parts = text.split()
+        if len(parts) >= 3 and parts[1].lower() in ("crown", "castle", "acclaim"):
+            msg_ = await throne_schedule(session, parts[1].lower(), parts[2])
+            await send(session.ws, "CHAT_MSG", **{"from": "Royal Herald", "text": msg_})
+            return
+        for line in throne.summary_lines(WORLD.db.conn, throne_live._name):
+            await send(session.ws, "CHAT_MSG", **{"from": "Royal Herald", "text": line})
+        return
+    if text.lower().startswith(("/clan", "/guild")):
         import clans
         await clans.handle_command(session, text)
         return
     await broadcast(
         "CHAT_MSG",
-        **{"from": session.char_name, "text": text, "player_id": session.player_id, "speech": True},
+        **{"from": nobility.display_name(session), "text": text, "player_id": session.player_id, "speech": True},
     )
 
 
@@ -3048,6 +3264,10 @@ def adjacent_or_same(ax, ay, bx, by):
 
 
 async def handle_attack(session, msg):
+    if not gear_rules.can_fight(session):
+        session.in_combat_with = None
+        await send(session.ws, "ERROR", message=gear_rules.NO_FIGHT_MSG)
+        return
     target_id = msg.get("target_id")
     monster = None
     if session.dungeon:
@@ -3397,6 +3617,9 @@ async def handle_gather(session, msg):
     if session.dungeon:
         await send(session.ws, "ERROR", message="There's nothing to gather in the cave.")
         return
+    if getattr(session, "last_gather_tick", None) == WORLD.tick_count:
+        return                           # one start per tick
+    session.last_gather_tick = WORLD.tick_count
     x, y = msg.get("x"), msg.get("y")
     node = WORLD.resource_nodes.get((x, y))
     if node is None or node["depleted"]:
@@ -3720,6 +3943,29 @@ async def handle_talk(session, msg):
     if not adjacent_or_same(session.x, session.y, npc["x"], npc["y"]):
         await send(session.ws, "ERROR", message="You're too far away to talk to them.")
         return
+    if reputation.first_talk_today(WORLD.db.conn, session.player_id, npc_id):
+        await social_event(session, "talk", xp={"charisma": reputation.CHARISMA_TALK_XP})
+    if npc.get("welcome_guide"):
+        await welcome_talk(session, npc)
+        return
+    if npc_id in ("old_king_prisoner", "old_king_aldous", "keeper_records"):
+        conn = WORLD.db.conn
+        opts = None
+        if npc_id == "old_king_prisoner":
+            lines = ruling.king_visit_line(conn, session.player_id)
+            if ruling.role(conn, session.player_id) == "Monarch":
+                opts = [{"id": "king_free", "label": f"Free him ({ruling.FREE_KING_COST:,} from the treasury)"}]
+        elif npc_id == "old_king_aldous":
+            import random as _r
+            lines = [_r.choice(ruling.ADVISOR_TIPS)]
+            got = ruling.counsel(conn, session.player_id)
+            if got:
+                WORLD.grant_xp(session, "charisma", got)
+                lines.append(f"(His counsel: +{got} Charisma XP.)")
+        else:
+            lines = ruling.reign_lines(conn) or ["The records are empty."]
+        await send(session.ws, "DIALOGUE", npc_id=npc_id, npc_name=npc["name"], lines=lines, options=opts)
+        return
     import fairy_village
     if npc_id in fairy_village.FAIRY_NPCS:
         await fairy_village.open_talk(session, npc)
@@ -3817,10 +4063,19 @@ async def handle_talk(session, msg):
         else:
             quest_info = _quest_payload("complete")
 
+    hello = reputation.greeting(session.reputation)
+    title_hello = nobility.address(getattr(session, "noble_rank", 0), session.gender)
+    if title_hello:
+        hello = f"{hello} {title_hello}".strip() if hello else title_hello
+    persuade = npc.get("persuade")
+    npc_lines = [outfits.mae_line(session)] if npc_id == "outfitter_mae" else list(npc["lines"])
     await send(
-        session.ws, "DIALOGUE", npc_id=npc_id, npc_name=npc["name"], lines=npc["lines"],
+        session.ws, "DIALOGUE", npc_id=npc_id, npc_name=npc["name"],
+        lines=([hello] if hello else []) + npc_lines,
         shop_id=npc.get("shop_id"), quest=quest_info, forge=bool(npc.get("forge")),
         bank=bool(npc.get("bank")), housing=bool(npc.get("housing")),
+        persuade={"req": int(persuade["req"])} if persuade else None,
+        options=_options_for(session, npc),
     )
     if session.quest_log_dirty:
         session.quest_log_dirty = False
@@ -3830,6 +4085,774 @@ async def handle_talk(session, msg):
         )
     if npc.get("shop_id"):
         await send_shop_state(session, npc["shop_id"])
+
+
+def _work_state(player_id):
+    try:
+        conn = WORLD.db.conn
+        return {"job": apprentice.status(conn, player_id), "property": _property.status(conn, player_id)}
+    except Exception:
+        return None
+
+
+def _sync_bank(player_id, value):
+    s = WORLD.sessions.get(player_id)
+    if s is not None:
+        s.bank_coins = int(value)
+
+
+apprentice.set_bank_hook(_sync_bank)
+
+
+async def settle_work(session, login=False):
+    """Apprentice shifts, property worker income and property land fees (phase 4)."""
+    conn = WORLD.db.conn
+    changed = False
+    r = apprentice.settle(conn, session, grant_xp=WORLD.grant_xp)
+    if r and r["shifts"]:
+        changed = True
+        await send(session.ws, "CHAT_MSG", **{"from": "Apprentice", "text": apprentice.message(r)})
+        await social_event(
+            session, "apprentice", rep=apprentice.REP_PER_SHIFT * r["shifts"],
+            rep_cap_key="rep_shift", rep_cap=apprentice.REP_SHIFT_DAILY_CAP,
+            xp={"etiquette": apprentice.ETIQUETTE_PER_SHIFT * r["shifts"]},
+            xp_cap_key="fee_xp", xp_cap=reputation.ETIQUETTE_FEE_DAILY_CAP,
+        )
+    if r and r["skipped"]:
+        await send(session.ws, "CHAT_MSG", **{"from": "Apprentice",
+                   "text": f"Your master couldn't pay {r['skipped']} shift(s), so they went unpaid."})
+    inc = _property.settle_income(conn, session.player_id)
+    if inc:
+        changed = True
+        if inc["shifts"]:
+            await send(session.ws, "CHAT_MSG", **{"from": "Property", "text": _property.income_message(inc)})
+        if inc["skipped"]:
+            await send(session.ws, "CHAT_MSG", **{"from": "Property",
+                       "text": f"Your bank couldn't cover {inc['skipped']} worker wage(s); those shifts were skipped."})
+    purse, bank, fees = _property.settle_land_fee_rows(
+        conn, session.player_id, int(session.coins), int(session.bank_coins))
+    if fees:
+        changed = True
+        if (purse, bank) != (session.coins, session.bank_coins):
+            session.coins, session.bank_coins = purse, bank
+            WORLD.db.save_player_stats(session.player_id, coins=purse, bank_coins=bank)
+        for kind, paid, days in fees:
+            fee = _property.land_fee(kind)
+            missed = min(days, royal_treasury.LAND_FEE_MAX_DAYS) - paid
+            await social_event(
+                session, "land_fee",
+                rep=reputation.REP_LAND_FEE_PAID * paid + reputation.REP_LAND_FEE_MISSED * missed,
+                xp={"etiquette": reputation.ETIQUETTE_FEE_XP * paid} if paid else None,
+                xp_cap_key="fee_xp", xp_cap=reputation.ETIQUETTE_FEE_DAILY_CAP,
+            )
+            text = (f"The King's land fee of {fee * paid:,} coins for your {_property.kind_name(kind).lower()} is paid."
+                    if paid else
+                    f"You couldn't cover the King's land fee for your {_property.kind_name(kind).lower()}. No debt is kept.")
+            await send(session.ws, "CHAT_MSG", **{"from": "Royal Tax Collector", "text": text})
+    if changed:
+        await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+
+
+async def ruling_daily_tick(now=None):
+    """Once per real day: pending rates apply, stipends, council rep, works expire, reign days."""
+    now = time.time() if now is None else now
+    conn = WORLD.db.conn
+    day = time.strftime("%Y-%m-%d", time.localtime(now))
+    row = conn.execute("SELECT value FROM realm_settings WHERE key = 'daily:last'").fetchone()
+    last = None if row is None else time.strftime("%Y-%m-%d", time.localtime(float(row[0])))
+    ruling.update_days(conn, now)
+    if last == day:
+        return
+    conn.execute("INSERT OR REPLACE INTO realm_settings (key, value, changed_at) VALUES ('daily:last', ?, ?)", (now, now))
+    conn.commit()
+    for key, old, new, actor in ruling.apply_pending(conn, now):
+        await broadcast("CHAT_MSG", **{"from": "Royal Herald", "text":
+                        f"By royal decree, {ruling.setting_label(key)} is now {ruling._fmt(key, new)}."})
+        politics.news(conn, "decree", f"By royal decree, {ruling.setting_label(key)} is now {ruling._fmt(key, new)}.", now)
+        live = WORLD.sessions.get(int(actor)) if actor else None
+        if live and ruling.role(conn, actor) == "Monarch":
+            await social_event(live, "tax_change", rep=ruling.REP_TAX_RAISE if new > old else ruling.REP_TAX_CUT)
+    _paid, _skipped = ruling.pay_stipends(conn, now)
+    old_band = politics.mood_band(conn)
+    _v, band, _parts, ev = politics.daily_mood_tick(conn, now, len(_skipped))
+    if band != old_band:
+        await broadcast("CHAT_MSG", **{"from": "Town Crier", "text": f"The kingdom's mood turns: {band}."})
+    if ev:
+        await court_event_notify()
+    for s_ in WORLD.sessions.values():
+        row = conn.execute("SELECT reputation FROM players WHERE id = ?", (s_.player_id,)).fetchone()
+        if row:
+            s_.reputation = int(row[0] or 0)
+        s_.bank_coins = apprentice.bank_get(conn, s_.player_id)
+    ruling._snapshot(conn, now)
+    conn.commit()
+
+
+# ---- dev commands (testing only; the "david" account, nobody else) -----------------------------
+DEV_ACCOUNT = "david"
+DEV_SKIP_MAX_HOURS = 24 * 30
+_DEV_TIME_COLS = ("since", "ts", "last_settled", "last_income_settled", "land_fee_paid_through",
+                  "last_petition_refused")
+
+
+def _is_dev(session):
+    return (getattr(session, "username", "") or "").strip().lower() == DEV_ACCOUNT
+
+
+def dev_shift_time(conn, seconds):
+    """Move every stored timestamp back, as if `seconds` had passed. Returns rows touched."""
+    touched = 0
+    for (table,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall():
+        if table.startswith("sqlite_"):
+            continue
+        for col in [r[1] for r in conn.execute(f'PRAGMA table_info("{table}")')]:
+            if col.endswith("_at") or col in _DEV_TIME_COLS:
+                cur = conn.execute(f'UPDATE "{table}" SET "{col}" = "{col}" - ? WHERE typeof("{col}") IN '
+                                   f'(\'integer\', \'real\') AND "{col}" > 1000000000', (seconds,))
+                touched += max(0, cur.rowcount)
+    conn.execute("UPDATE realm_settings SET value = value - ? WHERE key IN ('politics:last_raid', "
+                 "'politics:ironhold_due') AND value > 1000000000", (seconds,))
+    conn.commit()
+    return touched
+
+
+async def handle_dev_command(session, text):
+    def say(t):
+        return send(session.ws, "CHAT_MSG", **{"from": "Dev", "text": t})
+    if not _is_dev(session):
+        await say("Unknown command.")
+        return
+    conn = WORLD.db.conn
+    parts = text[2:].split()
+    cmd = parts[0].lower() if parts else ""
+    try:
+        if cmd == "skip" and len(parts) >= 2:
+            hours = max(1, min(DEV_SKIP_MAX_HOURS, int(float(parts[1]))))
+            n = dev_shift_time(conn, hours * 3600)
+            days = hours // 24
+            for _d in range(days):
+                conn.execute("DELETE FROM realm_settings WHERE key = 'daily:last'")
+                conn.execute("UPDATE house_pledges SET errand_day = NULL, support_day = NULL")
+                conn.commit()
+                await ruling_daily_tick()
+            for s_ in list(WORLD.sessions.values()):
+                await settle_work(s_)
+            await politics_live.tick()
+            await throne_live.tick()
+            await say(f"Skipped {hours}h ({n} timestamps moved, {days} daily tick(s) run). "
+                      f"{politics.hud_line(conn)}")
+        elif cmd == "rep" and len(parts) >= 2:
+            v = max(-1000, min(1000, int(parts[1])))
+            before = int(getattr(session, "reputation", 0) or 0)
+            conn.execute("UPDATE players SET reputation = ? WHERE id = ?", (v, session.player_id))
+            conn.commit()
+            session.reputation = v
+            await say(f"Reputation set to {v} ({reputation.tier(v)}), was {before}. "
+                      f"This sets the score; it does not add to it.")
+        elif cmd == "rank" and len(parts) >= 2:
+            r = max(0, min(nobility.MAX_RANK, int(parts[1])))
+            conn.execute("UPDATE players SET noble_rank = ? WHERE id = ?", (r, session.player_id))
+            conn.commit()
+            session.noble_rank = r
+            await say(f"Noble rank set to {r} ({nobility.rank_name(r, session.gender)}).")
+        elif cmd == "title" and len(parts) >= 2:
+            want = " ".join(parts[1:]).strip().lower()
+            titles = {"king": "King", "queen": "Queen", "prince consort": "Prince Consort",
+                      "queen consort": "Queen Consort", "none": None}
+            if want not in titles:
+                await say("Usage: ::title <King|Queen|Prince Consort|Queen Consort|none>")
+                return
+            t_ = titles[want]
+            conn.execute("UPDATE players SET royal_title = ? WHERE id = ?", (t_, session.player_id))
+            conn.commit()
+            session.royal_title = t_
+            await say(f"Royal title set to {t_ or 'none'} (dev only; the next throne change re-applies real titles).")
+            await broadcast_player_state(session)
+        elif cmd == "favour" and len(parts) >= 2:
+            want = max(0, min(throne.FAVOUR_MAX, int(parts[1])))
+            have = int(throne.favour_row(conn, session.player_id)["favour"] or 0)
+            now_f = throne.add_favour(conn, session.player_id, want - have)
+            await say(f"Court favour set to {now_f}, was {have}.")
+        elif cmd == "xp" and len(parts) >= 3:
+            skill = parts[1].lower()
+            if skill not in session.xp:
+                await say(f"No such skill: {skill}. Try: {', '.join(sorted(session.xp))}")
+                return
+            raw = parts[2].lower()
+            if raw.startswith("l"):      # ::xp mining L60 sets the level; ::xp mining 5000 adds xp
+                lvl = max(1, min(120, int(raw.lstrip("lvl"))))
+                target = combat.xp_for_level(lvl)
+                gain = max(0, target - int(session.xp[skill]))
+                note = f"to level {lvl}"
+            else:
+                gain = max(0, min(200_000_000, int(raw)))
+                note = f"+{gain:,} xp"
+            before, after = WORLD.grant_xp(session, skill, gain)
+            await say(f"{skill}: {note} (level {before} -> {after}).")
+        elif cmd == "welcome":
+            arg = (parts[1].lower() if len(parts) >= 2 else "status")
+            if arg == "reset":
+                welcome_kit.reset(WORLD.db.conn, session.player_id)
+            elif arg == "skip":
+                welcome_kit.set_skipped(WORLD.db.conn, session.player_id)
+            st = _welcome_status(session)
+            await send_welcome_state(session, st)
+            await say(f"Welcome kit: claimed={st['claimed']} skipped={st['skipped']} veteran={st['veteran']} "
+                      f"owed={len(st['owed'])} trail={'on' if st['show_path'] else 'off'} "
+                      f"(::welcome reset | skip)")
+        elif cmd == "idle":
+            arg = (parts[1].lower() if len(parts) >= 2 else "status")
+            if arg in ("off", "on"):
+                session.idle_exempt = arg == "off"
+            idle_s = int((WORLD.tick_count - (session.last_input_tick or WORLD.tick_count)) * TICK_SECONDS)
+            await say(f"Idle logout is {'off' if session.idle_exempt else 'on'} for you "
+                      f"(idle {idle_s}s; warning at {int(IDLE_WARN_TICKS * TICK_SECONDS)}s, "
+                      f"logout at {int(IDLE_LOGOUT_TICKS * TICK_SECONDS)}s).")
+        elif cmd == "give" and len(parts) >= 2:
+            item = parts[1]
+            qty = max(1, min(1_000_000, int(parts[2]) if len(parts) >= 3 else 1))
+            if item not in ITEMS:
+                await say(f"No such item: {item}")
+                return
+            ok = WORLD.add_item_to_inventory(session, item, qty)
+            await say(f"Gave {qty} x {item}." if ok else "Your inventory is full.")
+        elif cmd == "fakeguild" and len(parts) >= 2:
+            import clans
+            n = max(0, int(parts[1]))
+            cid = clans.clan_of(session.player_id)
+            if not cid:
+                await say("Make a guild first (/guild create <name>), then ::fakeguild <n>.")
+                return
+            clans._db().execute("DELETE FROM clan_members WHERE clan_id = ? AND player_id < 0", (cid,))
+            n = min(n, clans.MAX_PLAYER_MEMBERS - clans.member_count(cid))
+            for i in range(n):
+                clans._db().execute("INSERT OR REPLACE INTO clan_members (player_id, clan_id, joined_at, rank) "
+                                    "VALUES (?, ?, ?, 'Member')", (-(cid * 1000 + i + 1), cid, time.time()))
+            clans._db().commit()
+            await say(f"Guild now has {clans.member_count(cid)} members ({n} fake). {clans.strength_line(cid)}")
+        else:
+            await say("Dev: ::skip <hours> · ::rep <value> (sets) · ::rank <0-5> · ::title <King|Queen|Prince Consort|"
+                      "Queen Consort|none> · ::favour <n> · ::xp <skill> <amount | L<level>> · ::give <item_id> [qty]"
+                      " · ::fakeguild <n> · ::idle <on|off> · ::welcome <reset|skip>")
+            return
+    except (ValueError, TypeError):
+        await say("Bad number.")
+        return
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+
+
+async def court_event_notify():
+    """COURT_EVENT to the monarch and council online (the NPC King answers on the next politics tick)."""
+    conn = WORLD.db.conn
+    for s_ in list(WORLD.sessions.values()):
+        r = ruling.role(conn, s_.player_id)
+        if r == "Monarch" or r in ruling.POSTS:
+            ev = politics.event_payload(conn, s_.player_id)
+            if ev:
+                await send(s_.ws, "COURT_EVENT", event=ev)
+
+
+async def handle_politics_msg(session, mtype, msg):
+    conn = WORLD.db.conn
+    if mtype == "COURT_CHOOSE":
+        ok, text = politics.resolve(conn, session.player_id, str(msg.get("choice") or ""), monsters=MONSTERS)
+        await send(session.ws, "CHAT_MSG", **{"from": "Royal Herald", "text": text})
+        if ok:
+            await broadcast("CHAT_MSG", **{"from": "Royal Herald", "text": "Court: " + text})
+            s_ = session
+            row = conn.execute("SELECT reputation FROM players WHERE id = ?", (s_.player_id,)).fetchone()
+            if row:
+                s_.reputation = int(row[0] or 0)
+            await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    elif mtype == "NEWS_BOARD":
+        lines = politics.latest_news(conn, politics.NEWS_BOARD_LINES) or ["The board is bare. No news yet."]
+        await send(session.ws, "DIALOGUE", npc_id="notice_board", npc_name="Notice Board", lines=lines)
+        return
+    await send(session.ws, "KINGDOM_STATE", state=politics.state_payload(conn, session.player_id))
+
+
+async def handle_house_option(session, npc, opt):
+    conn = WORLD.db.conn
+    pid = session.player_id
+    house = npc.get("house")
+    if opt == "house_pledge":
+        ok, text = politics.pledge(conn, pid, house)
+    elif opt == "house_errand":
+        ok, text = politics.can_errand(conn, pid, house)
+        if ok:
+            item, qty, what = politics.ERRANDS[house]
+            if WORLD.count_item(session, item) < qty:
+                ok, text = False, f"Today's errand: bring {what}."
+            else:
+                WORLD.remove_item_qty(session, item, qty)
+                ok, text = politics.errand_done(conn, pid, house)
+                if ok:
+                    WORLD.grant_xp(session, "charisma", politics.ERRAND_CHARISMA)
+                    text += f" (+{politics.ERRAND_CHARISMA} Charisma XP.)"
+                session.bank_coins = apprentice.bank_get(conn, pid)
+                row = conn.execute("SELECT reputation FROM players WHERE id = ?", (pid,)).fetchone()
+                session.reputation = int(row[0] or 0) if row else session.reputation
+    elif opt in ("house_support", "house_oppose"):
+        p = politics.pledge_of(conn, pid)
+        if not p or p["house"] != house:
+            ok, text = False, f"Only those pledged to {politics.HOUSES[house]} speak in its halls."
+        else:
+            ok, text = politics.support(conn, pid, "support" if opt == "house_support" else "oppose")
+    else:
+        ok, text = True, ""
+    session.house_suffix = politics.title_suffix(conn, pid)
+    lines = ([text] if text else []) + politics.house_lines(conn, pid)
+    return lines
+
+
+async def handle_rule(session, mtype, msg):
+    """RULE_* requests. Every role and bound is checked in ruling.py."""
+    global _SHOP_STOCK_START
+    conn = WORLD.db.conn
+    pid = session.player_id
+    ok, text = True, ""
+    if mtype == "RULE_SET_TAX":
+        ok, out = ruling.set_tax(conn, pid, msg.get("key"), msg.get("value"))
+        text = (f"Decree recorded: {ruling.setting_label(msg.get('key'))} becomes "
+                f"{ruling._fmt(msg.get('key'), out)} at the next daily tick." if ok else out)
+    elif mtype == "RULE_FUND_WORK":
+        ok, text = ruling.fund_work(conn, pid, msg.get("key"))
+        if ok and msg.get("key") == "feast":
+            for s_ in list(WORLD.sessions.values()):
+                await social_event(s_, "feast", rep=ruling.FEAST_REP)
+        if ok and msg.get("key") == "markets":
+            if _SHOP_STOCK_START is not None:
+                for sid, shop in SHOPS.items():
+                    for iid, info in shop["stock"].items():
+                        info["qty"] = _SHOP_STOCK_START[sid][iid]
+        if ok:
+            await broadcast("CHAT_MSG", **{"from": "Royal Herald", "text": f"By royal order: {text}"})
+    elif mtype == "RULE_POST_BOUNTY":
+        ok, text = ruling.post_bounty(conn, pid, msg.get("monster"), msg.get("amount"), MONSTERS)
+        if ok:
+            await broadcast("CHAT_MSG", **{"from": "Royal Marshal", "text": text})
+    elif mtype == "RULE_CANCEL_BOUNTY":
+        try:
+            ok, text = ruling.cancel_bounty(conn, pid, int(msg.get("id")))
+        except (TypeError, ValueError):
+            ok, text = False, "Which bounty?"
+    elif mtype in ("RULE_APPOINT", "RULE_DISMISS"):
+        if mtype == "RULE_APPOINT":
+            row = conn.execute("SELECT id FROM players WHERE char_name = ? COLLATE NOCASE",
+                               (str(msg.get("player") or "").strip(),)).fetchone()
+            ok, text = (ruling.appoint(conn, pid, msg.get("post"), row[0]) if row else (False, "No such player."))
+        else:
+            ok, text = ruling.dismiss(conn, pid, msg.get("post"))
+    elif mtype == "RULE_ANNOUNCE":
+        ok, out = ruling.herald_announce(conn, pid, msg.get("text"))
+        text = "Proclaimed." if ok else out
+        if ok:
+            await broadcast("CHAT_MSG", **{"from": f"Royal Herald {session.char_name}", "text": out})
+    elif mtype in ("RULE_FREE_KING", "RULE_RECALL_KING"):
+        fn = ruling.free_king if mtype == "RULE_FREE_KING" else ruling.recall_king
+        ok, text = fn(conn, pid)
+        if ok:
+            throne_live.apply_king_state()
+            await broadcast("CHAT_MSG", **{"from": "Royal Herald", "text":
+                            "The old King is free, and now serves the Crown as Royal Advisor."})
+    elif mtype != "RULE_STATE":
+        return
+    if text:
+        await send(session.ws, "CHAT_MSG", **{"from": "Royal Treasury", "text": text})
+    if ruling.role(conn, pid):
+        await send(session.ws, "ROYAL_STATE", **ruling.state_payload(conn, pid))
+    elif mtype == "RULE_STATE":
+        await send(session.ws, "CHAT_MSG", **{"from": "Royal Treasury",
+                   "text": "Only the monarch and the royal council may open the treasury."})
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+
+
+def _nearest_other_player(session, reach):
+    best = None
+    for other in WORLD.sessions.values():
+        if other is session or other.dungeon != session.dungeon:
+            continue
+        d = max(abs(other.x - session.x), abs(other.y - session.y))
+        if d <= reach and (best is None or d < best[0]):
+            best = (d, other)
+    return best[1] if best else None
+
+
+async def throne_schedule(session, kind, hours):
+    conn = WORLD.db.conn
+    fn = {"crown": throne.schedule_crown, "castle": throne.schedule_castle,
+          "acclaim": throne.schedule_acclaim}.get(kind)
+    if not fn:
+        return "Unknown challenge."
+    ok, out = fn(session, conn, hours)
+    if not ok:
+        return out
+    import clans
+    guild = clans._clan_row(clans.clan_of(session.player_id))
+    gname = guild[1] if guild else "no guild"
+    if kind == "crown":
+        text = (f"⚔ {session.char_name} of {gname} challenges the Crown! "
+                f"The battle begins in {out} hours at the King's Castle.")
+    elif kind == "castle":
+        text = f"⚔ {session.char_name} of {gname} challenges for a castle! The battle begins in {out} hours."
+    else:
+        text = f"👑 {session.char_name} petitions the court for Acclaim. The court decides in {out} hours."
+    await broadcast("CHAT_MSG", **{"from": "Royal Herald", "text": text})
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    return f"Scheduled in {out} hours."
+
+
+# ---- Warden Tamsin: the welcome talk, the Recruit's Bronze kit, the trail flag (server/welcome_kit.py) -------
+def _welcome_status(session):
+    return welcome_kit.status(WORLD.db.conn, session, ITEMS)
+
+
+async def send_welcome_state(session, st=None):
+    st = st or _welcome_status(session)
+    await send(session.ws, "WELCOME_STATE", **welcome_kit.public_state(st, NPC_BY_ID.get(welcome_kit.GUIDE_ID)))
+
+
+async def welcome_on_join(session):
+    st = _welcome_status(session)
+    await send_welcome_state(session, st)
+    if st["show_path"]:
+        text = "Over here, by the crossroads! Follow the golden trail. I've a Bronze kit for you."
+    elif st["owed"]:
+        text = "I'm still holding part of your kit. Come and see me when you've room in your bag."
+    else:
+        return
+    await send(session.ws, "CHAT_MSG", **{"from": welcome_kit.GUIDE_NAME, "text": text})
+
+
+async def welcome_talk(session, npc, tour=False, note=None):
+    st = _welcome_status(session)
+    pages = welcome_kit.pages(st, session.char_name, tour=tour, note=note)
+    await send(session.ws, "DIALOGUE", npc_id=npc["id"], npc_name=npc["name"], lines=pages[0],
+               pages=pages if len(pages) > 1 else None, options=welcome_kit.options(st))
+
+
+def _welcome_put(session, item_id):
+    """Bag first, then bank. 'bag', 'bank', or None when neither has room."""
+    if WORLD.add_item_to_inventory(session, item_id, 1):
+        return "bag"
+    if _bank_put(session, item_id, 1):
+        return "bank"
+    return None
+
+
+def _welcome_deliver(session, item_ids):
+    placed, owed = {"bag": [], "bank": []}, []
+    for item_id in item_ids:
+        where = _welcome_put(session, item_id)
+        (placed[where] if where else owed).append(item_id)
+    return placed, owed
+
+
+def _welcome_note(placed, owed, head):
+    def names(ids):
+        return ", ".join(ITEMS[i]["name"] for i in ids)
+    lines = [head]
+    if placed["bank"]:
+        lines.append(f"Your bag was full, so I sent your {names(placed['bank'])} to the bank.")
+    if owed:
+        lines.append(f"Your bag and bank are both full. I'll keep your {names(owed)} safe. "
+                     "Make some room and talk to me again to collect it.")
+    return lines
+
+
+async def welcome_equip(session):
+    """Put kit pieces from the bag into empty (or tool-only) slots, through the normal equip path, so an
+    outfit comes off by the gear rules."""
+    worn = []
+    for item_id, slot in welcome_kit.equippable_kit(session, ITEMS):
+        slot_index = next((s for s, e in session.inventory.items() if e and e["item_id"] == item_id), None)
+        if slot_index is None:
+            continue
+        await handle_equip(session, {"slot_index": slot_index})
+        if session.equipment.get(slot) == item_id:
+            worn.append(item_id)
+    return worn
+
+
+async def welcome_option(session, npc, opt):
+    if not adjacent_or_same(session.x, session.y, npc["x"], npc["y"]):
+        await send(session.ws, "ERROR", message="You're too far away to talk to them.")
+        return
+    conn, pid = WORLD.db.conn, session.player_id
+    st = _welcome_status(session)
+    if opt not in welcome_kit.allowed(st):
+        await welcome_talk(session, npc)            # stale menu (double click, other client): show the real one
+        return
+    if opt == welcome_kit.OPT_REMIND:
+        await welcome_talk(session, npc, tour=True)
+        return
+    note = None
+    if opt in (welcome_kit.OPT_WEAR, welcome_kit.OPT_TAKE):
+        try:
+            with welcome_kit.one_transaction(WORLD.db, session):
+                if not welcome_kit.take_claim(conn, pid):
+                    raise welcome_kit.Rollback()
+                placed, owed = _welcome_deliver(session, welcome_kit.KIT_IDS)
+                welcome_kit.set_owed(conn, pid, owed)
+        except welcome_kit.Rollback:
+            await welcome_talk(session, npc)
+            return
+        log.info("%s claimed the welcome kit (bag %s, bank %s, owed %s)", session.char_name,
+                 placed["bag"], placed["bank"], owed)
+        note = _welcome_note(placed, owed, "Here's your Recruit's Bronze kit: helmet, chest plate, leg armour "
+                                           "and a sword. It's bound to you, so look after it.")
+        await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        if opt == welcome_kit.OPT_WEAR and await welcome_equip(session):
+            note.append("There, all buckled up. You're ready for the dungeon gate now.")
+    elif opt == welcome_kit.OPT_COLLECT:
+        with welcome_kit.one_transaction(WORLD.db, session):
+            placed, owed = _welcome_deliver(session, welcome_kit.record(conn, pid)["owed"])
+            welcome_kit.set_owed(conn, pid, owed)
+        note = _welcome_note(placed, owed, "Here's the rest of your kit." if placed["bag"] or placed["bank"]
+                             else "Still no room, I'm afraid.")
+    elif opt == welcome_kit.OPT_EQUIP:
+        worn = await welcome_equip(session)
+        note = (["There, all buckled up."] if worn
+                else ["There's nothing for me to put on you. Your kit's either on already or in the bank."])
+    elif opt == welcome_kit.OPT_SWORD:
+        try:
+            with welcome_kit.one_transaction(WORLD.db, session):
+                if not welcome_kit.take_sword(conn, pid):
+                    raise welcome_kit.Rollback()
+                where = _welcome_put(session, welcome_kit.SWORD)
+                if where is None:
+                    raise welcome_kit.Rollback()
+            log.info("%s got a replacement Recruit's sword (%s)", session.char_name, where)
+            note = ["Here, take this one. Try not to lose it. I can only spare one an hour."]
+            if where == "bank":
+                note.append("Your bag was full, so it's waiting in your bank.")
+        except welcome_kit.Rollback:
+            note = ["Your bag and bank are both full. Make some room and ask me again."]
+    elif opt == welcome_kit.OPT_SKIP:
+        welcome_kit.set_skipped(conn, pid)
+        note = ["Right you are. I'll be here by the crossroads if you change your mind, "
+                "and the kit's still yours to claim."]
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    await send_welcome_state(session)
+    await welcome_talk(session, npc, note=note)
+
+
+async def welcome_skip(session):
+    """The X on the trail banner. The trail stays off; the kit can still be claimed by talking to her."""
+    welcome_kit.set_skipped(WORLD.db.conn, session.player_id)
+    await send_welcome_state(session)
+
+
+def _options_for(session, npc):
+    """Celia's court options are female-only on the server."""
+    if npc.get("id") == "mistress_celia" and str(session.gender).lower() != "female":
+        return None
+    return npc.get("options")
+
+
+async def handle_npc_option(session, msg):
+    """Dialogue menu options for apprentice masters and the estate office (phase 4)."""
+    npc = NPC_BY_ID.get(msg.get("npc_id"))
+    opt = msg.get("option")
+    if npc and npc.get("welcome_guide"):
+        await welcome_option(session, npc, opt)
+        return
+    allowed = {o["id"] for o in (_options_for(session, npc) if npc else None) or []}
+    if npc and npc.get("id") == "chamberlain_aric":
+        allowed.add("noble_pay")
+    if npc and npc.get("id") == "old_king_prisoner":
+        allowed.add("king_free")
+    if allowed and isinstance(opt, str) and opt.startswith(throne.DYNAMIC_PREFIXES):
+        allowed.add(opt)
+    if not npc or not allowed or opt not in allowed:
+        return
+    if not adjacent_or_same(session.x, session.y, npc["x"], npc["y"]):
+        await send(session.ws, "ERROR", message="You're too far away to talk to them.")
+        return
+    conn = WORLD.db.conn
+    pid = session.player_id
+    wp = npc.get("apprentice")
+    lines = []
+    if npc.get("house"):
+        lines = await handle_house_option(session, npc, opt)
+    elif opt == "app_sign":
+        ok, text = apprentice.sign_on(conn, pid, npc["id"], wp)
+        lines = [text]
+    elif opt == "app_collect":
+        if not apprentice.active(conn, pid):
+            lines = ["You're not signed on with anyone."]
+        else:
+            await settle_work(session)
+            st = apprentice.status(conn, pid) or {}
+            lines = [f"Wages settled. Shifts today: {st.get('today', 0)}/{apprentice.DAILY_SHIFT_CAP}. "
+                     "A shift is a whole hour, so check back later."]
+    elif opt == "app_leave":
+        await settle_work(session)
+        lines = [apprentice.leave(conn, pid)[1]]
+    elif opt == "app_info":
+        lines = apprentice.info_lines(wp)
+    elif opt == "noble_petition":
+        rows = nobility.check_rows(session, conn)
+        if not rows:
+            lines = ["You already hold the highest rank the Crown grants."]
+        else:
+            nxt = session.noble_rank + 1
+            lines = [f"Next rank: {nobility.rank_name(nxt, session.gender)} · patent fee {nobility.fee(nxt):,}",
+                     "  ".join(("✓ " if ok else "✗ ") + label for label, ok in rows)]
+            left = nobility.cooldown_left(conn, pid)
+            if left > 0:
+                lines.append(f"Your last petition was refused. Come back in {int(left // 3600) + 1} hours.")
+            elif all(ok for _l, ok in rows):
+                await send(session.ws, "DIALOGUE", npc_id=npc["id"], npc_name=npc["name"], lines=lines,
+                           options=[{"id": "noble_pay", "label": f"Pay {nobility.fee(nxt):,}"}]
+                           + npc["options"][1:])
+                return
+    elif opt == "noble_pay":
+        old_name = nobility.display_name(session)
+        ok, text, _old = nobility.petition(session, conn)
+        lines = [text]
+        if ok:
+            await social_event(session, "noble_patent", rep=nobility.REP_PROMOTION,
+                               xp={"etiquette": nobility.ETIQUETTE_PROMOTION_XP})
+            herald = (f"By the King's patent, {old_name} is now "
+                      f"{nobility.rank_name(session.noble_rank, session.gender)} {session.char_name}.")
+            if session.noble_rank >= nobility.BROADCAST_FROM_RANK:
+                await broadcast("CHAT_MSG", **{"from": "Herald", "text": herald})
+            else:
+                await send(session.ws, "CHAT_MSG", **{"from": "Herald", "text": herald})
+    elif opt in ("crown_check", "castle_check", "acclaim_check"):
+        kind = opt.split("_")[0]
+        if kind == "crown":
+            ok, missing = throne.crown_eligible(session, conn)
+            import politics as _po
+            lines = [f"Crown Challenge (fee {_po.crown_fee(conn, throne.CROWN_FEE):,}; 30-minute battle in the throne room):"]
+            lines.append("✓ All requirements met." if ok else "✗ " + " · ✗ ".join(missing))
+        elif kind == "castle":
+            import clans
+            cid = clans.clan_of(pid)
+            row = conn.execute("SELECT challenge_castle_id FROM clans WHERE clan_id = ?", (cid,)).fetchone() if cid else None
+            castle = row[0] if row else None
+            ok = bool(castle) and clans.can_challenge_castle(cid, castle)
+            fee_txt = f"{throne.castle_fee(castle):,}" if castle else "1% of the deed"
+            lines = [f"Castle Challenge (fee {fee_txt}; 7 days between challenges; 20 minutes at the keep): "
+                     + (f"{castle} ✓" if ok else "only when every castle is owned, after /guild challenge <castle>.")]
+        else:
+            ok, missing = throne.courtier_eligible(session, conn)
+            fav = throne.favour_row(conn, pid)["favour"]
+            ok = ok and fav >= throne.FAVOUR_MAX
+            lines = [f"Court Acclaim (fee {throne.ACCLAIM_FEE:,}): favour {fav}/{throne.FAVOUR_MAX}"
+                     + ("" if not missing else " · ✗ " + " · ✗ ".join(missing))]
+        if ok:
+            hours = [{"id": f"{kind}_h{h}", "label": f"In {h}h"} for h in throne.HOUR_CHOICES]
+            lines.append("Pick a start time (or /throne " + kind + " <12-48>).")
+            await send(session.ws, "DIALOGUE", npc_id=npc["id"], npc_name=npc["name"], lines=lines,
+                       options=hours + list(_options_for(session, npc) or []))
+            return
+    elif isinstance(opt, str) and opt.startswith(throne.DYNAMIC_PREFIXES):
+        kind, _h, hours = opt.partition("_h")
+        lines = [await throne_schedule(session, kind, hours)]
+    elif opt == "throne_list":
+        lines = throne.summary_lines(conn, throne_live._name)
+    elif opt == "court_status":
+        f = throne.favour_row(conn, pid)
+        conn.commit()
+        lines = [f"Court Favour {f['favour']}/{throne.FAVOUR_MAX}. Three small services a day (+20 each); "
+                 "the Court Ball, Saturdays 20:00 in the throne room, is +100 once a week.",
+                 "Standing at Neutral or worse costs 50 favour a day."]
+    elif opt in throne.COURT_TASKS:
+        ok, missing = throne.courtier_eligible(session, conn)
+        label, items = throne.COURT_TASKS[opt]
+        have = next((i for i in items if WORLD.count_item(session, i) > 0), None)
+        if not ok:
+            lines = ["Not yet: " + "; ".join(missing)]
+        elif not have:
+            lines = [f"{label}: you have nothing suitable with you."]
+        else:
+            got = throne.court_task(conn, pid)
+            if got:
+                WORLD.remove_item_qty(session, have, 1)
+                lines = [f"Thank you. +{got} Court Favour."]
+            else:
+                lines = ["That's enough service for today. Come back tomorrow."]
+    elif opt == "wed_propose":
+        target = _nearest_other_player(session, 2)
+        if not target:
+            lines = ["Stand beside the one you wish to marry, then propose."]
+        else:
+            throne.propose(pid, target.player_id)
+            lines = [f"You propose to {target.char_name}. They have a minute to accept here."]
+            await send(target.ws, "CHAT_MSG", **{"from": "Chaplain Mirelle",
+                       "text": f"{session.char_name} proposes marriage. Talk to me and choose Accept proposal."})
+    elif opt == "wed_accept":
+        other = throne.pending_proposal(pid)
+        o_sess = WORLD.sessions.get(int(other)) if other else None
+        if not o_sess:
+            lines = ["No one has proposed to you (or the minute passed)."]
+        else:
+            ok, text = throne.marry(conn, other, pid)
+            lines = [text]
+            if ok:
+                for s_ in (session, o_sess):
+                    s_.bank_coins = apprentice.bank_get(conn, s_.player_id)
+                    await social_event(s_, "marriage", rep=throne.REP_MARRIAGE)
+                    await send(s_.ws, "PLAYER_UPDATE", player=s_.full_state())
+                await broadcast("CHAT_MSG", **{"from": "Chaplain Mirelle",
+                                "text": f"{session.char_name} and {o_sess.char_name} are wed."})
+    elif opt == "wed_divorce":
+        lines = [throne.divorce(conn, pid)[1]]
+    elif opt == "wed_status":
+        sp = throne.spouse_of(conn, pid)
+        lines = [f"You are married to {throne_live._name(sp)}." if sp else "You are not married."]
+    elif opt == "king_free":
+        await handle_rule(session, "RULE_FREE_KING", {})
+        return
+    elif opt == "noble_perks":
+        lines = nobility.perks_lines()
+    elif opt == "noble_leave":
+        await send(session.ws, "DIALOGUE", npc_id=npc["id"], npc_name=npc["name"],
+                   lines=["Good day to you."])
+        return
+    elif opt == "prop_buy":
+        lines = [_property.buy_plot(conn, pid)[1]]
+    elif opt == "prop_farm":
+        lines = [_property.upgrade(conn, pid, "farm")[1]]
+    elif opt == "prop_workshop":
+        lines = [_property.upgrade(conn, pid, "workshop")[1]]
+    elif opt == "prop_hire":
+        await settle_work(session)
+        lines = [_property.hire(conn, pid)[1]]
+    elif opt == "prop_dismiss":
+        await settle_work(session)
+        lines = [_property.dismiss(conn, pid)[1]]
+    elif opt == "prop_mine":
+        lines = _property.describe(conn, pid)
+    elif opt == "prop_work":
+        found = _property.find_workplace(conn, pid)
+        if not found:
+            lines = ["No player farm or workshop has a free worker slot right now."]
+        else:
+            prop_id, _owner, kind = found
+            ok, text = apprentice.sign_on(conn, pid, f"property:{prop_id}", _property.WORKPLACE_FOR[kind], prop_id)
+            lines = [text + (" The owner pays your wage." if ok else "")]
+    await send(
+        session.ws, "DIALOGUE", npc_id=npc["id"], npc_name=npc["name"], lines=lines,
+        options=npc.get("options"), housing=bool(npc.get("housing")),
+    )
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+
+
+async def handle_persuade(session, msg):
+    """[Persuade (Charisma N)] dialogue check. Success if charisma level >= req."""
+    npc = NPC_BY_ID.get(msg.get("npc_id"))
+    node = (npc or {}).get("persuade")
+    if not node or not adjacent_or_same(session.x, session.y, npc["x"], npc["y"]):
+        return
+    ok = session.level("charisma") >= int(node["req"])
+    await send(
+        session.ws, "DIALOGUE", npc_id=npc["id"], npc_name=npc["name"],
+        lines=list(node["success"] if ok else node["fail"]),
+        shop_id=npc.get("shop_id"),
+    )
 
 
 async def send_bank_state(session):
@@ -4000,16 +5023,59 @@ async def handle_bank_withdraw(session, msg):
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
 
 
+def _shop_discount(session):
+    """Noble rank + consort + Stock the markets; reputation.buy_price applies the −10% cap."""
+    d = nobility.shop_discount(getattr(session, "noble_rank", 0))
+    d += ruling.consort_discount(getattr(session, "royal_title", None))
+    if ruling.work_active(WORLD.db.conn, "markets"):
+        d += ruling.MARKETS_EXTRA_DISCOUNT
+    return d
+
+
 async def send_shop_state(session, shop_id):
     shop = SHOPS[shop_id]
-    stock = {iid: {"price": info["price"], "qty": info["qty"], "name": ITEMS[iid]["name"]} for iid, info in shop["stock"].items()}
+    score = getattr(session, "reputation", 0)
+    noble = _shop_discount(session)
+    stock = {iid: {"price": reputation.buy_price(info["price"], score, noble), "qty": info["qty"],
+                   "name": ITEMS[iid]["name"]}
+             for iid, info in shop["stock"].items()}
     await send(
         session.ws, "SHOP_STATE",
         shop_id=shop_id, name=shop["name"], stock=stock,
         your_coins=session.coins, buys=bool(shop.get("buys")),
         buys_types=list(shop.get("buys_types") or []),
         buys_slots=list(shop.get("buys_slots") or []),
+        tax_rate=royal_treasury.sales_tax_rate(),
+        rep_tier=reputation.tier(score), rep_mult=reputation.price_mult(score),
+        sell_mult=reputation.sell_mult(score),
+        noble_discount=noble,
+        noble_title=nobility.rank_name(getattr(session, "noble_rank", 0), session.gender),
     )
+
+
+async def social_event(session, source, **kw):
+    await reputation.social_event(WORLD, send, session, source, **kw)
+
+
+async def _pay_royal_tax(session, source, amount):
+    """Credit a paid sales tax to the treasury; first one ever shows the notice."""
+    if amount <= 0:
+        return
+    royal_treasury.credit(WORLD.db.conn, source, session.player_id, amount)
+    if amount >= reputation.MIN_TAX_FOR_STANDING:      # 1-coin trades can't farm standing
+        await social_event(
+            session, source, rep=reputation.REP_TAX, rep_cap_key="rep_tax", rep_cap=reputation.REP_TAX_DAILY_CAP,
+            xp={"etiquette": reputation.ETIQUETTE_TAX_XP}, xp_cap_key="fee_xp",
+            xp_cap=reputation.ETIQUETTE_FEE_DAILY_CAP,
+        )
+    if not getattr(session, "tax_notice_seen", False):
+        session.tax_notice_seen = True
+        WORLD.db.save_player_stats(session.player_id, tax_notice_seen=1)
+        pct = int(round(royal_treasury.sales_tax_rate() * 100))
+        await send(session.ws, "CHAT_MSG", **{
+            "from": "Royal Tax Collector",
+            "text": f"By decree of the King of Crownfall, {pct}% of every shop sale goes to the royal treasury.",
+        })
 
 
 async def handle_set_pet(session, msg):
@@ -4047,59 +5113,26 @@ async def handle_toggle_hd_player(session, msg):
 
 
 def _cosmetic_catalogue():
-    import json
-    import os
-    path = os.path.join(os.path.dirname(__file__), "..", "..", "player_hd", "assets", "catalogue.json")
-    with open(path, encoding="utf-8") as handle:
-        return json.load(handle)
+    """Outfitter catalogue, cached by file mtime (outfits.catalogue)."""
+    return outfits.catalogue()
 
 
 def _clean_appearance(session, appearance, owned=None):
-    """Return a saved look, or an error string."""
-    if not isinstance(appearance, dict):
-        return None, "Invalid appearance data."
-    cat = _cosmetic_catalogue()
-    items = {entry["id"]: entry for entry in cat.get("items") or []}
-    colours = {entry.get("id") for entry in cat.get("hair_palette") or []}
+    """Return a saved look, or an error string. Ownership, sex, regalia, palette and level are checked."""
     if owned is None:
         owned = set(session._json_list("owned_cosmetics"))
-    cleaned = {
-        "skin": appearance.get("skin"),
-        "hair": appearance.get("hair"),
-        "hair_colour": appearance.get("hair_colour"),
-        "top": appearance.get("top"),
-        "bottom": appearance.get("bottom"),
-        "shoes": appearance.get("shoes"),
-        "outfit": appearance.get("outfit") or None,
-        "accessories": [],
-    }
-    if cleaned["hair_colour"] not in colours:
-        return None, "That hair colour is not in the catalogue."
-    for slot in ("skin", "hair", "top", "bottom", "shoes"):
-        item_id = cleaned[slot]
-        item = items.get(item_id)
-        if not item or item.get("slot") != slot:
-            return None, "That look uses an unknown item."
-        if not item.get("starter") and item_id not in owned:
-            return None, "You do not own every piece of that look."
-    if cleaned["outfit"]:
-        item = items.get(cleaned["outfit"])
-        if not item or item.get("slot") != "outfit":
-            return None, "That outfit is not in the catalogue."
-        if not item.get("starter") and cleaned["outfit"] not in owned:
-            return None, "You do not own that outfit."
-    limit = int(cat.get("accessory_max") or 2)
-    for item_id in appearance.get("accessories") or []:
-        item = items.get(item_id)
-        if not item or item.get("slot") != "accessory":
-            return None, "That accessory is not in the catalogue."
-        if not item.get("starter") and item_id not in owned:
-            return None, "You do not own that accessory."
-        if item_id not in cleaned["accessories"]:
-            cleaned["accessories"].append(item_id)
-        if len(cleaned["accessories"]) > limit:
-            return None, "Too many accessories."
-    return cleaned, None
+    return outfits.clean(session, appearance, set(owned))
+
+
+def outfit_unlocked(session, item):
+    """(ok, hint, progress) for one catalogue item or set (OUTFITS_SPEC §3)."""
+    return outfits.outfit_unlocked(session, item, WORLD.db.conn)
+
+
+def _outfit_pricing(session):
+    return {"price_mult": reputation.price_mult(getattr(session, "reputation", 0)),
+            "discount": _shop_discount(session), "cap": reputation.MAX_TOTAL_DISCOUNT,
+            "tax_rate": royal_treasury.sales_tax_rate()}
 
 
 async def handle_set_gender(session, msg):
@@ -4117,6 +5150,10 @@ async def handle_update_appearance(session, msg):
     if error:
         await send(session.ws, "ERROR", message=error)
         return
+    error = await _outfit_gear_check(session, appearance)
+    if error:
+        await send(session.ws, "ERROR", message=error)
+        return
     WORLD.db.save_player_stats(session.player_id, appearance=json.dumps(appearance))
     session.row = WORLD.db.get_player_by_id(session.player_id)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
@@ -4125,34 +5162,43 @@ async def handle_update_appearance(session, msg):
 
 
 async def handle_buy_cosmetics(session, msg):
-    """Buy the unowned pieces being tried on, then wear the look."""
+    """Buy the unowned pieces being tried on (unlock-checked, shop pricing + royal tax), then wear the look."""
     import json
-    cat = _cosmetic_catalogue()
-    items = {entry["id"]: entry for entry in cat.get("items") or []}
+    table = outfits.items()
     owned = session._json_list("owned_cosmetics")
     owned_set = set(owned)
-    cost = 0
-    buying = []
-    for item_id in msg.get("items") or []:
-        item = items.get(item_id)
+    ids = [i for i in dict.fromkeys(msg.get("items") or [])]
+    for item_id in ids:
+        item = table.get(item_id)
         if not item:
             await send(session.ws, "ERROR", message="That item is not in the catalogue.")
             return
         if item.get("starter") or item_id in owned_set:
             continue
-        price = int(item.get("price") or 0)
-        cost += price
-        buying.append(item_id)
-        owned_set.add(item_id)
-    if cost > session.coins:
-        await send(session.ws, "ERROR", message="You don't have enough coins.")
+        ok, hint, _progress = outfit_unlocked(session, item)
+        if not ok:
+            await send(session.ws, "ERROR", message=hint or "That piece is locked.")
+            return
+        if not outfits.regalia_ok(session, item):
+            await send(session.ws, "ERROR", message="Regalia are worn only while you hold the title.")
+            return
+    q = outfits.quote(session, ids, owned_set, _shop_discount(session), msg.get("set"))
+    cost = int(q["total"])
+    tax = royal_treasury.buy_tax(cost)
+    if cost + tax > session.coins:
+        await send(session.ws, "ERROR", message=f"You need {cost + tax - session.coins:,} more coins.")
         return
-    owned.extend(buying)
-    appearance, error = _clean_appearance(session, msg.get("appearance"), owned_set)
+    buying = q["pieces"]
+    appearance, error = _clean_appearance(session, msg.get("appearance"), owned_set | set(buying))
     if error:
         await send(session.ws, "ERROR", message=error)
         return
-    session.coins -= cost
+    error = await _outfit_gear_check(session, appearance)
+    if error:
+        await send(session.ws, "ERROR", message=error)
+        return
+    owned.extend(b for b in buying if b not in owned_set)
+    session.coins -= cost + tax
     WORLD.db.save_player_stats(
         session.player_id,
         coins=session.coins,
@@ -4160,32 +5206,128 @@ async def handle_buy_cosmetics(session, msg):
         appearance=json.dumps(appearance),
     )
     session.row = WORLD.db.get_player_by_id(session.player_id)
+    if tax:
+        await _pay_royal_tax(session, "sales_tax_buy", tax)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     await broadcast_player_state(session)
     if cost:
-        await send(session.ws, "CHAT_MSG", **{"from": "Mae", "text": f"Bought and worn for {cost} coins."})
+        await send(session.ws, "CHAT_MSG", **{"from": "Mae", "text": f"Bought and worn for {cost:,} coins (+{tax:,} royal tax)."})
     else:
         await send(session.ws, "CHAT_MSG", **{"from": "Mae", "text": "Worn."})
 
 
+async def _charge_outfitter(session, base):
+    """Shop price (standing x discount, -10% cap) + royal tax. Returns (cost, tax) or None when short."""
+    cost = reputation.buy_price(base, getattr(session, "reputation", 0), _shop_discount(session)) if base else 0
+    tax = royal_treasury.buy_tax(cost)
+    if cost + tax > session.coins:
+        await send(session.ws, "ERROR", message=f"You need {cost + tax - session.coins:,} more coins.")
+        return None
+    return cost, tax
+
+
+async def handle_buy_palette(session, msg):
+    """BUY_PALETTE {set? | item?, palette}: one extra colour for a whole set (default) or one piece."""
+    import json
+    palette = msg.get("palette")
+    set_id, item_id = msg.get("set"), msg.get("item")
+    entry = outfits.sets().get(set_id) if set_id else outfits.items().get(item_id)
+    if not entry or palette not in (entry.get("palettes") or []):
+        await send(session.ws, "ERROR", message="That colour is not offered for it.")
+        return
+    if entry.get("sex") and entry["sex"] != ("female" if session.gender == "female" else "male"):
+        await send(session.ws, "ERROR", message="That isn't cut for you.")
+        return
+    ok, hint, _p = outfit_unlocked(session, entry)
+    if not ok:
+        await send(session.ws, "ERROR", message=hint or "That set is locked.")
+        return
+    key = f"palette:{set_id or item_id}:{palette}"
+    owned = session._json_list("owned_cosmetics")
+    if palette == entry["palettes"][0] or key in owned:
+        await send(session.ws, "CHAT_MSG", **{"from": "Mae", "text": "You already have that colour."})
+        return
+    tier = int(entry.get("tier") or 1)
+    base = int(((outfits.catalogue().get("garment_palettes") or {}).get(palette) or {}).get("price") or 0) \
+        or int(entry.get("palette_price") or 0)
+    if item_id and not set_id:
+        base = max(1, base // 2)
+    charged = await _charge_outfitter(session, base)
+    if charged is None:
+        return
+    cost, tax = charged
+    owned.append(key)
+    session.coins -= cost + tax
+    WORLD.db.save_player_stats(session.player_id, coins=session.coins, owned_cosmetics=json.dumps(owned))
+    session.row = WORLD.db.get_player_by_id(session.player_id)
+    if tax:
+        await _pay_royal_tax(session, "sales_tax_buy", tax)
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    await send(session.ws, "CHAT_MSG", **{"from": "Mae", "text": f"New colour for {cost:,} coins (+{tax:,} tax). Tier {tier} cloth, dyed fresh."})
+
+
+async def handle_upgrade_outfit(session, msg):
+    """UPGRADE_OUTFIT {set, level}: Plain -> Fine (2) -> Regal (3) for a set you own."""
+    import json
+    set_id = msg.get("set")
+    entry = outfits.sets().get(set_id)
+    try:
+        level = int(msg.get("level"))
+    except (TypeError, ValueError):
+        level = 0
+    if not entry or level not in (2, 3):
+        await send(session.ws, "ERROR", message="Nothing to upgrade there.")
+        return
+    owned = session._json_list("owned_cosmetics")
+    outfit_piece = next((p for p in entry.get("pieces") or [] if (outfits.items().get(p) or {}).get("slot") == "outfit"), None)
+    if outfit_piece not in owned:
+        await send(session.ws, "ERROR", message="Buy the set's outfit first.")
+        return
+    have = outfits.owned_level(set(owned), set_id)
+    if level != have + 1:
+        await send(session.ws, "ERROR", message="Upgrade one level at a time." if level > have else "You already have that level.")
+        return
+    ok, hint = outfits.upgrade_requirement(session, entry, level, WORLD.db.conn)
+    if not ok:
+        await send(session.ws, "ERROR", message=hint)
+        return
+    base = int((entry.get("upgrade_prices") or [0, 0])[level - 2])
+    charged = await _charge_outfitter(session, base)
+    if charged is None:
+        return
+    cost, tax = charged
+    owned.append(f"{set_id}@{level}")
+    session.coins -= cost + tax
+    WORLD.db.save_player_stats(session.player_id, coins=session.coins, owned_cosmetics=json.dumps(owned))
+    session.row = WORLD.db.get_player_by_id(session.player_id)
+    if tax:
+        await _pay_royal_tax(session, "sales_tax_buy", tax)
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    label = "Fine" if level == 2 else "Regal"
+    await send(session.ws, "CHAT_MSG", **{"from": "Mae", "text": f"{entry['name']} raised to {label} for {cost:,} coins (+{tax:,} tax)."})
+
+
 async def handle_save_outfit(session, msg):
+    """SAVE_OUTFIT {slot 0-5, appearance, name?}: six named wardrobe slots."""
     import json
     try:
         slot = int(msg.get("slot"))
     except (TypeError, ValueError):
         return
-    if slot not in (0, 1, 2):
+    if not 0 <= slot < outfits.SAVED_SLOTS:
         return
     appearance, error = _clean_appearance(session, msg.get("appearance"))
     if error:
         await send(session.ws, "ERROR", message=error)
         return
-    outfits = (session._json_list("saved_outfits") + [None, None, None])[:3]
-    outfits[slot] = appearance
-    WORLD.db.save_player_stats(session.player_id, saved_outfits=json.dumps(outfits))
+    outfits_list = outfits.saved_slots(session._json_list("saved_outfits"))
+    name = str(msg.get("name") or (outfits_list[slot] or {}).get("name") or f"Outfit {slot + 1}").strip()[:24]
+    appearance["name"] = name or f"Outfit {slot + 1}"
+    outfits_list[slot] = appearance
+    WORLD.db.save_player_stats(session.player_id, saved_outfits=json.dumps(outfits_list))
     session.row = WORLD.db.get_player_by_id(session.player_id)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
-    await send(session.ws, "CHAT_MSG", **{"from": "Mae", "text": f"Saved outfit {slot + 1}."})
+    await send(session.ws, "CHAT_MSG", **{"from": "Mae", "text": f"Saved \"{appearance['name']}\" to wardrobe slot {slot + 1}."})
 
 
 async def handle_shop_buy(session, msg):
@@ -4202,23 +5344,27 @@ async def handle_shop_buy(session, msg):
         if pet_id not in PETS:
             return
         already = pet_id in session.owned_pets
-        cost = 0 if already else stock["price"]
+        cost = 0 if already else reputation.buy_price(
+            stock["price"], session.reputation, _shop_discount(session))
+        tax = royal_treasury.buy_tax(cost)
         # Expensive pets (above purse cap) can be paid from bank coins
         if not already:
             purse = int(session.coins)
             bank = int(session.bank_coins)
-            if purse + bank < cost:
+            if purse + bank < cost + tax:
                 await send(session.ws, "ERROR", message="You can't afford that (check purse + bank).")
                 return
-            take_purse = min(purse, cost)
+            take_purse = min(purse, cost + tax)
             session.coins -= take_purse
-            session.bank_coins -= (cost - take_purse)
+            session.bank_coins -= (cost + tax - take_purse)
         if not already and stock["qty"] < 99:
             stock["qty"] = max(0, stock["qty"] - 1)
         session.activate_pet(pet_id)
         WORLD.db.save_player_stats(
             session.player_id, coins=session.coins, bank_coins=session.bank_coins,
         )
+        if not already:
+            await _pay_royal_tax(session, "sales_tax_buy", tax)
         await send_shop_state(session, shop_id)
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
         if already:
@@ -4228,18 +5374,20 @@ async def handle_shop_buy(session, msg):
         await send(session.ws, "CHAT_MSG", **{"from": "Pet Emporium", "text": msg_text})
         return
     qty = min(qty, stock["qty"])
-    cost = stock["price"] * qty
-    if qty <= 0 or session.coins < cost:
-        await send(session.ws, "ERROR", message="You can't afford that.")
+    cost = reputation.buy_price(stock["price"], session.reputation, _shop_discount(session)) * qty
+    tax = royal_treasury.buy_tax(cost)
+    if qty <= 0 or session.coins < cost + tax:
+        await send(session.ws, "ERROR", message="You can't afford that (price + royal tax).")
         return
     stock["qty"] -= qty
-    session.coins -= cost
+    session.coins -= cost + tax
     if not WORLD.add_item_to_inventory(session, item_id, qty):
-        session.coins += cost
+        session.coins += cost + tax
         stock["qty"] += qty
         await send(session.ws, "ERROR", message="Your inventory is full.")
         return
     WORLD.db.save_player_stats(session.player_id, coins=session.coins)
+    await _pay_royal_tax(session, "sales_tax_buy", tax)
     await send_shop_state(session, shop_id)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
 
@@ -4256,9 +5404,12 @@ async def handle_shop_sell(session, msg):
     qty = min(qty, have)
     if qty <= 0:
         return
-    value = int(ITEMS[item_id]["value"] * 0.4) * qty
+    each = int(ITEMS[item_id]["value"] * 0.4)
+    value = (reputation.sell_value(each, session.reputation) if each > 0 else 0) * qty
+    tax = royal_treasury.sell_tax(value)
     WORLD.remove_item_qty(session, item_id, qty)
-    gained, left = WORLD.add_coins(session, value)
+    gained, left = WORLD.add_coins(session, value - tax)
+    await _pay_royal_tax(session, "sales_tax_sell", tax)
     if left:
         await send(session.ws, "ERROR", message=f"Purse full ({MAX_PURSE_COINS}). {left} coins lost — bank first next time.")
     await send_shop_state(session, shop_id)
@@ -4325,6 +5476,8 @@ async def handle_equip(session, msg):
             return
         await send(session.ws, "ERROR", message="You can only equip arrows or an Arrow Quiver as ammo.")
         return
+    if eq_slot in gear_rules.ARMOUR_SLOTS:
+        await _take_outfit_off(session)
     old = session.equipment.get(eq_slot)
     session.equipment[eq_slot] = entry["item_id"]
     WORLD.db.set_equipment(session.player_id, eq_slot, entry["item_id"])
@@ -4342,10 +5495,72 @@ async def handle_equip(session, msg):
     )
 
 
+async def _take_outfit_off(session):
+    """Outfits and armour never mix: drop to the plain base clothes. Returns True when an outfit came off."""
+    import json
+    look = gear_rules.saved_look(session)
+    if not gear_rules.wearing_outfit(look):
+        return False
+    base = gear_rules.base_look(look, getattr(session, "gender", "male"), outfits.items())
+    WORLD.db.save_player_stats(session.player_id, appearance=json.dumps(base))
+    session.row = WORLD.db.get_player_by_id(session.player_id)
+    await broadcast_player_state(session)
+    await send(session.ws, "CHAT_MSG", **{"from": "You", "text": gear_rules.OUTFIT_OFF_MSG})
+    return True
+
+
+def _bank_put(session, item_id, qty=1):
+    if ITEMS.get(item_id, {}).get("stackable"):
+        for bslot, bent in session.bank.items():
+            if bent["item_id"] == item_id:
+                bent["qty"] += qty
+                WORLD.db.set_bank_slot(session.player_id, bslot, item_id, bent["qty"])
+                return True
+    for bslot in range(BANK_SLOTS):
+        if bslot not in session.bank:
+            session.bank[bslot] = {"item_id": item_id, "qty": qty}
+            WORLD.db.set_bank_slot(session.player_id, bslot, item_id, qty)
+            return True
+    return False
+
+
+async def _take_armour_off(session):
+    """Putting an outfit on: every armour piece and weapon goes to the bag, or the bank if the bag is full.
+    Returns an error string (and leaves the rest worn) only when neither has room. Nothing is lost."""
+    banked = []
+    for slot, item_id in gear_rules.worn_armour(session):
+        if WORLD.add_item_to_inventory(session, item_id, 1):
+            pass
+        elif _bank_put(session, item_id, 1):
+            banked.append(ITEMS.get(item_id, {}).get("name", item_id))
+        else:
+            await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+            return "Your bag and bank are both full, so your armour can't come off for the outfit."
+        session.equipment[slot] = None
+        WORLD.db.set_equipment(session.player_id, slot, None)
+        if slot == "weapon" and session.combat_style == "archery":
+            session.combat_style = getattr(session, "melee_style", None) or "attack"
+    if banked:
+        await send(session.ws, "CHAT_MSG", **{"from": "Mae", "text": f"Your bag was full, so I sent your {', '.join(banked)} to the bank."})
+    return None
+
+
+async def _outfit_gear_check(session, appearance):
+    """Before an outfit is worn: refuse inside a dungeon, otherwise take the armour off. Returns an error or None."""
+    if not gear_rules.wearing_outfit(appearance):
+        return None
+    if gear_rules.worn_armour(session) and gear_rules.in_real_dungeon(session):
+        return "You can't change into an outfit inside a dungeon."
+    return await _take_armour_off(session)
+
+
 async def handle_unequip(session, msg):
     slot_name = msg.get("equip_slot")
     item_id = session.equipment.get(slot_name)
     if not item_id:
+        return
+    if slot_name in gear_rules.LOCKED_IN_DUNGEON and gear_rules.in_real_dungeon(session):
+        await send(session.ws, "ERROR", message=gear_rules.unequip_locked_message(slot_name))
         return
     # Ammo: unequipping a quiver returns the pouch; contents stay stored for next equip.
     if slot_name == "ammo":
@@ -5163,7 +6378,29 @@ async def handle_quest_accept(session, msg):
         return
     session.quests[quest_id] = {"status": "active", "progress": 0}
     WORLD.db.set_quest_progress(session.player_id, quest_id, "active", 0)
+    if qdef["type"] == "guild":
+        import clans
+        if clans.clan_of(session.player_id):
+            await guild_tutorial_event(session, "guild", quiet=True)
     await send(session.ws, "QUEST_LOG", quests={qid: quest_status_for(session, qid) for qid in QUESTS})
+
+
+GUILD_STEP_BITS = {"guild": 1, "deposit": 2}
+
+
+async def guild_tutorial_event(session, step, quiet=False):
+    """guild_basics steps come from server events: joining/creating and depositing."""
+    prog = session.quests.get("guild_basics")
+    if not prog or prog.get("status") != "active":
+        return
+    prog["progress"] = int(prog.get("progress") or 0) | GUILD_STEP_BITS[step]
+    if prog["progress"] == 3:
+        prog["status"] = "ready"
+        if not quiet:
+            await send(session.ws, "CHAT_MSG", **{"from": "Guildmaster Ysolde",
+                       "text": "Well done. Come back to me at the castle gate for your reward."})
+    WORLD.db.set_quest_progress(session.player_id, "guild_basics", prog["status"], prog["progress"])
+    session.quest_log_dirty = True
 
 
 async def handle_quest_turnin(session, msg):
@@ -5196,7 +6433,7 @@ async def handle_quest_turnin(session, msg):
                 return
         for iid, need in qdef["targets"].items():
             session.consume_craft_input(iid, need)
-    elif qdef["type"] in ("kill", "find_npc"):
+    elif qdef["type"] in ("kill", "find_npc", "guild"):
         if prog["status"] != "ready":
             await send(session.ws, "ERROR", message="You haven't finished this quest yet.")
             return
@@ -5225,7 +6462,14 @@ async def handle_quest_turnin(session, msg):
 
 
 async def grant_quest_rewards(session, rewards):
-    """Apply coins / xp / single item / item list rewards from a quest def."""
+    """Apply coins / xp / single item / item list rewards from a quest def.
+
+    Every quest completion goes through here, so it also grants standing and Charisma.
+    """
+    await social_event(
+        session, "quest", rep=int((rewards or {}).get("reputation", reputation.REP_QUEST)),
+        xp={"charisma": int((rewards or {}).get("charisma_xp", reputation.CHARISMA_QUEST_XP))},
+    )
     if not rewards:
         return
     if "coins" in rewards:
@@ -5383,6 +6627,12 @@ async def handler(ws):
                     await handle_leaderboard(ws, msg)
                 continue
 
+            if mtype == "INPUT_PING":
+                await idle_input_ping(session, msg)
+                continue
+            if mtype not in PASSIVE_MESSAGE_TYPES:
+                await note_real_input(session)
+
             if mtype == "LEADERBOARD":
                 await handle_leaderboard(ws, msg)
             elif mtype == "ALLOCATE_STATS":
@@ -5422,6 +6672,16 @@ async def handler(ws):
                 await handle_craft(session, msg)
             elif mtype == "TALK":
                 await handle_talk(session, msg)
+            elif mtype == "PERSUADE":
+                await handle_persuade(session, msg)
+            elif mtype == "NPC_OPTION":
+                await handle_npc_option(session, msg)
+            elif mtype == "WELCOME_SKIP":
+                await welcome_skip(session)
+            elif mtype in ("COURT_CHOOSE", "NEWS_BOARD", "KINGDOM_STATE"):
+                await handle_politics_msg(session, mtype, msg)
+            elif isinstance(mtype, str) and mtype.startswith("RULE_"):
+                await handle_rule(session, mtype, msg)
             elif mtype == "TELEPORT":
                 await handle_teleport(session, msg)
             elif mtype == "STAIR":
@@ -5447,6 +6707,10 @@ async def handler(ws):
                 await handle_buy_cosmetics(session, msg)
             elif mtype == "SAVE_OUTFIT":
                 await handle_save_outfit(session, msg)
+            elif mtype == "BUY_PALETTE":
+                await handle_buy_palette(session, msg)
+            elif mtype == "UPGRADE_OUTFIT":
+                await handle_upgrade_outfit(session, msg)
             elif mtype == "SET_GENDER":
                 await handle_set_gender(session, msg)
             elif mtype == "EQUIP":
@@ -5497,22 +6761,135 @@ async def handler(ws):
     except websockets.exceptions.ConnectionClosed:
         pass
     finally:
-        if session:
-            if session.dungeon and session.dungeon.get("id") == "castle_realm":
-                session.x = int(session.dungeon.get("return_x", session.x))
-                session.y = int(session.dungeon.get("return_y", session.y))
-                session.dungeon = None
-                WORLD.db.save_player_position(session.player_id, session.x, session.y)
-                _clear_dungeon_resume(session)
-            elif session.dungeon:
-                _save_dungeon_resume(session)
-                session.dungeon = None
+        if session and WORLD.sessions.get(session.player_id) is session:
+            if _should_linger(session):
+                await begin_linger(session)
             else:
-                WORLD.db.save_player_position(session.player_id, session.x, session.y)
-                _clear_dungeon_resume(session)
-            WORLD.db.save_player_stats(session.player_id, hp=session.hp)
-            del WORLD.sessions[session.player_id]
-            log.info("%s disconnected", session.char_name)
+                await logout_session(session, "disconnect")
+
+
+async def logout_session(session, reason="logout"):
+    """The one logout path (LOGOUT, socket close, idle kick, end of a combat linger): save and remove."""
+    if WORLD.sessions.get(session.player_id) is not session:
+        return
+    if getattr(session, "trade_partner_id", None):
+        await handle_trade_cancel(session, {})
+    if session.dungeon and session.dungeon.get("id") == "castle_realm":
+        session.x = int(session.dungeon.get("return_x", session.x))
+        session.y = int(session.dungeon.get("return_y", session.y))
+        session.dungeon = None
+        WORLD.db.save_player_position(session.player_id, session.x, session.y)
+        _clear_dungeon_resume(session)
+    elif session.dungeon:
+        _save_dungeon_resume(session)
+        session.dungeon = None
+    else:
+        WORLD.db.save_player_position(session.player_id, session.x, session.y)
+        _clear_dungeon_resume(session)
+    WORLD.db.save_player_stats(session.player_id, hp=session.hp)
+    del WORLD.sessions[session.player_id]
+    log.info("%s disconnected (%s)", session.char_name, reason)
+
+
+# ---- idle logout and combat linger ----------------------------------------------------------------
+class _GhostSocket:
+    """Stands in for a closed socket while a body lingers after a mid-fight disconnect."""
+    closed = True
+
+    async def send(self, _raw):
+        return None
+
+    async def close(self, *args, **kwargs):
+        return None
+
+
+def _linger_ticks(session):
+    return PK_LINGER_TICKS if getattr(session, "player_killer", False) else COMBAT_LINGER_TICKS
+
+
+def _in_combat_recently(session, tick=None):
+    tick = WORLD.tick_count if tick is None else tick
+    return bool(session.in_combat_with) or tick - int(session.last_combat_tick) < COMBAT_LINGER_TICKS
+
+
+def _should_linger(session):
+    return _in_combat_recently(session) and not getattr(session, "idle_kicked", False)
+
+
+async def begin_linger(session):
+    """Socket closed mid-fight: the body stays (attackable, can die) until the linger runs out."""
+    if getattr(session, "trade_partner_id", None):
+        await handle_trade_cancel(session, {})
+    session.ws = _GhostSocket()
+    session.gathering_node = None
+    session.linger_until = WORLD.tick_count + _linger_ticks(session)
+    session.linger_started = WORLD.tick_count
+    log.info("%s disconnected mid-fight; body stays %d ticks", session.char_name, _linger_ticks(session))
+
+
+async def note_real_input(session):
+    tick = WORLD.tick_count
+    session.last_input_tick = session.last_real_input_tick = tick
+    if session.idle_warned:
+        session.idle_warned = False
+        await send(session.ws, "IDLE_CLEAR")
+
+
+async def idle_input_ping(session, msg):
+    """Credit local input the client saw, capped: never later than now, never past the grace after a real action."""
+    tick = WORLD.tick_count
+    try:
+        ago_ms = max(0, min(10 ** 7, int(msg.get("last_input_ms_ago") or 0)))
+    except (TypeError, ValueError):
+        return
+    claimed = tick - int(-(-ago_ms // int(TICK_SECONDS * 1000)))
+    real = session.last_real_input_tick if session.last_real_input_tick is not None else tick
+    credit = min(claimed, tick, real + INPUT_PING_GRACE_TICKS)
+    if session.last_input_tick is None or credit > session.last_input_tick:
+        session.last_input_tick = credit
+    if session.idle_warned and tick - session.last_input_tick < IDLE_WARN_TICKS:
+        session.idle_warned = False
+        await send(session.ws, "IDLE_CLEAR")
+
+
+async def idle_kick(session):
+    session.idle_kicked = True
+    if getattr(session, "trade_partner_id", None):
+        await handle_trade_cancel(session, {})
+    await send(session.ws, "LOGGED_OUT", reason="idle")
+    log.info("%s logged out for inactivity", session.char_name)
+    try:
+        # closing waits for the handshake, so don't hold the game tick on it
+        asyncio.ensure_future(session.ws.close())
+    except Exception:
+        pass
+    # the handler's finally runs logout_session once the socket loop ends
+
+
+async def process_idle():
+    tick = WORLD.tick_count
+    for s in list(WORLD.sessions.values()):
+        if s.last_input_tick is None:
+            s.last_input_tick = s.last_real_input_tick = tick
+        hp = int(getattr(s, "hp", 0) or 0)
+        if s.in_combat_with or (s._idle_hp is not None and hp < s._idle_hp):
+            s.last_combat_tick = tick
+        s._idle_hp = hp
+        if s.linger_until is not None:
+            # 10 s (60 s PK) after the last hit; a fight that never ends still lets go after 5 minutes
+            if (tick >= max(s.linger_until, s.last_combat_tick + _linger_ticks(s))
+                    or tick - getattr(s, "linger_started", tick) >= IDLE_LOGOUT_TICKS):
+                await logout_session(s, "combat linger over")
+            continue
+        if s.idle_exempt or s.idle_kicked:
+            continue
+        idle = tick - s.last_input_tick
+        if idle >= IDLE_WARN_TICKS and not s.idle_warned:
+            s.idle_warned = True
+            secs = max(1, int(round((IDLE_LOGOUT_TICKS - idle) * TICK_SECONDS)))
+            await send(s.ws, "IDLE_WARNING", seconds=secs)
+        if idle >= IDLE_LOGOUT_TICKS and not _in_combat_recently(s, tick):
+            await idle_kick(s)
 
 
 # ---------------------------------------------------------------------------
@@ -5577,6 +6954,8 @@ async def game_loop():
             await _ember_cones()
             await process_combat(events)
             await process_gathering(events)
+            await process_fishing_spots()
+            await process_idle()
             process_monster_respawns()
             process_resource_respawns()
             process_fires()
@@ -5593,6 +6972,16 @@ async def game_loop():
             await flush_quest_logs()
             if feature_flags.USE_PLAYER_HOUSING and WORLD.tick_count % 500 == 0:
                 await _housing.tick_leases()
+            if WORLD.tick_count % 10 == 0:
+                await throne_live.tick()
+                await politics_live.tick()
+            if WORLD.tick_count % 100 == 0:
+                await ruling_daily_tick()
+            if WORLD.tick_count % 500 == 0:
+                for _s in list(WORLD.sessions.values()):
+                    await settle_work(_s)
+                import clans
+                await clans.tick_upkeep()
             if feature_flags.USE_CASTLE_OWNERS and WORLD.tick_count % 500 == 0:
                 import castle_owners
                 await castle_owners.tick_taxes()
@@ -5780,7 +7169,12 @@ async def process_combat(events):
                     if wyrm is False:
                         session.in_combat_with = None
                     primary = None
-        if primary is None and attackers:
+        fights = gear_rules.can_fight(session)
+        if not fights:
+            if primary is not None:
+                session.in_combat_with = None
+            primary = None
+        if primary is None and attackers and fights:
             # Auto-retaliate only when the monster forces it (default). Bosses like
             # the dragon can hit you without locking you into fighting back.
             fleeing = time.time() < float(getattr(session, "combat_flee_until", 0) or 0)
@@ -5802,7 +7196,8 @@ async def process_combat(events):
             in_reach = wyrm if wyrm is not None else chebyshev(session.x, session.y, primary.x, primary.y) <= reach
             if in_reach:
                 ranged = bool(session.using_bow())
-                skip_player_swing = time.time() < float(getattr(session, "next_swing_at", 0) or 0)
+                # 50 ms grace so a 1.2s swing is not pushed a whole tick late by loop jitter
+                skip_player_swing = time.time() < float(getattr(session, "next_swing_at", 0) or 0) - 0.05
                 if skip_player_swing:
                     pass
                 elif ranged:
@@ -5817,7 +7212,12 @@ async def process_combat(events):
                     else:
                         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
                 if not skip_player_swing:
-                    session.next_swing_at = time.time() + 1.2
+                    wstats = None if ranged else weapon_stats(session.equipment.get("weapon"))
+                    interval = 1.2 if not wstats else SWING_SECONDS_PER_SPEED * float(wstats["attack_speed"])
+                    now_ = time.time()
+                    prev_ = float(getattr(session, "next_swing_at", 0) or 0)
+                    # Chained swings keep the exact average pace (an axe's 1.5s alternates 1.2/1.8 ticks)
+                    session.next_swing_at = (prev_ if now_ - prev_ < 0.6 else now_) + interval
                     mdef = primary.def_stats()
                     dmg, hit = combat.resolve_hit(session.combat_stats(), {
                         "attack": 1, "strength": 1, "defence": mdef["defence"],
@@ -5828,7 +7228,10 @@ async def process_combat(events):
                         flat = int(session.jewelry_ability_total("void_strike"))
                         if flat:
                             dmg += flat
-                        crit_chance = session.jewelry_ability_total("crit")
+                        if wstats and wstats.get("heavy_bonus"):
+                            dmg = max(1, int(round(dmg * (1 + float(wstats["heavy_bonus"])))))
+                        crit_chance = session.jewelry_ability_total("crit") + (
+                            float(wstats.get("crit_chance") or 0) if wstats else 0.0)
                         if crit_chance > 0 and random.random() < min(0.45, crit_chance):
                             dmg = max(1, int(round(dmg * session.jewelry_crit_mult())))
                             crit = True
@@ -6321,6 +7724,11 @@ async def process_gathering(events):
             "xp": session.xp[ydef["skill"]], "level": after, "leveled_up": after > before,
         }})
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        if fishing_spots.is_spot(node, ydef):
+            # shared stock: every catch by anyone drains it; the spot moves when it's gone
+            if fishing_spots.take_catch(node, WORLD.tick_count, ydef):
+                await fish_spot_moves(session.gathering_node)
+            continue
         # Quiet gather feedback — only announce depletion / first hit style messages elsewhere
         if ydef["depletion_chance"] > 0 and random.random() < ydef["depletion_chance"]:
             node["depleted"] = True
@@ -6349,6 +7757,8 @@ def _respawn_delay(monster):
 
 
 def _mark_monster_dead(monster):
+    if getattr(monster, "raid_id", None) is not None:   # phase 9: remember who drove a raider off
+        monster.killer_id = monster.target_player_id
     monster.alive = False
     monster.defeated = True
     monster.target_player_id = None
@@ -6391,6 +7801,32 @@ def process_monster_respawns():
             continue
         if WORLD.tick_count >= m.respawn_at_tick:
             _revive_monster(m)
+
+
+async def fish_spot_moves(pos):
+    """The spot leaves its tile: everyone fishing it stops and is told, then it waits to reappear nearby."""
+    pos = tuple(pos)
+    node = WORLD.resource_nodes.get(pos)
+    if not node:
+        return
+    ydef = RESOURCE_YIELDS.get(node["type"]) or {}
+    WORLD.moving_fish_spots.append(fishing_spots.depart(WORLD.resource_nodes, pos, WORLD.tick_count, ydef))
+    for s in list(WORLD.sessions.values()):
+        if s.gathering_node and tuple(s.gathering_node) == pos:
+            s.gathering_node = None
+            await send(s.ws, "CHAT_MSG", **{"from": "You", "text": fishing_spots.MOVED_MSG})
+
+
+async def process_fishing_spots():
+    """Timed-out spots move; waiting spots come back 3-6 tiles from home."""
+    tick = WORLD.tick_count
+    for pos, node in list(WORLD.resource_nodes.items()):
+        if node.get("is_fish_spot") and fishing_spots.expired(node, tick):
+            await fish_spot_moves(pos)
+    if WORLD.moving_fish_spots:
+        from world_map import WATER, WALKABLE_TILES
+        fishing_spots.return_due(WORLD.moving_fish_spots, WORLD.resource_nodes, WORLD.grid, tick,
+                                 WATER, WALKABLE_TILES, RESOURCE_YIELDS)
 
 
 def process_resource_respawns():

@@ -181,7 +181,7 @@ def draw(
         return False
     
     # Pick scale tag
-    tag, base = ("2x", 80) if size >= 80 else ("1x", 40)
+    tag, base = ("2x", 80) if size > 40 else ("1x", 40)
     k = size / float(base)
     
     # Determine state
@@ -243,7 +243,7 @@ def anchor(mtype: str, size: int, facing, state: str, frame: int, name: str) -> 
         return (0, 0)
     
     # Get scale factor
-    tag, base = ("2x", 80) if size >= 80 else ("1x", 40)
+    tag, base = ("2x", 80) if size > 40 else ("1x", 40)
     k = size / float(base)
     
     # Look up anchor in 4x coordinates

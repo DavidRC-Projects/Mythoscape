@@ -1,5 +1,5 @@
 """
-equipment_ui_v2.py — USE_NEW_EQUIPMENT_UI Equipment & Stats screen.
+equipment_ui_v2.py — Equipment & Stats screen.
 
 Same modal rect (90,36,760,560) so handle_equipment_click()'s click-outside
 close still works; same self.equip_slot_rects keys (click slot = UNEQUIP);
@@ -349,6 +349,24 @@ def draw(self, ITEMS, karma_slot_bonus, sprites, weapon_style):
     y += 24
     scr.blit(self.font_small.render(
         f"Combat {self.player_combat_level()}   ·   Total {self.player_total_level()}", True, (170, 230, 150)), (x0, y))
+    # Weapon class stats (used by combat) and the worn-set glow
+    import eclipse_fx
+    from content import weapon_stats
+    y += 22
+    ws = weapon_stats(eq.get("weapon")) if eq.get("weapon") else None
+    wline = (f"Weapon: Speed {ws['attack_speed']} · Crit {round(ws['crit_chance'] * 100)}% · "
+             f"Heavy +{round(ws['heavy_bonus'] * 100)}%") if ws else "Weapon: no sword or axe"
+    scr.blit(self.font_tiny.render(wline, True, (230, 200, 120)), (x0, y))
+    y += 16
+    tier = eclipse_fx.fx_tier(eq)
+    if tier:
+        name, how = eclipse_fx.TIER_LABELS.get(tier, (tier.title(), ""))
+        rgb = eclipse_fx.SPARKLE_TIERS[tier]["aura"]
+        pygame.draw.circle(scr, rgb, (x0 + 5, y + 7), 5)
+        scr.blit(self.font_tiny.render(f"Set glow: {name} ({how})", True, rgb), (x0 + 14, y))
+    else:
+        scr.blit(self.font_tiny.render("Set glow: none (full Mithril, Adamantite or Mythos set)", True, MUTED),
+                 (x0, y))
 
     ft = self.font_small.render("Hover a slot for details · Esc / E to close", True, MUTED)
     scr.blit(ft, (box.x + 20, box.bottom - 30))

@@ -358,7 +358,7 @@ def _shots(base, live):
         "Combat 1/100",
         "Castle 0/1",
         "Quests 0/N",
-        "0/25 members",
+        "0/20 members",
     ]
     for i, line in enumerate(lines):
         pen.text((16, 48 + i * 22), line, fill=(210, 220, 230))
@@ -370,7 +370,7 @@ def _shots(base, live):
     pen = ImageDraw.Draw(clan)
     pen.text((12, 12), "Moonpetal", fill=(200, 220, 180))
     pen.text((12, 36), "Leader Ada", fill=(200, 220, 180))
-    pen.text((12, 60), "1/25 members", fill=(200, 220, 180))
+    pen.text((12, 60), "1/20 members", fill=(200, 220, 180))
     pen.text((12, 90), "Journal", fill=(230, 210, 80))
     clan.save(os.path.join(out, "after_clan_summary.png"))
     print("screenshots written to", out)

@@ -45,7 +45,15 @@ ENTER_DUNGEON    {}                        -- enter Tidehollow Cave (must be at 
 LEAVE_DUNGEON    {}                        -- abandon current Tidehollow run
 WISH             {kind}                   -- power | gear | gold  (at wishing well)
 WISH_STAT        {skill}                  -- permanent +1 after rare power wish
+UPDATE_APPEARANCE {appearance}           -- save a look; every paid piece must be owned (skin_tone checked)
+BUY_COSMETICS    {items: [id], appearance, set?}  -- buy unowned try-on pieces (unlock + shop price + royal tax), wear
+BUY_PALETTE      {set | item, palette}    -- extra garment colour; owned as "palette:<set|item>:<palette>"
+UPGRADE_OUTFIT   {set, level}             -- 2 = Fine, 3 = Regal; owned as "<set>@<level>"
+SAVE_OUTFIT      {slot: 0-5, appearance, name?}  -- six named wardrobe slots
+SET_GENDER       {gender}                 -- creator only
 LOGOUT           {}
+INPUT_PING       {last_input_ms_ago}      -- every 30 s while there was local input; doesn't count as an action
+                                              -- by itself and can't extend idle time past 30 s after the last one
 
 Server -> Client message types
 -------------------------------
@@ -76,6 +84,9 @@ TRADE_CANCELLED   {reason}
 QUEST_LOG         {quests}
 QUEST_COMPLETE    {quest_id, rewards, quest_points?, total_quest_points?}
 ERROR             {message}
+IDLE_WARNING      {seconds}               -- 4:30 idle: logout in <seconds> unless you act
+IDLE_CLEAR        {}                      -- you acted; hide the warning
+LOGGED_OUT        {reason}                -- reason "idle"; the server closes the socket after this
 """
 
 TICK_SECONDS = 0.6  # one "game tick", matches classic RuneScape's 0.6s tick

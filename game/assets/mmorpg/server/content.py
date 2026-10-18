@@ -45,6 +45,11 @@ ITEMS = {
         "name": "Mythos Longsword", "type": "weapon", "stackable": False, "value": 8000,
         "equip_slot": "weapon", "str_bonus": 100, "att_bonus": 100,
     },
+    "mythos_battleaxe": {
+        "name": "Mythos Battleaxe", "type": "weapon", "stackable": False, "value": 9000,
+        "equip_slot": "weapon", "str_bonus": 128, "att_bonus": 54,
+        "desc": "A wing-shaped crimson double axe with a flame-edged bit. Dragon Mythos tier.",
+    },
     "mythos_body": {
         "name": "Mythos Armour", "type": "armor", "stackable": False, "value": 12000,
         "equip_slot": "body", "def_bonus": 100,
@@ -580,8 +585,16 @@ ITEMS = {
     },
 }
 
+# Warden Tamsin's welcome kit (server/welcome_kit.py): bronze stats and bronze art ("art_as"), bound to the
+# account. No trading, dropping or selling (worth 1), but it can sit in the bank.
+for _kit_id, _base_id in (("recruit_bronze_helmet", "bronze_helmet"), ("recruit_bronze_body", "bronze_body"),
+                          ("recruit_bronze_legs", "bronze_legs"), ("recruit_bronze_sword", "bronze_sword")):
+    ITEMS[_kit_id] = dict(ITEMS[_base_id], name="Recruit's " + ITEMS[_base_id]["name"], value=1,
+                          tradeable=False, sellable=False, bankable=True, art_as=_base_id,
+                          desc="A gift from Warden Tamsin. Bound to you: it can't be traded, dropped or sold.")
+
+# The sword comes with Warden Tamsin's kit now (one grant path), not in the starting bag.
 STARTER_INVENTORY = [
-    ("bronze_sword", 1),
     ("bronze_axe", 1),
     ("bronze_pickaxe", 1),
     ("small_fishing_net", 1),
@@ -783,6 +796,7 @@ MONSTERS = {
             ("adamantite_ore", 0.55, (1, 3)),
             ("adamantite_bar", 0.12, (1, 1)),
             ("mythos_longsword", 0.012, (1, 1)),   # 1 in ~83
+            ("mythos_battleaxe", 0.010, (1, 1)),   # 1 in 100
             ("mythos_helmet", 0.01, (1, 1)),       # 1 in 100
             ("mythos_legs", 0.008, (1, 1)),        # 1 in 125
             ("mythos_shield", 0.008, (1, 1)),      # 1 in 125
@@ -914,6 +928,7 @@ MONSTERS = {
             (("mythos_longsword", "mythos_helmet"), 0.06, (1, 1)),
             (("mythos_legs", "mythos_shield"), 0.04, (1, 1)),
             ("mythos_longsword", 0.03, (1, 1)),
+            ("mythos_battleaxe", 0.025, (1, 1)),
             ("mythos_body", 0.02, (1, 1)),
             ("super_attack_potion", 0.25, (1, 2)),
             ("super_strength_potion", 0.25, (1, 2)),
@@ -1040,6 +1055,7 @@ MONSTERS = {
             ("coins", 1.0, (400, 1200)),
             ("adamantite_bar", 0.25, (1, 2)),
             ("mythos_longsword", 0.03, (1, 1)),
+            ("mythos_battleaxe", 0.025, (1, 1)),
             ("mythos_body", 0.02, (1, 1)),
             ("mythos_shield", 0.025, (1, 1)),
             # Future: ("eclipse_shield", 0.01, (1, 1)),  # Eclipse Aegis — not enabled yet
@@ -1236,6 +1252,29 @@ MONSTERS = {
     },
 }
 
+
+def _apply_monster_levels():
+    """Monster levels are computed on the player scale (combat.monster_combat_level), never hand-typed.
+
+    The old hand-typed number is kept as "tier": loot gates (gear from 70, low-level drops under 50) and other
+    difficulty knobs read the tier, so the drop tables don't change. Set "level_override" for a special case.
+    """
+    import logging
+    import combat
+    log = logging.getLogger("content.monster_levels")
+    changes = []
+    for mid, mdef in MONSTERS.items():
+        mdef.setdefault("tier", int(mdef.get("level") or 1))
+        new = combat.monster_combat_level(mdef, mid)
+        changes.append((mid, mdef["tier"], new))
+        mdef["level"] = new
+    for mid, old, new in changes:
+        log.info("monster level %s: %s -> %s", mid, old, new)
+    return changes
+
+
+MONSTER_LEVEL_CHANGES = _apply_monster_levels()
+
 # Under this combat level, bones are rare. Gear still needs HIGH_GEAR_LEVEL.
 LOW_LEVEL_DROP_CAP = 50
 RARE_BONE_CHANCE = 0.15
@@ -1283,7 +1322,7 @@ def drops_for_kill(monster_type):
     """
     spec = MONSTERS.get(monster_type) or {}
     drops = list(spec.get("drops") or [])
-    level = int(spec.get("level") or 1)
+    level = int(spec.get("tier") or spec.get("level") or 1)     # loot gates use the tier, not the shown level
     dragon = "dragon" in str(monster_type)
     out = []
     for item_id, chance, bounds in drops:
@@ -1426,6 +1465,17 @@ RESOURCE_YIELDS = {
     },
 }
 
+# Fishing spots don't deplete per player any more: each spot has a shared stock and moves when it runs out
+# (server/fishing_spots.py). stock = catches per spawn, life_ticks from the first catch, move_radius from
+# home, move_ticks hidden before it comes back.
+for _ydef in RESOURCE_YIELDS.values():
+    if _ydef.get("skill") == "fishing":
+        _ydef["depletion_chance"] = 0.0
+        _ydef.setdefault("stock", [10, 20])
+        _ydef.setdefault("life_ticks", [34, 67])
+        _ydef.setdefault("move_radius", [3, 6])
+        _ydef.setdefault("move_ticks", [15, 25])
+
 # ---------------------------------------------------------------------------
 # NPCS
 # ---------------------------------------------------------------------------
@@ -1460,12 +1510,23 @@ NPCS = [
      ],
      "teleport_teacher": True},
 
+    {"id": "warden_tamsin", "name": "Warden Tamsin", "x": 36, "y": 22,
+     "lines": ["Well met! Talk to me for your Bronze kit and a word on how things work."],
+     "welcome_guide": True},
+
     {"id": "outfitter_mae", "name": "Mae the Outfitter", "x": 51, "y": 58,
      "lines": ["Welcome to Mythos Outfitters. Hair, clothes, and full outfits."],
      "cosmetic": "outfitters"},
 
     {"id": "shopkeeper_joe", "name": "Shopkeeper Joe", "x": 45, "y": 7,
-     "lines": ["Welcome to my general store!", "Take a look at my stock."], "shop_id": "general_store"},
+     "lines": ["Welcome to my general store!", "Take a look at my stock.",
+         "Prices went up again. Not mine. The Crown's cut.",
+         "Every bridge has a toll, every road has a tax. My stock pays both before it reaches this shelf."], "shop_id": "general_store",
+     # Phase 3 persuasion demo: one bit of free advice for a charming customer.
+     "persuade": {"req": 5,
+                  "success": ["Alright, since you asked nicely: sell to me when you're Respected. My prices soften for friends.",
+                              "And bank your coins before the land fee day. The collector takes from the bank first."],
+                  "fail": ["Advice costs extra. Come back when you've learned some manners."]}},
 
     {"id": "packer_nell", "name": "Nell the Packer", "x": 42, "y": 16,
      "lines": [
@@ -1486,6 +1547,8 @@ NPCS = [
          "I stock everyday pieces. Rubies, diamonds, onyx and void jewelry you'll have to find yourself.",
          "I'll buy any jewelry or gems you bring, rare included — just not for a king's ransom.",
          "Need a Gem Bag? It packs unset stones so your pack stays clear for the anvil.",
+         "The taxes are terrible. Fortunately, I can afford them.",
+         "Gold always finds its way up the hill. I just make sure some of it stops here.",
      ],
      "shop_id": "jewelry_shop", "quest_id": "liras_lost_locket"},
 
@@ -1505,6 +1568,8 @@ NPCS = [
          "Welcome to my smithy! Furnace for smelting, anvil for smithing.",
          "I sell bronze, iron, steel, and mithril. Adamantite you smith yourself — Mythos is not for sale.",
          "I buy ores, bars, weapons and armour — open the shop to buy or sell.",
+         "Knight orders keep coming. They want better swords.",
+         "Meanwhile the people can't afford horseshoes.",
      ],
      "shop_id": "blacksmith_shop", "quest_id": "ore_for_the_forge", "forge": True},
 
@@ -1528,11 +1593,50 @@ NPCS = [
      "lines": [
          "The rats in the mine have gotten out of hand. Could you thin their numbers?",
          "Those giant rats leave tails behind — bring me a handful and I'll pay extra.",
+         "In my day the King visited the village. Now only his collectors do.",
      ],
      "quest_ids": ["rat_problem", "rat_tails"]},
 
+    # Crownfall phase 8: Hall of Records (north-east room of the King's Great Hall)
+    {"id": "keeper_records", "name": "Keeper of Records", "x": 42, "y": 4, "plane": "king_f1",
+     "lines": ["Every reign is written here. Ask, and I'll read you the longest."]},
+
+    # Crownfall phase 7: the paths to the throne
+    {"id": "royal_herald", "name": "Royal Herald", "x": 156, "y": 78,
+     "lines": ["By the old law, a strong guild may challenge for the Crown.",
+               "Combat 100, a castle of your own, every quest done, and a guild fit for the Royal Challenge."]},
+    {"id": "mistress_celia", "name": "Mistress of the Robes Celia", "x": 156, "y": 81,
+     "lines": ["The court has its own ways to the throne, for a lady with the manners for it."]},
+    {"id": "chaplain_mirelle", "name": "Chaplain Mirelle", "x": 9, "y": 9,
+     "lines": ["I wed those who come to me together. The ceremony is 10,000 gold, shared between you."]},
+
+    # Crownfall phase 6: noble patents
+    {"id": "chamberlain_aric", "name": "Lord Chamberlain Aric", "x": 154, "y": 82,
+     "lines": ["The Crown grants patents of rank to those of good standing, manners and means.",
+               "Squire, Knight, Baron, Count, Duke. One step at a time."]},
+
+    # Crownfall phase 5: guild tutorial
+    {"id": "guildmaster_ysolde", "name": "Guildmaster Ysolde", "x": 154, "y": 79,
+     "quest_id": "guild_basics",
+     "lines": [
+         "A guild charter costs 10,000 coins from your bank (/guild create <name>).",
+         "Ranks: Leader, Officer, Member, Recruit. Officers invite and kick; Members may draw 5,000 a day.",
+         "The guild bank holds coins. Hire NPC recruits (Guard, Squire, Steward) for 5,000 and 250 a day.",
+         "The Royal Challenge needs 20 members: at least 12 real players, and up to 8 active recruits.",
+     ]},
+
+    # Crownfall phase 4: apprentice masters (options handled by server/apprentice.py)
+    {"id": "master_hollis", "name": "Farmer Hollis", "x": 44, "y": 43, "apprentice": "farm",
+     "lines": ["The farm always needs hands. Sign on and I'll pay you for every hour you're on my books."]},
+    {"id": "master_wren", "name": "Fletcher Wren", "x": 74, "y": 26, "apprentice": "workshop",
+     "lines": ["Elena sells the bows. I run the workshop behind them. Want steady work?"]},
+    {"id": "master_doran", "name": "Master Smith Doran", "x": 84, "y": 12, "apprentice": "smithy",
+     "lines": ["Gareth forges for the shop. I train apprentices. An hour at my bellows earns honest coin."]},
+
     {"id": "farmer_tom", "name": "Farmer Tom", "x": 41, "y": 40,
-     "lines": ["My daughter Mia wandered off into the forest and hasn't come back!"],
+     "lines": ["My daughter Mia wandered off into the forest and hasn't come back!",
+         "Used to sell wheat in the market. Now half of what I grow goes to the Crown.",
+         "The collector counts my sacks better than I do."],
      "quest_id": "lost_child"},
 
     {"id": "innkeeper_sarah", "name": "Innkeeper Sarah", "x": 9, "y": 40,
@@ -1540,6 +1644,7 @@ NPCS = [
          "Rooms are full up, but stay a while and rest your feet.",
          "Cook your catch on the hearth — raw fish won't restore your health.",
          "Bring me a platter of cooked trout for the evening rush and I'll tip you well.",
+         "Rooms are full of farmers who couldn't pay their land fees.",
      ],
      "quest_id": "inn_special"},
 
@@ -1548,31 +1653,38 @@ NPCS = [
          "Halt! ...just kidding, welcome to the village.",
          "Stay safe out in the wilds.",
          "Goblins keep spilling from the dungeon. Thin eight of them for the watch.",
+         "You think we enjoy collecting taxes? The King's army has to eat too.",
      ],
      "quest_id": "goblin_watch"},
 
     {"id": "guard_aldric", "name": "Guard Aldric", "x": 28, "y": 50,
-     "lines": ["The rat mine is under the volcano, just south of Emberdeep."]},
+     "lines": ["The rat mine is under the volcano, just south of Emberdeep.",
+         "I'm meant to note who leaves the village with full carts. It's never the villagers."]},
 
     {"id": "village_kid_timmy", "name": "Timmy", "x": 28, "y": 22,
-     "lines": ["Wanna race? ...no? Okay."]},
+     "lines": ["Wanna race? ...no? Okay.",
+         "My dad says the King has a room just for coins. Do you think he swims in it?"]},
 
     {"id": "village_idiot_bob", "name": "Bob", "x": 18, "y": 24,
-     "lines": ["I once punched a goblin. It hurt. A lot. Don't recommend it."]},
+     "lines": ["I once punched a goblin. It hurt. A lot. Don't recommend it.",
+         "I tried paying my tax in goblin teeth. They didn't laugh."]},
 
     {"id": "priest_cedric", "name": "Priest Cedric", "x": 6, "y": 8,
      "lines": [
          "May your travels be safe. If you're ever low on health, a meal will do you good.",
          "The fallen leave bones. Bring me a stack and I'll bless your karma.",
+         "Even the collection plate is tithed now. The Crown takes a tenth of our charity.",
      ],
      "quest_id": "blessed_bones"},
 
     {"id": "monk_healer", "name": "Monk Alaric", "x": 50, "y": 26,
-     "lines": ["Peace be with you, traveler."]},
+     "lines": ["Peace be with you, traveler.",
+         "A kingdom is its people. Someone should remind the castle."]},
 
     # Forest / lake
     {"id": "old_fisherman_pete", "name": "Old Fisherman Pete", "x": 106, "y": 16,
-     "lines": ["Bring me some fresh shrimp and I'll teach you a thing or two about fishing."],
+     "lines": ["Bring me some fresh shrimp and I'll teach you a thing or two about fishing.",
+         "They tax the lake now. Per fish. I've started throwing the small ones back out of spite."],
      "quest_id": "fishermans_request"},
 
     {"id": "mia", "name": "Mia", "x": 102, "y": 8,
@@ -1584,7 +1696,11 @@ NPCS = [
      "quest_id": "the_mysterious_traveler"},
 
     {"id": "merchant_wanderer", "name": "Wandering Merchant", "x": 96, "y": 24,
-     "lines": ["Bah, I've got nothing to sell you today. Come back later."]},
+     "lines": [
+         "Bah, I've got nothing to sell you today. Come back later.",
+         "Every bridge has a toll. Every road has a tax.",
+         "By the time I get anywhere, my cart's lighter and the Crown's heavier.",
+     ]},
 
     {"id": "pet_keeper_luna", "name": "Pet Keeper Luna", "x": 85, "y": 40,
      "lines": [
@@ -1657,6 +1773,7 @@ NPCS = [
          "Catch it raw, cook it here on the hearth.",
          "Trout, salmon, lobster, tuna, swordfish — the pier has them all.",
          "I buy spare catch if your pack is full.",
+         "Harbour duty on every crate. The fish don't pay it, so I do.",
      ],
      "shop_id": "harbour_fishmonger"},
     {"id": "harbour_cook", "name": "Cook Nell", "x": 174, "y": 23,
@@ -1675,6 +1792,7 @@ NPCS = [
          "Knights of the Keep patrol the courtyard. Strike first and they answer in steel.",
          "The throne hall is open to travellers. Mind your manners.",
          "Still — if you can best six guards, then the knights, then our champion… the Keep will notice.",
+         "By royal decree, the tax is fair. I'm paid to say that.",
      ],
      "quest_ids": ["city_watch", "knights_of_the_keep", "champions_challenge"]},
     {"id": "city_vendor_mira", "name": "Mira the Vendor", "x": 116, "y": 74,
@@ -1682,15 +1800,17 @@ NPCS = [
          "Fresh bread and travel kits from the market square! Press B to browse.",
          "I stock food, potions, and a few steel scraps for travellers heading to the keep.",
          "Stonehaven's gates open south and west — castle keep sits to the north.",
+         "Stonehaven prices are Stonehaven taxes, with bread on top.",
      ],
      "shop_id": "stonehaven_market"},
 
     # King's Great Hall (king_f1 interior plane)
-    {"id": "king", "name": "The King of Mythoscape", "x": 26, "y": 26, "plane": "king_f1",
+    {"id": "king", "name": "King of Crownfall", "x": 26, "y": 26, "plane": "king_f1",
      "lines": [
-         "You stand before the crown of Mythoscape. Speak quickly.",
-         "Fairies and Moonwater… trifles. My war is the true concern.",
-         "Kneel, or leave. The King does not wait on wanderers.",
+         "You stand before the Crown. Do be brief, my time is taxed as well.",
+         "Taxes? A kingdom is expensive. Someone must pay for it, and it certainly won't be me.",
+         "The old law? Anyone strong enough may take my castle. Look around you. No one is.",
+         "Kneel, or leave. Either way, the toll on the bridge home is the same.",
      ]},
     {"id": "mythos_knight_1", "name": "Mythos Knight Valerius", "x": 22, "y": 27, "plane": "king_f1",
      "lines": [
@@ -1702,7 +1822,7 @@ NPCS = [
      "lines": [
          "Eyes forward.",
          "The court is in session.",
-         "Hail Mythoscape.",
+         "Hail the Crown.",
      ]},
     {"id": "mythos_knight_3", "name": "Mythos Knight Roland", "x": 28, "y": 27, "plane": "king_f1",
      "lines": [
@@ -1910,6 +2030,12 @@ SHOPS = {
             "steel_longsword": {"price": 180, "qty": 3},
             "steel_sq_shield": {"price": 120, "qty": 3},
             "steel_helmet": {"price": 90, "qty": 3},
+            # Adamantite (Warlord) tier: smithable, and stocked here at a city premium
+            "adamant_sword": {"price": 680, "qty": 2},
+            "adamant_battleaxe": {"price": 880, "qty": 2},
+            "adamant_helmet": {"price": 420, "qty": 2},
+            "adamant_body": {"price": 1170, "qty": 1},
+            "adamant_legs": {"price": 940, "qty": 1},
             "bronze_arrow": {"price": 4, "qty": 100},
             "iron_arrow": {"price": 8, "qty": 60},
             "feather": {"price": 3, "qty": 40},
@@ -1952,9 +2078,9 @@ SHOPS = {
 # ---------------------------------------------------------------------------
 QUESTS = {
     "fairy_oath": {
-        "name": "The Moonwater Oath",
+        "name": "The Royal Challenge",
         "giver": "elowen_moonwhisper",
-        "description": "Reach combat 100, own a castle, finish every other quest, and gather a clan of 25.",
+        "description": "The Royal Challenge: reach combat 100, own a castle, finish every other quest, and lead or join a clan of 20.",
         "type": "oath",
         "quest_points": 1,
         "rewards": {},
@@ -1966,6 +2092,15 @@ QUESTS = {
         "type": "kill", "target": "giant_rat", "count": 5,
         "quest_points": 1,
         "rewards": {"coins": 50, "xp": {"attack": 30}},
+    },
+    "guild_basics": {
+        "name": "Guild Basics",
+        "giver": "guildmaster_ysolde",
+        "description": "Create or join a guild, put any coins in the guild bank (/guild deposit), "
+                       "then return to Guildmaster Ysolde.",
+        "type": "guild",
+        "quest_points": 1,
+        "rewards": {"coins": 500, "reputation": 15, "charisma_xp": 600},
     },
     "lost_child": {
         "name": "Lost Child",
@@ -2296,6 +2431,7 @@ MAGIC_ABILITY_ORDER = (
 XP_SKILLS = [
     "attack", "strength", "defence", "archery",
     "woodcutting", "mining", "fishing", "cooking", "smithing", "fletching", "karma",
+    "charisma", "etiquette",
 ]
 
 # Trained combat skills. Hitpoints is derived and has no experience.
@@ -2307,6 +2443,7 @@ SKILL_DISPLAY_NAMES = {
     "woodcutting": "Woodcutting", "mining": "Mining",
     "fishing": "Fishing", "cooking": "Cooking", "firemaking": "Firemaking",
     "smithing": "Smithing", "fletching": "Fletching", "karma": "Karma",
+    "charisma": "Charisma", "etiquette": "Etiquette",
 }
 
 # Karma blesses worn gear. Level 2 weapons get +2 attack (matches L).
@@ -2536,7 +2673,7 @@ TRAVEL_DESTINATIONS = [
     {"id": "mad_scientist", "kind": "place", "label": "Mad Scientist",
      "x": 98, "y": 22, "blurb": "Combat potions (+10 / +20)"},
     {"id": "mountain_pass", "kind": "place", "label": "Mountain Pass",
-     "x": 145, "y": 16, "blurb": "Wolves (lvl 40) — path east"},
+     "x": 145, "y": 16, "blurb": f"Wolves (lvl {MONSTERS['wolf']['level']}) — path east"},
     {"id": "harbourreach", "kind": "place", "label": "Harbourreach",
      "x": 176, "y": 18, "blurb": "Fishing village & harbour"},
     {"id": "harbour_tackle", "kind": "place", "label": "Tackle Shop",
@@ -2586,7 +2723,7 @@ TRAVEL_DESTINATIONS = [
     {"id": "knights", "kind": "monster", "label": "Castle Knights",
      "x": 128, "y": 66, "monster": "knight", "blurb": "Castle keep — peaceful until hit"},
     {"id": "mythos_champion", "kind": "monster", "label": "Mythos Champion",
-     "x": 130, "y": 64, "monster": "mythos_champion", "blurb": "⚠ Lv 90 — full Mythos plate (peaceful until hit)"},
+     "x": 130, "y": 64, "monster": "mythos_champion", "blurb": f"⚠ Lv {MONSTERS['mythos_champion']['level']} — full Mythos plate (peaceful until hit)"},
     {"id": "big_skeletons", "kind": "monster", "label": "Big Skeletons",
      "x": 54, "y": 110, "monster": "big_skeleton", "blurb": "Mithril cavern"},
     {"id": "spiders", "kind": "monster", "label": "Giant Spiders",
@@ -2594,7 +2731,7 @@ TRAVEL_DESTINATIONS = [
     {"id": "dragon", "kind": "monster", "label": "Adamant Dragon",
      "x": 70, "y": 112, "monster": "dragon", "blurb": "Adamantite lair"},
     {"id": "wolves", "kind": "monster", "label": "Mountain Wolves",
-     "x": 147, "y": 16, "monster": "wolf", "blurb": "Mountain pass (lvl 40)"},
+     "x": 147, "y": 16, "monster": "wolf", "blurb": f"Mountain pass (lvl {MONSTERS['wolf']['level']})"},
     {"id": "shades", "kind": "monster", "label": "Shades",
      "x": 160, "y": 110, "monster": "shade", "blurb": "Void Sanctum room 1"},
     {"id": "crypt_ghouls", "kind": "monster", "label": "Crypt Ghouls",
@@ -2606,7 +2743,7 @@ TRAVEL_DESTINATIONS = [
     {"id": "shadow_knights", "kind": "monster", "label": "Shadow Knights",
      "x": 160, "y": 125, "monster": "shadow_knight", "blurb": "Void Sanctum room 5"},
     {"id": "void_horror", "kind": "monster", "label": "Void Horror",
-     "x": 173, "y": 125, "monster": "void_horror", "blurb": "Sanctum boss (lvl 95)"},
+     "x": 173, "y": 125, "monster": "void_horror", "blurb": f"Sanctum boss (lvl {MONSTERS['void_horror']['level']})"},
 ]
 
 
@@ -2850,6 +2987,15 @@ INTERACTABLES = [
     {"id": "void_altar", "kind": "bookshelf", "name": "Forbidden Tomes", "x": 167, "y": 103},
 
     # Wayfinder posts. They sit on the road and do not block walking.
+    # Crownfall phase 4: King's Row plot sites (server/property.py SITES)
+    {"id": "sign_plot_1", "kind": "signpost", "name": "Plot 1", "x": 15, "y": 99, "facing": "s",
+     "lines": ["King's Row plot. Ask the Estate Agent to buy."]},
+    {"id": "sign_plot_2", "kind": "signpost", "name": "Plot 2", "x": 20, "y": 99, "facing": "s",
+     "lines": ["King's Row plot. Ask the Estate Agent to buy."]},
+    {"id": "sign_plot_3", "kind": "signpost", "name": "Plot 3", "x": 15, "y": 104, "facing": "s",
+     "lines": ["King's Row plot. Ask the Estate Agent to buy."]},
+    {"id": "sign_plot_4", "kind": "signpost", "name": "Plot 4", "x": 20, "y": 104, "facing": "s",
+     "lines": ["King's Row plot. Ask the Estate Agent to buy."]},
     {"id": "sign_crossroads", "kind": "signpost", "name": "Crossroads",
      "x": 31, "y": 23, "facing": "e",
      "lines": ["→ Forest · Harbour", "↓ Mine · Dungeon", "↑ Village shops"]},
@@ -3697,7 +3843,10 @@ _castle_realm_portal()
 # ---------------------------------------------------------------------------
 # Swords: faster, higher crit. Axes (axe / battleaxe / cleaver): slower, heavier hits.
 # Lower speed = faster. Item defs may override with attack_speed / crit_chance / heavy_bonus.
-# Combat does not use these yet (UI only).
+# Combat uses all three (server.py player swing): speed scales the swing interval
+# (speed 4 = 1.2s, the old fixed pace), crit_chance adds to jewellery crit (shared 0.45 cap),
+# heavy_bonus multiplies every landed hit.
+SWING_SECONDS_PER_SPEED = 0.3
 WEAPON_CLASS_STATS = {
     "sword": {"attack_speed": 4, "crit_chance": 0.08, "heavy_bonus": 0.10},
     "axe": {"attack_speed": 5, "crit_chance": 0.05, "heavy_bonus": 0.25},

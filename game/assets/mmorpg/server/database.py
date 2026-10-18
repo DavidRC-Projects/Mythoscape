@@ -236,8 +236,28 @@ class Database:
             self.conn.execute(
                 "ALTER TABLE players ADD COLUMN saved_outfits TEXT NOT NULL DEFAULT '[]'"
             )
+        if "tax_notice_seen" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN tax_notice_seen INTEGER NOT NULL DEFAULT 0"
+            )
         import clans
         clans.ensure_tables(self.conn)
+        import royal_treasury
+        royal_treasury.ensure_schema(self.conn)
+        import reputation
+        reputation.ensure_schema(self.conn)
+        import apprentice
+        apprentice.ensure_schema(self.conn)
+        import nobility
+        nobility.ensure_schema(self.conn)
+        import throne
+        throne.ensure_schema(self.conn)
+        import ruling
+        ruling.ensure_schema(self.conn)
+        import politics
+        politics.ensure_schema(self.conn)
+        import property as _property
+        _property.ensure_schema(self.conn)
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS bank ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -266,13 +286,13 @@ class Database:
         for row in rows:
             if row["gender"] == "female":
                 look = {
-                    "skin": "skin_light", "hair": "hair_ponytail", "hair_colour": "chestnut",
+                    "skin": "skin_base", "skin_tone": "tone_3", "hair": "hair_ponytail", "hair_colour": "chestnut",
                     "top": "top_linen_shirt", "bottom": "bottom_long_skirt", "shoes": "shoes_leather",
                     "outfit": None, "accessories": [],
                 }
             else:
                 look = {
-                    "skin": "skin_light", "hair": "hair_side_part", "hair_colour": "dark_brown",
+                    "skin": "skin_base", "skin_tone": "tone_3", "hair": "hair_side_part", "hair_colour": "dark_brown",
                     "top": "top_linen_shirt", "bottom": "bottom_work_trousers", "shoes": "shoes_leather",
                     "outfit": None, "accessories": [],
                 }
