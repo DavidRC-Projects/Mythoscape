@@ -254,7 +254,9 @@ def build(tiles, next_id, monster_cls, stats_for):
                 continue
             used.add((x, y))
             mid = next_id()
-            monsters.append(monster_cls(mid, cid, x, y, stats=dict(stats)))
+            # Private instance: the floor is cleared by killing everything, so
+            # a respawn would make clearing it impossible.
+            monsters.append(monster_cls(mid, cid, x, y, stats=dict(stats), no_respawn=True))
     for prop in data.get("props") or []:
         spot = prop.get("tile") or {}
         x, y = int(spot.get("x", -1)), int(spot.get("y", -1))
@@ -286,5 +288,5 @@ def build(tiles, next_id, monster_cls, stats_for):
             stats["facing"] = boss.get("facing") or "south"
             stats["cone_tiles"] = cone_tiles_for(x, y, stats["facing"], tiles)
             mid = next_id()
-            monsters.append(monster_cls(mid, boss["id"], x, y, stats=dict(stats)))
+            monsters.append(monster_cls(mid, boss["id"], x, y, stats=dict(stats), no_respawn=True))
     return props, monsters

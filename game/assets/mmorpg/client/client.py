@@ -283,6 +283,8 @@ class GameClient(ScreensMixin, CameraYaw):
         self.combat_style_prompt = None  # {"target_id": int} while choosing XP skill
         self.combat_style_prompt_rects = {}
         self.context_menu = None  # right-click Attack / Talk-to list
+        self.examine_target = None  # player id currently being examined
+        self.examine_until = 0.0
         self.combat_style_rects = []  # [(rect, style), ...]
         self.trade_incoming = None  # {"from_player_id","from_name"}
         self.trade_state = None     # {"other_name","your_offer","other_offer",...}
@@ -496,6 +498,11 @@ class GameClient(ScreensMixin, CameraYaw):
             return
         if t == "_CONN_ERROR":
             self.login_error = msg["message"]
+            # Drop any half-open connection so the next Login press actually
+            # retries. Without this the error was shown, but nothing was
+            # listening for a retry: messages queued into a dead socket and the
+            # client looked frozen even after the server was started.
+            self.net.connected = False
         elif t == "_DISCONNECTED":
             if self._logging_out:
                 self._logging_out = False
@@ -508,7 +515,13 @@ class GameClient(ScreensMixin, CameraYaw):
                 self.net.reconnect()
         elif t == "LOGIN_FAIL":
             self.login_error = msg["reason"]
+            # A failed attempt must not leave the 'new character' flags armed.
+            # They are set when the form is submitted, so without this a player
+            # who retries after "username taken" keeps arrival_guide=True and
+            # skips the tutorial on their eventual login, or sees the comic
+            # twice. Both flags are re-set on the next submit anyway.
             self.opening_comic_pending = False
+            self.arrival_guide = False
             if self.state == "STAT_ALLOC":
                 self.state = "LOGIN"
         elif t == "LEADERBOARD":
@@ -549,6 +562,15 @@ class GameClient(ScreensMixin, CameraYaw):
             self.stat_alloc_error = ""
             self.stat_gender = "male"
         elif t == "WORLD_STATE":
+            # A fresh login always starts from the overworld. If a previous
+            # session left dungeon state behind (logged out, disconnected, or
+            # logged straight back in), clear it before the overworld is
+            # captured, or the client keeps drawing a floor the server has
+            # already thrown away.
+            self.dungeon = None
+            self._overworld_tiles = None
+            self._overworld_size = None
+            self._overworld_npcs = None
             self.tiles = msg["tiles"]
             self.world_w, self.world_h = msg["width"], msg["height"]
             self.npcs = msg["npcs"]
@@ -594,6 +616,11 @@ class GameClient(ScreensMixin, CameraYaw):
                     "floors": msg["dungeon"].get("floors", self.dungeon.get("floors")),
                     "remaining": msg["dungeon"].get("remaining", 0),
                     "label": msg["dungeon"].get("label", self.dungeon.get("label")),
+                    # Segmented floors also report the chamber you are in, so
+                    # the HUD can show this fight rather than the floor total.
+                    "room": msg["dungeon"].get("room", self.dungeon.get("room")),
+                    "rooms_total": msg["dungeon"].get("rooms_total", self.dungeon.get("rooms_total")),
+                    "rooms_cleared": msg["dungeon"].get("rooms_cleared", self.dungeon.get("rooms_cleared")),
                 })
                 if self.dungeon.get("v2"):
                     import void_v2_client
@@ -614,8 +641,22 @@ class GameClient(ScreensMixin, CameraYaw):
         elif t == "DUNGEON_ENTER":
             self._enter_dungeon_view(msg)
         elif t == "DUNGEON_TILES":
-            import void_v2_client
-            void_v2_client.apply_tiles(self, msg)
+            if self.dungeon and not self.dungeon.get("v2"):
+                # Tidehollow and Emberdeep share this message to announce that
+                # a chamber door has opened. Apply the changed tiles directly;
+                # void_v2_client expects a v2 payload and would misread it.
+                self._minimap_base = None
+                for change in msg.get("changes") or []:
+                    try:
+                        x, y, tile = int(change[0]), int(change[1]), change[2]
+                    except (TypeError, ValueError, IndexError):
+                        continue
+                    if 0 <= y < len(self.tiles) and 0 <= x < len(self.tiles[y]):
+                        self.tiles[y][x] = tile
+                self.clear_walk()
+            else:
+                import void_v2_client
+                void_v2_client.apply_tiles(self, msg)
         elif t == "VOID_WIND":
             import void_v2_client
             void_v2_client.on_wind(self, msg)
@@ -767,12 +808,12 @@ class GameClient(ScreensMixin, CameraYaw):
                                 "face": self._entity_facing.get(face_key, "front"),
                                 "t0": time.time(),
                             })
-            
+
             # HD player death animation tracking
             if msg.get("entity_kind") == "player":
                 pid = msg.get("entity_id")
                 self.player_death_at[pid] = time.time()
-            
+
             if msg.get("entity_kind") == "monster" and msg.get("entity_id") == self.combat_target_id:
                 self.combat_target_id = None
                 self.combat_rounds = 0
@@ -1072,7 +1113,7 @@ class GameClient(ScreensMixin, CameraYaw):
         ranged = bool(msg.get("ranged"))
         anim_secs = self.RANGED_ANIM_SECS if ranged else self.ATTACK_ANIM_SECS
         strike_t = 0.58 if ranged else 0.48
-        
+
         # HD knight hit reaction tracking
         if kind in ("player_hits_monster", "pet_hits_monster") and did_hit and msg.get("damage", 0) > 0:
             defender = self._monster_by_id(def_id) if def_id else None
@@ -1082,14 +1123,14 @@ class GameClient(ScreensMixin, CameraYaw):
                     self.knight_hit_at[def_id] = now + strike_t * anim_secs
                 if self.dungeon and self.dungeon.get("id") == "emberdeep":
                     self.monster_hit_at[def_id] = now + strike_t * anim_secs
-        
+
         if kind == "monster_hits_player" and did_hit and msg.get("damage", 0) > 0:
             self.player_hit_at[def_id] = now + strike_t * anim_secs
             if def_id == (self.player or {}).get("id") and self.dungeon and self.dungeon.get("id") == "emberdeep":
                 strike = now + strike_t * anim_secs
                 self._ember_shake_from = strike
                 self._ember_shake_until = strike + 0.08
-        
+
         self.attack_anims[anim_key] = now + anim_secs
         self.attack_anim_kind[anim_key] = "ranged" if ranged else "melee"
         if "combat_rounds" in msg and kind == "player_hits_monster" and atk_id == (self.player or {}).get("id"):
@@ -1410,6 +1451,8 @@ class GameClient(ScreensMixin, CameraYaw):
                         self.confirm_combat_style(style)
                 elif event.key == pygame.K_m:
                     self.toggle_travel_modal()
+                elif event.key == pygame.K_x and new_player_guide.visible(self):
+                    new_player_guide.skip_key(self)
                 elif event.key == pygame.K_h:
                     self.show_help = not self.show_help
                     if self.show_help:
@@ -2854,8 +2897,16 @@ class GameClient(ScreensMixin, CameraYaw):
         self._next_walk_at = now + (emberdeep_v2_client.STEP_SECONDS if in_ember else 0.16)
 
     def _capture_home_map(self, force=False):
-        """Keep the overworld tiles. Dungeon and Castle Realm swaps must not replace them."""
-        if self.dungeon and not force:
+        """Keep the overworld tiles. Dungeon and Castle Realm swaps must not replace them.
+
+        Never capture while a dungeon is active, even when forced. The forced
+        call on WORLD_STATE fires on *every* login, so logging back in while
+        inside Tidehollow snapshotted the dungeon floor as the overworld. On
+        leaving, that floor was restored in place of the village — the player
+        ended up in the wrong world fighting monsters they could not see,
+        because the client and server disagreed about which tiles were which.
+        """
+        if self.dungeon:
             return
         if self._home_tiles is not None and not force:
             return
@@ -2891,6 +2942,9 @@ class GameClient(ScreensMixin, CameraYaw):
             "plane": msg.get("plane") or "",
             "realm": bool(msg.get("realm")),
             "boss_door": msg.get("boss_door"),
+            "room": msg.get("room"),
+            "rooms_total": msg.get("rooms_total"),
+            "rooms_cleared": msg.get("rooms_cleared"),
         }
         self.monsters = {m["id"]: m for m in (msg.get("monsters") or [])}
         self.resources = {}
@@ -3631,6 +3685,13 @@ class GameClient(ScreensMixin, CameraYaw):
             self.walk_and_act(self.adjacent_goals(npc["x"], npc["y"]), {
                 "type": "TALK", "npc_id": npc["id"],
             })
+        elif kind == "examine_player":
+            self.examine_player(row.get("id"))
+        elif kind == "trade":
+            tx, ty = int(row["x"]), int(row["y"])
+            self.walk_and_act(self.adjacent_goals(tx, ty), {
+                "type": "TRADE", "target_player_id": row["id"],
+            })
         elif kind == "walk":
             tx, ty = int(row["x"]), int(row["y"])
             if self.tile_walkable(tx, ty):
@@ -3692,6 +3753,10 @@ class GameClient(ScreensMixin, CameraYaw):
         if self.context_menu and event.button == 1:
             self._click_context_menu(mx, my)
             return
+        # A world click dismisses the examine panel, the same way it dismisses
+        # a context menu — transient UI should not linger over the play area.
+        if getattr(self, "examine_target", None) is not None:
+            self.examine_target = None
         if self.state == "GAME":
             import emberdeep_v2_client
             if emberdeep_v2_client.fp_active(self):
@@ -4107,9 +4172,20 @@ class GameClient(ScreensMixin, CameraYaw):
                 "type": "TALK", "npc_id": best_n["id"],
             })
             return
-        # other player -> trade request
+        # Another player. Right-click opens a menu so you can look before you
+        # act: left-click used to fire a trade request the instant someone was
+        # clicked, which was surprising and easy to spam.
         for p in self.players.values():
             if p["id"] != self.player["id"] and p["x"] == tx and p["y"] == ty:
+                if event.button == 3:
+                    name = p.get("name") or "player"
+                    self._open_context_menu(mx, my, [
+                        {"label": f"Examine {name}", "kind": "examine_player", "id": p["id"]},
+                        {"label": f"Trade with {name}", "kind": "trade", "id": p["id"],
+                         "x": p["x"], "y": p["y"]},
+                        {"label": "Cancel", "kind": "cancel"},
+                    ])
+                    return
                 self.walk_and_act(self.adjacent_goals(p["x"], p["y"]), {
                     "type": "TRADE", "target_player_id": p["id"],
                 })
@@ -4448,7 +4524,7 @@ class GameClient(ScreensMixin, CameraYaw):
                 potion = is_potion_item(item_id)
                 gem = is_gem_item(item_id)
                 bag_ids = (
-                    "arrowtip_box", "food_bag", "raw_food_bag",
+                    "arrow_quiver", "arrowtip_box", "food_bag", "raw_food_bag",
                     "mining_bag", "log_bag", "fletch_pouch", "potion_pouch",
                     "gem_bag",
                 )
@@ -4467,6 +4543,9 @@ class GameClient(ScreensMixin, CameraYaw):
                         self.open_log_prompt(slot, entry)
                     elif item.get("karma_xp"):
                         self.net.send("USE_ITEM", slot_index=slot)  # bury one
+                    elif item.get("unique"):
+                        # Bags are permanent: never offer to throw the container away.
+                        self.add_chat(f"Your {item.get('name', item_id)} is permanent — it can't be dropped or sold.")
                     elif shift:
                         self.net.send("DROP", slot_index=slot, qty=max(1, int(entry.get("qty") or 1)))
                     else:
@@ -5166,6 +5245,32 @@ class GameClient(ScreensMixin, CameraYaw):
             return True
         return False
 
+    def owns_shop_item(self, item_id):
+        """True when a one-per-character item (bag, pouch, quiver) is already yours.
+
+        Mirrors the server's check: worn, in the pack, or holding its contents.
+        """
+        if not (ITEMS.get(item_id) or {}).get("unique"):
+            return False
+        eq_slot = (ITEMS.get(item_id) or {}).get("equip_slot")
+        equipment = (self.player or {}).get("equipment") or {}
+        if eq_slot and equipment.get(eq_slot) == item_id:
+            return True
+        for entry in ((self.player or {}).get("inventory") or {}).values():
+            if entry and entry.get("item_id") == item_id:
+                return True
+        bag_key = {
+            "food_bag": "food_bag", "raw_food_bag": "raw_bag", "mining_bag": "mining_bag",
+            "log_bag": "log_bag", "gem_bag": "gem_bag", "potion_pouch": "potion_pouch",
+            "fletch_pouch": "fletch_pouch", "arrowtip_box": "tip_box",
+            "arrow_quiver": "quiver_arrows",
+        }.get(item_id)
+        if bag_key:
+            bag = (self.player or {}).get(bag_key)
+            if isinstance(bag, dict) and any(int(q or 0) > 0 for q in bag.values()):
+                return True
+        return False
+
     def handle_shop_click(self, mx, my, button):
         box = pygame.Rect(160, 70, 700, 520)
         if not box.collidepoint(mx, my):
@@ -5212,10 +5317,10 @@ class GameClient(ScreensMixin, CameraYaw):
         else:
             self.draw_game()
             idle_client.draw(self)
-        
+
         if self.outfitters.active:
             self.outfitters.render(self.screen)
-        
+
         pygame.display.flip()
 
     def _offer_appearance(self):
@@ -5519,6 +5624,8 @@ class GameClient(ScreensMixin, CameraYaw):
             self.draw_teleport_modal()
         if self.stair_prompt:
             self.draw_stair_prompt()
+        if not self.dungeon:
+            self.draw_examine_panel()
         self.draw_context_menu()
         self.draw_teleport_fx()
 
@@ -5704,6 +5811,7 @@ class GameClient(ScreensMixin, CameraYaw):
         if not self.dungeon:
             self._draw_fish_spot_fx(cam_x, cam_y, vis_w, vis_h)
             new_player_guide.draw_trail(self, cam_x, cam_y, vis_w, vis_h, TILE)
+            new_player_guide.draw_waypoint(self, cam_x, cam_y, vis_w, vis_h, TILE)
             for key, rtype in self.resources.items():
                 x, y = map(int, key.split(","))
                 # Skip trees that sit on / canopy-cover building shells
@@ -6155,7 +6263,7 @@ class GameClient(ScreensMixin, CameraYaw):
                     if hint and hint[0] == "monster" and hint[1] == m["id"]:
                         self.blit_action_hint(hint[2], cx, ny - 42, hint[3])
                 draw_list.append((cy + TILE // 2, 4, _draw_mon))
-        
+
         # HD knight corpses (death animations)
         if hasattr(self, 'knight_corpses'):
             import knights_hd_client
@@ -6170,7 +6278,7 @@ class GameClient(ScreensMixin, CameraYaw):
                 if death_t > 1.5:  # 0.9s death + 0.6s fade
                     continue
                 alpha = 255 if death_t < 0.9 else int(255 * (1 - (death_t - 0.9) / 0.6))
-                
+
                 def _draw_corpse(cx=cx, cy=cy, corpse=corpse, death_t=death_t, alpha=alpha):
                     if USE_NEW_CASTLE:
                         cy -= castle_sprites.lift_px(corpse["x"], corpse["y"], TILE)
@@ -6182,7 +6290,7 @@ class GameClient(ScreensMixin, CameraYaw):
                         facing=corpse["facing"], moving=False, attacking=-1.0,
                         hit_t=-1.0, death_t=death_t, alpha=alpha,
                     )
-                
+
                 draw_list.append((cy + TILE // 2, 4, _draw_corpse))
                 keep_corpses.append(corpse)
             self.knight_corpses = keep_corpses
@@ -6411,9 +6519,15 @@ class GameClient(ScreensMixin, CameraYaw):
                     rank = int(p.get("noble_rank") or 0)
                     if is_self:
                         rank = int((self.player or {}).get("noble_rank") or rank)
+                    # Other players' combat levels are tinted by how they
+                    # compare with yours, using the same green/yellow/orange/
+                    # red vocabulary as monster nameplates. One glance tells
+                    # you whether someone is a threat, an even match or easy.
                     plate = (180, 255, 180) if is_self else WHITE
-                    if rank >= 2:
-                        plate = (235, 210, 140) if not is_self else (215, 235, 150)
+                    if not is_self and cmb:
+                        plate = threat_color(cmb, self.player_combat_level())
+                    if rank >= 2 and is_self:
+                        plate = (215, 235, 150)
                     royal = p.get("royal_title") or ((self.player or {}).get("royal_title") if is_self else None)
                     if royal:
                         plate = (255, 205, 60)
@@ -7010,15 +7124,14 @@ class GameClient(ScreensMixin, CameraYaw):
     def _paint_meadow(self, rect, wx, wy, zone):
         if not village_ground.paints_grass(zone):
             return False
-        return village_ground.draw_grass(self.screen, rect, wx, wy)
+        return village_ground.draw_grass(self.screen, rect, wx, wy, client=self)
 
     def _paint_lane(self, rect, wx, wy, zone):
         if not village_ground.paints_path(zone):
             return False
-        if not village_ground.draw_path(self.screen, rect, wx, wy):
-            return False
-        village_ground.draw_edge(self, rect, wx, wy)
-        return True
+        # The painter blends meadow into lane across the seam itself, so the
+        # old per-tile grass overlay would double up. world paint only.
+        return village_ground.draw_path(self.screen, rect, wx, wy, client=self)
 
     def draw_terrain_tile(self, rect, tile_id, wx, wy, t):
         if self.dungeon and self.dungeon.get("id") == "castle_realm":
@@ -7037,6 +7150,12 @@ class GameClient(ScreensMixin, CameraYaw):
             zone = "volcano" if self.dungeon.get("id") == "emberdeep" else "dungeon"
         else:
             zone = wm.get_zone(wx, wy) if self.world_w else "wilderness"
+        if self.dungeon and tile_id == "sealed":
+            # A chamber door held shut until its wave is dead. Drawn as stone
+            # and iron rather than a bare wall so the player reads "this opens"
+            # instead of "this is scenery".
+            self._draw_sealed_door(rect, wx, wy, t)
+            return
         if not self.dungeon and fairy_ground.draw_tile(self, rect, tile_id, wx, wy):
             return
         if not self.dungeon and fairy_ground.draw_fence(self, rect, wx, wy):
@@ -7114,6 +7233,30 @@ class GameClient(ScreensMixin, CameraYaw):
             if any(walls.values()):
                 ao_a = 95 if (self.dungeon or zone in ("dungeon", "volcano", "shadow_crypt")) else 68
                 sprites.draw_tile_wall_ao(self.screen, rect, walls, alpha=ao_a)
+
+    def _draw_sealed_door(self, rect, wx, wy, t):
+        """Barred stone doorway between Tidehollow chambers."""
+        sprites.draw_floor(self.screen, rect, wx, wy, zone="dungeon", interior=True)
+        w, h = rect.w, rect.h
+        frame = rect.inflate(-w // 8, -h // 8)
+        pygame.draw.rect(self.screen, (52, 50, 46), frame, border_radius=max(2, w // 10))
+        pygame.draw.rect(self.screen, (30, 30, 28), frame, max(1, w // 22),
+                         border_radius=max(2, w // 10))
+        # Iron bars, evenly spaced, with a faint warm glint on the leading edge.
+        bars = 3
+        for i in range(bars):
+            bx = frame.x + int(frame.w * (i + 1) / (bars + 1))
+            pygame.draw.line(self.screen, (84, 82, 78), (bx, frame.y + 2), (bx, frame.bottom - 2),
+                             max(1, w // 20))
+            pygame.draw.line(self.screen, (108, 104, 96), (bx, frame.y + 2), (bx, frame.bottom - 2), 1)
+        # A slow pulse on the lock so it reads as active rather than static art.
+        pulse = 0.5 + 0.5 * math.sin(t * 2.2)
+        cx, cy = frame.center
+        pygame.draw.circle(self.screen, (70, 60, 34), (cx, cy), max(2, w // 12))
+        pygame.draw.circle(self.screen, (212, 175, 90),
+                           (cx, cy), max(1, w // 14), 1)
+        if pulse > 0.5:
+            pygame.draw.circle(self.screen, (255, 226, 150), (cx, cy), 1)
 
     def _draw_headstone(self, rect, wx, wy):
         """World-space grave marker. Drawn with the tile, not turned toward the camera."""
@@ -7734,6 +7877,83 @@ class GameClient(ScreensMixin, CameraYaw):
         pygame.draw.rect(self.screen, (40, 16, 16), (cx - 3, top_y + 3, 6, 3))
         self.blit_nameplate(f"PK {kills}", cx, top_y - 16, (255, 80, 70))
 
+    def examine_player(self, player_id):
+        """Show another player's combat level and skills.
+
+        Read-only, and driven by data the server already broadcasts, so there
+        is nothing to request and nothing to wait for.
+        """
+        p = (self.players or {}).get(player_id) or (self.players or {}).get(int(player_id))
+        if not p:
+            self.add_chat("That player is no longer nearby.")
+            return
+        self.examine_target = player_id
+        self.examine_until = time.time() + 20.0
+
+    def draw_examine_panel(self):
+        """Panel listing the examined player's combat level and skills."""
+        pid = getattr(self, "examine_target", None)
+        if pid is None:
+            return
+        if time.time() > getattr(self, "examine_until", 0):
+            self.examine_target = None
+            return
+        p = (self.players or {}).get(pid) or (self.players or {}).get(int(pid))
+        if not p:
+            self.examine_target = None
+            return
+        mine = self.player_combat_level()
+        theirs = int(p.get("combat_level") or 0)
+        colour = threat_color(theirs, mine) if theirs else WHITE
+        name = p.get("name") or "Player"
+        their_levels = p.get("levels") or {}
+
+        # 5 rows start at +80 and step 20, so the last sits at +160; leave
+        # room for the footer or it prints over the Archery value.
+        box = pygame.Rect(0, 0, 250, 206)
+        box.topright = (MAP_W - 16, 16)
+        panel = pygame.Surface(box.size, pygame.SRCALPHA)
+        panel.fill((14, 18, 28, 235))
+        self.screen.blit(panel, box.topleft)
+        pygame.draw.rect(self.screen, colour, box, 2, border_radius=6)
+        title = self.font.render(name[:18], True, colour)
+        self.screen.blit(title, (box.x + 10, box.y + 8))
+        sub = self.font_small.render(f"Combat level {theirs}", True, colour)
+        self.screen.blit(sub, (box.x + 10, box.y + 32))
+        # Say how they compare in words too, so colour is not the only cue
+        # (it matters for colour-blind players).
+        if theirs and mine:
+            diff = theirs - mine
+            if diff >= 10:
+                verdict = f"{diff} levels above you"
+            elif diff > 0:
+                verdict = "Slightly stronger"
+            elif diff == 0:
+                verdict = "Even match"
+            elif diff > -10:
+                verdict = "Slightly weaker"
+            else:
+                verdict = f"{abs(diff)} levels below you"
+            vs = self.font_tiny.render(verdict, True, colour)
+            self.screen.blit(vs, (box.x + 10, box.y + 52))
+        pygame.draw.line(self.screen, (70, 76, 92), (box.x + 10, box.y + 72),
+                         (box.right - 10, box.y + 72), 1)
+        rows = (("Attack", "attack"), ("Strength", "strength"), ("Defence", "defence"),
+                ("Hitpoints", "hitpoints"), ("Archery", "archery"))
+        y = box.y + 80
+        for label, key in rows:
+            lab = self.font_tiny.render(label, True, (170, 182, 200))
+            self.screen.blit(lab, (box.x + 12, y))
+            val = int(their_levels.get(key) or 0)
+            col = self.font_tiny.render(str(val) if val else "-", True,
+                                        WHITE if val else (110, 118, 132))
+            self.screen.blit(col, (box.right - 14 - col.get_width(), y))
+            y += 20
+        pygame.draw.line(self.screen, (70, 76, 92), (box.x + 10, box.bottom - 26),
+                         (box.right - 10, box.bottom - 26), 1)
+        hint = self.font_tiny.render("Click elsewhere to close", True, (120, 128, 144))
+        self.screen.blit(hint, (box.x + 12, box.bottom - 19))
+
     def _resolve_hover_hint(self, tile):
         """Action label for the person under the pointer."""
         if tile is None or self.dialogue:
@@ -7899,6 +8119,31 @@ class GameClient(ScreensMixin, CameraYaw):
             return (55, 110, 50)
         return (40, 55, 40)
 
+    def _minimap_rim_point(self, wx, wy, rect, pad=6):
+        """Point on the minimap rim (and heading) toward a world tile outside the view."""
+        cx, cy = rect.center
+        vw, vh = self.view_size()
+        if vw <= 0 or vh <= 0:
+            return float(cx), float(cy), 0.0
+        vx, vy = self.world_to_view(int(wx), int(wy))
+        dx = rect.x + vx * rect.w / vw - cx
+        dy = rect.y + vy * rect.h / vh - cy
+        if dx == 0 and dy == 0:
+            return float(cx), float(cy), 0.0
+        half_w = max(1.0, rect.w / 2 - pad)
+        half_h = max(1.0, rect.h / 2 - pad)
+        k = min(half_w / abs(dx) if dx else 1e9, half_h / abs(dy) if dy else 1e9)
+        return cx + dx * k, cy + dy * k, math.atan2(dy, dx)
+
+    def _draw_minimap_rim_pin(self, x, y, ang, colour):
+        """Arrow on the minimap rim: this place is off screen, walk this way."""
+        pygame.draw.circle(self.screen, (12, 14, 20), (int(x), int(y)), 4)
+        pygame.draw.circle(self.screen, colour, (int(x), int(y)), 2)
+        tip = (x + math.cos(ang) * 7, y + math.sin(ang) * 7)
+        left = (x + math.cos(ang + 2.5) * 5, y + math.sin(ang + 2.5) * 5)
+        right = (x + math.cos(ang - 2.5) * 5, y + math.sin(ang - 2.5) * 5)
+        pygame.draw.polygon(self.screen, colour, (tip, left, right))
+
     def rebuild_minimap_base(self):
         mm_w, mm_h = self.minimap_dims()
         surf = pygame.Surface((mm_w, mm_h))
@@ -8035,23 +8280,29 @@ class GameClient(ScreensMixin, CameraYaw):
             pygame.draw.rect(self.screen, (90, 120, 160), frame, 2, border_radius=6)
             self.screen.blit(self._minimap_base, rect.topleft)
 
-        # Destination markers (shared with the mockup-plate minimap)
+        # Destination markers (shared with the mockup-plate minimap). The
+        # corner map only shows the screen, so a place you'd walk to is usually
+        # off it: pin it to the rim with a direction arrow instead of dropping it.
         for dest in TRAVEL_DESTINATIONS:
             dx, dy = self.world_to_minimap(dest["x"], dest["y"], rect)
             if dest.get("id") == "castle_realm":
                 self._draw_castle_realm_pin(dx, dy, short=True)
                 continue
             if dest["kind"] == "monster":
-                mdef = MONSTERS.get(dest.get("monster") or "", {})
-                col = self.monster_threat_color(mdef.get("level", 1))
+                col = self.monster_threat_color(
+                    (MONSTERS.get(dest.get("monster") or "", {})).get("level", 1))
+            elif dest.get("id") == "emberdeep":
+                col = (255, 140, 70)
+            elif dest.get("action"):
+                col = (255, 220, 120)
+            else:
+                col = (200, 210, 230)
+            if not rect.collidepoint(dx, dy):
+                rx, ry, ang = self._minimap_rim_point(dest["x"], dest["y"], rect)
+                self._draw_minimap_rim_pin(rx, ry, ang, col)
+            elif dest["kind"] == "monster":
                 pygame.draw.circle(self.screen, col, (dx, dy), 3)
             else:
-                if dest.get("id") == "emberdeep":
-                    col = (255, 140, 70)
-                elif dest.get("action"):
-                    col = (255, 220, 120)
-                else:
-                    col = (200, 210, 230)
                 pygame.draw.rect(self.screen, col, (dx - 2, dy - 2, 4, 4))
 
         # Other players
@@ -8074,15 +8325,28 @@ class GameClient(ScreensMixin, CameraYaw):
             pygame.draw.rect(self.screen, (255, 255, 255), view, 1)
 
         new_player_guide.draw_minimap_marker(self, rect)
+        new_player_guide.draw_waypoint_minimap(self, rect)
 
-        # You are here
+        # You are here — pulsing white ring plus a "You" tag, so your dot can't
+        # be confused with a destination or another player.
         px, py = self.player_xy()
         mx, my = self.world_to_minimap(px, py, rect)
+        pulse = 0.5 + 0.5 * math.sin(time.time() * 3)
+        pygame.draw.circle(self.screen, (255, 255, 255), (mx, my), 5 + int(pulse * 1.5), 1)
         pygame.draw.circle(self.screen, (40, 40, 40), (mx, my), 4)
         pygame.draw.circle(self.screen, (255, 80, 70), (mx, my), 3)
+        tag = self.font_tiny.render("You", True, (255, 255, 255))
+        tx = max(rect.x + 2, min(rect.right - tag.get_width() - 2, mx - tag.get_width() // 2))
+        ty = my - tag.get_height() - 6
+        if ty < rect.y:
+            ty = my + 6
+        bg = pygame.Surface((tag.get_width() + 4, tag.get_height() + 2), pygame.SRCALPHA)
+        bg.fill((10, 12, 18, 190))
+        self.screen.blit(bg, (tx - 2, ty - 1))
+        self.screen.blit(tag, (tx, ty))
 
         if plate_rect is None:
-            hint = self.font_tiny.render("Click hide · Right map · M travel", True, (200, 210, 230))
+            hint = self.font_tiny.render("Left: walk here · Right: world map · M: travel", True, (200, 210, 230))
             self.screen.blit(hint, (rect.x + 4, rect.bottom - 14))
 
     def _blit_round_minimap(self, rect):
@@ -10121,7 +10385,30 @@ class GameClient(ScreensMixin, CameraYaw):
             sub_txt = "Exit to leave"
         else:
             title_txt = f"{name} {d.get('floor', 1)}/{d.get('floors', 10)}"
-            sub_txt = f"{d.get('remaining', 0)} left"
+            # Segmented floors report the player's current chamber, so the
+            # number they watch is the fight they are in — not a floor total
+            # that barely moves.
+            room = d.get("room")
+            if room:
+                num = room.get("number")
+                of = d.get("rooms_total")
+                where = f"Chamber {num}/{of}" if num and of else "Chamber"
+                threat = room.get("threat")
+                if room.get("doors_open"):
+                    sub_txt = f"{where} cleared · way open"
+                elif threat:
+                    # A named fight is the reason to be tense; say who it is.
+                    label = "BOSS" if threat.get("boss") else "Elite"
+                    sub_txt = f"{label}: {threat.get('name', '')}"[:46]
+                else:
+                    # The kill count is the goal that opens the door. Show the
+                    # progress against it, not how many are merely alive —
+                    # monsters can respawn, and those still count.
+                    have = room.get("kills", 0)
+                    need = room.get("target", room.get("remaining", 0))
+                    sub_txt = f"{where} · {have}/{need} slain · sealed"
+            else:
+                sub_txt = f"{d.get('remaining', 0)} left"
 
         if self.dungeon_hud_hidden:
             self.dungeon_leave_rect = None

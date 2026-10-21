@@ -221,7 +221,20 @@ def public_state(st, guide):
     """What the client gets: only enough to draw the trail. The server re-checks everything on each request."""
     g = guide or {}
     return {"show_path": bool(st["show_path"]), "claimed": bool(st["claimed"]), "owed": len(st["owed"]),
+            "skipped": bool(st["skipped"]),
             "guide": {"id": GUIDE_ID, "name": GUIDE_NAME, "x": g.get("x"), "y": g.get("y")}}
+
+
+def public_state_after_claim(st, guide):
+    """State right after the kit is claimed: the trail is off, but stage 2 (Miriam's quest) can begin.
+
+    The client uses show_path + claimed to run stage 2 while no quest is underway, so a fresh WELCOME_STATE
+    must arrive after the claim — the client can't derive it from QUEST_LOG alone.
+    """
+    state = public_state(st, guide)
+    state["claimed"] = True
+    state["show_path"] = True
+    return state
 
 
 def options(st):

@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS players (
     x INTEGER NOT NULL,
     y INTEGER NOT NULL,
     hp INTEGER NOT NULL DEFAULT 10,
+    starter_tips_seen INTEGER NOT NULL DEFAULT 0,   -- first-session chat pointers
     attack_xp INTEGER NOT NULL DEFAULT 388,   -- level 5
     strength_xp INTEGER NOT NULL DEFAULT 388,
     defence_xp INTEGER NOT NULL DEFAULT 388,
@@ -106,6 +107,11 @@ class Database:
 
     def _migrate(self):
         cols = {row[1] for row in self.conn.execute("PRAGMA table_info(players)")}
+        if "starter_tips_seen" not in cols:
+            # Existing characters have already had their first session.
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN starter_tips_seen INTEGER NOT NULL DEFAULT 1"
+            )
         if "smithing_xp" not in cols:
             self.conn.execute(
                 "ALTER TABLE players ADD COLUMN smithing_xp INTEGER NOT NULL DEFAULT 0"
@@ -331,12 +337,16 @@ class Database:
             return None
         if _hash_password(password, row["salt"]) != row["password_hash"]:
             return None
+        now = time.strftime("%Y-%m-%d %H:%M:%S")
         self.conn.execute(
-            "UPDATE players SET last_login = ? WHERE id = ?",
-            (time.strftime("%Y-%m-%d %H:%M:%S"), row["id"]),
+            "UPDATE players SET last_login = ? WHERE id = ?", (now, row["id"]),
         )
         self.conn.commit()
-        return row
+        # Return a row that reflects the write. Returning the pre-update row
+        # left callers seeing a stale last_login, which is exactly what the
+        # "is this their first session?" check reads.
+        fresh = self.get_player_by_id(row["id"])
+        return fresh if fresh is not None else row
 
     def get_player_by_id(self, player_id):
         cur = self.conn.execute("SELECT * FROM players WHERE id = ?", (player_id,))

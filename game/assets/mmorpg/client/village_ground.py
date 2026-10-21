@@ -6,11 +6,13 @@ road edge. Collision is unchanged.
 """
 from __future__ import annotations
 
+import math
 import os
 
 import numpy as np
 import pygame
 
+import ground_paint
 import world_map as wm
 
 _DIR = os.path.normpath(os.path.join(
@@ -117,7 +119,73 @@ def fringe_alpha(mask, n, ox, oy):
     return (np.clip(alpha, 0, 1) * 255).astype(np.uint8)
 
 
-def draw_grass(screen, rect, wx, wy):
+def _is_path_tile_cb(client):
+    """Is (x, y) a lane? Uses the live tile grid, read through the client."""
+    if client is None:
+        return lambda x, y: False
+    tiles = client.tiles
+    w = getattr(client, "world_w", 0)
+    dungeon = bool(getattr(client, "dungeon", None))
+    if dungeon or not tiles:
+        return lambda x, y: False
+
+    def is_path(x, y):
+        ix, iy = int(math.floor(x)), int(math.floor(y))
+        if not (0 <= iy < len(tiles) and 0 <= ix < w):
+            return False
+        tid = tiles[iy][ix]
+        if tid == wm.PATH:
+            return True
+        # Trees, grass and trees-with-ground cover all count as meadow.
+        return False
+
+    return is_path
+
+
+def _paint(client, rect, wx, wy, is_path):
+    """Continuous, world-space ground painting (shared fields across tiles).
+
+    `client` is only used for the path field, so the lane/meadow boundary is
+    computed from the real tile grid and agrees on both sides of a seam.
+    """
+    if rect.w <= 4:
+        return False
+    screen = getattr(client, "screen", None)
+    if screen is None:
+        return False
+    is_path_fn = _is_path_tile_cb(client)
+    try:
+        # paint() wants the *predicate*, so it can sample the neighbours around
+        # this tile and keep the lane edge continuous across the seam. Passing
+        # is_path_fn(...) here handed it a bool, which raised on every tile —
+        # and the bare except below hid it, so the game silently kept drawing
+        # the old textures.
+        surf = ground_paint.paint(rect.w, int(wx), int(wy), is_path_fn)
+    except Exception:
+        # Keep the old art as a fallback, but never silently: a broken painter
+        # should be visible in the log instead of costing hours to spot.
+        if not getattr(_paint, "_warned", False):
+            _paint._warned = True
+            import traceback
+            traceback.print_exc()
+            print("[village_ground] ground painter failed; falling back to the old tiles")
+        return False
+    if surf is None:
+        return False
+    screen.blit(surf, rect.topleft)
+    return True
+
+
+# Work in progress. The world-space painter is not finished: the lane surface
+# is flat, the edge is too soft and it costs ~9 ms a tile. It is left in the
+# tree behind this switch so the work is not lost, but the game draws its
+# original ground tiles until it is worth showing.
+USE_WORLD_GROUND = False
+
+
+def draw_grass(screen, rect, wx, wy, client=None):
+    if USE_WORLD_GROUND and client is not None and _paint(client, rect, wx, wy, False):
+        return True
     image = _scaled("meadow", variant(wx, wy), rect.w)
     if image is None:
         return False
@@ -125,7 +193,9 @@ def draw_grass(screen, rect, wx, wy):
     return True
 
 
-def draw_path(screen, rect, wx, wy):
+def draw_path(screen, rect, wx, wy, client=None):
+    if USE_WORLD_GROUND and client is not None and _paint(client, rect, wx, wy, True):
+        return True
     image = _scaled("lane", variant(wx, wy), rect.w)
     if image is None:
         return False

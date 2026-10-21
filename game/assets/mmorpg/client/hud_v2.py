@@ -8,8 +8,8 @@ import pygame
 
 import combat
 from content import (
-    ITEMS, QUESTS, SKILL_DISPLAY_NAMES, STORAGE_BAG_IDS, INVENTORY_SIZE,
-    is_gem_item, is_storage_bag,
+    ITEMS, QUESTS, NPCS, SKILL_DISPLAY_NAMES, STORAGE_BAG_IDS, INVENTORY_SIZE,
+    COOKED_FISH_IDS, is_gem_item, is_storage_bag,
 )
 
 NAVY = (12, 18, 34)
@@ -448,23 +448,84 @@ def _draw_currencies(client, y, rects):
     return row.bottom + 6
 
 
+def _no_quest_step(client):
+    """One concrete next step for a player with no active quest.
+
+    Ordered by what actually blocks a fresh character: the tutorial, then a
+    weapon in hand, then the starter quest, then food. Each entry names a
+    place and (when it has one) an NPC the Go button can point at.
+    """
+    welcome = getattr(client, "welcome", None) or {}
+    if welcome.get("show_path"):
+        return {"title": "Get your starter kit", "detail": "Warden Tamsin, by the crossroads",
+                "hint": "Follow the gold trail — she explains the basics", "npc": "warden_tamsin"}
+    player = client.player or {}
+    weapon = (player.get("equipment") or {}).get("weapon")
+    if not weapon:
+        return {"title": "You're fighting bare-handed", "detail": "Equip a weapon from your bag (E)",
+                "hint": "An axe or pick works too — click it to wield", "npc": None}
+    done = {key for key, state in (client.quests or {}).items()
+            if state and (state.get("status") or "") == "complete"}
+    if not done:
+        return {"title": "Find Elder Miriam", "detail": "North-west cottage — your first quest",
+                "hint": "Click her, then press A to accept", "npc": "elder_miriam"}
+    has_food = any((entry or {}).get("item_id") in COOKED_FISH_IDS or (entry or {}).get("item_id") == "food_bag"
+                   for entry in (player.get("inventory") or {}).values())
+    if not has_food:
+        return {"title": "Carry some food", "detail": "Cook fish at a hearth, or buy food at a shop",
+                "hint": "R eats your best food when things go wrong", "npc": None}
+    return {"title": "Follow the trail", "detail": "Your quest card lists its next step",
+            "hint": "Press Q for the quest journal · H for controls", "npc": None}
+
+
 def _draw_quest_card(client, y, rects):
     _mw, _mh, SIDEBAR_X, SCREEN_W, _sh = _layout()
     x0 = SIDEBAR_X + 10
     w = SCREEN_W - SIDEBAR_X - 20
-    card = pygame.Rect(x0, y, w, 52)
+    card = pygame.Rect(x0, y, w, 72)
     _panel(client.screen, card, NAVY_CARD, GOLD_DIM)
-    _blit(client, client.font_tiny, "Current Quest", (card.x + 8, card.y + 4), GOLD)
+    _blit(client, client.font_tiny, "NEXT ACTION", (card.x + 8, card.y + 4), GOLD)
     quest = _current_quest(client)
     if not quest:
-        _blit(client, client.font_tiny, "No active quest", (card.x + 8, card.y + 24), MUTED)
+        # No quest yet. A new player still needs one concrete next step, and
+        # "talk to an NPC" is not one: name the NPC, say where, and let the
+        # card set a waypoint so the arrow tracks them.
+        step = _no_quest_step(client)
+        _blit(client, client.font_small, step["title"][:28], (card.x + 8, card.y + 18), INK)
+        _blit(client, client.font_tiny, step["detail"][:48], (card.x + 8, card.y + 36), GOLD)
+        _blit(client, client.font_tiny, step["hint"][:48], (card.x + 8, card.y + 53), MUTED)
+        if step.get("npc"):
+            track = pygame.Rect(card.right - 58, card.y + 44, 50, 20)
+            _panel(client.screen, track, NAVY_HI, SAFE_GREEN, radius=4)
+            label = _text(client, client.font_tiny, "Go", INK)
+            client.screen.blit(label, (track.centerx - label.get_width() // 2, track.centery - label.get_height() // 2))
+            rects["quest_track"] = {"rect": track, "npc_id": step["npc"]}
     else:
         name, _desc, progress, need, status = quest
+        qid = next(
+            (key for key, state in (client.quests or {}).items()
+             if state and (state.get("status") or "not_started") not in ("complete", "not_started")),
+            None,
+        )
+        state = (client.quests or {}).get(qid) or {}
+        qdef = QUESTS.get(qid) or {}
         _blit(client, client.font_small, name[:28], (card.x + 8, card.y + 18), INK)
-        detail = status.replace("_", " ")
-        if need:
-            detail = f"{progress}/{need}"
-        _blit(client, client.font_tiny, detail, (card.x + 8, card.y + 34), MUTED)
+        objective = client._quest_objective_text(qid, state) if qid else _desc
+        if status == "ready":
+            giver = next((npc for npc in NPCS if npc.get("id") == qdef.get("giver")), {})
+            objective = f"Return to {giver.get('name', 'the quest giver')}"
+        _blit(client, client.font_tiny, objective[:48], (card.x + 8, card.y + 36), GOLD)
+        detail = f"Progress: {progress}/{need}" if need else status.replace("_", " ").title()
+        _blit(client, client.font_tiny, detail, (card.x + 8, card.y + 53), MUTED)
+        target_id = qdef.get("giver") if status == "ready" else None
+        if qdef.get("type") == "find_npc" and status != "ready":
+            target_id = qdef.get("target")
+        if target_id and qid:
+            track = pygame.Rect(card.right - 58, card.y + 44, 50, 20)
+            _panel(client.screen, track, NAVY_HI, SAFE_GREEN, radius=4)
+            label = _text(client, client.font_tiny, "Go", INK)
+            client.screen.blit(label, (track.centerx - label.get_width() // 2, track.centery - label.get_height() // 2))
+            rects["quest_track"] = {"rect": track, "npc_id": target_id}
     rects["quest_card"] = card
     return card.bottom + 6
 
@@ -583,6 +644,19 @@ def _draw_inventory(client, y, bottom, rects):
         if rect.collidepoint(pygame.mouse.get_pos()) and not getattr(client, "inv_drag", None):
             hover = (entry, rect)
     rects["slots"] = slots
+    if not rows:
+        # An empty bag (or an empty filter) used to leave a blank void with no
+        # way to tell "nothing here" from "the panel is broken". Say which it
+        # is, and what to do about it.
+        filt = getattr(client, "hud_filter", "all")
+        if filt == "all":
+            msg = "Your bag is empty.  Click trees, rocks or fish to gather."
+            hint = "Loot, food and coins you pick up appear here."
+        else:
+            msg = f"No {filt} in your bag."
+            hint = "Press 'All' above to see everything."
+        _blit(client, client.font_small, msg, (x0 + 4, y + 10), MUTED)
+        _blit(client, client.font_tiny, hint, (x0 + 4, y + 30), GOLD_DIM)
     rects["inv_scroll_up"] = None
     rects["inv_scroll_down"] = None
     if max_scroll:
@@ -727,10 +801,43 @@ def _nearest_node(client):
 
 def _draw_bags(client, y, bottom, rects):
     x0 = _body_x()
-    _blit(client, client.font_tiny, "Bulk storage  ·  not worn gear", (x0, y), MUTED)
+    _blit(client, client.font_tiny, "Bulk storage and ammo containers", (x0, y), MUTED)
     y += 18
     boxes = {}
     player = client.player or {}
+
+    # A quiver is both a container and worn ammunition. Keeping it out of the
+    # normal inventory list made a loaded-but-unequipped quiver invisible.
+    inventory = player.get("inventory") or {}
+    quiver_slot = next(
+        (int(slot) for slot, entry in inventory.items()
+         if entry and entry.get("item_id") == "arrow_quiver"),
+        None,
+    )
+    ammo_id = (player.get("equipment") or {}).get("ammo")
+    quiver_equipped = ammo_id == "arrow_quiver"
+    quiver_total = int(player.get("quiver_total") or 0)
+    quiver = pygame.Rect(x0, y, _body_w(), 42)
+    owned = quiver_equipped or quiver_slot is not None
+    _panel(client.screen, quiver, NAVY_CARD, GOLD if owned else GOLD_DIM, radius=5)
+    _blit(client, client.font_tiny, "Arrow Quiver", (quiver.x + 8, quiver.y + 5), INK if owned else MUTED)
+    if quiver_equipped:
+        detail, detail_col = f"Equipped · {quiver_total} arrows", SAFE_GREEN
+    elif quiver_slot is not None:
+        detail, detail_col = f"{quiver_total} stored · equip to fire", GOLD
+    elif quiver_total:
+        detail, detail_col = f"{quiver_total} stored · quiver missing", DANGER_RED
+    else:
+        detail, detail_col = "Not owned", MUTED
+    _blit(client, client.font_tiny, detail, (quiver.x + 8, quiver.y + 22), detail_col)
+    if quiver_slot is not None and not quiver_equipped:
+        equip = pygame.Rect(quiver.right - 58, quiver.y + 9, 50, 24)
+        _panel(client.screen, equip, NAVY_HI, SAFE_GREEN, radius=5)
+        label = _text(client, client.font_tiny, "Equip", INK)
+        client.screen.blit(label, (equip.centerx - label.get_width() // 2, equip.centery - label.get_height() // 2))
+        rects["quiver_equip"] = {"rect": equip, "slot": quiver_slot}
+    boxes["Arrow Quiver"] = quiver
+    y += 44
     for label, flag, total_key, cap in BAG_ROWS:
         if y + 28 > bottom:
             break
@@ -963,6 +1070,23 @@ def handle_sidebar_click(client, mx, my, button):
             client.show_skills = False
             client.show_travel = False
             client.show_pets = False
+        return
+    quiver_equip = rects.get("quiver_equip") or {}
+    if quiver_equip.get("rect") and quiver_equip["rect"].collidepoint(mx, my):
+        client.net.send("EQUIP", slot_index=quiver_equip["slot"])
+        client.add_chat("Equipping Arrow Quiver.")
+        return
+    quest_track = rects.get("quest_track") or {}
+    if quest_track.get("rect") and quest_track["rect"].collidepoint(mx, my):
+        npc = next((row for row in NPCS if row.get("id") == quest_track.get("npc_id")), None)
+        if npc:
+            # "Go" means "show me the way", not teleport: set a waypoint so
+            # the edge arrow tracks it, and start walking if it's in view.
+            import new_player_guide
+            new_player_guide.set_waypoint(client, npc["x"], npc["y"], npc.get("name") or "Quest")
+            client.walk_and_act(client.adjacent_goals(npc["x"], npc["y"]), {
+                "type": "TALK", "npc_id": npc["id"],
+            })
         return
     if rects.get("skills") and rects["skills"].collidepoint(mx, my):
         client.toggle_skills_modal()

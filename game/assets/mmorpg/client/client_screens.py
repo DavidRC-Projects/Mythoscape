@@ -7,6 +7,24 @@ direct `python client.py` and an import see the same values.
 
 
 _BOUND = False
+import math
+import time
+
+# Plain-English descriptions shown on the stat allocation screen when a
+# beginner clicks the +/- of a skill. Keeps first-time players from guessing.
+SKILL_DESCRIPTIONS = {
+    "attack": "Attack: how often your melee hits land. Good if you fight with swords.",
+    "strength": "Strength: how hard your melee hits land. Good for a brawler build.",
+    "defence": "Defence: how often enemies miss you. Keeps you alive longer.",
+    "archery": "Archery: lets you fight at range with a bow — safer for new players.",
+}
+
+# One-click stat presets. Values are the 10 bonus points per skill.
+STAT_PRESETS = (
+    ("Balanced", {"attack": 3, "strength": 3, "defence": 2, "archery": 2}),
+    ("Warrior", {"attack": 4, "strength": 3, "defence": 3, "archery": 0}),
+    ("Ranger", {"attack": 0, "strength": 2, "defence": 2, "archery": 6}),
+)
 
 
 def _shop_buy_tax(cost, rate):
@@ -457,9 +475,23 @@ class ScreensMixin:
         if not u or not p:
             self.login_error = "Enter a username and password."
             return
+        # If the socket is down (server was not running at launch), open a
+        # fresh one now. Otherwise the Login press queues into a dead socket
+        # and the player sees nothing happen even after starting the server.
+        if not self.net.connected:
+            self.net.reconnect()
         if self.login_mode == "register":
             if not c:
                 self.login_error = "Enter a character name."
+                return
+            # Match the server's rule so a bad name is rejected before the
+            # round trip. Letters or numbers only; punctuation alone is not a
+            # name, and the server would refuse it anyway.
+            if not u.isascii():
+                self.login_error = "Usernames use letters and numbers only."
+                return
+            if len(u) < 3:
+                self.login_error = "Username must be at least 3 characters."
                 return
             import feature_flags
             self.opening_comic_pending = bool(feature_flags.USE_OPENING_COMIC)
@@ -606,11 +638,19 @@ class ScreensMixin:
                     return
                 if action == "plus" and self.remaining_stat_points() > 0:
                     self.stat_alloc[skill] += 1
+                    self.stat_skill_desc = skill
                     self.stat_alloc_error = ""
                 elif action == "minus" and self.stat_alloc[skill] > 0:
                     self.stat_alloc[skill] -= 1
+                    self.stat_skill_desc = skill
                     self.stat_alloc_error = ""
                 return
+            for rect, points in self.stat_preset_rects.items():
+                if rect.collidepoint(mx, my):
+                    self.stat_alloc = dict(points)
+                    self.stat_skill_desc = ""
+                    self.stat_alloc_error = ""
+                    return
             confirm = pygame.Rect(400, 540, 400, 44)
             if confirm.collidepoint(mx, my):
                 self.submit_stat_alloc()
@@ -618,6 +658,8 @@ class ScreensMixin:
     def draw_stat_alloc(self):
         _bind_client_globals()
         title = self.font_big.render("Choose your starting stats", True, WHITE)
+        tip = self.font_small.render("Not sure? Pick a preset below — you can train any skill later.", True, (200, 190, 170))
+        self.screen.blit(tip, (SCREEN_W // 2 - tip.get_width() // 2, 640))
         self.screen.blit(title, (SCREEN_W // 2 - title.get_width() // 2, 80))
         name = (self.player or {}).get("name", "Adventurer")
         sub = self.font.render(f"Welcome, {name}. Distribute 10 points.", True, YELLOW)
@@ -671,11 +713,34 @@ class ScreensMixin:
             self.screen.blit(spent, (box.x + 440, y + 10))
             y += 58
 
+        # Plain-English description of the highlighted/last-touched skill
+        self.stat_skill_desc = getattr(self, "stat_skill_desc", "")
+        desc = SKILL_DESCRIPTIONS.get(self.stat_skill_desc, "")
+        if desc:
+            d = self.font_small.render(desc, True, (200, 190, 170))
+            self.screen.blit(d, (SCREEN_W // 2 - d.get_width() // 2, 492))
+
         hint = self.font_small.render(
             "Each point raises that skill by 1 level. Confirm when all 10 are spent.",
             True, GREY,
         )
         self.screen.blit(hint, (SCREEN_W // 2 - hint.get_width() // 2, 512))
+
+        # One-click presets for players who don't want to min-max their first character
+        preset_y = 512 + hint.get_height() + 6
+        self.stat_preset_rects = {}
+        px = SCREEN_W // 2 - 400
+        for name, points in STAT_PRESETS:
+            pw = 190
+            pr = pygame.Rect(px, preset_y, pw, 30)
+            active = dict(self.stat_alloc) == points
+            pygame.draw.rect(self.screen, (45, 100, 55) if active else (30, 32, 42), pr, border_radius=6)
+            pygame.draw.rect(self.screen, GREEN if active else PANEL_LINE, pr, 1, border_radius=6)
+            label = self.font_small.render(name, True, WHITE if active else GREY)
+            self.screen.blit(label, (pr.centerx - label.get_width() // 2,
+                                     pr.centery - label.get_height() // 2))
+            self.stat_preset_rects[pr] = points
+            px += pw + 10
 
         confirm = pygame.Rect(400, 540, 400, 44)
         ready = left == 0
@@ -1027,7 +1092,13 @@ class ScreensMixin:
                     (canvas.x + tx * scale, canvas.y + ty * scale, scale, scale),
                 )
 
-        # Destination pins
+        prev_clip = self.screen.get_clip()
+        self.screen.set_clip(canvas)
+
+        # Destination pins with names; store hover rects so clicking a pin walks exactly there
+        self.world_map_pin_rects = []
+        mouse = pygame.mouse.get_pos()
+        hover_pin = None
         for dest in TRAVEL_DESTINATIONS:
             dx = dest["x"] - ox
             dy = dest["y"] - oy
@@ -1036,29 +1107,109 @@ class ScreensMixin:
                 py = canvas.y + dy * scale + scale // 2
                 if dest.get("id") == "castle_realm":
                     self._draw_castle_realm_pin(px, py, short=False)
-                    continue
-                if dest["kind"] == "monster":
+                elif dest["kind"] == "monster":
                     mdef = MONSTERS.get(dest.get("monster") or "", {})
                     col = self.monster_threat_color(mdef.get("level", 1))
-                    pygame.draw.circle(self.screen, col, (px, py), 3)
+                    pygame.draw.circle(self.screen, col, (px, py), 4)
+                    pygame.draw.circle(self.screen, (20, 20, 20), (px, py), 4, 1)
                 else:
-                    pygame.draw.rect(self.screen, (255, 220, 120), (px - 2, py - 2, 4, 4))
+                    pygame.draw.rect(self.screen, (255, 220, 120), (px - 2, py - 2, 5, 5))
+                    pygame.draw.rect(self.screen, (60, 40, 10), (px - 2, py - 2, 5, 5), 1)
+                label = dest["label"]
+                if dest["kind"] == "monster":
+                    label = f"{label} (Lv {MONSTERS.get(dest.get('monster') or '', {}).get('level', 1)})"
+                pin_rect = pygame.Rect(px - 5, py - 5, 10, 10).inflate(6, 6)
+                self.world_map_pin_rects.append((pin_rect, dest))
+                # Label under the pin, brighter when hovered
+                lab = self.font_tiny.render(label, True, (255, 240, 200) if pin_rect.collidepoint(mouse) else (215, 205, 180))
+                bg = pygame.Surface((lab.get_width() + 8, lab.get_height() + 4), pygame.SRCALPHA)
+                bg.fill((10, 12, 18, 170))
+                lx = min(max(canvas.x + 2, px - lab.get_width() // 2), canvas.right - lab.get_width() - 2)
+                ly = min(max(canvas.y + 2, py + 7), canvas.bottom - lab.get_height() - 2)
+                self.screen.blit(bg, (lx - 4, ly - 2))
+                self.screen.blit(lab, (lx, ly))
+                if pin_rect.collidepoint(mouse):
+                    hover_pin = dest
 
-        # Player marker
+        # Player marker + direction/edge arrow so you always know where you are
         if self.player:
             px, py = self.player_xy()
             dx, dy = px - ox, py - oy
             if 0 <= dx <= view_w and 0 <= dy <= view_h:
                 mx = canvas.x + dx * scale + scale // 2
                 my = canvas.y + dy * scale + scale // 2
-                pygame.draw.circle(self.screen, (40, 40, 40), (mx, my), 5)
-                pygame.draw.circle(self.screen, (255, 80, 70), (mx, my), 4)
+                pulse = 0.5 + 0.5 * math.sin(time.time() * 3)
+                halo = pygame.Surface((24, 24), pygame.SRCALPHA)
+                pygame.draw.circle(halo, (255, 90, 70, int(40 + 50 * pulse)), (12, 12), 10 + int(2 * pulse))
+                self.screen.blit(halo, (mx - 12, my - 12))
+                pygame.draw.circle(self.screen, (40, 40, 40), (mx, my), 6)
+                pygame.draw.circle(self.screen, (255, 80, 70), (mx, my), 5)
+                pygame.draw.circle(self.screen, (255, 220, 200), (mx, my), 2)
+            else:
+                self._map_edge_arrow(canvas, dx, dy, (255, 90, 70), "You")
+
+        self.screen.set_clip(prev_clip)
+
+        # Hover tooltip: what this pin is + how to walk there
+        if hover_pin is not None:
+            tip = f"Click to walk to {hover_pin['label']}"
+            t = self.font_tiny.render(tip, True, (255, 240, 200))
+            tw = t.get_width() + 14
+            tbox = pygame.Rect(mouse[0] + 12, mouse[1] + 14, tw, t.get_height() + 8)
+            tbox.clamp_ip(box)
+            bg = pygame.Surface(tbox.size, pygame.SRCALPHA)
+            bg.fill((16, 20, 28, 220))
+            self.screen.blit(bg, tbox.topleft)
+            pygame.draw.rect(self.screen, (120, 170, 220), tbox, 1, border_radius=4)
+            self.screen.blit(t, (tbox.x + 7, tbox.y + 4))
+
+        # Recenter-on-player button
+        self.world_map_recenter_rect = pygame.Rect(box.right - 108, box.y + 8, 92, 26)
+        rb = self.world_map_recenter_rect
+        pygame.draw.rect(self.screen, (40, 60, 90), rb, border_radius=6)
+        pygame.draw.rect(self.screen, (120, 170, 220), rb, 1, border_radius=6)
+        rt = self.font_tiny.render("Center on me", True, WHITE)
+        self.screen.blit(rt, (rb.centerx - rt.get_width() // 2, rb.centery - rt.get_height() // 2))
 
         foot = self.font_tiny.render(
-            "Right-click the corner minimap for a quick walk  ·  Press M for Travel list",
+            "Click a named pin to walk there  ·  Scroll / drag to pan  ·  Esc closes  ·  Press M for Travel list",
             True, (140, 138, 120),
         )
         self.screen.blit(foot, (box.x + 20, box.bottom - 28))
+
+    def _map_edge_arrow(self, canvas, dx, dy, color, label):
+        """Arrow at the canvas edge pointing toward an off-screen map point."""
+        cx, cy = canvas.center
+        if dx == 0 and dy == 0:
+            return
+        margin = 26
+        half_w, half_h = canvas.w / 2 - margin, canvas.h / 2 - margin
+        k = min(half_w / abs(dx) if dx else 1e9, half_h / abs(dy) if dy else 1e9)
+        ax, ay = cx + dx * k, cy + dy * k
+        ang = math.atan2(dy, dx)
+        size = 13
+        tip = (ax + math.cos(ang) * size, ay + math.sin(ang) * size)
+        left = (ax + math.cos(ang + 2.5) * size, ay + math.sin(ang + 2.5) * size)
+        right = (ax + math.cos(ang - 2.5) * size, ay + math.sin(ang - 2.5) * size)
+        pygame.draw.polygon(self.screen, color, (tip, left, right))
+        pygame.draw.polygon(self.screen, (20, 20, 20), (tip, left, right), 2)
+        lab = self.font_tiny.render(label, True, color)
+        bg = pygame.Surface((lab.get_width() + 8, lab.get_height() + 4), pygame.SRCALPHA)
+        bg.fill((10, 12, 18, 180))
+        lx = int(max(canvas.x + 4, min(canvas.right - lab.get_width() - 4, ax - lab.get_width() / 2)))
+        ly = int(max(canvas.y + 4, min(canvas.bottom - lab.get_height() - 4, ay - lab.get_height() / 2)))
+        self.screen.blit(bg, (lx - 4, ly - 2))
+        self.screen.blit(lab, (lx, ly))
+
+    def _shop_bag_tip(self):
+        """One-line hint naming the first unowned container this shop sells."""
+        from content import ITEMS
+        for item_id, _info in (self.shop.get("stock") or {}).items():
+            item = ITEMS.get(item_id) or {}
+            if item.get("unique") and not self.owns_shop_item(item_id):
+                verb = "Holds" if item_id == "arrow_quiver" else "Frees up your bag"
+                return f"{verb}: buy the {item.get('name', item_id)} once — it's permanent"
+        return None
 
     def draw_travel_modal(self):
         _bind_client_globals()
@@ -1435,6 +1586,10 @@ class ScreensMixin:
             bits.append(f"Bury: +{item['karma_xp']} Karma XP")
         if item.get("desc"):
             lines.append(item["desc"])
+        if item.get("unique"):
+            # The bag rule has to be visible where the player meets the item,
+            # not only when a sale is refused.
+            lines.append("Permanent — buy once, cannot be sold, traded or banked")
         # Jewelry specials (skip if already covered by desc "Special:")
         def _abil_line(name, val, mult=None):
             if name == "lifesteal":
@@ -1823,8 +1978,12 @@ class ScreensMixin:
 
         # --- Buy column ---
         self.screen.blit(self.font.render("Buy", True, GREEN), (box.x + 18, box.y + 72))
+        # A first-hour player doesn't know what a bag does for them; if one is
+        # on the shelf and not yet owned, say so plainly instead of "click to buy".
+        bag_tip = self._shop_bag_tip()
         self.screen.blit(
-            self.font_small.render("Click to buy 1 · scroll / drag bar", True, GREY),
+            self.font_small.render(bag_tip or "Click to buy 1 · scroll / drag bar", True,
+                                   (150, 220, 150) if bag_tip else GREY),
             (box.x + 60, box.y + 76),
         )
         buy_items = list((self.shop.get("stock") or {}).items())
@@ -1843,15 +2002,23 @@ class ScreensMixin:
             if row.bottom >= list_top and row.y <= list_bottom:
                 pygame.draw.rect(self.screen, (32, 36, 48), row, border_radius=4)
                 pygame.draw.rect(self.screen, (70, 80, 100), row, 1, border_radius=4)
+                # Bags, pouches and the quiver are one-per-character and never
+                # resold: once owned the row goes quiet instead of offering a
+                # second copy you could not use.
+                owned = self.owns_shop_item(item_id)
                 icon = pygame.Rect(row.x + 6, row.y + 4, 28, 28)
                 sprites.draw_item_icon(self.screen, icon, item_id, ITEMS)
-                name = self.font_small.render(info["name"], True, WHITE)
+                name = self.font_small.render(info["name"], True, (130, 140, 160) if owned else WHITE)
                 self.screen.blit(name, (row.x + 42, row.y + 4))
-                btax = _shop_buy_tax(info["price"], self.shop.get("tax_rate", 0))
-                meta = self.font_small.render(
-                    f"{info['price']} gp (+{btax} tax)   stock {info['qty']}", True, (180, 200, 140))
+                if owned:
+                    meta = self.font_small.render("Owned — one per character", True, (140, 200, 140))
+                else:
+                    btax = _shop_buy_tax(info["price"], self.shop.get("tax_rate", 0))
+                    meta = self.font_small.render(
+                        f"{info['price']} gp (+{btax} tax)   stock {info['qty']}", True, (180, 200, 140))
                 self.screen.blit(meta, (row.x + 42, row.y + 18))
-                self.shop_buy_rects.append((row, item_id))
+                if not owned:
+                    self.shop_buy_rects.append((row, item_id))
             y += row_h
         self.screen.set_clip(prev_clip)
 
@@ -1895,6 +2062,7 @@ class ScreensMixin:
             sell_slots = [
                 (slot, entry) for slot, entry in sell_slots
                 if entry and entry.get("item_id") != "coins"
+                and not (ITEMS.get(entry.get("item_id")) or {}).get("unique")
                 and self.shop_will_buy_item(entry.get("item_id"))
             ]
 
@@ -2735,8 +2903,10 @@ class ScreensMixin:
                 ("Shift+G / Shift+click loot", "Take all items on the pile"),
                 ("P / sidebar button", "Toggle auto-pickup items (coins always auto)"),
                 ("X", "Toggle floating XP drops above your head (off = chat XP)"),
-                ("Minimap left-click", "Walk toward that area"),
-                ("Minimap right-click", "Open the scrollable world map"),
+                ("Minimap left-click", "Walk toward that area · click again on the frame to hide/show"),
+                ("Minimap right-click", "Open the world map (named buildings, click a pin to walk there)"),
+                ("Minimap rim arrows", "A gold/white arrow at the edge = that place is off screen that way"),
+                ("World map", "\"Center on me\" re-centres on you · red arrow at the edge points to you when panned away"),
             ]),
             ("Panels", [
                 ("Travel / Bank / Gear", "Sidebar buttons (also M / B / E)"),

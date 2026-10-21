@@ -171,12 +171,13 @@ def _draw_prop(client, rect, decor, t):
     elif decor == "warning":
         pygame.draw.polygon(surf, (80, 70, 90), [(cx - 8, cy + 6), (cx + 8, cy + 6), (cx, cy - 16)])
     elif decor == "pylon":
-        lit = True
-        for p in (client.dungeon.get("pylons") or []):
-            if p["x"] == rect.x // max(1, tile) or True:
-                pass
+        wx, wy = client.view_to_world(rect.x // max(1, tile), rect.y // max(1, tile))
+        pylons = client.dungeon.get("pylons") or []
+        pylon = next((p for p in pylons if p.get("x") == wx and p.get("y") == wy), None)
+        lit = bool(pylon and pylon.get("lit"))
+        colour = (255, 210, 120) if lit else (92, 82, 108)
         pygame.draw.rect(surf, (70, 60, 90), (cx - 4, cy - 18, 8, 22))
-        pygame.draw.circle(surf, (255, 210, 120), (cx, cy - 20), 4)
+        pygame.draw.circle(surf, colour, (cx, cy - 20), 4)
     elif decor == "rift":
         pygame.draw.ellipse(surf, (120, 40, 180), (cx - 12, cy - 6, 24, 12), 2)
     elif decor == "loot":

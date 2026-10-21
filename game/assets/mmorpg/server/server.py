@@ -497,6 +497,22 @@ class PlayerSession:
     def quiver_equipped(self):
         return self.equipment.get("ammo") == "arrow_quiver"
 
+    def auto_equip_quiver(self):
+        """Wear an available quiver when a bow needs it. Returns whether one was worn."""
+        if self.equipment.get("ammo"):
+            return False
+        slot = next(
+            (slot for slot, entry in self.inventory.items()
+             if entry and entry.get("item_id") == "arrow_quiver"),
+            None,
+        )
+        if slot is None:
+            return False
+        self.equipment["ammo"] = "arrow_quiver"
+        WORLD.db.set_equipment(self.player_id, "ammo", "arrow_quiver")
+        WORLD.remove_item_qty(self, "arrow_quiver", 1)
+        return True
+
     def best_quiver_arrow(self):
         """Highest-tier arrow currently stored in the quiver, or None."""
         best_id = None
@@ -960,6 +976,11 @@ class PlayerSession:
             "hp": self.hp, "max_hp": self.max_hp(),
             "combat_level": self.combat_level(),
             "equipment": self.equipment,  # client uses this for sprite weapons/armor
+            # Skill levels, so another player can examine you. Levels only —
+            # no XP and no inventory, and nothing the highscore tables do not
+            # already publish.
+            "levels": {s: self.level(s) for s in ("attack", "strength", "defence",
+                                                  "hitpoints", "archery")},
             "gathering": self.gathering_public(),
             "gender": self.gender,
             "noble_rank": int(getattr(self, "noble_rank", 0) or 0),
@@ -1040,6 +1061,7 @@ class PlayerSession:
             "quest_points": self.quest_points(),
             "magic": self.magic_public(),
             "quiver": dict(self.quiver),
+            "quiver_arrows": dict(self.quiver),
             "quiver_capacity": int(QUIVER_CAPACITY),
             "quiver_total": self.quiver_total(),
             "quiver_best": self.best_quiver_arrow() if self.quiver_equipped() else None,
@@ -1806,10 +1828,16 @@ async def flush_quest_logs():
         if not getattr(session, "quest_log_dirty", False):
             continue
         session.quest_log_dirty = False
-        await send(
-            session.ws, "QUEST_LOG",
-            quests={qid: quest_status_for(session, qid) for qid in QUESTS},
-        )
+        quests = {qid: quest_status_for(session, qid) for qid in QUESTS}
+        await send(session.ws, "QUEST_LOG", quests=quests)
+        # A brand-new player accepting their first quest ends the arrival guide's
+        # stage-2 trail (to Elder Miriam) — tell the client the quest is underway.
+        if getattr(session, "arrival_guide", False):
+            session.arrival_guide = False
+            st = _welcome_status(session)
+            st["claimed"] = True
+            st["show_path"] = True
+            await send_welcome_state(session, st)
 
 
 # ---------------------------------------------------------------------------
@@ -1822,7 +1850,20 @@ async def handle_login(ws, msg, is_register):
         await send(ws, "LOGIN_FAIL", reason="Username and password required.")
         return
     if is_register:
-        char_name = (msg.get("char_name") or username).strip()[:16]
+        # Reject unusable usernames before anything is written. The client
+        # checks this too, but the server is the one that can be talked to
+        # directly. Length bounds also stop a blank or a single character
+        # username becoming an account nobody can identify.
+        if len(username) < 3 or len(username) > 20 or not username.isascii():
+            await send(ws, "LOGIN_FAIL", reason="Usernames need 3-20 letters or numbers.")
+            return
+        # "   " is truthy, so `msg.get("char_name") or username` passed it
+        # straight through and strip() then saved an empty name. Fall back to
+        # the username *after* stripping, and refuse a name with no letters.
+        char_name = str(msg.get("char_name") or "").strip()[:16] or username[:16]
+        if not any(ch.isalnum() for ch in char_name):
+            await send(ws, "LOGIN_FAIL", reason="Pick a character name with letters or numbers.")
+            return
         gender = msg.get("gender") or "male"
         if WORLD.db.get_player_by_username(username):
             await send(ws, "LOGIN_FAIL", reason="That username is already taken.")
@@ -1906,16 +1947,33 @@ async def send_world_join(session):
 
 
 async def send_starter_tips(session):
-    """Short first-session pointers — H for the full help list."""
-    tips = [
-        "Welcome to Crownfall! Press H anytime for controls · Esc closes popups.",
-        "Talk to Elder Miriam (NW) for a quest, Elena (east) for a free bow kit, Lira for jewelry (B = shop).",
-        "Bank (B): Deposit inventory, shift-click vault to withdraw 1. Purse max 65k — keep coins in the vault.",
-        "Gareth smelts & smiths (F) — jewelry too. Mira sells food. Tidehollow Cave is at Harbourreach.",
-        "P toggles auto-pickup · Tab skills · Q journal · M travel · Space attacks · R eats food (bags first).",
-    ]
-    for text in tips:
-        await send(session.ws, "CHAT_MSG", **{"from": "Guide", "text": text})
+    """Short first-session pointers — H for the full help list.
+
+    Only for a character who has never played before. This used to run on
+    every login, so a returning player was re-tutored each session and the
+    five lines drowned whatever they had actually logged in to read.
+    """
+    if getattr(session, "_starter_tips_sent", False):
+        return
+    session._starter_tips_sent = True
+    try:
+        seen = WORLD.db.get_player_by_id(session.player_id)["starter_tips_seen"]
+    except (KeyError, IndexError, TypeError):
+        seen = 0
+    if seen:
+        return
+    WORLD.db.save_player_stats(session.player_id, starter_tips_seen=1)
+    # One instruction, then play.
+    #
+    # This used to dump five dense lines naming six NPCs, four keybinds, the
+    # bank limits and the purse cap before the player had taken a single step.
+    # Onboarding guidance is blunt about this: players act on one clear next
+    # step, not on a wall of reference text. Everything else is still there —
+    # it arrives when it is relevant, and H always lists the lot.
+    await send(session.ws, "CHAT_MSG", **{
+        "from": "Guide",
+        "text": "Follow the golden trail to Warden Tamsin — she has your starting kit. (H = all controls.)",
+    })
 
 
 async def handle_allocate_stats(session, msg):
@@ -1958,9 +2016,43 @@ async def handle_allocate_stats(session, msg):
     log.info("%s allocated starting stats %s", session.username, alloc)
 
 
+# Item id -> Session attribute holding what a packed bag is currently carrying.
+BAG_CONTENTS_ATTR = {
+    "arrow_quiver": "quiver", "arrowtip_box": "tip_box",
+    "food_bag": "food_bag", "raw_food_bag": "raw_bag",
+    "mining_bag": "mining_bag", "log_bag": "log_bag",
+    "fletch_pouch": "fletch_pouch", "potion_pouch": "potion_pouch",
+    "gem_bag": "gem_bag",
+}
+
+
 def item_is_sellable(item_id):
     item = ITEMS.get(item_id) or {}
     return item.get("sellable", True) and item.get("tradeable", True)
+
+
+def owns_unique_item(session, item_id):
+    """True when this character already owns a one-per-account container (bag, pouch or quiver).
+
+    Counts every place an owned bag can be: worn, in the pack, in the bank, or
+    holding its items. Bags are bought once and can never be sold, so a second
+    copy could only ever be dead weight.
+    """
+    item = ITEMS.get(item_id) or {}
+    if not item.get("unique"):
+        return False
+    if (session.equipment or {}).get(item.get("equip_slot")) == item_id:
+        return True
+    if WORLD.count_item(session, item_id) > 0 or WORLD.count_item_bank(session, item_id) > 0:
+        return True
+    # Last resort: merged contents. Bags normally keep their item, but an empty
+    # stored bag is still indistinguishable from "never owned", so this must
+    # stay tighter than the has_* helpers or an empty packed bag could be re-bought.
+    attr = BAG_CONTENTS_ATTR.get(item_id)
+    contents = getattr(session, attr, None) if attr else None
+    if isinstance(contents, dict):
+        return any(int(q or 0) > 0 for q in contents.values())
+    return False
 
 
 def shop_will_buy(shop, item_id):
@@ -1988,8 +2080,14 @@ def item_is_tradeable(item_id):
 
 
 def item_is_bankable(item_id):
-    """Medals stay unsellable, but they can sit in the bank."""
+    """Medals stay unsellable, but they can sit in the bank.
+
+    One-per-character containers can't: their ownership is checked by reading
+    the bag itself, so banking the empty item would let a second be bought.
+    """
     item = ITEMS.get(item_id) or {}
+    if item.get("unique"):
+        return False
     if item.get("dungeon_bound"):
         return False
     if "bankable" in item:
@@ -2260,7 +2358,15 @@ def _build_dungeon_floor(session, floor: int, dungeon_id: str = None):
     mod = DUNGEON_MODS.get(dungeon_id, tidehollow)
     meta = _dungeon_meta(dungeon_id)
     info = mod.floor_info(floor)
-    tiles = mod.generate_floor_tiles(floor)
+    # Tidehollow is segmented: a chain of chambers, each sealing its exits until
+    # its own wave is dead. Other dungeons keep the single open floor they were
+    # designed around.
+    rooms = None
+    if dungeon_id == "tidehollow" and hasattr(mod, "generate_rooms"):
+        tiles, rooms = mod.generate_rooms(floor)
+        mod.apply_seals(tiles, rooms)
+    else:
+        tiles = mod.generate_floor_tiles(floor)
     props = dungeon_props.install(
         tiles, dungeon_id, floor, mod.DUNGEON_SPAWN, (mod.DUNGEON_SPAWN[0], mod.DUNGEON_H - 1),
     )
@@ -2269,18 +2375,115 @@ def _build_dungeon_floor(session, floor: int, dungeon_id: str = None):
     if dungeon_id == "emberdeep" and feature_flags.USE_EMBERDEEP_CREATURES and feature_flags.USE_EMBERDEEP_V2:
         import emberdeep_creatures
         reserved = emberdeep_creatures.reserved_tiles(tiles)
-    spots = [
-        p for p in mod.pick_spawn_tiles(tiles, info["count"] + len(blocked) + len(reserved))
-        if p not in blocked and p not in reserved
-    ][: info["count"]]
+    spot_room = {}
+    if rooms:
+        # Spread the floor's monsters across the chambers, leaving the
+        # entrance hall empty so the player gets a moment to orient.
+        #
+        # Deep floors carry more chambers than monsters (floor 10 has three
+        # beasts and six rooms). Any chamber left holding no monsters must be
+        # considered cleared, or its doors seal forever with no fight to open
+        # them — an unwinnable soft-lock.
+        fight_rooms = [r for r in rooms if not r["cleared"]] or rooms
+        spots = []
+        used = set()
+        per_room = mod.room_spawn_count(floor) if hasattr(mod, "room_spawn_count") else 3
+        # Populate every chamber individually. Each room's kill target is the
+        # number that actually spawned inside it, so "kill N to open the door"
+        # is always achievable without farming respawns.
+        claimed = set()
+        for room in fight_rooms:
+            pool = [p for p in mod.spawn_tiles_for_room(room, tiles, 64)
+                    if p not in blocked and p not in reserved and p not in claimed]
+            mod.random.Random(floor * 131 + room["id"]).shuffle(pool)
+            room_spots = pool[:per_room]
+            claimed.update(room_spots)
+            for pos in room_spots:
+                spot_room[pos] = room["id"]
+            spots.extend(room_spots)
+            used.add(room["id"])
+            room["kills"] = 0
+            # The target is the number that *actually* spawned here. Rooms are
+            # only ever credited by looking up the tile a monster died on, and
+            # corridors overlap room footprints, so a mismatch here would leave
+            # a chamber needing kills it can never be given.
+            room["kill_target"] = len(room_spots)
+            if not room_spots:
+                # A chamber props have filled cannot be fought in; leave it
+                # open rather than sealing a door nothing can unlock.
+                room["cleared"] = True
+        for room in rooms:
+            if room["cleared"]:
+                room["kill_target"] = 0
+                room["kills"] = 0
+        # Seals were written before spawns were placed. Re-apply now that we
+        # know which chambers are empty, so an empty room is never shut.
+        for row in tiles:
+            for i, tile in enumerate(row):
+                if tile == mod.SEALED:
+                    row[i] = mod.FLOOR
+        mod.apply_seals(tiles, rooms)
+    else:
+        spots = [
+            p for p in mod.pick_spawn_tiles(tiles, info["count"] + len(blocked) + len(reserved))
+            if p not in blocked and p not in reserved
+        ][: info["count"]]
     stats = mod.scaled_monster_stats(info["level"])
     visual = mod.visual_type_for_floor(floor)
     if hasattr(mod, "monster_display_name"):
         stats["name"] = mod.monster_display_name(visual, stats["level"])
+    # Named encounters. These replace ordinary monsters rather than adding to
+    # them, so info["count"] — and therefore the floor's clear condition — is
+    # unchanged. The last-drawn chamber gets the elite; the two milestone
+    # floors also get a boss in the final chamber.
+    elite_name = info.get("elite") if dungeon_id == "tidehollow" else None
+    boss_info = info.get("boss") if dungeon_id == "tidehollow" else None
+
+    def _in_last_room():
+        """Index of the monster in the most advanced chamber.
+
+        "Last chamber" must mean the chamber furthest along the chain, not the
+        last spawn: monsters are dealt round-robin, so the final spawn often
+        lands back in the first room.
+        """
+        if rooms is None:
+            return len(spots) - 1
+        best_index, best_room = -1, -1
+        for idx, pos in enumerate(spots):
+            room = mod.room_at(rooms, pos[0], pos[1])
+            if room is not None and room["id"] >= best_room:
+                best_room, best_index = room["id"], idx
+        return best_index
+
+    elite_index = _in_last_room() if elite_name and spots else -1
+    # A milestone floor puts its boss in the final chamber in place of the
+    # elite, so the floor still ends on one decisive fight.
+    boss_index = _in_last_room() if boss_info and spots else -1
+
     monsters = {}
-    for sx, sy in spots:
+    for index, (sx, sy) in enumerate(spots):
         mid = next_id()
-        m = MonsterInstance(mid, visual, sx, sy, stats=dict(stats))
+        mstats = dict(stats)
+        if index == boss_index and boss_info:
+            bonus = int(boss_info.get("level_bonus") or 0)
+            mstats = mod.scaled_monster_stats(info["level"] + bonus)
+            mstats["name"] = boss_info["name"]
+            mstats["boss"] = True
+            mstats["hp"] = int(mstats["hp"] * 1.35)
+            mstats["xp"] = int(mstats["xp"] * 2.2)
+        elif index == elite_index and elite_name:
+            mstats["name"] = elite_name
+            mstats["elite"] = True
+            mstats["hp"] = int(mstats["hp"] * 1.45)
+            mstats["xp"] = int(mstats["xp"] * 1.6)
+            mstats["def_bonus"] = int(mstats.get("def_bonus", 0)) + 2
+        # Segmented floors progress on a kill *count*, so a respawn is a
+        # feature: it lets the player finish a chamber's target without
+        # hunting every corner. Other dungeons are still "kill everything",
+        # where a respawn would make clearing impossible.
+        respawns = dungeon_id == "tidehollow" and rooms
+        m = MonsterInstance(mid, visual, sx, sy, stats=mstats,
+                            no_respawn=not respawns)
         # Stay near where they spawned. They stop chasing once you leave that patch.
         if dungeon_id == "emberdeep" and feature_flags.USE_EMBERDEEP_V2:
             m.home_room = emberdeep.room_box(tiles, sx, sy)
@@ -2292,6 +2495,9 @@ def _build_dungeon_floor(session, floor: int, dungeon_id: str = None):
                 min(mod.DUNGEON_W - 1, sx + leash),
                 min(mod.DUNGEON_H - 1, sy + leash),
             )
+        # Remember the chamber this beast belongs to. Kills are credited to
+        # that room even if it wanders down a corridor into another.
+        m._dungeon_room_id = spot_room.get((sx, sy))
         monsters[mid] = m
     if dungeon_id == "emberdeep" and feature_flags.USE_EMBERDEEP_CREATURES and feature_flags.USE_EMBERDEEP_V2:
         import emberdeep_creatures
@@ -2314,6 +2520,7 @@ def _build_dungeon_floor(session, floor: int, dungeon_id: str = None):
         "width": mod.DUNGEON_W,
         "height": mod.DUNGEON_H,
         "monsters": monsters,
+        "rooms": rooms,
         "return_x": prev.get("return_x", mod.CAVE_RETURN[0]),
         "return_y": prev.get("return_y", mod.CAVE_RETURN[1]),
         "props": props,
@@ -2327,6 +2534,60 @@ def _build_dungeon_floor(session, floor: int, dungeon_id: str = None):
     session.gathering_node = None
     if session.pet_id:
         _bring_pet(session)
+
+
+def _dungeon_room_hud(session):
+    """Room-scoped numbers for segmented floors: which chamber the player is
+    standing in, its remaining wave, and how many are done. Empty for floors
+    that are one open map."""
+    d = session.dungeon
+    if not d or not d.get("rooms"):
+        return {}
+    here = tidehollow.room_at(d["rooms"], session.x, session.y)
+    left = {}
+    for mon in d["monsters"].values():
+        if not mon.alive:
+            continue
+        room = tidehollow.room_at(d["rooms"], mon.x, mon.y)
+        if room is not None:
+            left[room["id"]] = left.get(room["id"], 0) + 1
+    # Which chamber is this, counting only the ones with fights, so "Chamber
+    # 2 of 3" means something to the player.
+    rooms = d["rooms"]
+    fought = [r for r in rooms if r["doors"]] or rooms
+    here_no = None
+    if here is not None and here in fought:
+        here_no = fought.index(here) + 1
+    # Surface a named elite or boss when one is still alive in this chamber.
+    threat = None
+    if here is not None and not here["cleared"]:
+        for mon in d["monsters"].values():
+            stats = mon.stats or {}
+            if not mon.alive or not (stats.get("boss") or stats.get("elite")):
+                continue
+            if tidehollow.room_at(rooms, mon.x, mon.y) is here:
+                threat = {"name": stats.get("name") or "Something stirs",
+                          "boss": bool(stats.get("boss"))}
+                break
+    # Kills earned vs kills needed. This is the number that opens the door, so
+    # it is the one the HUD shows — "remaining alive" is not the goal any more
+    # (respawns count), and showing it would be misleading.
+    kills = int(here.get("kills") or 0) if here is not None else 0
+    need = int(here.get("kill_target") or 0) if here is not None else 0
+    return {
+        "room": None if here is None else {
+            "id": here["id"],
+            "doors_open": bool(here["cleared"]),
+            "kills": kills,
+            "target": need,
+            "remaining": max(0, need - kills),
+            "alive": left.get(here["id"], 0),
+            "number": here_no,
+            "threat": threat,
+        },
+        "rooms_total": len(fought),
+        "rooms_cleared": sum(1 for r in fought if r["cleared"]),
+    }
 
 
 def _dungeon_payload(session):
@@ -2367,6 +2628,7 @@ def _dungeon_payload(session):
         "exit_y": exit_y,
         "props": d.get("props") or [],
     }
+    payload.update(_dungeon_room_hud(session))
     if d.get("v2") == "depths":
         import depths_v2
         payload.update(depths_v2.client_extra(session))
@@ -2443,9 +2705,14 @@ async def _grant_monster_table(session, monster):
         lo, hi = bounds
         qty = random.randint(lo, hi)
         if item_id == "coins":
-            gained, _left = WORLD.add_coins(session, qty)
+            gained, left = WORLD.add_coins(session, qty)
             if gained:
                 got.append(f"{gained} coins")
+            if left:
+                # The purse caps at MAX_PURSE_COINS. Dropping the overflow
+                # silently destroyed real rewards; say so instead (the quest
+                # reward path already warned, this one did not).
+                got.append(f"{left} coins lost (purse full — bank first)")
             continue
         if WORLD.add_item_to_inventory(session, item_id, qty):
             name = ITEMS.get(item_id, {}).get("name", item_id)
@@ -2474,8 +2741,184 @@ async def _finish_dungeon_kill(session, monster=None):
                 await depths_v2.announce_first_kill(session)
         return
     await _grant_dungeon_kill_loot(session)
+    if d.get("rooms"):
+        # Count the kill toward its chamber's target. This is what opens doors
+        # now; it replaces the old "are there any monsters left alive?" check,
+        # so a respawn still contributes and nothing can stall progress.
+        await credit_dungeon_room_kill(session, monster)
+        _nudge_off_sealed_door(session)
     if not d.get("explore") and _floor_uncleared(d) == 0:
         await _dungeon_on_clear(session)
+
+
+def _grant_room_cache(session, floor):
+    """Give the loot for clearing one Tidehollow chamber. Returns labels."""
+    try:
+        loot = tidehollow.room_clear_reward(floor)
+    except Exception:
+        return []
+    got = []
+    for item_id, qty in loot:
+        if item_id == "coins":
+            gained, left = WORLD.add_coins(session, qty)
+            if gained:
+                got.append(f"{gained} coins")
+            if left:
+                got.append(f"{left} coins lost (purse full — bank first)")
+            continue
+        if WORLD.add_item_to_inventory(session, item_id, qty):
+            name = ITEMS.get(item_id, {}).get("name", item_id)
+            got.append(f"{name} x{qty}" if qty > 1 else name)
+        else:
+            got.append(f"{ITEMS.get(item_id, {}).get('name', item_id)} (bag full, left behind)")
+    return got
+
+
+def _nudge_off_sealed_door(session):
+    """Never leave the player standing inside a door that just sealed.
+
+    A door can slam while someone is on its threshold. Standing there is not
+    fatal (they can step off), but it looks like a bug and can strand a player
+    who walked in behind a wave. Push them to the nearest open floor tile.
+    """
+    d = session.dungeon
+    if not d or not d.get("tiles"):
+        return
+    tiles = d["tiles"]
+    x, y = int(session.x), int(session.y)
+    if not (0 <= y < len(tiles) and 0 <= x < len(tiles[y])):
+        return
+    if tiles[y][x] != tidehollow.SEALED:
+        return
+    best = None
+    for radius in range(1, 6):
+        for dx in range(-radius, radius + 1):
+            for dy in range(-radius, radius + 1):
+                nx, ny = x + dx, y + dy
+                if not (0 <= ny < len(tiles) and 0 <= nx < len(tiles[ny])):
+                    continue
+                if tiles[ny][nx] != FLOOR:
+                    continue
+                dist = abs(dx) + abs(dy)
+                if best is None or dist < best[0]:
+                    best = (dist, nx, ny)
+        if best:
+            break
+    if best:
+        session.x, session.y = best[1], best[2]
+
+
+async def reconcile_dungeon_doors():
+    """Safety net: reopen any chamber that is empty but still sealed.
+
+    Doors normally open on the kill event. This runs every tick and fixes any
+    room whose monsters are all dead but whose doors are still SEALED — the
+    state a player gets stuck in when a kill is ever missed (a monster dying
+    from a pet, a poison tick, a save/restore, or an older build).
+
+    Cheap enough to run unconditionally: dungeons are private and short-lived,
+    and it touches only sessions that are actually inside one.
+    """
+    for session in list(WORLD.sessions.values()):
+        d = getattr(session, "dungeon", None)
+        if not d or d.get("explore"):
+            continue
+        rooms = d.get("rooms")
+        if not rooms:
+            continue
+        # Fast path: skip sessions with nothing sealed on the floor.
+        if not any(tile == tidehollow.SEALED for row in (d.get("tiles") or []) for tile in row):
+            continue
+        try:
+            await _open_cleared_rooms(session)
+        except Exception:
+            log.exception("door reconcile failed for %s", getattr(session, "char_name", "?"))
+
+
+async def credit_dungeon_room_kill(session, monster):
+    """Count one kill toward the chamber it happened in, and open the door when
+    that chamber's target is met.
+
+    Progression is a kill *count*, not "no monsters left alive". A monster that
+    respawns therefore still counts when killed again — the player just needs
+    the number, which is what the HUD promises — and it can never soft-lock on
+    a beast that wandered out of reach or died somewhere off-screen.
+    """
+    d = getattr(session, "dungeon", None)
+    rooms = (d or {}).get("rooms")
+    if not rooms or not monster:
+        return
+    # Credit the chamber the monster belongs to. Room footprints include their
+    # connecting corridor and two rooms can share one, so the room recorded at
+    # spawn — not wherever the beast happened to die — is the reliable answer.
+    home = getattr(monster, "_dungeon_room_id", None)
+    if home is not None:
+        room = next((r for r in rooms if r["id"] == home), None)
+    else:
+        room = tidehollow.room_at(rooms, monster.x, monster.y)
+    if room is None or room.get("cleared"):
+        return
+    room["kills"] = int(room.get("kills") or 0) + 1
+    target = int(room.get("kill_target") or 0)
+    if room["kills"] < target:
+        await send(session.ws, "CHAT_MSG", **{
+            "from": "Tidehollow",
+            "text": f"Chamber {room['id'] + 1}: {room['kills']}/{target} slain.",
+        })
+        return
+    await _open_cleared_rooms(session)
+
+
+async def _open_cleared_rooms(session):
+    """Unseal any chamber whose kill target has been reached."""
+    d = session.dungeon
+    rooms = d.get("rooms")
+    if not rooms:
+        return
+    opened = []
+    for room in rooms:
+        if room["cleared"]:
+            continue
+        if int(room.get("kills") or 0) < int(room.get("kill_target") or 0):
+            continue
+        if not room["doors"]:
+            continue
+        tidehollow.open_room(d["tiles"], rooms, room)
+        opened.append(room)
+    if not opened:
+        return
+    # Say exactly where the player stands. The only progress signal used to be
+    # a door opening, so "have I hit the number?" was guesswork.
+    total_rooms = len([r for r in rooms if r["doors"]]) or len(rooms)
+    cleared_rooms = sum(1 for r in rooms if r["cleared"] and r["doors"])
+    floor_left = sum(1 for m in d["monsters"].values() if m.alive)
+    await send(session.ws, "CHAT_MSG", **{
+        "from": "Tidehollow",
+        "text": (f"The chamber falls silent — {cleared_rooms}/{total_rooms} chambers clear, "
+                 f"{floor_left} beast{'s' if floor_left != 1 else ''} left. The way ahead opens."),
+    })
+    # Clearing a chamber earns a cache: coins plus something to keep going.
+    # Paid once per room, on the same event that opens the door, so it cannot
+    # be farmed by walking in and out.
+    if d.get("id") == "tidehollow":
+        for room in opened:
+            if room.get("reward_paid"):
+                continue
+            room["reward_paid"] = True
+            got = _grant_room_cache(session, int(d.get("floor") or 1))
+            if got:
+                await send(session.ws, "CHAT_MSG", **{
+                    "from": "Cache", "text": "Hidden cache: " + ", ".join(got) + ".",
+                })
+                await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    # The client renders from its own tile grid, so push only the tiles that
+    # changed doors. DUNGEON_TILES takes a `changes` list, not a whole map.
+    changes = []
+    for room in opened:
+        for x, y in room["doors"]:
+            changes.append([int(x), int(y), d["tiles"][y][x]])
+    if changes:
+        await send(session.ws, "DUNGEON_TILES", changes=changes)
 
 
 def _find_dungeon_entrance(session, preferred_id=None):
@@ -2709,6 +3152,28 @@ async def handle_enter_dungeon(session, msg):
         **{"from": meta["chat_from"],
            "text": f"Floor 1/{session.dungeon['floors']}: {session.dungeon['label']}. Slay every beast to advance. Leave anytime from the EXIT."},
     )
+    if dungeon_id == "tidehollow":
+        # Say how the dungeon works before the first door shuts behind them,
+        # and name what is waiting at the end of the floor.
+        intro = ("Each chamber seals until its beasts are dead. Clear it, and the way "
+                 "ahead grinds open — and something is always left behind.")
+        info = tidehollow.floor_info(1)
+        if info.get("elite"):
+            intro += f" Watch for {info['elite']} in the last chamber."
+        await send(session.ws, "CHAT_MSG", **{"from": meta["chat_from"], "text": intro})
+        # Warn rather than block: an under-levelled player should be able to
+        # try it, but they deserve to know before the first door seals.
+        try:
+            my_level = session.combat_level()
+        except Exception:
+            my_level = 0
+        if my_level and my_level < info["level"] - 5:
+            await send(session.ws, "CHAT_MSG", **{
+                "from": meta["chat_from"],
+                "text": (f"Caution: these beasts are level {info['level']}, and you are "
+                         f"combat level {my_level}. Bring food, and remember the EXIT."),
+                "style": "gold",
+            })
 
 
 async def handle_leave_dungeon(session, msg=None, silent=False):
@@ -2813,11 +3278,36 @@ async def _dungeon_on_clear(session):
     _build_dungeon_floor(session, nxt, dungeon_id=dungeon_id)
     await send(session.ws, "DUNGEON_FLOOR", **_dungeon_payload(session))
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    if dungeon_id == "tidehollow":
+        ninfo = tidehollow.floor_info(nxt)
+        boss = ninfo.get("boss")
+        if boss:
+            await send(session.ws, "CHAT_MSG", **{
+                "from": chat_from,
+                "text": f"Something vast shifts in the dark below: {boss['name']} waits on floor {nxt}.",
+                "style": "gold",
+            })
     await send(
         session.ws, "CHAT_MSG",
         **{"from": chat_from,
            "text": f"Floor {nxt}/{session.dungeon['floors']}: {session.dungeon['label']}. The beasts grow fiercer."},
     )
+    if dungeon_id == "tidehollow":
+        # A clear target for the floor, so the player knows exactly what to aim
+        # for instead of finding out only when a door opens.
+        info = tidehollow.floor_info(nxt)
+        rooms_n = len([r for r in (session.dungeon.get("rooms") or []) if r["doors"]])
+        await send(session.ws, "CHAT_MSG", **{
+            "from": chat_from,
+            "text": (f"Target: slay {info['count']} beasts across {rooms_n} chambers "
+                     f"(level {info['level']}). Your health is restored on each new floor."),
+        })
+        # Restore some health between floors: a long run on nothing but found
+        # food is punishing, and a fresh floor is a natural checkpoint.
+        healed = min(session.max_hp(), session.hp + int(session.max_hp() * 0.35))
+        if healed > session.hp:
+            session.hp = healed
+            await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
 
 
 async def bury_bone_stack(session, item_id, qty, quiet=False):
@@ -3264,9 +3754,12 @@ def adjacent_or_same(ax, ay, bx, by):
 
 
 async def handle_attack(session, msg):
-    if not gear_rules.can_fight(session):
+    # A downed player must not be able to open a fight. HP only hits zero the
+    # instant a killing blow lands, and the death handler resets it on the next
+    # tick, so there is a window where a click could otherwise start combat.
+    if session.hp <= 0:
         session.in_combat_with = None
-        await send(session.ws, "ERROR", message=gear_rules.NO_FIGHT_MSG)
+        await send(session.ws, "ERROR", message="You're in no state to fight. Eat something first.")
         return
     target_id = msg.get("target_id")
     monster = None
@@ -3281,8 +3774,15 @@ async def handle_attack(session, msg):
                 monster = WORLD.monsters.get(int(target_id))
             except (TypeError, ValueError):
                 monster = None
+    # Resolve the target before complaining about gear. Checking the outfit
+    # first meant clicking a monster that had already died told the player
+    # "you can't fight dressed like this", which is both wrong and alarming.
     if monster is None or not monster.alive:
         await send(session.ws, "ERROR", message="That target isn't there.")
+        return
+    if not gear_rules.can_fight(session):
+        session.in_combat_with = None
+        await send(session.ws, "ERROR", message=gear_rules.NO_FIGHT_MSG)
         return
     mdef = monster.def_stats() or {}
     if mdef.get("requires_pk") and not session.player_killer:
@@ -3305,7 +3805,18 @@ async def handle_attack(session, msg):
         return
     if session.using_bow():
         if not session.has_arrow_ammo():
-            await send(session.ws, "ERROR", message="You need arrows equipped to shoot.")
+            stored = session.quiver_total()
+            has_quiver = WORLD.count_item(session, "arrow_quiver") > 0
+            if stored and has_quiver:
+                message = (
+                    f"Your quiver holds {stored} arrows but is not equipped. "
+                    "Open Bags and choose Equip on the Arrow Quiver."
+                )
+            elif stored:
+                message = f"Your quiver holds {stored} arrows, but no Arrow Quiver is available to equip."
+            else:
+                message = "You need arrows in an equipped Arrow Quiver to shoot."
+            await send(session.ws, "ERROR", message=message)
             return
     session.combat_flee_until = 0.0
     already = session.in_combat_with == ("monster", monster.id)
@@ -3618,7 +4129,11 @@ async def handle_gather(session, msg):
         await send(session.ws, "ERROR", message="There's nothing to gather in the cave.")
         return
     if getattr(session, "last_gather_tick", None) == WORLD.tick_count:
-        return                           # one start per tick
+        # One start per tick, but say so. Returning silently made a fast second
+        # click look like a dropped input, especially when switching straight
+        # from a tree to a rock.
+        await send(session.ws, "ERROR", message="You are already gathering — give it a moment.")
+        return
     session.last_gather_tick = WORLD.tick_count
     x, y = msg.get("x"), msg.get("y")
     node = WORLD.resource_nodes.get((x, y))
@@ -4022,6 +4537,17 @@ async def handle_talk(session, msg):
                     # Pack starter bronze arrows into the new quiver if present
                     if WORLD.count_item(session, "arrow_quiver") > 0:
                         session.deposit_arrows_to_quiver("bronze_arrow", 50)
+                        # The starter kit is immediately usable: players should
+                        # not need to discover an ammo-slot toggle before their
+                        # first bow shot.
+                        if not session.equipment.get("ammo"):
+                            qslot = next(
+                                (slot for slot, entry in session.inventory.items()
+                                 if entry and entry.get("item_id") == "arrow_quiver"),
+                                None,
+                            )
+                            if qslot is not None:
+                                await handle_equip(session, {"slot_index": qslot})
                     if WORLD.count_item(session, "arrowtip_box") > 0:
                         session.deposit_tips_to_box("bronze_arrowtips", 30)
                     qp = session.quest_points()
@@ -4599,6 +5125,8 @@ async def welcome_option(session, npc, opt):
             return
         log.info("%s claimed the welcome kit (bag %s, bank %s, owed %s)", session.char_name,
                  placed["bag"], placed["bank"], owed)
+        # Stage 2 of the arrival guide: point them at Elder Miriam's starter quest.
+        session.arrival_guide = True
         note = _welcome_note(placed, owed, "Here's your Recruit's Bronze kit: helmet, chest plate, leg armour "
                                            "and a sword. It's bound to you, so look after it.")
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
@@ -4633,7 +5161,14 @@ async def welcome_option(session, npc, opt):
         note = ["Right you are. I'll be here by the crossroads if you change your mind, "
                 "and the kit's still yours to claim."]
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
-    await send_welcome_state(session)
+    if getattr(session, "arrival_guide", False) and opt in (welcome_kit.OPT_WEAR, welcome_kit.OPT_TAKE):
+        # Kit just claimed: flip the trail to stage 2 (Elder Miriam) in the same breath.
+        st = _welcome_status(session)
+        st["claimed"] = True
+        st["show_path"] = True
+        await send_welcome_state(session, st)
+    else:
+        await send_welcome_state(session)
     await welcome_talk(session, npc, note=note)
 
 
@@ -4950,6 +5485,10 @@ async def handle_bank_deposit(session, msg):
         return
     item_id, qty = entry["item_id"], entry["qty"]
     if not item_is_bankable(item_id):
+        if (ITEMS.get(item_id) or {}).get("unique"):
+            await send(session.ws, "ERROR",
+                       message=f"Your {ITEMS[item_id]['name']} stays with you — bags can't be banked.")
+            return
         await send(session.ws, "ERROR", message="You can't bank that.")
         return
     # stack into existing bank slot or free slot
@@ -5333,10 +5872,23 @@ async def handle_save_outfit(session, msg):
 async def handle_shop_buy(session, msg):
     shop_id, item_id, qty = msg.get("shop_id"), msg.get("item_id"), max(1, int(msg.get("qty", 1)))
     shop = SHOPS.get(shop_id)
-    if not shop or item_id not in shop["stock"]:
+    if not shop:
+        # A stale shop panel used to swallow the click entirely, so the player
+        # saw nothing happen. Tell them the panel is out of date.
+        await send(session.ws, "ERROR", message="That shop is no longer open — reopen it.")
+        return
+    if item_id not in shop["stock"]:
+        await send(session.ws, "ERROR", message="That shop doesn't sell that.")
         return
     stock = shop["stock"][item_id]
     item = ITEMS.get(item_id) or {}
+    # Bags, pouches and the quiver are bought once per character and never resold.
+    if item.get("unique"):
+        qty = 1
+        if owns_unique_item(session, item_id):
+            await send(session.ws, "ERROR",
+                       message=f"You already own the {item.get('name', item_id)}. One per character is enough.")
+            return
     # Pets: buy adds to collection and activates (re-buy of owned = free switch)
     if item.get("type") == "pet":
         qty = 1
@@ -5395,9 +5947,18 @@ async def handle_shop_buy(session, msg):
 async def handle_shop_sell(session, msg):
     shop_id, item_id, qty = msg.get("shop_id"), msg.get("item_id"), max(1, int(msg.get("qty", 1)))
     shop = SHOPS.get(shop_id)
-    if not shop or not shop.get("buys"):
+    if not shop:
+        await send(session.ws, "ERROR", message="That shop is no longer open — reopen it.")
+        return
+    if not shop.get("buys"):
+        await send(session.ws, "ERROR", message="This shop doesn't buy anything.")
         return
     if not shop_will_buy(shop, item_id):
+        item = ITEMS.get(item_id) or {}
+        if item.get("unique"):
+            await send(session.ws, "ERROR",
+                       message=f"The {item.get('name', item_id)} is yours for good — bags never sell.")
+            return
         await send(session.ws, "ERROR", message="This shop isn't interested in that.")
         return
     have = WORLD.count_item(session, item_id)
@@ -5484,14 +6045,19 @@ async def handle_equip(session, msg):
     WORLD.remove_item_qty(session, entry["item_id"], 1)
     if old:
         WORLD.add_item_to_inventory(session, old, 1)
+    auto_quiver = False
     if is_bow(entry["item_id"]):
         session.combat_style = "archery"
+        auto_quiver = session.auto_equip_quiver()
     elif session.combat_style == "archery":
         session.combat_style = getattr(session, "melee_style", None) or "attack"
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     await send(
         session.ws, "CHAT_MSG",
-        **{"from": "You", "text": f"You equip the {item['name']}."},
+        **{"from": "You", "text": (
+            f"You equip the {item['name']}"
+            f"{' and your Arrow Quiver' if auto_quiver else ''}."
+        )},
     )
 
 
@@ -5858,6 +6424,20 @@ async def handle_use_item(session, msg):
                 **{"from": "You", "text": f"You pack {took} {item['name']} ({left}/{TIP_BOX_CAPACITY})."},
             )
         return
+    if item_id == "arrow_quiver" and action == "unpack":
+        # A quiver's contents survive even if the quiver item is gone (traded away),
+        # so unpacking without holding one would mint arrows from nothing.
+        if not owns_unique_item(session, "arrow_quiver"):
+            await send(session.ws, "ERROR", message="You have no quiver to unpack.")
+            return
+        moved, left = session._withdraw_bag_to_inventory(session.quiver, "quiver_contents")
+        await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        await send(session.ws, "CHAT_MSG", **{
+            "from": "You",
+            "text": (f"You unpack {moved} arrows ({left} still in the quiver)." if moved
+                     else ("Your quiver is empty." if left <= 0 else "No free inventory space.")),
+        })
+        return
     if item_id == "arrow_quiver":
         # Use quiver from pack: scoop every arrow stack into storage (even if not worn)
         deposited = 0
@@ -6110,13 +6690,21 @@ async def handle_use_item(session, msg):
                 **{"from": "You", "text": f"You eat the {item['name']}. It tastes awful."},
             )
             return
+        # At full health the food was eaten for nothing: the message even
+        # claimed it restored HEAL hitpoints when it restored none. Refuse and
+        # keep the meal.
+        if session.hp >= session.max_hp():
+            await send(session.ws, "ERROR", message="You're already at full health.")
+            return
+        before = session.hp
         session.hp = min(session.max_hp(), session.hp + heal)
+        restored = session.hp - before
         WORLD.remove_item_qty(session, item_id, 1)
         WORLD.db.save_player_stats(session.player_id, hp=session.hp)
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
         await send(
             session.ws, "CHAT_MSG",
-            **{"from": "You", "text": f"You eat the {item['name']} and restore {heal} Hitpoints."},
+            **{"from": "You", "text": f"You eat the {item['name']} and restore {restored} Hitpoints."},
         )
         return
     if item["type"] == "potion":
@@ -6163,6 +6751,11 @@ async def handle_quick_consume(session, msg):
             entry = session.inventory[best_slot]
             item = ITEMS[entry["item_id"]]
             heal = int(item.get("heal") or 0)
+            # Refuse at full health: eating used to consume the food for no
+            # benefit at all, quietly costing the player a meal.
+            if session.hp >= session.max_hp():
+                await send(session.ws, "ERROR", message="You're already at full health.")
+                return
             session.hp = min(session.max_hp(), session.hp + heal)
             WORLD.remove_item_qty(session, entry["item_id"], 1)
             WORLD.db.save_player_stats(session.player_id, hp=session.hp)
@@ -6173,6 +6766,9 @@ async def handle_quick_consume(session, msg):
             })
             return
         if session.has_food_bag() and session.food_bag_total() > 0:
+            if session.hp >= session.max_hp():
+                await send(session.ws, "ERROR", message="You're already at full health.")
+                return
             ok, name, heal = session.eat_one_from_food_bag()
             await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
             if ok:
@@ -6190,6 +6786,10 @@ async def handle_quick_consume(session, msg):
             return
         if session.count_owned_item("health_potion") <= 0:
             await send(session.ws, "ERROR", message="You have no health potions.")
+            return
+        if session.hp >= session.max_hp():
+            # A potion drunk at full health used to vanish with no effect.
+            await send(session.ws, "ERROR", message="You're already at full health.")
             return
         if not session.take_one_owned_item("health_potion"):
             await send(session.ws, "ERROR", message="You have no health potions.")
@@ -6239,6 +6839,10 @@ async def handle_drop(session, msg):
     qty = min(qty, entry["qty"])
     item_id = entry["item_id"]
     if not item_is_tradeable(item_id):
+        if (ITEMS.get(item_id) or {}).get("unique"):
+            await send(session.ws, "ERROR",
+                       message=f"The {ITEMS[item_id]['name']} is yours for good — you can't drop or trade it.")
+            return
         await send(session.ws, "ERROR", message="You can't drop that.")
         return
     WORLD.remove_item_qty(session, item_id, qty)
@@ -6956,6 +7560,7 @@ async def game_loop():
             await process_gathering(events)
             await process_fishing_spots()
             await process_idle()
+            await reconcile_dungeon_doors()
             process_monster_respawns()
             process_resource_respawns()
             process_fires()
@@ -7048,6 +7653,7 @@ async def game_loop():
                         "floors": d["floors"],
                         "remaining": _dungeon_remaining(d),
                         "label": d["label"],
+                        **_dungeon_room_hud(session),
                         **(__import__("void_v2").hud_state(d, WORLD.tick_count) if d.get("v2") else {}),
                     },
                 })
@@ -7407,9 +8013,13 @@ async def process_combat(events):
                 break
 
         if died:
-            lost = session.coins
+            # A quarter, not everything. Losing the entire purse to one bad
+            # fight is the harshest possible outcome, and it hit hardest on a
+            # good run (the 65k purse cap means a long session has the most to
+            # lose). A quarter still stings and still rewards banking first.
+            lost = int(session.coins * 0.25)
             session.hp = session.max_hp()
-            session.coins = 0
+            session.coins = max(0, session.coins - lost)
             session.in_combat_with = None
             session.pet_target_id = None
             where = "village"
@@ -7768,6 +8378,21 @@ def _mark_monster_dead(monster):
 
 
 def _floor_uncleared(dungeon):
+    """Kills still owed across the map.
+
+    For a segmented floor that is the sum of what each chamber still needs, not
+    a count of living monsters: respawns must not make a floor unwinnable, and
+    a chamber that has met its target is done however many beasts are still
+    shuffling about inside it.
+    """
+    rooms = dungeon.get("rooms")
+    if rooms:
+        owed = 0
+        for room in rooms:
+            if room.get("cleared"):
+                continue
+            owed += max(0, int(room.get("kill_target") or 0) - int(room.get("kills") or 0))
+        return owed
     return sum(1 for m in dungeon["monsters"].values() if not getattr(m, "defeated", False))
 
 

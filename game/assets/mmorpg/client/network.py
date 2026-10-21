@@ -27,8 +27,7 @@ class NetworkClient:
     def reconnect(self):
         """Open a fresh websocket after logout / disconnect (old thread exits)."""
         if self._thread.is_alive():
-            # Old connection is still winding down; start a replacement anyway.
-            pass
+            self._thread.join()
         self.connected = False
         self.connect_error = None
         # Drain stale messages so a prior _DISCONNECTED doesn't clobber login.
@@ -75,15 +74,33 @@ class NetworkClient:
                     sender.cancel()
         except OSError as e:
             self.connect_error = str(e)
-            self.incoming.put({"type": "_CONN_ERROR", "message": f"Could not reach server: {e}"})
+            # "[Errno 61] Connect call failed ('127.0.0.1', 8765)" is true but
+            # tells a player nothing. Lead with the thing they can act on, and
+            # keep the detail after it for troubleshooting.
+            self.incoming.put({
+                "type": "_CONN_ERROR",
+                "message": ("Could not reach the server. Is it running? "
+                            "Start it with `python3 server.py` in the server folder. "
+                            f"({e})"),
+            })
         finally:
             self.connected = False
             self.incoming.put({"type": "_DISCONNECTED"})
 
     async def _sender(self, ws):
-        loop = asyncio.get_event_loop()
+        # Poll the queue instead of `run_in_executor(None, queue.get)`.
+        #
+        # queue.get() blocks forever until a message arrives, and the default
+        # executor's threads are non-daemon. Python joins them at interpreter
+        # shutdown, so the process could never exit while the socket was open
+        # — the client appeared to freeze on quit, and every reconnect leaked
+        # another never-ending thread.
         while True:
-            msg = await loop.run_in_executor(None, self.outgoing.get)
+            try:
+                msg = self.outgoing.get_nowait()
+            except queue.Empty:
+                await asyncio.sleep(0.016)      # ~one frame; imperceptible latency
+                continue
             try:
                 await ws.send(json.dumps(msg))
             except websockets.exceptions.ConnectionClosed:
