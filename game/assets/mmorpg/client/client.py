@@ -301,6 +301,7 @@ class GameClient(ScreensMixin, CameraYaw):
         self.magic_btn_rects = {}  # ability_id -> rect (fight bar + tab)
         self.magic_mode_btn_rect = None
         self.quest_row_rects = []  # [(rect, quest_id)] for journal click-to-giver
+        self.tracked_quest_id = None  # quest the HUD card tracks (player choice)
         self.quests_scroll = 0  # pixel offset into the journal list
         self.quests_scroll_meta = None
         self.magic_fx = []  # ephemeral cast visuals
@@ -1001,6 +1002,10 @@ class GameClient(ScreensMixin, CameraYaw):
             }
         elif t == "QUEST_COMPLETE":
             qid = msg.get("quest_id") or ""
+            if self.tracked_quest_id == qid:
+                # The card must not cling to a finished quest; hud picks the
+                # next active one (or the next-step hint) when this is None.
+                self.tracked_quest_id = None
             title = qid.replace("_", " ").title() or "Quest"
             qp = int(msg.get("quest_points") or 0)
             rewards = msg.get("rewards") or {}
@@ -1952,6 +1957,7 @@ class GameClient(ScreensMixin, CameraYaw):
         self.resources = {}
         self.ground_items = {}
         self.quests = {}
+        self.tracked_quest_id = None
         self.dialogue = None
         self.shop = None
         self.show_shop_panel = False
@@ -2677,6 +2683,21 @@ class GameClient(ScreensMixin, CameraYaw):
             name = (ITEMS.get(iid) or {}).get("name", iid)
             bits.append(f"{qty}x {name}" if qty != 1 else name)
         return " · ".join(bits) if bits else ""
+
+    def track_quest(self, qid):
+        """Pin a quest to the HUD card from the journal list.
+
+        Clicking an already-tracked quest unpins it, letting the card fall
+        back to its default choice.
+        """
+        if self.tracked_quest_id == qid:
+            self.tracked_quest_id = None
+            name = (QUESTS.get(qid) or {}).get("name") or qid.replace("_", " ").title()
+            self.add_chat(f"Stopped tracking {name}.")
+            return
+        self.tracked_quest_id = qid
+        name = (QUESTS.get(qid) or {}).get("name") or qid.replace("_", " ").title()
+        self.add_chat(f"Tracking {name}.")
 
     def _walk_to_quest_giver(self, qid):
         qdef = QUESTS.get(qid) or {}
@@ -4373,6 +4394,7 @@ class GameClient(ScreensMixin, CameraYaw):
         if self.sidebar_tab == "quests":
             for rect, qid in (self.quest_row_rects or []):
                 if rect.collidepoint(mx, my):
+                    self.track_quest(qid)
                     self._walk_to_quest_giver(qid)
                     return
         if self.sidebar_tab == "inventory" and self.show_inventory:
@@ -10084,6 +10106,8 @@ class GameClient(ScreensMixin, CameraYaw):
             bg = (42, 48, 36) if status == "ready" else ((32, 36, 46) if status != "complete" else (28, 34, 32))
             pygame.draw.rect(self.screen, bg, row, border_radius=5)
             border = YELLOW if status == "ready" else PANEL_LINE
+            if qid == self.tracked_quest_id:
+                border = (120, 200, 255)  # tracked quest stands out from ready/completed tints
             pygame.draw.rect(self.screen, border, row, 1, border_radius=5)
             self.screen.blit(self.font_small.render(title, True, color), (row.x + 8, row.y + 3))
             giver = next((n for n in NPCS if n.get("id") == qdef.get("giver")), None) or {}

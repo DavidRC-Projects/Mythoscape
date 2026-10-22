@@ -154,16 +154,35 @@ def _title(client):
     return best or "Adventurer"
 
 
+def _tracked_quest_id(client):
+    """Which quest the HUD tracks.
+
+    The player's explicit choice (client.tracked_quest_id) wins whenever it is
+    still an active quest, so the card never jumps just because another quest
+    changed state. Without a choice, fall back deterministically: a quest that
+    is ready to turn in beats one merely in progress, then dictionary order.
+    """
+    quests = client.quests or {}
+    active = [
+        qid for qid, state in quests.items()
+        if state and (state.get("status") or "not_started") not in ("complete", "not_started")
+    ]
+    tracked = getattr(client, "tracked_quest_id", None)
+    if tracked in active:
+        return tracked
+    ready = [qid for qid in active if (quests.get(qid) or {}).get("status") == "ready"]
+    return (ready or active or [None])[0]
+
+
 def _current_quest(client):
-    for qid, state in (client.quests or {}).items():
-        status = (state or {}).get("status") or "not_started"
-        if status in ("complete", "not_started"):
-            continue
-        spec = QUESTS.get(qid) or {}
-        progress = int((state or {}).get("progress") or 0)
-        need = int(spec.get("count") or 0)
-        return spec.get("name") or qid, spec.get("description") or "", progress, need, status
-    return None
+    qid = _tracked_quest_id(client)
+    if not qid:
+        return None
+    state = (client.quests or {}).get(qid) or {}
+    spec = QUESTS.get(qid) or {}
+    progress = int(state.get("progress") or 0)
+    need = int(spec.get("count") or 0)
+    return spec.get("name") or qid, spec.get("description") or "", progress, need, state.get("status") or "not_started"
 
 
 def _item_bucket(item_id):
@@ -502,11 +521,7 @@ def _draw_quest_card(client, y, rects):
             rects["quest_track"] = {"rect": track, "npc_id": step["npc"]}
     else:
         name, _desc, progress, need, status = quest
-        qid = next(
-            (key for key, state in (client.quests or {}).items()
-             if state and (state.get("status") or "not_started") not in ("complete", "not_started")),
-            None,
-        )
+        qid = _tracked_quest_id(client)
         state = (client.quests or {}).get(qid) or {}
         qdef = QUESTS.get(qid) or {}
         _blit(client, client.font_small, name[:28], (card.x + 8, card.y + 18), INK)
