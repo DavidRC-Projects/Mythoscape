@@ -2617,6 +2617,15 @@ def is_gem_item(item_id):
     return (ITEMS.get(item_id) or {}).get("type") == "gem"
 
 
+def is_food(item_id):
+    """Anything edible that actually restores health.
+
+    Burnt variants are typed "food" but heal 0, so they don't count.
+    """
+    item = ITEMS.get(item_id) or {}
+    return item.get("type") == "food" and int(item.get("heal") or 0) > 0
+
+
 def is_storage_bag(item_id):
     """True for inventory bag/pouch/box/quiver containers (Bags tab)."""
     return item_id in STORAGE_BAG_IDS

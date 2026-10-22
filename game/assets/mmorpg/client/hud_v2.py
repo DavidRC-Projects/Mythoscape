@@ -9,7 +9,7 @@ import pygame
 import combat
 from content import (
     ITEMS, QUESTS, NPCS, SKILL_DISPLAY_NAMES, STORAGE_BAG_IDS, INVENTORY_SIZE,
-    COOKED_FISH_IDS, is_gem_item, is_storage_bag,
+    COOKED_FISH_IDS, TRAVEL_DESTINATIONS, is_gem_item, is_storage_bag, is_food,
 )
 
 NAVY = (12, 18, 34)
@@ -483,12 +483,14 @@ def _no_quest_step(client):
     if not weapon:
         return {"title": "You're fighting bare-handed", "detail": "Equip a weapon from your bag (E)",
                 "hint": "An axe or pick works too — click it to wield", "npc": None}
-    done = {key for key, state in (client.quests or {}).items()
-            if state and (state.get("status") or "") == "complete"}
-    if not done:
+    starter = (client.quests or {}).get("rat_problem") or {}
+    if (starter.get("status") or "not_started") != "complete":
+        # A fresh client has quests == {} (no QUEST_LOG yet), which reads as
+        # not_started — the right advice for a brand-new character. Completing
+        # some other quest does not satisfy this specific milestone.
         return {"title": "Find Elder Miriam", "detail": "North-west cottage — your first quest",
                 "hint": "Click her, then press A to accept", "npc": "elder_miriam"}
-    has_food = any((entry or {}).get("item_id") in COOKED_FISH_IDS or (entry or {}).get("item_id") == "food_bag"
+    has_food = any(is_food((entry or {}).get("item_id")) or (entry or {}).get("item_id") == "food_bag"
                    for entry in (player.get("inventory") or {}).values())
     if not has_food:
         return {"title": "Carry some food", "detail": "Cook fish at a hearth, or buy food at a shop",
@@ -535,6 +537,20 @@ def _draw_quest_card(client, y, rects):
         target_id = qdef.get("giver") if status == "ready" else None
         if qdef.get("type") == "find_npc" and status != "ready":
             target_id = qdef.get("target")
+        if not target_id and qdef.get("type") == "kill" and status != "ready":
+            # Point the Go button at a known monster camp for the kill target,
+            # e.g. rat_problem → the Giant Rat mine. Travel destinations already
+            # expose camp centres, so no new data source is needed.
+            camp = next((d for d in TRAVEL_DESTINATIONS
+                         if d.get("kind") == "monster" and d.get("monster") == qdef.get("target")), None)
+            if camp:
+                rects["quest_track_dest"] = {"rect": camp, "x": camp["x"], "y": camp["y"],
+                                              "label": camp.get("label") or qdef.get("target")}
+                track = pygame.Rect(card.right - 58, card.y + 44, 50, 20)
+                _panel(client.screen, track, NAVY_HI, SAFE_GREEN, radius=4)
+                label = _text(client, client.font_tiny, "Go", INK)
+                client.screen.blit(label, (track.centerx - label.get_width() // 2, track.centery - label.get_height() // 2))
+                rects["quest_track"] = {"rect": track, "npc_id": None}
         if target_id and qid:
             track = pygame.Rect(card.right - 58, card.y + 44, 50, 20)
             _panel(client.screen, track, NAVY_HI, SAFE_GREEN, radius=4)
@@ -1102,6 +1118,14 @@ def handle_sidebar_click(client, mx, my, button):
             client.walk_and_act(client.adjacent_goals(npc["x"], npc["y"]), {
                 "type": "TALK", "npc_id": npc["id"],
             })
+        else:
+            # Kill-quest destination: walk to the camp centre via the same
+            # pathing the travel modal uses, and mark it on the minimap.
+            dest = rects.get("quest_track_dest") or {}
+            if dest.get("x") is not None:
+                import new_player_guide
+                new_player_guide.set_waypoint(client, dest["x"], dest["y"], dest.get("label") or "Camp")
+                client.travel_to_destination({"x": dest["x"], "y": dest["y"], "label": dest.get("label") or "Camp", "action": None})
         return
     if rects.get("skills") and rects["skills"].collidepoint(mx, my):
         client.toggle_skills_modal()
