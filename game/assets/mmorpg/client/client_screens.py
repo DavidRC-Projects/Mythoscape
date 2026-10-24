@@ -27,6 +27,22 @@ STAT_PRESETS = (
 )
 
 
+def stat_alloc_layout(screen_w, n_presets=len(STAT_PRESETS)):
+    """One vertical stack under the stat box: hint, preset tip, a centred preset row, then Confirm.
+    Shared by draw and click so they can never disagree. Logical 1200x800 surface (window scaling
+    is done by the caller), so this holds at every window size."""
+    import pygame
+    gap, pw = 12, 180
+    row_w = n_presets * pw + (n_presets - 1) * gap
+    x0 = screen_w // 2 - row_w // 2
+    return {
+        "hint_y": 508, "tip_y": 532, "preset_y": 556,
+        "presets": [pygame.Rect(x0 + i * (pw + gap), 556, pw, 32) for i in range(n_presets)],
+        "confirm": pygame.Rect(screen_w // 2 - 200, 604, 400, 44),
+        "err_y": 662, "login_err_y": 692,
+    }
+
+
 def _shop_buy_tax(cost, rate):
     """Mirror of royal_treasury.buy_tax for display (ceil, min 1 when cost > 0)."""
     import math
@@ -645,21 +661,20 @@ class ScreensMixin:
                     self.stat_skill_desc = skill
                     self.stat_alloc_error = ""
                 return
-            for rect, points in self.stat_preset_rects.items():
+            for rect, points in self.stat_preset_rects:
                 if rect.collidepoint(mx, my):
                     self.stat_alloc = dict(points)
                     self.stat_skill_desc = ""
                     self.stat_alloc_error = ""
                     return
-            confirm = pygame.Rect(400, 540, 400, 44)
+            confirm = stat_alloc_layout(SCREEN_W)["confirm"]
             if confirm.collidepoint(mx, my):
                 self.submit_stat_alloc()
 
     def draw_stat_alloc(self):
         _bind_client_globals()
         title = self.font_big.render("Choose your starting stats", True, WHITE)
-        tip = self.font_small.render("Not sure? Pick a preset below — you can train any skill later.", True, (200, 190, 170))
-        self.screen.blit(tip, (SCREEN_W // 2 - tip.get_width() // 2, 640))
+        lay = stat_alloc_layout(SCREEN_W)
         self.screen.blit(title, (SCREEN_W // 2 - title.get_width() // 2, 80))
         name = (self.player or {}).get("name", "Adventurer")
         sub = self.font.render(f"Welcome, {name}. Distribute 10 points.", True, YELLOW)
@@ -695,7 +710,7 @@ class ScreensMixin:
             base = self.stat_alloc_base.get(skill, 1)
             bonus = self.stat_alloc[skill]
             final = base + bonus
-            label = self.font.render(f"{skill.title()}:  {base}  →  {final}", True, WHITE)
+            label = self.font.render(f"{skill.title()}:  {base}  ->  {final}", True, WHITE)
             self.screen.blit(label, (box.x + 28, y + 8))
 
             minus = pygame.Rect(box.x + 320, y, 44, 36)
@@ -718,31 +733,28 @@ class ScreensMixin:
         desc = SKILL_DESCRIPTIONS.get(self.stat_skill_desc, "")
         if desc:
             d = self.font_small.render(desc, True, (200, 190, 170))
-            self.screen.blit(d, (SCREEN_W // 2 - d.get_width() // 2, 492))
+            self.screen.blit(d, (SCREEN_W // 2 - d.get_width() // 2, 486))
 
         hint = self.font_small.render(
             "Each point raises that skill by 1 level. Confirm when all 10 are spent.",
             True, GREY,
         )
-        self.screen.blit(hint, (SCREEN_W // 2 - hint.get_width() // 2, 512))
+        self.screen.blit(hint, (SCREEN_W // 2 - hint.get_width() // 2, lay["hint_y"]))
+        tip = self.font_small.render("Not sure? Pick a preset - you can train any skill later.", True, (200, 190, 170))
+        self.screen.blit(tip, (SCREEN_W // 2 - tip.get_width() // 2, lay["tip_y"]))
 
-        # One-click presets for players who don't want to min-max their first character
-        preset_y = 512 + hint.get_height() + 6
-        self.stat_preset_rects = {}
-        px = SCREEN_W // 2 - 400
-        for name, points in STAT_PRESETS:
-            pw = 190
-            pr = pygame.Rect(px, preset_y, pw, 30)
+        # One-click presets in a row under the tip; (rect, points) pairs since pygame.Rect is unhashable.
+        self.stat_preset_rects = []
+        for (name, points), pr in zip(STAT_PRESETS, lay["presets"]):
             active = dict(self.stat_alloc) == points
             pygame.draw.rect(self.screen, (45, 100, 55) if active else (30, 32, 42), pr, border_radius=6)
             pygame.draw.rect(self.screen, GREEN if active else PANEL_LINE, pr, 1, border_radius=6)
             label = self.font_small.render(name, True, WHITE if active else GREY)
             self.screen.blit(label, (pr.centerx - label.get_width() // 2,
                                      pr.centery - label.get_height() // 2))
-            self.stat_preset_rects[pr] = points
-            px += pw + 10
+            self.stat_preset_rects.append((pr, points))
 
-        confirm = pygame.Rect(400, 540, 400, 44)
+        confirm = lay["confirm"]
         ready = left == 0
         pygame.draw.rect(self.screen, (45, 100, 55) if ready else (40, 42, 50), confirm)
         pygame.draw.rect(self.screen, GREEN if ready else PANEL_LINE, confirm, 2)
@@ -752,10 +764,10 @@ class ScreensMixin:
 
         if self.stat_alloc_error:
             err = self.font.render(self.stat_alloc_error, True, RED)
-            self.screen.blit(err, (SCREEN_W // 2 - err.get_width() // 2, 600))
+            self.screen.blit(err, (SCREEN_W // 2 - err.get_width() // 2, lay["err_y"]))
         if self.login_error:
             err = self.font.render(self.login_error, True, RED)
-            self.screen.blit(err, (SCREEN_W // 2 - err.get_width() // 2, 630))
+            self.screen.blit(err, (SCREEN_W // 2 - err.get_width() // 2, lay["login_err_y"]))
 
     def _load_login_backdrop(self):
         """Load and cache the adventurous title-screen art."""
@@ -1099,7 +1111,11 @@ class ScreensMixin:
         self.world_map_pin_rects = []
         mouse = pygame.mouse.get_pos()
         hover_pin = None
-        for dest in TRAVEL_DESTINATIONS:
+        map_dests = list(TRAVEL_DESTINATIONS)
+        home = self._home_destination() if hasattr(self, "_home_destination") else None
+        if home:
+            map_dests = [home] + [d for d in map_dests if d.get("id") != "home"]
+        for dest in map_dests:
             dx = dest["x"] - ox
             dy = dest["y"] - oy
             if 0 <= dx <= view_w and 0 <= dy <= view_h:
@@ -1107,6 +1123,11 @@ class ScreensMixin:
                 py = canvas.y + dy * scale + scale // 2
                 if dest.get("id") == "castle_realm":
                     self._draw_castle_realm_pin(px, py, short=False)
+                elif dest.get("home") or dest.get("id") == "home":
+                    pulse = 0.5 + 0.5 * math.sin(time.time() * 2.4)
+                    pygame.draw.circle(self.screen, (40, 90, 50), (px, py), 7)
+                    pygame.draw.circle(self.screen, (90, 220, 120), (px, py), 5 + int(pulse))
+                    pygame.draw.circle(self.screen, (220, 255, 220), (px, py), 2)
                 elif dest["kind"] == "monster":
                     mdef = MONSTERS.get(dest.get("monster") or "", {})
                     col = self.monster_threat_color(mdef.get("level", 1))
@@ -1121,7 +1142,10 @@ class ScreensMixin:
                 pin_rect = pygame.Rect(px - 5, py - 5, 10, 10).inflate(6, 6)
                 self.world_map_pin_rects.append((pin_rect, dest))
                 # Label under the pin, brighter when hovered
-                lab = self.font_tiny.render(label, True, (255, 240, 200) if pin_rect.collidepoint(mouse) else (215, 205, 180))
+                lab_col = (160, 255, 180) if dest.get("home") or dest.get("id") == "home" else (
+                    (255, 240, 200) if pin_rect.collidepoint(mouse) else (215, 205, 180)
+                )
+                lab = self.font_tiny.render(label, True, lab_col)
                 bg = pygame.Surface((lab.get_width() + 8, lab.get_height() + 4), pygame.SRCALPHA)
                 bg.fill((10, 12, 18, 170))
                 lx = min(max(canvas.x + 2, px - lab.get_width() // 2), canvas.right - lab.get_width() - 2)
@@ -1147,6 +1171,11 @@ class ScreensMixin:
                 pygame.draw.circle(self.screen, (255, 220, 200), (mx, my), 2)
             else:
                 self._map_edge_arrow(canvas, dx, dy, (255, 90, 70), "You")
+            # Off-screen home arrow so the deed is never lost
+            if home:
+                hdx, hdy = home["x"] - ox, home["y"] - oy
+                if not (0 <= hdx <= view_w and 0 <= hdy <= view_h):
+                    self._map_edge_arrow(canvas, hdx, hdy, (90, 220, 120), "Home")
 
         self.screen.set_clip(prev_clip)
 
@@ -1226,7 +1255,9 @@ class ScreensMixin:
             (box.x + 20, box.y + 46),
         )
 
-        places = [d for d in TRAVEL_DESTINATIONS if d["kind"] == "place"]
+        places = self._travel_places() if hasattr(self, "_travel_places") else [
+            d for d in TRAVEL_DESTINATIONS if d["kind"] == "place"
+        ]
         monsters = [d for d in TRAVEL_DESTINATIONS if d["kind"] == "monster"]
         self.travel_btn_rects = []
 
@@ -2771,21 +2802,42 @@ class ScreensMixin:
         title = self.font_big.render("Your Pets", True, WHITE)
         self.screen.blit(title, (box.x + 18, box.y + 14))
         self.screen.blit(
-            self.font_small.render("Click a companion to switch  ·  Esc closes", True, GREY),
+            self.font_small.render(
+                "Click to switch  ·  scroll / ↑↓  ·  Esc closes", True, GREY,
+            ),
             (box.x + 18, box.y + 48),
         )
 
         owned = (self.player or {}).get("owned_pets") or []
         self.pet_switch_rects = []
-        y = box.y + 80
+        list_top = box.y + 80
+        list_bottom = box.bottom - 36
+        view_h = list_bottom - list_top
+        row_h = 64
         if not owned:
+            self.pets_scroll_meta = {"max_scroll": 0}
             self.screen.blit(
                 self.font.render("You don't own any pets yet.", True, GREY),
-                (box.x + 18, y),
+                (box.x + 18, list_top),
             )
             return
-        for entry in owned:
-            row = pygame.Rect(box.x + 16, y, box.w - 32, 56)
+
+        content_h = len(owned) * row_h
+        max_scroll = max(0, content_h - view_h)
+        self.pets_scroll = max(0, min(float(getattr(self, "pets_scroll", 0) or 0), max_scroll))
+        self.pets_scroll_meta = {
+            "list_top": list_top, "view_h": view_h, "max_scroll": max_scroll,
+            "content_h": content_h,
+            "track": pygame.Rect(box.right - 20, list_top, 10, view_h),
+        }
+
+        prev_clip = self.screen.get_clip()
+        self.screen.set_clip(pygame.Rect(box.x + 8, list_top, box.w - 36, view_h))
+        for i, entry in enumerate(owned):
+            y = list_top - self.pets_scroll + i * row_h
+            if y + 56 < list_top or y > list_bottom:
+                continue
+            row = pygame.Rect(box.x + 16, int(y), box.w - 44, 56)
             active = entry.get("active")
             pygame.draw.rect(self.screen, (42, 70, 50) if active else (34, 40, 52), row, border_radius=6)
             pygame.draw.rect(
@@ -2806,14 +2858,14 @@ class ScreensMixin:
                     self.screen, sprite_id, icon, time.time(), facing=1,
                 )
             ):
-                prev_clip = self.screen.get_clip()
-                self.screen.set_clip(icon)
+                icon_clip = self.screen.get_clip()
+                self.screen.set_clip(icon.clip(pygame.Rect(box.x + 8, list_top, box.w - 36, view_h)))
                 sprites.draw_pet(
                     self.screen, sprite_id,
                     icon.centerx, icon.bottom - 4, 18, time.time(),
                     facing=1,
                 )
-                self.screen.set_clip(prev_clip)
+                self.screen.set_clip(icon_clip)
             name = entry.get("name", "?")
             lvl = entry.get("level", 1)
             status = "ACTIVE" if active else "Switch"
@@ -2822,8 +2874,20 @@ class ScreensMixin:
                 self.font_small.render(f"Level {lvl}  ·  {status}", True, YELLOW if active else GREY),
                 (row.x + 62, row.y + 32),
             )
-            y += 64
+        self.screen.set_clip(prev_clip)
 
+        if max_scroll > 0:
+            track = self.pets_scroll_meta["track"]
+            pygame.draw.rect(self.screen, (35, 40, 50), track, border_radius=4)
+            thumb_h = max(28, int(view_h * view_h / max(1, content_h)))
+            thumb_y = list_top + int((view_h - thumb_h) * self.pets_scroll / max_scroll)
+            thumb = pygame.Rect(track.x, thumb_y, track.w, thumb_h)
+            self.pets_scroll_meta["thumb"] = thumb
+            pygame.draw.rect(self.screen, (100, 160, 220), thumb, border_radius=4)
+        else:
+            self.pets_scroll_meta["thumb"] = None
+
+        pygame.draw.rect(self.screen, (16, 22, 30), pygame.Rect(box.x + 2, box.bottom - 34, box.w - 4, 32))
         self.screen.blit(
             self.font_tiny.render("Buy more at Pet Emporium (Luna). Owned pets stay yours.", True, GREY),
             (box.x + 18, box.bottom - 28),
@@ -2869,6 +2933,15 @@ class ScreensMixin:
             True, (232, 226, 210),
         )
         self.screen.blit(follow, (self.ember_follow_rect.x + 12, self.ember_follow_rect.y + 5))
+        import outfit_fx
+        st = outfit_fx.state
+        self.outfit_fx_rect = pygame.Rect(box.x + 16, box.y + 100, 260, 28)
+        self.outfit_fx_others_rect = pygame.Rect(box.x + 288, box.y + 100, 270, 28)
+        for r, txt in ((self.outfit_fx_rect, "Outfit effects: " + st["mode"].capitalize()),
+                       (self.outfit_fx_others_rect, "Others' outfit effects: " + ("On" if st["others"] else "Off"))):
+            pygame.draw.rect(self.screen, (32, 42, 68), r, border_radius=14)
+            pygame.draw.rect(self.screen, (212, 175, 90), r, 1, border_radius=14)
+            self.screen.blit(self.font_small.render(txt, True, (232, 226, 210)), (r.x + 12, r.y + 5))
 
         sections = [
             ("Start here", [
@@ -2948,9 +3021,9 @@ class ScreensMixin:
                 ("Fletching", "Knife + N: logs→shafts/bows · shafts+feathers→headless · +tips→arrows"),
             ]),
             ("Tidehollow", [
-                ("Cave mouth", "Harbourreach north — private 10-floor dungeon"),
-                ("Per kill", "Coins/food/tips drop straight into your pack"),
-                ("Clear floor", "Slay all beasts to advance; floor 10 = medal reward"),
+                ("Cave mouth", "Harbourreach — private chamber dungeon"),
+                ("Per room", "Three different beasts; dragons in the last chamber"),
+                ("Clear all", "Open every sealed door; medal drops on completion"),
             ]),
             ("Emberdeep", [
                 ("Volcano mouth", "East of Stonehaven — private 8-floor lava dungeon"),
@@ -2986,7 +3059,7 @@ class ScreensMixin:
             ]),
         ]
 
-        list_top = box.y + 104
+        list_top = box.y + 136
         list_bottom = box.bottom - 36
         view_h = max(40, list_bottom - list_top)
         key_w = 150

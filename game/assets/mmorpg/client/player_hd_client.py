@@ -5,10 +5,14 @@ Loads sprites from game/assets/player_hd/ and composites layers at runtime
 based on appearance dict. Frame timing follows meta.json so walk, combat and
 skilling stay on the same clock as the 2D figure.
 """
+import json
 import math
 import os
 
 import pygame
+
+import slung_gear as _slung
+import helmet_overlay as _helm
 
 _BASE = os.path.join(
     os.path.dirname(__file__), "..", "..", "player_hd", "assets"
@@ -209,6 +213,12 @@ def _has_4x_frame(sex, layer, anim, facing, frame_idx):
     if strip is None:
         return False
     frames = max(1, strip.get_width() // max(1, strip.get_height()))
+    if frames == 1:
+        # A single-frame 4x portrait (creator / shop preview). If the 2x strip animates, use 2x for
+        # every frame: mixing 4x frame 0 with 2x frames 1-7 made a zoomed-in idle figure pop each loop.
+        two = _load_image(f"{sex}/2x/{layer}/{anim}_{facing}.png")
+        if two is not None and two.get_width() // max(1, two.get_height()) > 1:
+            return False
     return frame_idx < frames or frames > 1
 
 
@@ -643,6 +653,272 @@ def _cosmetic_layers(appearance, sex, item_map):
     return layers
 
 
+# ---- whole-figure HD outfits (tier art painted as one figure, skin tinted at runtime) -----------
+_WHOLE_ANIMS = ("idle", "walk")
+
+
+ARMOUR_TIERS = ("bronze", "iron", "steel", "mithril", "adamant", "mythos", "eclipse")
+_SET_SLOTS = {"helmet": ("helmet",), "body": ("body", "chainbody"), "legs": ("legs", "chainlegs")}
+
+
+def full_armour_tier(equipment):
+    """The tier of a full matching set (helmet + body + legs of one tier; plate or chain), else None.
+    Gauntlets and sabatons are part of the body and legs pieces. A shield never counts and never matters."""
+    eq = {k: (str(v)[len("recruit_"):] if str(v or "").startswith("recruit_") else v)   # welcome kit = bronze
+          for k, v in (equipment or {}).items()}
+    for tier in ARMOUR_TIERS:
+        if all(eq.get(slot) in {f"{tier}_{n}" for n in names} for slot, names in _SET_SLOTS.items()):
+            return tier
+    return None
+
+
+def armour_hd_layer(tier):
+    return f"armour_{tier}_hd" if tier else None
+
+
+def set_tier(equipment):
+    """The tier of a matching body + legs pair (plate or chain), helmet ignored, else None."""
+    eq = {k: (str(v)[len("recruit_"):] if str(v or "").startswith("recruit_") else v)
+          for k, v in (equipment or {}).items()}
+    for tier in ARMOUR_TIERS:
+        if all(eq.get(slot) in {f"{tier}_{n}" for n in _SET_SLOTS[slot]} for slot in ("body", "legs")):
+            return tier
+    return None
+
+
+def armour_bh_layer(tier):
+    return f"armour_{tier}_bh_hd" if tier else None
+
+
+def is_barehead_layer(layer):
+    return bool(layer) and str(layer).startswith("armour_") and str(layer).endswith("_bh_hd")
+
+
+def armour_layer_for(sex, equipment):
+    """David, 23 Oct 2026: body + legs of one tier show that tier's set. Tiers with bare-head art draw the
+    bare-head figure (hair tinted to the player's colour) and any worn helmet goes on as the overlay; tiers
+    without it keep the helmeted full-set figure, which needs the matching helmet too."""
+    t = set_tier(equipment)
+    if t and _art_present(sex, armour_bh_layer(t)):
+        return armour_bh_layer(t)
+    full = armour_hd_layer(full_armour_tier(equipment))
+    return full if (full and _art_present(sex, full)) else None
+
+
+def _whole_figure_layer(appearance, sex, anim, equipment, item_map):
+    """The painted whole-figure layer for this frame, else None (None only means missing art).
+    David, 23 Oct 2026: painted armour is for full sets only. A full matching tier set shows that tier's
+    painted armour figure; partial armour and shields keep the outfit's painted figure (stats still apply,
+    the gear isn't drawn). Weapons and tools appear only in the combat / skilling strips
+    ({anim}_{facing}.png under the layer's folder); idle and walk never show them."""
+    tier_layer = armour_layer_for(sex, equipment)
+    if tier_layer and (anim in _WHOLE_ANIMS or _whole_anim_present(sex, tier_layer, anim)):
+        return tier_layer
+    outfit = (appearance or {}).get("outfit")
+    item = item_map.get(outfit) if outfit else None
+    hd = (item or {}).get("hd_art")
+    if not hd or not _art_present(sex, hd):
+        hd = None
+    if not hd:
+        hd = collection_hd(appearance)
+        if hd and not _art_present(sex, hd):
+            hd = None
+    if hd and (anim in _WHOLE_ANIMS or _whole_anim_present(sex, hd, anim)):
+        return hd
+    # a missing action strip holds the figure's idle (tier set first, else the outfit), never the layered doll
+    return tier_layer or hd
+
+
+def collection_entry(appearance):
+    sid = (appearance or {}).get("set")
+    if not sid:
+        return None
+    for e in _load_catalogue().get("collection") or []:
+        if e.get("id") == sid:
+            return e
+    return None
+
+
+def collection_hd(appearance):
+    return (collection_entry(appearance) or {}).get("hd_art")
+
+
+_FX_JSON = {}
+
+
+def _fx_info(sex, layer):
+    key = (sex, layer)
+    if key not in _FX_JSON:
+        try:
+            with open(os.path.join(_BASE, sex, "2x", layer, "fx.json")) as f:
+                _FX_JSON[key] = json.load(f)
+        except (OSError, ValueError):
+            _FX_JSON[key] = None
+    return _FX_JSON[key]
+
+
+def _draw_outfit_fx(dest, which, sex, appearance, layer, anim, facing, flip, pos_feet, tile, t, fx_ctx):
+    """fx_ctx: dict(is_self, preview, full_armour, eclipse). which: back/front."""
+    import outfit_fx
+    if not layer or collection_hd(appearance) != layer:
+        return
+    info = _fx_info(sex, layer)
+    if not info:
+        return
+    ctx = fx_ctx or {}
+    eff = outfit_fx.effective(ctx.get("is_self", True), ctx.get("preview", False),
+                              ctx.get("full_armour", False), ctx.get("eclipse", False))
+    if not eff:
+        return
+    mode, alpha, front_on, tint_on = eff
+    if which == "front" and (not front_on or anim not in ("idle", "walk")):
+        return
+    scale_tag, base = ("1x", 40) if tile <= 48 else ("2x", 80)
+    frames = int(info.get("frames") or 16)
+    idx = outfit_fx.frame_for(t, frames, mode, which == "front")
+    strip = _load_image(f"{sex}/{scale_tag}/{layer}/fx_{which}_{facing}.png")
+    if strip is None:
+        return
+    cw = strip.get_width() // frames
+    k = tile / float(base)
+    key = ("fx", id(strip), idx, tile)
+    fr = _IMAGES.get(key)
+    if fr is None:
+        sub = strip.subsurface(pygame.Rect(idx * cw, 0, cw, strip.get_height()))
+        fr = pygame.transform.smoothscale(sub, (max(1, int(cw * k)), max(1, int(strip.get_height() * k))))
+        _IMAGES[key] = fr
+    if flip:
+        fr = pygame.transform.flip(fr, True, False)
+    fr = outfit_fx._alpha(fr, alpha)
+    meta = _load_meta()
+    feet = (meta.get("feet_px") or {}).get(scale_tag, [72, 124])
+    fx = (cw - feet[0]) if flip else feet[0]
+    x, y = int(pos_feet[0] - fx * k), int(pos_feet[1] - feet[1] * k)
+    if which == "back" and tint_on and info.get("tint"):
+        tint = info["tint"]
+        rgb = tint.get("rgb") if isinstance(tint, dict) else tint
+        ts = outfit_fx.tint_surface(int(tile * 0.9), int(tile * 0.32), rgb)
+        dest.blit(ts, (int(pos_feet[0] - ts.get_width() / 2), int(pos_feet[1] - ts.get_height() / 2)))
+    if which == "back" and mode != "reduced":
+        dest.blit(outfit_fx.glow_surface(fr), (x, y), special_flags=pygame.BLEND_RGB_ADD)
+    dest.blit(fr, (x, y))
+    if which == "front":
+        dest.blit(outfit_fx.glow_surface(fr, 0.35 if mode == "reduced" else 0.6), (x, y),
+                  special_flags=pygame.BLEND_RGB_ADD)
+
+
+def _draw_jewellery(dest, which, sex, appearance, layer, anim, facing, frame_idx, flip, main_surf, pos, equipment, t, fx_ctx):
+    """HD jewellery overlays + Crown Jewels sparkle (client/jewellery.py, JEWELLERY_SPEC.md)."""
+    look = appearance or {}
+    if not (look.get("jewellery") or look.get("head")):
+        return
+    try:
+        import jewellery as _jw
+        if not any(_jw.item(j) for j in list(look.get("jewellery") or []) + [look.get("head")]):
+            return
+        coll = collection_entry(look) or {}
+        ctx = dict(fx_ctx or {})
+        ctx.setdefault("t", t)
+        ctx["flags"] = dict(coll.get("painted") or {})
+        ctx["equipment"] = {"head": _helm.helmet_tier(equipment), "body": set_tier(equipment), "hands": None}
+        ctx["armour_glow"] = bool(ctx.get("armour_glow") or set_tier(equipment) in ("mithril", "adamant", "dragon", "eclipse")
+                                  or ctx.get("eclipse"))
+        ctx["elemental_full"] = bool(coll.get("fx"))
+        layer_dir = os.path.join(_BASE, sex, "2x", layer)
+        rect = pygame.Rect(pos[0], pos[1], main_surf.get_width(), main_surf.get_height())
+        _jw.draw(dest, main_surf, rect, layer_dir, anim, facing, frame_idx, flip, look, ctx, which=which)
+    except Exception as exc:   # never break the figure for an accessory
+        print("[jewellery]", exc)
+
+
+def _whole_anim_for(final_anim, frame_idx, t, equipment):
+    """Body-strip anim -> the whole-figure outfit strip name and frame.
+    melee -> melee_sword / melee_axe (10 frames, same MELEE_PROGRESS timing; only swords and axes fight).
+    chop / mine / fish* -> chop / mine / fish: 8 frames, one loop sampled evenly over GATHER_LOOP_MS."""
+    if final_anim == "melee":
+        w = str((equipment or {}).get("weapon") or "")
+        return ("melee_axe" if ("axe" in w and "pickaxe" not in w) else "melee_sword"), frame_idx
+    if is_gather_anim(final_anim):
+        base = "fish" if final_anim.startswith("fish") else final_anim
+        loop = float(GATHER_LOOP_MS.get(final_anim) or GATHER_LOOP_MS.get(base) or 1800) / 1000.0
+        u = ((t or 0.0) % loop) / loop
+        return base, min(7, int(u * 8))
+    return final_anim, frame_idx
+
+
+def _whole_anim_present(sex, layer, anim):
+    key = (sex, layer, anim)
+    if key not in _ART_PRESENT:
+        root = os.path.join(_BASE, sex, "2x", layer)
+        _ART_PRESENT[key] = any(os.path.isfile(os.path.join(root, f"{anim}_{f}.png")) for f in ("s", "e", "n"))
+    return _ART_PRESENT[key]
+
+
+def starter_outfit_look(appearance, sex):
+    """Everyone wears the new skins: a look without an HD outfit is shown in the free tier 1 set
+    (catalogue starter_sets: Villager / Village Lady), keeping its skin tone and hair colour."""
+    cat = _load_catalogue()
+    set_id = (cat.get("starter_sets") or {}).get(sex)
+    entry = (cat.get("sets") or {}).get(set_id or "") or {}
+    item_map = _build_item_map()
+    look = dict(appearance or get_default_appearance(sex, starter=False))
+    if look.get("outfit") or not entry or collection_hd(look):   # any chosen outfit (HD or an older layered set) is kept
+        return look
+    pals = entry.get("palettes") or [None]
+    try:
+        import jewellery as _jw
+        keep_jw = [j for j in look.get("jewellery") or [] if _jw.item(j)]
+        keep_head = look.get("head") if _jw.item(look.get("head") or "") else None
+    except Exception:
+        keep_jw, keep_head = [], None
+    look.update(outfit=None, cloak=None, head=None, held=None, jewellery=[], outfit_level=1,
+                palette=look.get("palette") if look.get("palette") in pals else pals[0])
+    for pid in entry.get("pieces") or []:
+        slot = (item_map.get(pid) or {}).get("slot")
+        if slot == "jewellery":
+            look["jewellery"].append(pid)
+        elif slot in ("outfit", "cloak", "head", "held"):
+            look[slot] = pid
+    look["jewellery"] = keep_jw + [j for j in look["jewellery"] if j not in keep_jw]
+    if keep_head:
+        look["head"] = keep_head
+    # hair stays the player's own pick: the set's styled hair is a shop item, not part of the free starter
+    return look
+
+
+def _layer_skin(sex, scale_tag, layer, anim, facing, frame_idx, tile, base):
+    """The _skin strip that pairs with a whole-figure frame (RGB = shade ratio*128, A = face/neck/hands)."""
+    if scale_tag == "4x" and not _has_4x_frame(sex, layer, anim, facing, frame_idx):
+        scale_tag, base = "2x", 80
+    return _frame_surface(f"{sex}/{scale_tag}/{layer}/{anim}_{facing}_skin.png", frame_idx, scale_tag, tile, base)
+
+
+def _layer_hair(sex, scale_tag, layer, anim, facing, frame_idx, tile, base):
+    """The _hair strip of a bare-head figure (RGB = shade ratio*128, A = hair), else None."""
+    if scale_tag == "4x" and not _has_4x_frame(sex, layer, anim, facing, frame_idx):
+        scale_tag, base = "2x", 80
+    path = f"{sex}/{scale_tag}/{layer}/{anim}_{facing}_hair.png"
+    if not os.path.isfile(os.path.join(_BASE, path)):
+        return None
+    return _frame_surface(path, frame_idx, scale_tag, tile, base)
+
+
+def _skin_whole(main_surf, skin_surf, rgb):
+    """Recolour only the skin of a painted figure: lerp(src, tone * ratio, mask)."""
+    import numpy as np
+    out = main_surf.copy()
+    if skin_surf is None or skin_surf.get_size() != out.get_size():
+        return out
+    px = pygame.surfarray.pixels3d(out)
+    src = px.astype(np.float32)
+    ratio = pygame.surfarray.pixels3d(skin_surf).astype(np.float32) / 128.0
+    w = (pygame.surfarray.pixels_alpha(skin_surf).astype(np.float32) / 255.0)[..., None]
+    toned = np.clip(np.array(rgb, dtype=np.float32) * ratio, 0, 255)
+    px[...] = (src * (1.0 - w) + toned * w).astype(np.uint8)
+    del px
+    return out
+
+
 def _gather_tool_layer(tool, sex):
     """The tool's own layer (wpn_harpoon, wpn_net, wpn_pot ...) once it's on disk, else the rod."""
     named = {"small_fishing_net": "wpn_net", "harpoon": "wpn_harpoon", "lobster_pot": "wpn_pot"}.get(tool)
@@ -808,9 +1084,9 @@ def _blit_tinted(dest, tint_surf, rgb, pos):
 def draw_player(
     surf, sex, appearance, cx, cy_feet, tile, t,
     anim="idle", progress=None, facing=1,
-    hit_t=-1.0, death_t=-1.0, equipment=None, fx_seed=None, tool=None,
+    hit_t=-1.0, death_t=-1.0, equipment=None, fx_seed=None, tool=None, starter=True, fx_ctx=None,
 ):
-    """Draw the HD paper doll. False means the body art is missing, so use 2D.
+    """Draw the HD paper doll. starter=False skips the free-outfit default (creator item thumbnails). False means the body art is missing, so use 2D.
 
     fx_seed (players only): enables the worn-gear sparkle overlay (eclipse_fx)
     when the equipment qualifies. NPCs, monsters and pets leave it None.
@@ -823,11 +1099,37 @@ def draw_player(
         if tier:
             return _draw_player_fx(
                 surf, sex, appearance, cx, cy_feet, tile, t, anim, progress, facing,
-                hit_t, death_t, equipment, fx_seed, tier, tool=tool,
+                hit_t, death_t, equipment, fx_seed, tier, tool=tool, fx_ctx=fx_ctx,
             )
     sex = "female" if sex == "female" else "male"
-    appearance = appearance or get_default_appearance(sex)
+    # Armour never switches to the layered doll: partial armour keeps the outfit figure, a full set
+    # shows its painted tier figure. The doll is only a dormant backup for missing art or an error.
+    try:
+        hd_look = starter_outfit_look(appearance, sex) if starter else (appearance or {})
+        probe = _whole_anim_for(*_frame_for_anim(anim, t, progress, -1.0, -1.0), t, equipment)[0]
+        if _whole_figure_layer(hd_look, sex, probe, equipment, _build_item_map()):
+            ctx = dict(fx_ctx or {})
+            ctx.setdefault("full_armour", bool(armour_layer_for(sex, equipment)))
+            if _elemental_fx_worn(hd_look, sex):
+                # David, 24 Oct 2026: an elemental outfit's own effect always shows; gear auras never suppress it.
+                ctx["eclipse"] = False
+                ctx["full_armour"] = False
+            return _draw_player_core(surf, sex, hd_look, cx, cy_feet, tile, t, anim, progress, facing,
+                                     hit_t, death_t, equipment, tool, fx_ctx=ctx)
+    except Exception:   # dormant backup: any error in the HD path falls through to the layered doll
+        import logging
+        logging.getLogger("player_hd").exception("HD outfit draw failed; using the layered doll")
+    return _draw_player_core(surf, sex, appearance or get_default_appearance(sex, starter=False), cx, cy_feet,
+                             tile, t, anim, progress, facing, hit_t, death_t, equipment, tool, layered=True)
+
+
+def _draw_player_core(surf, sex, appearance, cx, cy_feet, tile, t, anim, progress, facing,
+                      hit_t, death_t, equipment, tool, layered=False, fx_ctx=None):
+    """layered=True is the old paper doll (backup for missing art / errors / armour)."""
     final_anim, frame_idx = _frame_for_anim(anim, t, progress, hit_t, death_t)
+    if not layered and final_anim in ("hit", "death") and anim in _WHOLE_ANIMS:
+        # outfits have no hit/death strips: hold the outfit's own frame instead of flashing the doll
+        final_anim, frame_idx = _frame_for_anim(anim, t, progress, -1.0, -1.0)
     scale_tag, base = _scale_for(tile)
     meta = _load_meta()
     # 4x sheets are idle previews for the creator and shop. Walk and combat
@@ -851,8 +1153,29 @@ def draw_player(
                 # gather loops ship east-only today: use the strip that exists rather than drop to 2D
                 facing_tag = "s" if "s" in anim_facings or not anim_facings else anim_facings[0]
     item_map = _build_item_map()
-    cosmetic = _cosmetic_layers(appearance, sex, item_map)
-    visible, swing_layer = _apply_covers(cosmetic, equipment, final_anim, sex, tool=tool)
+    whole = None
+    if not layered:
+        w_anim, w_frame = _whole_anim_for(final_anim, frame_idx, t, equipment)
+        whole = _whole_figure_layer(appearance, sex, w_anim, equipment, item_map)
+        if whole and w_anim not in _WHOLE_ANIMS and not _whole_anim_present(sex, whole, w_anim):
+            w_anim, w_frame = _frame_for_anim("idle", t, None, -1.0, -1.0)
+            final_anim = None   # force the whole-figure branch below to take the idle strip
+        if whole and w_anim != final_anim:
+            # the outfit's own combat / skilling strip (weapon or tool painted in), s/e/n with w = e mirrored
+            final_anim, frame_idx = w_anim, w_frame
+            facing_tag, flip_x = _facing_str(facing), False
+            if facing_tag == "w":
+                facing_tag, flip_x = "e", True
+            if scale_tag == "4x":
+                scale_tag, base = "2x", 80
+    if whole:
+        hair_id = (appearance or {}).get("hair_colour") or ("chestnut" if sex == "female" else "dark_brown")
+        visible = [(whole, {"skin_whole": skin_rgb(skin_tone_id(appearance)), "hair_whole": _parse_hair_colour(hair_id)},
+                    {"s": 50, "e": 50, "n": 50, "w": 50})]
+        swing_layer = None
+    else:
+        cosmetic = _cosmetic_layers(appearance, sex, item_map)
+        visible, swing_layer = _apply_covers(cosmetic, equipment, final_anim, sex, tool=tool)
     visible.insert(0, ("shadow", None, {"s": 0, "e": 0, "n": 0, "w": 0}))
     if final_anim == "melee" and frame_idx in (4, 5) and swing_layer:
         visible.append((
@@ -908,6 +1231,21 @@ def draw_player(
                 "flip": bool(layer_flip),
             })
             _store_combat_anchors(sex, final_anim, file_facing, frame_idx, tile, equipment)
+        if layer_name == whole and main_surf is not None:
+            body_ok = True
+            file_facing = "e" if (layer_flip and not flip_x) else use_facing
+            last_draw.clear()
+            last_draw.update({"anim": final_anim, "facing": file_facing, "strip": f"{final_anim}_{file_facing}.png",
+                              "frame": frame_idx, "flip": bool(layer_flip), "whole": layer_name})
+            skin_surf = _layer_skin(sex, scale_tag, layer_name, final_anim, file_facing, frame_idx, tile, base)
+            rgb = tuple(tint_rgb["skin_whole"])
+            main_surf = _cached(("whole", id(main_surf), rgb), lambda: _skin_whole(main_surf, skin_surf, rgb))
+            if is_barehead_layer(layer_name):
+                hair_surf = _layer_hair(sex, scale_tag, layer_name, final_anim, file_facing, frame_idx, tile, base)
+                hrgb = tuple(tint_rgb.get("hair_whole") or (112, 76, 52))
+                if hair_surf is not None:
+                    main_surf = _cached(("hair", id(main_surf), hrgb), lambda: _skin_whole(main_surf, hair_surf, hrgb))
+            tint_rgb = None
         if isinstance(tint_rgb, dict):
             main_surf, tint_surf = _recolour(tint_rgb, main_surf, tint_surf)
             tint_rgb = None
@@ -925,8 +1263,37 @@ def draw_player(
             mask_facing = "e" if (layer_flip and not flip_x) else use_facing
             _erase_under(dest, sex, scale_tag, layer_name, final_anim, mask_facing, frame_idx, tile, base,
                          layer_flip, pos)
+        slung = layer_name == whole and main_surf is not None and final_anim in _slung.SLUNG_ANIMS
+        if slung:
+            vis_facing = "w" if (file_facing == "e" and layer_flip) else file_facing
+            _slung.draw(dest, main_surf, pos, vis_facing, equipment, "under")
+        fx_here = layer_name == whole and main_surf is not None and not layered
+        if fx_here:
+            _vf = "e" if (layer_flip and not flip_x) else use_facing
+            _draw_outfit_fx(dest, "back", sex, appearance, whole, final_anim, _vf, layer_flip,
+                            (cx + off_dx, cy_feet + off_dy), tile, t, fx_ctx)
         if main_surf is not None:
             dest.blit(main_surf, pos)
+        if fx_here:
+            _draw_jewellery(dest, "jewellery", sex, appearance, whole, final_anim, _vf, frame_idx, layer_flip,
+                            main_surf, pos, equipment, t, fx_ctx)
+        if fx_here:
+            _draw_outfit_fx(dest, "front", sex, appearance, whole, final_anim, _vf, layer_flip,
+                            (cx + off_dx, cy_feet + off_dy), tile, t, fx_ctx)
+        if slung:
+            _slung.draw(dest, main_surf, pos, vis_facing, equipment, "over")
+        if fx_here:
+            _draw_jewellery(dest, "head", sex, appearance, whole, final_anim, _vf, frame_idx, layer_flip,
+                            main_surf, pos, equipment, t, fx_ctx)
+        if (layer_name == whole and main_surf is not None and (str(whole).startswith("outfit_") or is_barehead_layer(whole))
+                and final_anim in _helm.HELMET_ANIMS):
+            _helm.draw(dest, main_surf, pos, sex, "w" if (file_facing == "e" and layer_flip) else file_facing,
+                       equipment)
+        elif (layer_name == whole and main_surf is not None and (str(whole).startswith("outfit_") or is_barehead_layer(whole))
+                and _helm.helmet_tier(equipment)):
+            # actions: per-frame head anchors (tools/helm_anchors.py); raised weapons break the head-top
+            _helm.draw_action(dest, pos, sex, "w" if (file_facing == "e" and layer_flip) else file_facing, equipment,
+                              layer_name, final_anim, file_facing, frame_idx, main_surf, layer_flip)
         if tint_surf is not None and tint_rgb:
             _blit_tinted(dest, tint_surf, tint_rgb, pos)
     if dest is not surf:
@@ -948,8 +1315,20 @@ def _erase_under(dest, sex, scale_tag, layer_name, anim, facing, frame_idx, tile
     dest.blit(_inverted_mask(frame, flip), pos, special_flags=pygame.BLEND_RGBA_MULT)
 
 
+def _soft(s, a):
+    out = s.copy()
+    out.fill((255, 255, 255, int(255 * a)), special_flags=pygame.BLEND_RGBA_MULT)
+    return out
+
+
+def _elemental_fx_worn(appearance, sex):
+    """True when the look wears a collection outfit that ships fx layers (fire, water, ...)."""
+    layer = collection_hd(appearance or {})
+    return bool(layer and _fx_info("female" if sex == "female" else "male", layer))
+
+
 def _draw_player_fx(surf, sex, appearance, cx, cy_feet, tile, t, anim, progress, facing,
-                    hit_t, death_t, equipment, fx_seed, tier, tool=None):
+                    hit_t, death_t, equipment, fx_seed, tier, tool=None, fx_ctx=None):
     """Composite offscreen, then the tier glow behind the sprite."""
     import eclipse_fx
     scale_tag, base = _scale_for(tile)
@@ -964,8 +1343,9 @@ def _draw_player_fx(surf, sex, appearance, cx, cy_feet, tile, t, anim, progress,
     oy = int(pad + feet_y)
     ok = draw_player(
         off, sex, appearance, ox, oy, tile, t, anim=anim, progress=progress, facing=facing,
-        hit_t=hit_t, death_t=death_t, equipment=equipment, tool=tool,
+        hit_t=hit_t, death_t=death_t, equipment=equipment, tool=tool, fx_ctx=dict(fx_ctx or {}, eclipse=True),
     )
+    elemental = _elemental_fx_worn(appearance, sex)
     if not ok:
         return ok
     zoom = tile / 40.0
@@ -976,6 +1356,9 @@ def _draw_player_fx(surf, sex, appearance, cx, cy_feet, tile, t, anim, progress,
     )
     aura = eclipse_fx.aura_surface(off, zoom, tier, key=key)
     dest = (int(cx - ox), int(cy_feet - oy))
+    if elemental:
+        # the gear aura stays only as a faint outline under the elemental effect
+        aura = _cached(("aura_soft", tier, key), lambda: _soft(aura, 0.3))
     surf.blit(aura, dest)
     surf.blit(off, dest)
     return ok
@@ -1038,7 +1421,10 @@ def _store_combat_anchors(sex, anim, facing, frame, tile, equipment):
             last_draw["tip"] = tip
 
 
-def get_default_appearance(sex):
+def get_default_appearance(sex, starter=True):
+    """Default look: the free starter outfit (starter=False gives the bare base clothes under it)."""
+    if starter:
+        return starter_outfit_look(get_default_appearance(sex, starter=False), sex)
     cat = _load_catalogue()
     defaults = (cat.get("defaults") or {}).get(sex) or {}
     female = sex == "female"

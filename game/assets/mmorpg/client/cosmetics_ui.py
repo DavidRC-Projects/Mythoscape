@@ -26,8 +26,9 @@ _BASE = os.path.join(os.path.dirname(__file__), "..", "..", "player_hd", "assets
 _CATALOGUE = None
 _CAT_MTIME = None
 _FACINGS = (("s", "Front"), ("e", "Side"), ("n", "Back"))
-_CREATOR_TABS = (("body", "Body"), ("hair", "Hair"), ("hair_colour", "Hair colour"), ("top", "Tops"),
-                 ("bottom", "Bottoms"), ("shoes", "Shoes"))
+# Everyone starts in the free Villager / Village Lady outfit (worn over the base clothes), so the
+# creator only picks what shows: skin tone, hair and hair colour. Mae sells the rest.
+_CREATOR_TABS = (("body", "Body"), ("hair", "Hair"), ("hair_colour", "Hair colour"))
 _CROPS = {
     "hair": (0.15, 0.0, 0.7, 0.38), "top": (0.18, 0.22, 0.64, 0.38), "bottom": (0.22, 0.48, 0.56, 0.32),
     "shoes": (0.25, 0.72, 0.5, 0.26), "outfit": (0.08, 0.04, 0.84, 0.94), "skin": (0.2, 0.12, 0.6, 0.7),
@@ -113,8 +114,8 @@ def buy_tax(cost, rate):
 class Outfitters:
     """Creator mode for a new account, shop mode when talking to Mae."""
 
-    SHOP_TABS = ("sets", "outfit", "top", "bottom", "sleeves", "cloak", "head", "jewellery", "hair", "shoes",
-                 "body", "wardrobe")
+    # SIDEBAR_DESIGN.md §1: painted figures, so 11 tabs became 6. No colour options, no Plain/Fine/Regal.
+    SHOP_TABS = ("sets", "head", "accessories", "hair", "body", "wardrobe")
 
     def __init__(self, client):
         self.client = client
@@ -134,12 +135,15 @@ class Outfitters:
         self.focus_item = None
         self.try_set = None
         self.compare = False
-        self.show_armour = False
         self.apply_to_set = True
         self.modal = None
         self.greeting = ""
         self.hover = None
         self.hover_since = 0.0
+        self.focus_coll = None
+        self.toast = None
+        self._pending_wear = None
+        self._sil = {}
 
     # ---- open / close ------------------------------------------------------------------------
     def open(self, mode="shop", greeting=None):
@@ -152,6 +156,7 @@ class Outfitters:
         self.scroll = 0
         self.modal = None
         self.compare = False
+        self._pending_wear = None
         self.greeting = greeting or ""
         import player_hd_client
         base = player.get("appearance") or player_hd_client.get_default_appearance(self.sex)
@@ -172,9 +177,73 @@ class Outfitters:
             "top": base.get("top"), "bottom": base.get("bottom"), "shoes": base.get("shoes"),
             "outfit": base.get("outfit"), "accessories": list(base.get("accessories") or []),
             "cloak": base.get("cloak"), "head": base.get("head"), "held": base.get("held"),
-            "jewellery": list(base.get("jewellery") or []), "palette": base.get("palette"),
-            "outfit_level": int(base.get("outfit_level") or 1),
+            "jewellery": list(base.get("jewellery") or []), "set": base.get("set") or self._set_of(base),
         }
+
+    @staticmethod
+    def _set_of(look):
+        if look.get("set"):
+            return look["set"]
+        return (_by_id(look.get("outfit")) or {}).get("set")
+
+    @staticmethod
+    def _painted(set_id):
+        cat = _catalogue()
+        entry = (cat.get("sets") or {}).get(set_id) or next(
+            (c for c in cat.get("collection") or [] if c.get("id") == set_id), {})
+        return entry.get("painted") or {}
+
+    def _overlay_block(self, item, set_id=None):
+        """Why a headwear/cloak/jewellery overlay is off on this set (None when allowed)."""
+        flags = self._painted(set_id or self.look.get("set"))
+        slot = item.get("slot")
+        if item.get("hd_jewellery") and not item.get("bundle"):
+            try:
+                import jewellery as J, player_hd_client as P
+                eq = (self._player().get("equipment") or {})
+                why = J.hidden_reason(item.get("id"), flags, {
+                    "head": P._helm.helmet_tier(eq) if eq else None, "body": None, "hands": None})
+                if why:
+                    return why
+            except Exception as e:
+                print("jw block:", e)
+        if slot == "head" and flags.get("head"):
+            return "This set wears its own crown"
+        if slot == "cloak" and flags.get("cloak"):
+            return "This set has its own cloak"
+        if slot == "jewellery" and flags.get("neck") and item.get("anchor") == "neck":
+            return "This set has its own necklace"
+        return None
+
+    def _say(self, text):
+        self.toast = (str(text), time.time())
+
+    def on_server_error(self, text):
+        """Surface Mae / wear errors in the shop toast (not only chat)."""
+        if self.active:
+            self._pending_wear = None
+            self._say(text)
+
+    def on_player_update(self):
+        """Sync from server after Wear/Buy. Do not stomp an in-progress try-on on every tick."""
+        if not self.active or self.mode == "creator":
+            return
+        base = self._player().get("appearance")
+        if not isinstance(base, dict):
+            return
+        worn_name = self._pending_wear
+        if worn_name:
+            self.look = self._full_look(base)
+            self.saved = self._copy(self.look)
+            self.try_set = None
+            self._thumbs.clear()
+            self._say(f"Now wearing {worn_name}")
+            self._pending_wear = None
+            return
+        # Background PLAYER_UPDATE (coins, unlocks…): keep try-on; refresh saved only if clean.
+        if not self.dirty():
+            self.look = self._full_look(base)
+            self.saved = self._copy(self.look)
 
     @staticmethod
     def _copy(look):
@@ -225,7 +294,7 @@ class Outfitters:
     def _track_hover(self, pos):
         found = None
         for kind, rect, payload in self.hit:
-            if kind in ("set_card", "item", "palette") and rect.collidepoint(pos):
+            if kind in ("set_card", "item", "coll_card") and rect.collidepoint(pos):
                 found = (kind, payload.get("id") if isinstance(payload, dict) else payload)
                 break
         if found != self.hover:
@@ -289,19 +358,10 @@ class Outfitters:
             self.look["skin_tone"] = payload
         elif kind in ("set_card", "wear_set"):
             self._try_set(payload)
-        elif kind == "palette":
-            self.look["palette"] = payload
-        elif kind == "apply_set":
-            self.apply_to_set = not self.apply_to_set
-        elif kind == "level":
-            self.look["outfit_level"] = int(payload)
-        elif kind == "upgrade":
-            set_id, level = payload
-            net.send("UPGRADE_OUTFIT", set=set_id, level=int(level))
+        elif kind == "coll_card":
+            self._focus_collection(payload)
         elif kind == "compare":
             self.compare = not self.compare
-        elif kind == "armour":
-            self.show_armour = not self.show_armour
         elif kind == "random":
             self._randomise()
         elif kind == "reset":
@@ -328,6 +388,9 @@ class Outfitters:
             if worn:
                 self.look = self._full_look(worn)
                 self.try_set = None
+                self._pending_wear = worn.get("name") or self._wear_label()
+                self.client.net.send("UPDATE_APPEARANCE", appearance=self._payload())
+                self._say(f"Wearing {self._pending_wear}…")
         elif kind == "save_current":
             outfits = self._wardrobe()
             slot = next((i for i, o in enumerate(outfits) if not o), 0)
@@ -384,12 +447,10 @@ class Outfitters:
         mult, disc, cap, _rate = self._pricing()
         return buy_price(base, mult, disc, cap)
 
-    def _palette_key_owned(self, item, palette):
-        pals = list(item.get("palettes") or [])
-        if not pals or palette in (None, pals[0]):
-            return True
-        owned = self._owned()
-        return f"palette:{item.get('set')}:{palette}" in owned or f"palette:{item['id']}:{palette}" in owned
+    def _spendable(self):
+        """Purse + bank. Mae takes purse first, then the vault (purse caps at 65k)."""
+        p = self._player()
+        return int(p.get("coins") or 0) + int(p.get("bank_coins") or 0)
 
     def _owned_level(self, set_id):
         owned = self._owned()
@@ -397,16 +458,25 @@ class Outfitters:
 
     def _selected_ids(self, look=None):
         look = look or self.look
-        ids = [look[k] for k in ("hair", "top", "bottom", "shoes", "outfit", "cloak", "head", "held") if look.get(k)]
-        ids.extend(look.get("accessories") or [])
-        ids.extend(look.get("jewellery") or [])
+        ids = []
+        for key in ("hair", "top", "bottom", "shoes", "outfit", "cloak", "head", "held"):
+            item_id = look.get(key)
+            item = _by_id(item_id) if item_id else None
+            if item_id and item and not (item.get("regalia") and not self._regalia_held(item)):
+                ids.append(item_id)
+        for item_id in look.get("accessories") or []:
+            ids.append(item_id)
+        for item_id in look.get("jewellery") or []:
+            item = _by_id(item_id) or {}
+            if not (item.get("regalia") and not self._regalia_held(item)):
+                ids.append(item_id)
         return ids
 
     def _free_regalia(self, item):
         return bool(item and item.get("regalia") and int(item.get("tier") or 0) == 7 and self._regalia_held(item))
 
     def _quote(self):
-        """Footer total. Same maths as the server: set bundle, free coronation crown, palette, upgrade, tax."""
+        """Footer total. Same maths as the server: set bundle, free coronation crown, Collection design, tax."""
         owned = self._owned()
         cat = _catalogue()
         new_ids = []
@@ -414,6 +484,10 @@ class Outfitters:
             item = _by_id(item_id)
             if item and not item.get("starter") and item_id not in owned and item_id not in new_ids:
                 new_ids.append(item_id)
+        for b in cat.get("items") or []:       # Crown Jewels bundles: both pieces new -> one bundle line
+            pcs = b.get("bundle") or []
+            if pcs and b.get("id") not in owned and all(p in new_ids for p in pcs):
+                new_ids = [i for i in new_ids if i not in pcs] + [b["id"]]
         locked = [i for i in new_ids if self._item_locked(_by_id(i))]
         lines, total = [], 0
         want = list(new_ids)
@@ -438,22 +512,12 @@ class Outfitters:
             lines.append((item.get("name") or item_id, cost))
             total += cost
         extras = []
-        outfit = _by_id(self.look.get("outfit"))
-        pal = self.look.get("palette")
-        if outfit and outfit.get("set") and pal and not self._palette_key_owned(outfit, pal):
-            base = int(((cat.get("garment_palettes") or {}).get(pal) or {}).get("price") or 0)
-            if not self.apply_to_set:
-                base = max(1, base // 2)
-            cost = self._price(base)
-            extras.append(("palette", outfit["set"], pal, cost))
+        coll = self._coll(self.focus_coll) if self.try_set == self.focus_coll else None
+        if coll and self._coll_live(coll) and coll["id"] not in owned:
+            cost = self._price(int(coll.get("price") or 0))
+            extras.append(("collection", coll["id"], None, cost))
+            lines.append((coll.get("name") or coll["id"], cost))
             total += cost
-        if outfit and outfit.get("set"):
-            have = self._owned_level(outfit["set"])
-            prices = (self._sets().get(outfit["set"]) or {}).get("upgrade_prices") or [0, 0]
-            for level in range(have + 1, int(self.look.get("outfit_level") or 1) + 1):
-                cost = self._price(int(prices[level - 2]))
-                extras.append(("upgrade", outfit["set"], level, cost))
-                total += cost
         rate = self._pricing()[3]
         return {"new": new_ids, "locked": locked, "lines": lines, "extras": extras, "total": total,
                 "tax": buy_tax(total, rate), "rate": rate}
@@ -461,47 +525,80 @@ class Outfitters:
     # ---- actions -----------------------------------------------------------------------------
     @staticmethod
     def _payload_of(look):
+        # SIDEBAR_DESIGN §4 canonical block (+ skin/hair/outfit so older servers still render it).
         return {
-            "skin": look.get("skin"), "skin_tone": look.get("skin_tone"), "hair": look.get("hair"),
-            "hair_colour": look.get("hair_colour"), "top": look.get("top"), "bottom": look.get("bottom"),
-            "shoes": look.get("shoes"), "outfit": look.get("outfit"),
-            "accessories": list(look.get("accessories") or []), "cloak": look.get("cloak"),
-            "head": look.get("head"), "held": look.get("held"), "jewellery": list(look.get("jewellery") or []),
-            "palette": look.get("palette"), "outfit_level": int(look.get("outfit_level") or 1),
+            "set": look.get("set") or Outfitters._set_of(look), "skin": look.get("skin"),
+            "skin_tone": look.get("skin_tone"), "hair": look.get("hair"), "hair_colour": look.get("hair_colour"),
+            "outfit": look.get("outfit"), "head": look.get("head"), "cloak": look.get("cloak"),
+            "jewellery": list(look.get("jewellery") or []),
         }
 
     def _payload(self):
-        return self._payload_of(self.look)
+        """Canonical wear block; drop title-gated regalia so Wear never fails for the rest of a set."""
+        wear = self._payload_of(self.look)
+        for slot in ("head", "cloak", "held"):
+            item = _by_id(wear.get(slot))
+            if item and item.get("regalia") and not self._regalia_held(item):
+                wear[slot] = None
+        wear["jewellery"] = [
+            j for j in wear.get("jewellery") or []
+            if self._regalia_held(_by_id(j) or {})
+        ]
+        return wear
+
+    def _wear_label(self):
+        entry = self._sets().get(self.look.get("set") or self.try_set or "") or {}
+        if entry.get("name"):
+            return entry["name"]
+        item = _by_id(self.look.get("outfit") or self.focus_item)
+        return (item or {}).get("name") or "that look"
 
     def _buy_and_wear(self):
-        """Pieces first (worn with owned colour/level), then colour and upgrade, then the full look."""
+        """Pieces (story set) or the Collection design, then the full look. No colours or upgrades."""
         q = self._quote()
         if q["locked"]:
+            self._say("Locked — preview only")
             return
+        label = self._wear_label()
         net = self.client.net
         wear = self._payload()
-        if q["new"] or q["extras"]:
-            first = dict(wear)
-            outfit = _by_id(wear.get("outfit"))
-            if outfit and not self._palette_key_owned(outfit, wear.get("palette")):
-                first["palette"] = None
-            if outfit and outfit.get("set"):
-                first["outfit_level"] = min(int(wear.get("outfit_level") or 1), self._owned_level(outfit["set"]))
-            if q["new"]:
-                net.send("BUY_COSMETICS", items=q["new"], appearance=first, set=self.try_set)
-            for kind, set_id, value, _cost in q["extras"]:
-                if kind == "palette":
-                    if self.apply_to_set:
-                        net.send("BUY_PALETTE", set=set_id, palette=value)
-                    else:
-                        net.send("BUY_PALETTE", item=wear.get("outfit"), palette=value)
-                else:
-                    net.send("UPGRADE_OUTFIT", set=set_id, level=int(value))
-            if q["extras"]:
-                net.send("UPDATE_APPEARANCE", appearance=wear)
+        coll = [e for e in q["extras"] if e[0] == "collection"]
+        self._pending_wear = label
+        if coll:
+            net.send("BUY_COLLECTION_SET", set=coll[0][1])
+            self._say(f"Buying {label}…")
+        elif q["new"]:
+            net.send("BUY_COSMETICS", items=q["new"], appearance=wear, set=self.try_set)
+            self._say(f"Buying & wearing {label}…")
         else:
             net.send("UPDATE_APPEARANCE", appearance=wear)
-        self.saved = self._copy(self.look)
+            self._say(f"Wearing {label}…")
+
+    # ---- Collection row (SIDEBAR_DESIGN §6.1 / §6.3) -------------------------------------------
+    def _collection(self):
+        return [c for c in _catalogue().get("collection") or [] if c.get("sex") == self.sex]
+
+    def _coll(self, set_id):
+        return next((c for c in _catalogue().get("collection") or [] if c.get("id") == set_id), None)
+
+    @staticmethod
+    def _coll_live(entry):
+        try:
+            return entry.get("release") == "live" and float(entry.get("review_score") or 0) >= 8
+        except (TypeError, ValueError):
+            return False
+
+    def _focus_collection(self, set_id):
+        entry = self._coll(set_id)
+        if not entry:
+            return
+        self.focus_coll = set_id
+        self.focus_set = None
+        if self._coll_live(entry):          # released: previewable, Buy & Wear
+            self.try_set = set_id
+            self.look["set"] = set_id
+        else:
+            self._say("Coming soon: no preview yet")
 
     def _try_set(self, set_id):
         """Try on a whole set: outfit + head + cloak + jewellery + held + suggested hair."""
@@ -509,33 +606,82 @@ class Outfitters:
         if not entry:
             return
         self.focus_set = set_id
+        self.focus_coll = None
         self.try_set = set_id
         look = self.look
+        keep = {"head": look.get("head"), "cloak": look.get("cloak"), "jewellery": [
+            j for j in look.get("jewellery") or [] if (_by_id(j) or {}).get("overlay")]}
+        if not (_by_id(keep["head"]) or {}).get("overlay"):
+            keep["head"] = self.__dict__.get("_held_head")
+        if not (_by_id(keep["cloak"]) or {}).get("overlay"):
+            keep["cloak"] = None
+        look["set"] = set_id
         look["outfit"] = look["cloak"] = look["head"] = look["held"] = None
         look["jewellery"] = []
+        skipped = []
         for pid in entry.get("pieces") or []:
             item = _by_id(pid) or {}
             slot = item.get("slot")
+            # Title regalia only while the title is held (preview + Wear).
+            if item.get("regalia") and not self._regalia_held(item):
+                skipped.append(item.get("name") or pid)
+                continue
             if slot == "jewellery":
                 look["jewellery"].append(pid)
             elif slot in ("outfit", "cloak", "head", "held"):
-                if not (item.get("regalia") and pid in self._owned() and not self._regalia_held(item)):
-                    look[slot] = pid
+                look[slot] = pid
         if entry.get("hair") and _by_id(entry["hair"]):
             look["hair"] = entry["hair"]
-        pals = entry.get("palettes") or []
-        if look.get("palette") not in pals:
-            look["palette"] = pals[0] if pals else None
-        look["outfit_level"] = min(int(look.get("outfit_level") or 1), self._owned_level(set_id))
+        if skipped:
+            self._say(f"{skipped[0]} needs the title — trying the rest")
+        # Overlays carry over unless the painting already has that piece (§5: cleared with a toast,
+        # headwear restored if you go back to an uncrowned set this session).
+        cleared = []
+        for slot in ("head", "cloak"):
+            item = _by_id(keep[slot])
+            if item:
+                if self._overlay_block(item, set_id):
+                    cleared.append(item["name"])
+                    if slot == "head":
+                        self._held_head = keep[slot]
+                else:
+                    look[slot] = keep[slot]
+                    if slot == "head":
+                        self._held_head = None
+        for jid in keep["jewellery"]:
+            if self._overlay_block(_by_id(jid), set_id):
+                cleared.append(_by_id(jid)["name"])
+            else:
+                look["jewellery"].append(jid)
+        if cleared:
+            self._say(f"{', '.join(cleared)} off: {self._overlay_block(_by_id(keep['head']) or {'slot': 'cloak'}, set_id) or 'painted in'}")
 
     def _pick_item(self, item):
         if self.mode == "creator" and not item.get("starter"):
             return
         slot = item.get("slot")
         self.focus_item = item.get("id")
+        if item.get("id") and self.mode == "shop":
+            why = self._overlay_block(item)
+            if why:
+                self._say(why)
+                return
+        if item.get("bundle"):
+            for pid in item["bundle"]:
+                piece = _by_id(pid)
+                if piece and pid not in (self.look.get("jewellery") or []):
+                    self._pick_item(piece)
+            self.focus_item = item.get("id")
+            return
+        if slot == "jewellery" and item.get("hd_jewellery"):
+            def _an(it):
+                return set(str((it or {}).get("anchor") or "").split("+")) - {""}
+            mine = _an(item)
+            self.look["jewellery"] = [j for j in self.look.get("jewellery") or [] if j == item["id"] or not (
+                mine & _an(_by_id(j)))]
         if slot in ("accessory", "jewellery"):
             key = "accessories" if slot == "accessory" else "jewellery"
-            limit = int(_catalogue().get("accessory_max" if slot == "accessory" else "jewellery_max") or 2)
+            limit = 2       # v1: max 2 jewellery pieces (SIDEBAR_DESIGN §3.3)
             chosen = list(self.look.get(key) or [])
             if item["id"] in chosen:
                 chosen.remove(item["id"])
@@ -548,34 +694,27 @@ class Outfitters:
             self.look[slot] = None
         else:
             self.look[slot] = item["id"]
-            if slot in ("top", "bottom"):
-                self.look["outfit"] = None
             if item.get("set"):
                 self.focus_set = item["set"]
-                if slot == "outfit":
-                    pals = item.get("palettes") or []
-                    if self.look.get("palette") not in pals:
-                        self.look["palette"] = pals[0] if pals else None
-                    self.look["outfit_level"] = min(int(self.look.get("outfit_level") or 1),
-                                                    self._owned_level(item["set"]))
         if self.try_set and item.get("set") != self.try_set:
             self.try_set = None
 
     def _randomise(self):
+        """Painted sets: shuffle the free choices only (hair colour, skin tone stays the player's)."""
         import random
-        owned = self._owned()
-        for slot in ("hair", "top", "bottom", "shoes"):
-            pool = [i for i in _visible_items(self.sex, slot)
-                    if i.get("starter") or (self.mode == "shop" and i["id"] in owned)]
+        sw = self._swatches()
+        if sw:
+            self.look["hair_colour"] = random.choice(sw)["id"]
+        if self.mode == "creator":
+            pool = [i for i in _visible_items(self.sex, "hair") if i.get("starter")]
             if pool:
-                self.look[slot] = random.choice(pool)["id"]
-        colours = _catalogue().get("hair_palette") or []
-        if colours:
-            self.look["hair_colour"] = random.choice(colours)["id"]
-        self.look["outfit"] = self.look["cloak"] = self.look["head"] = self.look["held"] = None
-        self.look["accessories"] = []
-        self.look["jewellery"] = []
-        self.try_set = None
+                self.look["hair"] = random.choice(pool)["id"]
+
+    def _swatches(self):
+        cat = _catalogue()
+        pal = {h.get("id"): h for h in cat.get("hair_palette") or []}
+        ids = cat.get("hair_swatches") or [h for h in pal if not pal[h].get("legacy")]
+        return [pal[i] for i in ids if i in pal]
 
     # ---- drawing helpers ---------------------------------------------------------------------
     def _font(self, size, bold=False):
@@ -696,15 +835,23 @@ class Outfitters:
         self._draw_detail(surf)
         pygame.draw.line(surf, GOLD_DIM, (28, BAR_Y - 4), (1172, BAR_Y - 4), 1)
         self._draw_bar(surf)
+        if self.toast and time.time() - self.toast[1] < 3.5:
+            text = self.toast[0]
+            ok = text.startswith("Now wearing")
+            tw = self._font(15, True).size(text)[0] + 36
+            box = pygame.Rect(STAGE.centerx - tw // 2, STAGE.y + 48, tw, 34)
+            pygame.draw.rect(surf, NAVY, box, border_radius=16)
+            pygame.draw.rect(surf, SAFE_GREEN if ok else GOLD, box, 2, border_radius=16)
+            self._text(surf, text, (box.centerx, box.y + 8), SAFE_GREEN if ok else GOLD_HI, 15, bold=True, centre=True)
         if self.modal == "discard":
             self._draw_modal(surf)
 
     def _tab_label(self, key):
         female = self.sex == "female"
         return {"sets": "Sets", "outfit": "Gowns" if female else "Coats", "top": "Tops",
-                "bottom": "Skirts" if female else "Bottoms", "sleeves": "Sleeves", "cloak": "Cloaks",
-                "head": "Headwear", "jewellery": "Jewellery", "hair": "Hair", "shoes": "Shoes", "body": "Body",
-                "wardrobe": "Wardrobe"}[key]
+                "bottom": "Skirts" if female else "Bottoms", "cloak": "Cloaks", "accessories": "Accessories",
+                "head": "Headwear", "jewellery": "Jewellery", "hair": "Hair colour", "shoes": "Shoes",
+                "body": "Body", "wardrobe": "Wardrobe"}[key]
 
     def _draw_rail(self, surf):
         pygame.draw.rect(surf, NAVY_CARD, RAIL, border_radius=12)
@@ -739,14 +886,12 @@ class Outfitters:
             else:
                 pygame.draw.polygon(surf, col, [(x - 6, y - 9), (x + 6, y - 9), (x + 8, y + 9), (x + 2, y + 9),
                                                 (x, y - 2), (x - 2, y + 9), (x - 8, y + 9)])
-        elif key == "sleeves":
-            pygame.draw.line(surf, col, (x - 8, y - 6), (x + 6, y + 8), 6)
         elif key == "cloak":
             pygame.draw.polygon(surf, col, [(x - 3, y - 9), (x + 3, y - 9), (x + 10, y + 9), (x - 10, y + 9)], 2)
             pygame.draw.circle(surf, col, (x, y - 8), 3)
         elif key == "head":
             self._crown_glyph(surf, (x, y), 0.95, col)
-        elif key == "jewellery":
+        elif key in ("jewellery", "accessories"):
             pygame.draw.circle(surf, col, (x, y + 3), 6, 2)
             pygame.draw.polygon(surf, col, [(x - 3, y - 7), (x + 3, y - 7), (x, y - 2)])
         elif key == "hair":
@@ -769,6 +914,46 @@ class Outfitters:
     def _preview_look(self):
         return self.saved if self.compare else self.look
 
+    def _blit_stage_player(self, surf, cx, feet, facing):
+        """Draw the shop/creator preview at native 4x with a light unsharp pass."""
+        import player_hd_client
+        pad = 300
+        canvas = pygame.Surface((pad * 2, pad * 2), pygame.SRCALPHA)
+        player_hd_client.draw_player(
+            canvas, self.sex, self._preview_look() if self.mode != "creator" else self.look,
+            pad, pad + 80, 160, pygame.time.get_ticks() / 1000.0, anim="idle", facing=facing, equipment=None,
+            fx_ctx={"preview": True},
+        )
+        box = canvas.get_bounding_rect()
+        if box.w < 4 or box.h < 4:
+            return
+        fig = canvas.subsurface(box).copy()
+        fig = self._unsharp(fig)
+        surf.blit(fig, (cx - (pad - box.x), feet - (pad + 80 - box.y)))
+
+    @staticmethod
+    def _unsharp(surf, amount=0.4):
+        """Mild unsharp-mask so soft HD edges read cleaner in the Outfitters stage."""
+        try:
+            import numpy as np
+        except ImportError:
+            return surf
+        w, h = surf.get_size()
+        if w < 8 or h < 8:
+            return surf
+        small = pygame.transform.smoothscale(surf, (max(1, w // 2), max(1, h // 2)))
+        blur = pygame.transform.smoothscale(small, (w, h))
+        rgb = pygame.surfarray.array3d(surf).astype(np.float32)
+        brgb = pygame.surfarray.array3d(blur).astype(np.float32)
+        alpha = pygame.surfarray.array_alpha(surf)
+        out = np.clip(rgb + amount * (rgb - brgb), 0, 255).astype(np.uint8)
+        sharp = pygame.Surface((w, h), pygame.SRCALPHA)
+        pygame.surfarray.blit_array(sharp, out)
+        alpha_px = pygame.surfarray.pixels_alpha(sharp)
+        alpha_px[:] = alpha
+        del alpha_px
+        return sharp
+
     def _draw_stage_shop(self, surf):
         stage = STAGE
         pygame.draw.rect(surf, NAVY_CARD, stage, border_radius=12)
@@ -783,26 +968,14 @@ class Outfitters:
             if on:
                 pygame.draw.rect(surf, GOLD, seg, border_radius=12)
             self._text(surf, label, (seg.centerx, seg.y + 4), NAVY if on else LOCK_GREY, 14, bold=on, centre=True)
-        cx, feet = stage.centerx, stage.bottom - 100
-        glow = pygame.Surface((260, 420), pygame.SRCALPHA)
-        for r in range(120, 10, -10):
-            pygame.draw.ellipse(glow, (212, 175, 90, 6), (130 - r, 400 - int(r * 3.2), r * 2, int(r * 3.2)))
-        surf.blit(glow, (cx - 130, feet - 400))
-        side = pygame.Rect(cx - 100, feet - 2, 200, 40)
-        top = pygame.Rect(cx - 100, feet - 18, 200, 36)
-        pygame.draw.ellipse(surf, (36, 30, 28), side)
-        pygame.draw.ellipse(surf, GOLD_DIM, side, 2)
-        pygame.draw.ellipse(surf, (62, 52, 44), top)
-        pygame.draw.ellipse(surf, GOLD, top, 2)
-        rim = pygame.Surface((220, 60), pygame.SRCALPHA)
-        pygame.draw.ellipse(rim, (240, 206, 120, 60), (6, 8, 208, 40), 4)
-        surf.blit(rim, (cx - 110, feet - 26))
-        import player_hd_client
-        eq = (self._player().get("equipment") or None) if self.show_armour else None
+        # Native 4x (tile=160): 1:1 pixels — no smoothscale soft blur from up/downscaling.
+        cx, feet = stage.centerx, stage.bottom - 112
+        ped = pygame.Rect(cx - 70, feet + 2, 140, 30)
+        pygame.draw.ellipse(surf, (32, 26, 22), ped)
         clip = surf.get_clip()
         surf.set_clip(stage.inflate(-4, -4))
-        player_hd_client.draw_player(surf, self.sex, self._preview_look(), cx, feet, 232, 0.0,
-                                     anim="idle", facing=_FACINGS[self.facing_i][0], equipment=eq)
+        self._blit_stage_player(surf, cx, feet, _FACINGS[self.facing_i][0])
+        pygame.draw.ellipse(surf, GOLD, ped, 2)
         surf.set_clip(clip)
         if self.compare:
             self._text(surf, "Comparing: saved look", (cx, stage.y + 50), GOLD, 14, centre=True)
@@ -835,10 +1008,8 @@ class Outfitters:
     # ---- sets path ----------------------------------------------------------------------------
     def _set_look(self, set_id, palette=None):
         entry = self._sets().get(set_id) or {}
-        pals = entry.get("palettes") or [None]
         look = self._copy(self.look)
-        look.update(outfit=None, cloak=None, head=None, held=None, jewellery=[], palette=palette or pals[0],
-                    outfit_level=1)
+        look.update(outfit=None, cloak=None, head=None, held=None, jewellery=[], set=set_id)
         for pid in entry.get("pieces") or []:
             item = _by_id(pid) or {}
             if item.get("slot") == "jewellery":
@@ -855,9 +1026,9 @@ class Outfitters:
         if key in self._thumbs:
             return self._thumbs[key]
         import player_hd_client
-        canvas = pygame.Surface((200, 260), pygame.SRCALPHA)
-        player_hd_client.draw_player(canvas, self.sex, self._set_look(set_id), 100, 240, 160, 0.0,
-                                     anim="idle", facing=facing)
+        canvas = pygame.Surface((220, 340), pygame.SRCALPHA)     # tall enough for crowns and HD sets
+        player_hd_client.draw_player(canvas, self.sex, self._set_look(set_id), 110, 320, 160, 0.0,
+                                     anim="idle", facing=facing, fx_ctx={"preview": True})
         self._thumbs[key] = self._fit_image(canvas, size)
         return self._thumbs[key]
 
@@ -873,18 +1044,19 @@ class Outfitters:
     def _draw_sets_path(self, surf):
         area = CENTRE
         self._text(surf, "The royal path", (area.x + 18, area.y + 14), GOLD, 18, bold=True)
-        self._text(surf, "Outfits grow as you rise. Click a set to try it on; locked sets can still be previewed.",
+        self._text(surf, "Each set is shown as painted. Click to try on; locked sets can still be previewed.",
                    (area.x + 18, area.y + 40), MUTED, 13)
+        self._draw_collection_row(surf, area)
         order = [s for s in self._set_order() if self._unlock(s).get("state") != "hidden"]
         if not order:
             return
-        card_w, card_h, gap = 72, 240, 4
+        card_w, card_h, gap = 72, 222, 4
         total = len(order) * card_w + (len(order) - 1) * gap
         x0 = area.centerx - total // 2
-        y0 = area.y + 110
-        coins = int(self._player().get("coins") or 0)
+        y0 = area.y + 64
+        coins = self._spendable()
         rects = [pygame.Rect(x0 + i * (card_w + gap), y0, card_w, card_h) for i in range(len(order))]
-        base_y = y0 + card_h + 26
+        base_y = y0 + card_h + 16
         for a, b in zip(rects, rects[1:]):
             y = a.y + 96
             pygame.draw.line(surf, GOLD_DIM, (a.right - 2, y), (b.x + 2, y), 3)
@@ -910,18 +1082,18 @@ class Outfitters:
             pygame.draw.rect(surf, tier_col, (rect.x + 6, rect.y + 5, rect.w - 12, 5), border_radius=2)
             self._text(surf, f"T{entry['tier']}", (rect.right - 6, rect.y + 12), tier_col, 12, bold=True, right=True)
             hovering = self.hover == ("set_card", sid) and time.time() - self.hover_since > 0.6
-            thumb = self._set_thumb(sid, "n" if hovering else "s")
+            thumb = self._set_thumb(sid, "n" if hovering else "s", (66, 136))
             if thumb:
                 if locked:
                     thumb = thumb.copy()
                     thumb.fill((120, 120, 120, 255), special_flags=pygame.BLEND_RGBA_MULT)
-                surf.blit(thumb, (rect.centerx - thumb.get_width() // 2, rect.y + 164 - thumb.get_height()))
+                surf.blit(thumb, (rect.centerx - thumb.get_width() // 2, rect.y + 152 - thumb.get_height()))
             if locked:
                 self._padlock(surf, (rect.centerx, rect.y + 96), 1.3)
             for k, row in enumerate(self._wrap(entry["name"], rect.w - 4, 14)[:2]):
-                self._text(surf, row, (rect.centerx, rect.y + 168 + k * 16), INK if not locked else MUTED, 14,
+                self._text(surf, row, (rect.centerx, rect.y + 154 + k * 16), INK if not locked else MUTED, 14,
                            centre=True)
-            sy = rect.y + 204
+            sy = rect.y + 190
             if regalia_lost:
                 self._text(surf, "Regalia", (rect.centerx, sy), LOCK_GREY, 13, centre=True)
             elif own_all:
@@ -958,6 +1130,65 @@ class Outfitters:
             for k, row in enumerate(rows):
                 self._text(surf, row, (box.x + 8, box.y + 6 + k * 16), INK, 13)
 
+    def _silhouette(self, entry, size):
+        """Greyed silhouette of a not-yet-released design (§6.1): shape only, no colour, no preview."""
+        key = (entry["id"], size)
+        if key in self._sil:
+            return self._sil[key]
+        img = None
+        path = os.path.join(_BASE, "collection", entry["id"] + ".png")
+        try:
+            raw = pygame.image.load(path)
+            raw = raw.convert_alpha() if pygame.display.get_surface() else raw
+            img = self._fit_image(raw, size)
+            if img:
+                img = img.copy()
+                img.fill((70, 76, 92, 0), special_flags=pygame.BLEND_RGB_MIN)
+                img.fill((0, 0, 0, 150), special_flags=pygame.BLEND_RGBA_MIN)
+        except (pygame.error, FileNotFoundError, OSError):
+            img = None
+        self._sil[key] = img
+        return img
+
+    def _draw_collection_row(self, surf, area):
+        rows = self._collection()
+        if not rows:
+            return
+        y = area.y + 330
+        self._text(surf, "Collection", (area.x + 18, y), GOLD, 16, bold=True)
+        self._text(surf, "New painted designs, sold separately. Elemental line: coming soon.",
+                   (area.x + 118, y + 3), MUTED, 12)
+        card_w, card_h, gap = 72, 186, 4
+        total = len(rows) * card_w + (len(rows) - 1) * gap
+        x0 = area.centerx - total // 2
+        coins = self._spendable()
+        owned = self._owned()
+        for i, entry in enumerate(rows):
+            rect = pygame.Rect(x0 + i * (card_w + gap), y + 24, card_w, card_h)
+            live = self._coll_live(entry)
+            focus = self.focus_coll == entry["id"]
+            pygame.draw.rect(surf, NAVY, rect, border_radius=8)
+            sil = self._silhouette(entry, (60, 118))
+            if sil:
+                surf.blit(sil, (rect.centerx - sil.get_width() // 2, rect.y + 124 - sil.get_height()))
+            el = (entry.get("element") or "").title()
+            self._padlock(surf, (rect.centerx, rect.y + 66), 1.0, INK if live else LOCK_GREY)
+            for k, row in enumerate(self._wrap(entry.get("name") or "", rect.w - 6, 12)[:2]):
+                self._text(surf, row, (rect.centerx, rect.y + 126 + k * 13), INK if live else MUTED, 12, centre=True)
+            if entry["id"] in owned:
+                self._text(surf, "owned", (rect.centerx, rect.bottom - 22), SAFE_GREEN, 12, centre=True)
+            elif live:
+                price = self._price(int(entry.get("price") or 0))
+                self._text(surf, f"{price:,}", (rect.centerx, rect.bottom - 22), GOLD if coins >= price else SHORT_RED,
+                           12, centre=True)
+            else:
+                self._text(surf, "Coming soon", (rect.centerx, rect.bottom - 22), GOLD_DIM, 12, centre=True)
+            if el:
+                self._text(surf, el, (rect.right - 5, rect.y + 6), GOLD_DIM, 11, right=True)
+            pygame.draw.rect(surf, GOLD_HI if focus else (GOLD_DIM if live else LOCK_GREY), rect,
+                             3 if focus else 1, border_radius=8)
+            self.hit.append(("coll_card", rect, entry["id"]))
+
     def _short_hint(self, set_id, info):
         """Card line under a locked set; gender-correct, never Courtier wording for men."""
         tier = int((self._sets().get(set_id) or {}).get("tier") or 0)
@@ -973,25 +1204,43 @@ class Outfitters:
 
     # ---- item grid ----------------------------------------------------------------------------
     def _grid_items(self):
+        """Headwear: None + head overlays. Accessories: cloak section + jewellery section (overlays only)."""
         tab = self.tab
-        if tab == "jewellery":
-            return _visible_items(self.sex, "jewellery") + _visible_items(self.sex, "accessory")
-        items = _visible_items(self.sex, tab)
-        if tab in ("outfit", "cloak", "head") and items:
-            items = [{"id": None, "slot": tab, "name": "None", "price": 0, "starter": True}] + items
-        return items
+        def live(i):
+            return i.get("release", "live") == "live"
+        def overlays(slot):
+            return [i for i in _visible_items(self.sex, slot) if i.get("overlay") and live(i)]
+        if tab == "head":
+            return [{"id": None, "slot": "head", "name": "None", "price": 0, "starter": True}] + overlays("head")
+        if tab == "accessories":
+            free = [{"id": None, "slot": "cloak", "name": "No cloak", "price": 0, "starter": True}] + overlays("cloak") + [
+                i for i in overlays("jewellery") if i.get("row") != "Crown Jewels"]
+            crown = [i for i in _catalogue().get("items", []) if (i.get("row") == "Crown Jewels" or i.get("slot") == "bundle") and live(i)
+                     and i.get("sex") in (None, self.sex)]
+            if crown:
+                free += [{"spacer": True, "id": None}] * ((-len(free)) % 4)
+                crown = [dict(c, _crown_first=(k == 0)) for k, c in enumerate(crown)]
+            return free + crown
+        return []
 
     def _draw_item_grid(self, surf):
         area = CENTRE
         label = self._tab_label(self.tab)
         self._text(surf, label, (area.x + 18, area.y + 14), GOLD, 18, bold=True)
-        if self.tab == "jewellery":
-            self._text(surf, f"Jewellery {len(self.look.get('jewellery') or [])}/{int(_catalogue().get('jewellery_max') or 3)}"
-                       f" · Accessories {len(self.look.get('accessories') or [])}/{int(_catalogue().get('accessory_max') or 2)}",
-                       (area.right - 18, area.y + 18), MUTED, 13, right=True)
+        if self.tab == "hair":
+            self._draw_hair_tab(surf, area)
+            return
+        if self.tab == "accessories":
+            worn = [j for j in self.look.get("jewellery") or [] if (_by_id(j) or {}).get("overlay")]
+            self._text(surf, f"1 cloak · Jewellery {len(worn)}/2", (area.right - 18, area.y + 18), MUTED, 13, right=True)
+        if self.tab == "head":
+            eq = (self.client.player or {}).get("equipment") or {}
+            helm = eq.get("helmet") if isinstance(eq, dict) else None
+            note = "Helmets come from Equipment (unequip there). " + ("Hidden by helmet." if helm else "")
+            self._text(surf, note, (area.right - 18, area.y + 18), MUTED, 12, right=True)
         items = self._grid_items()
         top = area.y + 48
-        bottom_pad = 64 if self.tab == "hair" else 10
+        bottom_pad = 10
         if not items:
             self._text(surf, f"No {label.lower()} yet. Mae expects them with the new outfit art.",
                        (area.centerx, area.y + 220), MUTED, 15, centre=True)
@@ -1002,15 +1251,29 @@ class Outfitters:
         self.scroll = min(self.scroll, max_scroll)
         old_clip = surf.get_clip()
         surf.set_clip(clip_rect)
-        coins = int(self._player().get("coins") or 0)
+        coins = self._spendable()
+        crown_row = next((i // cols for i, it in enumerate(items) if it.get("_crown_first")), None)
+        if crown_row is not None:
+            max_scroll += 30
+            self.scroll = min(self.scroll, max_scroll)
         for i, item in enumerate(items):
             col, row = i % cols, i // cols
-            rect = pygame.Rect(area.x + 14 + col * (card_w + gap), top + row * (card_h + gap) - self.scroll, card_w, card_h)
+            dy = 30 if crown_row is not None and row >= crown_row else 0
+            rect = pygame.Rect(area.x + 14 + col * (card_w + gap), top + row * (card_h + gap) + dy - self.scroll, card_w, card_h)
+            if item.get("_crown_first"):
+                hy = rect.y - 26
+                self._text(surf, "Crown Jewels", (area.x + 18, hy), GOLD_HI, 16, bold=True)
+                self._text(surf, "gem sparkle \u00b7 hover to see it", (area.right - 18, hy + 2), MUTED, 12, right=True)
+                pygame.draw.line(surf, GOLD_DIM, (area.x + 130, hy + 10), (area.right - 200, hy + 10), 1)
+            if item.get("spacer"):
+                continue
             if rect.bottom < clip_rect.y or rect.top > clip_rect.bottom:
                 continue
             selected = self._is_selected(item)
             locked = self._item_locked(item)
-            pygame.draw.rect(surf, NAVY, rect, border_radius=8)
+            blocked = self._overlay_block(item) if item.get("id") else None
+            crown = item.get("row") == "Crown Jewels"
+            pygame.draw.rect(surf, (34, 22, 52) if crown else NAVY, rect, border_radius=8)
             if item.get("tier"):
                 tier_col = tuple((_catalogue().get("tier_colours") or {}).get(str(item["tier"]), GOLD))
                 pygame.draw.rect(surf, tier_col, (rect.x + 6, rect.y + 5, rect.w - 12, 4), border_radius=2)
@@ -1025,17 +1288,49 @@ class Outfitters:
                     self._placeholder_icon(surf, item, pygame.Rect(rect.centerx - 40, rect.y + 14, 80, 80))
                 if locked:
                     self._padlock(surf, (rect.centerx, rect.y + 54), 1.1)
+                if crown and thumb and not locked and self.hover == ("item", item.get("id")):
+                    self._card_sparkle(surf, item, pygame.Rect(rect.centerx - thumb.get_width() // 2, rect.y + 12,
+                                                               thumb.get_width(), thumb.get_height()))
                 if item.get("regalia"):
                     self._crown_glyph(surf, (rect.x + 14, rect.y + 18), 0.6)
             for k, row_t in enumerate(self._wrap(item.get("name") or "", card_w - 8, 14)[:2]):
                 self._text(surf, row_t, (rect.centerx, rect.bottom - 54 + k * 16), INK, 14, centre=True)
             price, colour = self._price_label(item, coins)
-            self._text(surf, price, (rect.centerx, rect.bottom - 20), colour, 13, centre=True)
-            pygame.draw.rect(surf, GOLD_HI if selected else GOLD_DIM, rect, 3 if selected else 1, border_radius=8)
+            if blocked:
+                grey = pygame.Surface(rect.size, pygame.SRCALPHA)
+                grey.fill((12, 18, 34, 170))
+                surf.blit(grey, rect.topleft)
+                price, colour = blocked, LOCK_GREY
+                rows_b = self._wrap(price, card_w - 8, 11)[:2]
+                for k, r in enumerate(rows_b):
+                    self._text(surf, r, (rect.centerx, rect.bottom - 26 + k * 12), colour, 11, centre=True)
+            else:
+                self._text(surf, price, (rect.centerx, rect.bottom - 20), colour, 13, centre=True)
+            pygame.draw.rect(surf, GOLD_HI if selected or crown else GOLD_DIM, rect, 3 if selected else 1, border_radius=8)
             self.hit.append(("item", rect.clip(clip_rect), item))
         surf.set_clip(old_clip)
-        if self.tab == "hair":
-            self._draw_hair_swatches(surf, pygame.Rect(area.x + 14, area.bottom - 56, area.w - 28, 48))
+
+    def _draw_hair_tab(self, surf, area):
+        """§3.4: 10 free colour swatches; style is fixed to the painting."""
+        self._text(surf, "Hair colour", (area.x + 18, area.y + 14), GOLD, 18, bold=True)
+        self._text(surf, "10 colours, all free. Tints the painted hair (and beard) in every set.",
+                   (area.x + 18, area.y + 40), MUTED, 13)
+        sw = self._swatches()
+        size, gap, per_row = 50, 46, 5
+        x0 = area.x + (area.w - (per_row * size + (per_row - 1) * gap)) // 2
+        for i, colour in enumerate(sw):
+            cell = pygame.Rect(x0 + (i % per_row) * (size + gap), area.y + 90 + (i // per_row) * 116, size, size)
+            pygame.draw.circle(surf, tuple(colour.get("mul") or (80, 80, 80)), cell.center, size // 2)
+            pygame.draw.circle(surf, (0, 0, 0), cell.center, size // 2, 1)
+            if self.look.get("hair_colour") == colour.get("id"):
+                pygame.draw.circle(surf, GOLD, cell.center, size // 2 + 5, 3)
+            self._text(surf, colour.get("name") or colour.get("id"), (cell.centerx, cell.bottom + 10), INK, 13, centre=True)
+            self.hit.append(("colour", cell.inflate(10, 10), colour.get("id")))
+        row = pygame.Rect(area.x + 18, area.y + 340, area.w - 36, 40)
+        pygame.draw.rect(surf, NAVY, row, border_radius=8)
+        pygame.draw.rect(surf, LOCK_GREY, row, 1, border_radius=8)
+        self._padlock(surf, (row.x + 18, row.centery + 1), 0.6, LOCK_GREY)
+        self._text(surf, "Style: as painted on this set", (row.x + 36, row.y + 11), MUTED, 15)
 
     def _placeholder_icon(self, surf, item, rect):
         """Head, jewellery and held pieces have no strip yet: a clean drawn icon in the set colours."""
@@ -1079,8 +1374,9 @@ class Outfitters:
 
     def _draw_body_tab(self, surf, area):
         self._text(surf, "Body", (area.x + 18, area.y + 14), GOLD, 18, bold=True)
-        self._text(surf, "Skin tone · free · face, neck, body and hands, in every outfit", (area.x + 18, area.y + 40),
+        self._text(surf, "Skin tone · free · face, neck and hands, in every outfit", (area.x + 18, area.y + 40),
                    MUTED, 13)
+        self._text(surf, "Gender: change at the barber or in the creator", (area.x + 18, area.bottom - 34), MUTED, 13)
         tones = _catalogue().get("skin_palette") or []
         size, gap, per_row = 44, 44, 5
         x0 = area.x + (area.w - (per_row * size + (per_row - 1) * gap)) // 2
@@ -1150,13 +1446,18 @@ class Outfitters:
         rect = DETAIL
         pygame.draw.rect(surf, NAVY_CARD, rect, border_radius=12)
         pygame.draw.rect(surf, GOLD_DIM, rect, 1, border_radius=12)
-        item = _by_id(self.focus_item) if self.tab not in ("sets", "body", "wardrobe") else None
-        if item and item.get("slot") != self.tab and not (self.tab == "jewellery" and item.get("slot") == "accessory"):
+        item = _by_id(self.focus_item) if self.tab in ("head", "accessories") else None
+        if item and not ((self.tab == "head" and item.get("slot") == "head")
+                         or (self.tab == "accessories" and item.get("slot") in ("cloak", "jewellery", "bundle"))):
             item = None
+        coll = self._coll(self.focus_coll) if self.tab == "sets" and self.focus_coll else None
+        if coll:
+            self._draw_coll_detail(surf, DETAIL, coll)
+            return
         set_id = (item or {}).get("set") if item else (self.focus_set if self.tab in ("sets", "wardrobe") else None)
         entry = self._sets().get(set_id) if set_id else None
         x, y, w = rect.x + 12, rect.y + 12, rect.w - 24
-        coins = int(self._player().get("coins") or 0)
+        coins = self._spendable()
         if entry:
             info, own_all, _regalia_lost = self._set_state(set_id)
             name = item.get("name") if item else entry["name"]
@@ -1187,10 +1488,18 @@ class Outfitters:
                 self._text(surf, f"Progress {info['progress']}", (x + 20, y - 2), GOLD, 13)
                 y += 16
             if ok and not owned_here and coins < price:
-                self._text(surf, f"You need {price - coins:,} more coins.", (x, y - 2), SHORT_RED, 13)
+                self._text(surf, f"You need {price - coins:,} more (purse + bank).", (x, y - 2), SHORT_RED, 13)
                 y += 16
-            y = self._draw_palettes(surf, entry, item, x, y, w)
-            y = self._draw_levels(surf, entry, x, y, w)
+            flags = self._painted(set_id)
+            painted = [n for k, n in (("head", "crown"), ("neck", "necklace"), ("cloak", "cloak")) if flags.get(k)]
+            if painted:
+                for k, row in enumerate(self._wrap("Painted in: " + ", ".join(painted), w, 13)[:2]):
+                    self._text(surf, row, (x, y + k * 15), MUTED, 13)
+                y += 34
+            self._text(surf, "Shown as painted · no colour options", (x, y), MUTED, 12)
+            y += 20
+            jmax = 2
+            self._text(surf, f"Jewellery {len(self.look.get('jewellery') or [])}/{jmax}", (x, y + 2), INK, 13)
         elif item:
             rows = self._wrap(item.get("name") or "", w, 19)[:2]
             for k, row in enumerate(rows):
@@ -1199,10 +1508,13 @@ class Outfitters:
             label, colour = self._price_label(item, coins)
             self._text(surf, label, (rect.centerx, y), colour, 16, centre=True)
             y += 28
-            if item.get("slot") == "accessory":
-                self._text(surf, f"Accessories {len(self.look.get('accessories') or [])}/2", (x, y), MUTED, 13)
-            elif item.get("slot") == "hair":
-                self._text(surf, "Colour swatches sit under the grid.", (x, y), MUTED, 13)
+            why = self._overlay_block(item)
+            if why:
+                for k, row in enumerate(self._wrap(why, w, 13)[:2]):
+                    self._text(surf, row, (x, y + k * 15), LOCK_GREY, 13)
+            elif item.get("overlay") and not item.get("layer") and not item.get("hd_jewellery") and not item.get("bundle"):
+                for k, row in enumerate(self._wrap("Overlay art arriving soon; saved with your look.", w, 12)[:2]):
+                    self._text(surf, row, (x, y + k * 14), MUTED, 12)
         elif self.tab == "body":
             tone = next((t for t in _catalogue().get("skin_palette") or [] if t["id"] == self.look.get("skin_tone")), {})
             self._text(surf, "Skin tone", (rect.centerx, y), GOLD_HI, 21, bold=True, centre=True)
@@ -1214,6 +1526,10 @@ class Outfitters:
         else:
             self._text(surf, self._tab_label(self.tab), (rect.centerx, y), GOLD_HI, 21, bold=True, centre=True)
             self._text(surf, "Pick a piece to see it here.", (rect.centerx, y + 34), MUTED, 13, centre=True)
+        if entry and not item:
+            self._detail_picture(surf, rect, self._set_thumb(set_id, "s", (rect.w - 40, 160)))
+        elif item:
+            self._detail_picture(surf, rect, self._item_picture(item, (rect.w - 40, 160)))
         back = pygame.Rect(rect.x + 10, rect.bottom - 132, rect.w - 20, 122)
         pygame.draw.rect(surf, NAVY, back, border_radius=8)
         pygame.draw.rect(surf, GOLD_DIM, back, 1, border_radius=8)
@@ -1224,6 +1540,117 @@ class Outfitters:
         if img:
             surf.blit(img, (back.centerx - img.get_width() // 2, back.bottom - 6 - img.get_height()))
         self._text(surf, "Back", (back.x + 8, back.y + 6), MUTED, 12)
+
+    def _draw_coll_detail(self, surf, rect, entry):
+        x, y, w = rect.x + 12, rect.y + 12, rect.w - 24
+        for k, row in enumerate(self._wrap(entry.get("name") or "", w, 21)[:2]):
+            self._text(surf, row, (rect.centerx, y + k * 25), GOLD_HI, 21, bold=True, centre=True)
+        y += 58
+        live = self._coll_live(entry)
+        self._text(surf, ((entry.get("element") or "").title() + " · elemental line").strip(" ·"),
+                   (rect.centerx, y), MUTED, 13, centre=True)
+        y += 24
+        if live:
+            price = self._price(int(entry.get("price") or 0))
+            owned = entry["id"] in self._owned()
+            self._text(surf, "Owned" if owned else f"{price:,} coins", (rect.centerx, y), GOLD, 17, bold=True, centre=True)
+            y += 26
+            need = "Needs its story tier" if entry.get("tier") else "Buy only, no story gate"
+            self._text(surf, need, (x, y), INK, 13)
+        else:
+            self._padlock(surf, (rect.centerx, y + 16), 1.2, LOCK_GREY)
+            y += 44
+            self._text(surf, "Coming soon", (rect.centerx, y), GOLD, 18, bold=True, centre=True)
+            y += 28
+            for k, row in enumerate(self._wrap("Not released yet: no preview and no Buy. A paid painted design with "
+                                               "its own animated effect.", w, 13)[:5]):
+                self._text(surf, row, (x, y + k * 16), MUTED, 13)
+        y += 16 * 5 if not live else 40
+        box = pygame.Rect(rect.x + 12, y + 6, rect.w - 24, rect.bottom - 14 - (y + 6))
+        pic = self._coll_picture(entry, (box.w - 8, box.h - 8))
+        if pic is None:
+            pic = self._silhouette(entry, (box.w - 8, box.h - 8))
+        if pic:
+            frame = pygame.Rect(0, 0, pic.get_width() + 6, pic.get_height() + 6)
+            frame.midbottom = (box.centerx, box.bottom)
+            pygame.draw.rect(surf, NAVY, frame, border_radius=6)
+            surf.blit(pic, (frame.x + 3, frame.y + 3))
+            pygame.draw.rect(surf, GOLD if live else LOCK_GREY, frame, 1, border_radius=6)
+            if not live:     # still locked: badge over the picture, Buy stays disabled
+                tag = pygame.Rect(0, 0, frame.w - 20, 26)
+                tag.midbottom = (frame.centerx, frame.bottom - 8)
+                shade = pygame.Surface(tag.size, pygame.SRCALPHA)
+                shade.fill((6, 8, 16, 205))
+                surf.blit(shade, tag)
+                self._padlock(surf, (tag.x + 14, tag.centery), 0.6, GOLD)
+                self._text(surf, "Coming soon", (tag.centerx + 8, tag.y + 5), GOLD, 14, bold=True, centre=True)
+
+    def _coll_picture(self, entry, size):
+        """The design's painted card (OUTFITS/sidebar/elemental) for the detail panel, live or coming soon."""
+        key = ("collpic", entry["id"], size)
+        if key not in self._sil:
+            img = None
+            for path in (os.path.join(_BASE, "collection", "elemental", entry["id"] + ".jpg"),
+                         os.path.join(_BASE, "collection", entry["id"] + ".png")):
+                try:
+                    raw = pygame.image.load(path)
+                    raw = raw.convert() if pygame.display.get_surface() else raw
+                    k = min(size[0] / raw.get_width(), size[1] / raw.get_height())
+                    img = pygame.transform.smoothscale(raw, (max(1, int(raw.get_width() * k)),
+                                                             max(1, int(raw.get_height() * k))))
+                    break
+                except (pygame.error, FileNotFoundError, OSError):
+                    continue
+            self._sil[key] = img
+        return self._sil[key]
+
+    def _item_picture(self, item, size):
+        """Picture for a selected head/accessory/jewellery piece: painted card, else the worn render."""
+        key = ("itempic", self.sex, item.get("id"), size)
+        if key in self._thumbs:
+            return self._thumbs[key]
+        img = None
+        ids = list(item.get("bundle") or [item.get("id")])
+        try:
+            import jewellery as _jw
+            cards = []
+            for pid in ids:
+                jit = _jw.item(pid)
+                if jit and "bundle" not in jit and os.path.exists(_jw.card_path(pid)):
+                    cards.append(pygame.image.load(_jw.card_path(pid)))
+            if cards:
+                cw = size[0] // len(cards)
+                out = pygame.Surface((cw * len(cards), min(size[1], cw)), pygame.SRCALPHA)
+                for k, c in enumerate(cards):
+                    c = pygame.transform.smoothscale(c, (min(cw, out.get_height()),) * 2)
+                    out.blit(c, (k * cw + (cw - c.get_width()) // 2, 0))
+                img = out
+        except Exception as e:
+            print("item picture:", e)
+        if img is None:
+            th = self._thumb(item)
+            if th is not None:
+                k = min(size[0] / th.get_width(), size[1] / th.get_height())
+                img = pygame.transform.smoothscale(th, (int(th.get_width() * k), int(th.get_height() * k)))
+        if img is None:      # no strip yet: the same drawn icon the grid card shows, larger
+            img = pygame.Surface((min(size), min(size)), pygame.SRCALPHA)
+            try:
+                self._placeholder_icon(img, item, img.get_rect().inflate(-16, -16))
+            except Exception as e:
+                print("placeholder picture:", e)
+                img = None
+        self._thumbs[key] = img
+        return img
+
+    def _detail_picture(self, surf, rect, img):
+        if img is None:
+            return
+        area = pygame.Rect(rect.x + 12, rect.bottom - 312, rect.w - 24, 172)
+        frame = pygame.Rect(0, 0, min(area.w, img.get_width() + 8), min(area.h, img.get_height() + 8))
+        frame.center = area.center
+        pygame.draw.rect(surf, NAVY, frame, border_radius=6)
+        pygame.draw.rect(surf, GOLD_DIM, frame, 1, border_radius=6)
+        surf.blit(img, (frame.centerx - img.get_width() // 2, frame.centery - img.get_height() // 2))
 
     def _unlock_line(self, set_id, info):
         tier = int((self._sets().get(set_id) or {}).get("tier") or 1)
@@ -1236,95 +1663,15 @@ class Outfitters:
                     7: "Reigning Queen" if female else "Reigning King"}.get(tier, "Unlocked")
         return info.get("hint") or self._short_hint(set_id, info)
 
-    def _draw_palettes(self, surf, entry, item, x, y, w):
-        pals = list((item or {}).get("palettes") or entry.get("palettes") or [])
-        gp = _catalogue().get("garment_palettes") or {}
-        unlocked = self._unlock(entry["id"]).get("state") == "unlocked"
-        self._text(surf, "Colours", (x, y), INK, 14, bold=True)
-        y += 20
-        probe = item or _by_id(next((p for p in entry.get("pieces") or [] if (_by_id(p) or {}).get("slot") == "outfit"), "")) or {}
-        cx = x + 14
-        hover_price = None
-        for pal in pals:
-            info = gp.get(pal) or {}
-            centre = (cx, y + 13)
-            pygame.draw.circle(surf, _hex(info.get("base")), centre, 11)
-            pygame.draw.circle(surf, (0, 0, 0), centre, 11, 1)
-            pygame.draw.circle(surf, _hex(info.get("trim")), centre, 4)
-            owned = self._palette_key_owned(probe, pal) if probe else pal == pals[0]
-            if not unlocked and not owned:
-                dim = pygame.Surface((24, 24), pygame.SRCALPHA)
-                dim.fill((12, 18, 34, 150))
-                surf.blit(dim, (centre[0] - 12, centre[1] - 12))
-                self._padlock(surf, (centre[0], centre[1] + 1), 0.5, INK)
-            if self.look.get("palette") == pal and (_by_id(self.look.get("outfit")) or {}).get("set") == entry["id"]:
-                pygame.draw.circle(surf, GOLD, centre, 14, 2)
-            self.hit.append(("palette", pygame.Rect(centre[0] - 16, centre[1] - 16, 32, 32), pal))
-            if self.hover == ("palette", pal) and not owned:
-                hover_price = self._price(int(info.get("price") or 0))
-            cx += 36
-        y += 30
-        if hover_price is not None:
-            self._text(surf, f"{hover_price:,} coins", (x, y - 4), GOLD, 12)
-        box = pygame.Rect(x, y + 10, 16, 16)
-        pygame.draw.rect(surf, NAVY, box, border_radius=3)
-        pygame.draw.rect(surf, GOLD_DIM, box, 1, border_radius=3)
-        if self.apply_to_set:
-            self._tick(surf, (box.x + 2, box.y + 3), GOLD)
-        self._text(surf, "Apply to set", (box.right + 8, box.y), INK, 13)
-        self.hit.append(("apply_set", pygame.Rect(x, y + 2, 140, 32), None))
-        return y + 34
-
-    def _draw_levels(self, surf, entry, x, y, w):
-        set_id = entry["id"]
-        have = self._owned_level(set_id)
-        owns_outfit = any((_by_id(p) or {}).get("slot") == "outfit" and p in self._owned() for p in entry.get("pieces") or [])
-        prices = entry.get("upgrade_prices") or [0, 0]
-        current = int(self.look.get("outfit_level") or 1) if (_by_id(self.look.get("outfit")) or {}).get("set") == set_id else 1
-        tier = int(entry.get("tier") or 1)
-        rows = (("Plain", 1, "Base cloth, one trim band"), ("Fine", 2, "Embroidery, +1 jewellery"),
-                ("Regal", 3, "Filigree, gems, shimmer"))
-        for label, level, blurb in rows:
-            row = pygame.Rect(x, y, w, 50)
-            pygame.draw.rect(surf, NAVY, row, border_radius=6)
-            pygame.draw.rect(surf, GOLD if current == level else GOLD_DIM, row, 1, border_radius=6)
-            self._text(surf, label, (row.x + 8, row.y + 4), GOLD_HI if level <= have and owns_outfit else INK, 14, bold=True)
-            for p in range(3):
-                pygame.draw.circle(surf, GOLD if p < level else NAVY_HI, (row.x + 62 + p * 11, row.y + 13), 4)
-            self._text(surf, blurb, (row.x + 8, row.y + 22), MUTED, 12)
-            if level == 1:
-                if owns_outfit:
-                    self._text(surf, "owned", (row.right - 8, row.y + 5), SAFE_GREEN, 12, right=True)
-            else:
-                need_tier = min(7, tier + level - 1)
-                need_set = next((s for s in self._set_order()
-                                 if int((self._sets().get(s) or {}).get("tier") or 0) == need_tier), None)
-                allowed = bool(need_set) and self._unlock(need_set).get("state") == "unlocked"
-                if level <= have:
-                    self._text(surf, "owned", (row.right - 8, row.y + 5), SAFE_GREEN, 12, right=True)
-                elif level == have + 1 and owns_outfit and allowed:
-                    self._button(surf, pygame.Rect(row.right - 100, row.y + 3, 94, 20),
-                                 f"Upgrade {self._price(int(prices[level - 2])):,}", "upgrade", (set_id, level), size=11)
-                elif not allowed:
-                    name = (self._sets().get(need_set) or {}).get("name", f"tier {need_tier}")
-                    self._padlock(surf, (row.x + 13, row.y + 41), 0.4, LOCK_GREY)
-                    self._text(surf, f"Unlock {name}", (row.x + 22, row.y + 35), LOCK_GREY, 11)
-                else:
-                    self._text(surf, "Buy the outfit first" if not owns_outfit else "Upgrade Fine first",
-                               (row.x + 8, row.y + 35), LOCK_GREY, 11)
-            self.hit.append(("level", pygame.Rect(row.x, row.y, 100, row.h), level))
-            y += 54
-        jmax = int(_catalogue().get("jewellery_max") or 3)
-        self._text(surf, f"Jewellery {len(self.look.get('jewellery') or [])}/{jmax}", (x, y + 2), INK, 13)
-        return y + 20
-
     # ---- bottom bar ---------------------------------------------------------------------------
     def _draw_bar(self, surf):
-        coins = int(self._player().get("coins") or 0)
+        purse = int(self._player().get("coins") or 0)
+        bank = int(self._player().get("bank_coins") or 0)
+        coins = purse + bank
         self._coin(surf, (44, BAR_Y + 48), 11)
-        self._text(surf, f"{coins:,} coins", (62, BAR_Y + 38), INK, 18, bold=True)
+        self._text(surf, f"{coins:,} coins", (62, BAR_Y + 30), INK, 18, bold=True)
+        self._text(surf, f"purse {purse:,} · bank {bank:,}", (62, BAR_Y + 52), MUTED, 12)
         self._toggle(surf, 200, BAR_Y + 32, "Compare (Tab)", self.compare, "compare")
-        self._toggle(surf, 360, BAR_Y + 32, "Show armour", self.show_armour, "armour")
         q = self._quote()
         n = len(q["new"]) + len(q["extras"])
         mult, disc, cap, rate = self._pricing()
@@ -1347,7 +1694,8 @@ class Outfitters:
         for kind, label, width in (("random", "Randomise", 110), ("reset", "Reset", 90), ("save_current", "Save outfit", 120)):
             self._button(surf, pygame.Rect(x, BAR_Y + 32, width, 40), label, kind, size=16)
             x += width + 10
-        disabled = bool(q["locked"]) or (n > 0 and q["total"] + q["tax"] > coins)
+        soon = bool(self.focus_coll) and not self._coll_live(self._coll(self.focus_coll) or {}) and self.tab == "sets"
+        disabled = soon or bool(q["locked"]) or (n > 0 and q["total"] + q["tax"] > coins)
         self._button(surf, pygame.Rect(x, BAR_Y + 28, 1172 - x - 4, 48), "Buy & Wear" if n else "Wear", "buy",
                      primary=True, disabled=disabled, size=20)
 
@@ -1429,11 +1777,11 @@ class Outfitters:
         stage = pygame.Rect(60, 136, 400, 554)
         pygame.draw.rect(surf, NAVY_CARD, stage, border_radius=12)
         pygame.draw.rect(surf, GOLD_DIM, stage, 1, border_radius=12)
-        plinth = pygame.Rect(stage.centerx - 70, stage.bottom - 150, 140, 28)
-        pygame.draw.ellipse(surf, GOLD_DIM, plinth, 2)
-        import player_hd_client
-        player_hd_client.draw_player(surf, self.sex, self.look, stage.centerx, plinth.centery, 216, 0.0,
-                                     anim="idle", facing=_FACINGS[self.facing_i][0], equipment=None)
+        feet = stage.bottom - 150
+        ped = pygame.Rect(stage.centerx - 70, feet + 2, 140, 30)
+        pygame.draw.ellipse(surf, (32, 26, 22), ped)
+        self._blit_stage_player(surf, stage.centerx, feet, _FACINGS[self.facing_i][0])
+        pygame.draw.ellipse(surf, GOLD, ped, 2)
         pill = pygame.Rect(stage.centerx - 78, stage.y + 16, 156, 32)
         pygame.draw.rect(surf, NAVY, pill, border_radius=16)
         pygame.draw.rect(surf, GOLD_DIM, pill, 1, border_radius=16)
@@ -1465,7 +1813,49 @@ class Outfitters:
             return True
         return self.look.get(slot) == item.get("id")
 
+    def _card_sparkle(self, surf, item, rect):
+        """Hover preview: the piece's gem glints (Full sparkle, max 2 lit) over the card art."""
+        try:
+            import jewellery as J
+            src = J.item(item.get("id")) or {}
+            pts = (src.get("sparkle_points") or {}).get("s") or []
+            fx = item.get("fx") or src.get("fx") or {}
+            if not pts:
+                return
+            w60, h60 = src.get("size60") or (1, 1)
+            box = rect.inflate(-16, -16)
+            sc = min(box.w / float(w60), box.h / float(h60))
+            rect = pygame.Rect(0, 0, int(w60 * sc), int(h60 * sc))
+            rect.center = box.center
+            loop = float(fx.get("loop_s") or 1.8)
+            phase = (time.time() % loop) / loop
+            for k, p in enumerate(pts):
+                ph = (phase + k / max(1, len(pts))) % 1.0
+                if ph > 0.34 or k >= 6:
+                    continue
+                a = math.sin(ph / 0.34 * math.pi)
+                x = rect.x + p[0] * rect.w
+                y = rect.y + p[1] * rect.h
+                r = 2 + 5 * a
+                col = (255, 255, 255)
+                pygame.draw.line(surf, col, (x - r, y), (x + r, y), 1)
+                pygame.draw.line(surf, col, (x, y - r), (x, y + r), 1)
+                pygame.draw.circle(surf, col, (int(x), int(y)), max(1, int(1.6 * a)))
+        except Exception as e:
+            print("card sparkle:", e)
+
     def _thumb(self, item):
+        if item.get("hd_jewellery") and item.get("card"):
+            k = ("card", item["id"])
+            if k not in self._thumbs:
+                try:
+                    import player_hd_client
+                    img = pygame.image.load(os.path.join(player_hd_client._BASE, item["card"])).convert_alpha()
+                    self._thumbs[k] = pygame.transform.smoothscale(img, (96, 96))
+                except Exception as e:
+                    print("card load:", e)
+                    self._thumbs[k] = None
+            return self._thumbs[k]
         key = ("item", self.sex, item.get("id"), self.look.get("hair_colour"), self.look.get("skin_tone"),
                self.look.get("palette"))
         if key in self._thumbs:
@@ -1487,7 +1877,8 @@ class Outfitters:
         if item.get("palettes") and look.get("palette") not in item["palettes"]:
             look["palette"] = item["palettes"][0]
         canvas = pygame.Surface((160, 200), pygame.SRCALPHA)
-        player_hd_client.draw_player(canvas, self.sex, look, 80, 186, 120, 0.0, anim="idle", facing="s")
+        player_hd_client.draw_player(canvas, self.sex, look, 80, 186, 120, 0.0, anim="idle", facing="s",
+                                     starter=False)
         box = canvas.get_bounding_rect()
         if box.w < 4 or box.h < 4:
             self._thumbs[key] = None

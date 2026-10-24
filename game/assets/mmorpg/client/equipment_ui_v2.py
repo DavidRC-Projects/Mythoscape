@@ -25,12 +25,20 @@ DOLL = {
     "amulet": (0.14, 0.25), "ammo": (0.86, 0.25),
     "weapon": (0.14, 0.44), "shield": (0.86, 0.44),
     "body": (0.14, 0.63), "legs": (0.86, 0.63),
-    "ring": (0.5, 0.925),
+    "ring": (0.5, 0.925), "tool": (0.86, 0.82),
 }
 DOLL_SCALE = 1.75  # 2x paper doll scaled to fill the oval; feet stay on the plinth
 # where each slot's guide line lands on the doll (fraction of stage)
 ANCHOR = {"helmet": (0.5, 0.25), "amulet": (0.5, 0.33), "ammo": (0.58, 0.36), "weapon": (0.36, 0.52),
-          "shield": (0.64, 0.52), "body": (0.46, 0.45), "legs": (0.54, 0.65), "ring": (0.62, 0.64)}
+          "shield": (0.64, 0.52), "body": (0.46, 0.45), "legs": (0.54, 0.65), "ring": (0.62, 0.64),
+          "tool": (0.64, 0.56)}
+
+
+def _slot_hint(slot):
+    """Detail-line hint. Body and legs are worn as a pair (David, 23 Oct 2026)."""
+    if slot in ("body", "legs"):
+        return "Body + legs are a pair  ·  Click to take both off"
+    return f"{slot.title()} slot  ·  Click slot to unequip"
 
 
 def _bevel(surf, rect, fill=STONE, light=STONE_L, dark=STONE_D, w=2):
@@ -84,6 +92,9 @@ def _silhouette(surf, slot, r, col=(78, 70, 58)):
         pygame.draw.polygon(surf, col, [P(-4, -5.6), P(4, -5.6), P(4.6, 5.6), P(1.2, 5.6), P(0, -1), P(-1.2, 5.6), P(-4.6, 5.6)])
     elif slot == "ring":
         pygame.draw.circle(surf, col, P(0, 1), int(4.2 * u), max(2, int(u * 1.3)))
+    elif slot == "tool":   # pickaxe: handle + curved head
+        pygame.draw.line(surf, col, P(-4.6, 5.2), P(2.2, -1.6), max(2, int(u * 1.5)))
+        pygame.draw.polygon(surf, col, [P(-1.8, -5.2), P(2.6, -3.6), P(5.6, 0.2), P(4.4, 0.8), P(1.8, -2.2), P(-2.2, -3.8)])
         pygame.draw.circle(surf, col, P(0, -3.6), int(1.8 * u))
 
 
@@ -245,10 +256,10 @@ def draw(self, ITEMS, karma_slot_bonus, sprites, weapon_style):
                 line2 = (f"Speed {ws['attack_speed']}   Crit {round(ws['crit_chance'] * 100)}%   "
                          f"Heavy +{round(ws['heavy_bonus'] * 100)}%")
                 scr.blit(self.font_tiny.render(line2, True, (230, 200, 120)), (det.x + 64, det.y + 38))
-                scr.blit(self.font_tiny.render(f"{detail_slot.title()} slot  ·  Click slot to unequip", True, MUTED), (det.x + 64, det.y + 53))
+                scr.blit(self.font_tiny.render(_slot_hint(detail_slot), True, MUTED), (det.x + 64, det.y + 53))
             else:
                 scr.blit(self.font_tiny.render(detail, True, TEXT), (det.x + 64, det.y + 28))
-                scr.blit(self.font_tiny.render(f"{detail_slot.title()} slot  ·  Click slot to unequip", True, MUTED), (det.x + 64, det.y + 47))
+                scr.blit(self.font_tiny.render(_slot_hint(detail_slot), True, MUTED), (det.x + 64, det.y + 47))
         else:
             scr.blit(self.font_small.render(f"{detail_slot.title()}: empty", True, MUTED), (det.x + 12, det.y + 24))
     else:

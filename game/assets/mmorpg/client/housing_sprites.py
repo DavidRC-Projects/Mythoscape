@@ -189,7 +189,12 @@ def queue(client, draw_list, cam_x, cam_y, tile):
         fp = house["footprint"]
         label = None
         if not house.get("office"):
-            label = owners.get(house["key"]) or (house.get("ownership") or {}).get("vacant_label") or "For Sale"
+            mine = ((client.player or {}).get("home") or {}).get("key") == house["key"]
+            owner = owners.get(house["key"])
+            if mine:
+                label = f"YOUR HOME · {house.get('name') or house['key']}"
+            else:
+                label = owner or (house.get("ownership") or {}).get("vacant_label") or "For Sale"
         elif not _inside(client, house):
             label = "ESTATE AGENT"
         _queue_piece(
@@ -253,14 +258,19 @@ def _queue_piece(client, draw_list, cam_x, cam_y, tile, key, x0, y0, x1, y1, ins
     if label and not inside:
         def _plaque(_left=left, _width=(x1 - x0 + 1) * tile, _y=sort_y, _label=label, _sign=sign, _x0=x0, _y0=y0):
             font = client.font if _sign else client.font_small
-            text = font.render(_label, True, (255, 236, 170) if _sign else (255, 230, 180))
-            if _sign:
+            home = str(_label).startswith("YOUR HOME")
+            text = font.render(
+                _label,
+                True,
+                (180, 255, 190) if home else ((255, 236, 170) if _sign else (255, 230, 180)),
+            )
+            if _sign or home:
                 _sx, north = client.world_to_view_offset(_x0, _y0, cam_x, cam_y)
                 px = _sx * tile + _width * 0.5 - text.get_width() / 2
                 py = north * tile - text.get_height() - 8
                 pad = pygame.Rect(px - 8, py - 4, text.get_width() + 16, text.get_height() + 8)
-                pygame.draw.rect(screen, (28, 22, 12), pad, border_radius=4)
-                pygame.draw.rect(screen, (212, 175, 70), pad, 2, border_radius=4)
+                pygame.draw.rect(screen, (16, 36, 22) if home else (28, 22, 12), pad, border_radius=4)
+                pygame.draw.rect(screen, (90, 220, 120) if home else (212, 175, 70), pad, 2, border_radius=4)
                 screen.blit(text, (px, py))
             else:
                 screen.blit(text, (_left + _width * 0.5 - text.get_width() / 2, _y - 18))

@@ -44,6 +44,7 @@ from content import (
     TELEPORT_DESTINATIONS, WIZARD_TILE,
 )  # noqa: E402
 import world_map as wm  # noqa: E402
+import wolf_pass_client  # noqa: E402
 import fairy_ground  # noqa: E402
 import village_ground  # noqa: E402
 import combat  # noqa: E402
@@ -84,9 +85,11 @@ ZOOM_MIN = 40
 ZOOM_MAX = 200
 ZOOM_STEP = 20
 ZOOM_LEVELS = tuple(range(ZOOM_MIN, ZOOM_MAX + 1, ZOOM_STEP))
-ZOOM_EASE_SECONDS = 0.2
-# Start at 100%.
-TILE = TILE_ZOOM_BASE
+ZOOM_DEFAULT = 140
+# Short ease; the world keeps its current TILE until the end so zoom-out never
+# suddenly redraws a wider map mid-animation (that was the main hitch).
+ZOOM_EASE_SECONDS = 0.12
+TILE = max(8, int(round(TILE_ZOOM_BASE * ZOOM_DEFAULT / 100.0)))
 
 # Low-poly dragon visuals (pre-baked sheets). False = original procedural draw_dragon.
 USE_LOWPOLY_DRAGONS = True
@@ -192,10 +195,10 @@ class GameClient(ScreensMixin, CameraYaw):
         self.cam_drag = None
         self._cam_drag_threshold = 56
         self.BUILDING_WORLD_ROTATION_DEG = 0
-        self.zoom_pct = 100
-        self._zoom_goal = 100
-        self._zoom_anim = 100.0     # eased float zoom drawn on screen
-        self._zoom_from = 100.0
+        self.zoom_pct = ZOOM_DEFAULT
+        self._zoom_goal = ZOOM_DEFAULT
+        self._zoom_anim = float(ZOOM_DEFAULT)  # eased float zoom drawn on screen
+        self._zoom_from = float(ZOOM_DEFAULT)
         self._zoom_t0 = 0.0
         self._zoom_drag = False
         self._zoom_toast_until = 0.0
@@ -338,6 +341,7 @@ class GameClient(ScreensMixin, CameraYaw):
         self.fletch_tab_rects = {}
         self.fires = set()  # {"x,y", ...} active campfires from STATE_UPDATE
         self.dungeon = None  # Tidehollow instance HUD state or None
+        self.dungeon_victory = None  # {name, rewards, until} after clear, before auto-leave
         self._overworld_tiles = None
         self._overworld_size = None
         self._overworld_npcs = None
@@ -356,6 +360,9 @@ class GameClient(ScreensMixin, CameraYaw):
         self.show_pets = False
         self.pets_btn_rect = None
         self.pet_switch_rects = []
+        self.pets_scroll = 0
+        self.pets_scroll_meta = None
+        self.pets_drag = None
         self.show_travel = False
         self.travel_btn_rects = []
         self.show_teleport = False
@@ -588,7 +595,6 @@ class GameClient(ScreensMixin, CameraYaw):
                 self.state = "GAME"
                 self._offer_appearance()
                 if self.arrival_guide:
-                    import new_player_guide
                     new_player_guide.start(self)
             self.stat_alloc_error = ""
             self._minimap_base = None  # rebuild when world loads
@@ -678,24 +684,40 @@ class GameClient(ScreensMixin, CameraYaw):
         elif t == "STAIR_PROMPT":
             self.stair_prompt = {"tiles": [tuple(tile) for tile in (msg.get("tiles") or [])]}
         elif t == "DUNGEON_EXIT":
+            self.dungeon_victory = None
             self._exit_dungeon_view()
             self.stair_prompt = None
             if self.player:
                 self.player["x"] = msg.get("x", self.player["x"])
                 self.player["y"] = msg.get("y", self.player["y"])
         elif t == "DUNGEON_COMPLETE":
-            self._exit_dungeon_view()
+            # Stay inside briefly — server ejects after leave_in seconds.
             rewards = msg.get("rewards") or []
+            leave_in = float(msg.get("leave_in") or 5)
+            dungeon_name = (
+                msg.get("name")
+                or (self.dungeon or {}).get("name")
+                or (self.dungeon or {}).get("label")
+                or "Dungeon"
+            )
             names = []
             for r in rewards:
                 it = ITEMS.get(r.get("item_id"), {})
                 names.append(f"{r.get('qty', 1)}x {it.get('name', r.get('item_id'))}")
-            if names:
-                self.add_chat(
-                    "Tidehollow conquered! Reward: " + ", ".join(names),
-                    color=(255, 215, 90),
-                    highlight=True,
-                )
+            self.dungeon_victory = {
+                "name": dungeon_name,
+                "rewards": names,
+                "until": time.time() + leave_in,
+                "leave_in": leave_in,
+            }
+            if self.dungeon is not None:
+                self.dungeon["completed"] = True
+            self.add_chat(
+                f"{dungeon_name} complete!"
+                + ((" Reward: " + ", ".join(names)) if names else ""),
+                color=(255, 215, 90),
+                highlight=True,
+            )
         elif t == "HOUSE_LEVEL":
             if self.player:
                 self.player["house_level"] = int(msg.get("level") or 0)
@@ -703,6 +725,8 @@ class GameClient(ScreensMixin, CameraYaw):
         elif t == "PLAYER_UPDATE":
             prev_boosts = (self.player or {}).get("stat_boosts") or {}
             self.player = msg["player"]
+            if getattr(self, "outfitters", None) and self.outfitters.active:
+                self.outfitters.on_player_update()
             pet = (self.player or {}).get("pet")
             if pet:
                 owner = pet.get("owner_id")
@@ -724,7 +748,14 @@ class GameClient(ScreensMixin, CameraYaw):
                 self.combat_style = self.player["combat_style"]
             # Mirror into the shared players dict so sprites stay consistent.
             if self.player:
+                # Merge, never replace: the public entry carries fields this mirror doesn't
+                # (appearance, hd_player ...). Dropping appearance here made the HD outfit
+                # fall back to the layered default look on every self-update while walking.
+                prev_pub = self.players.get(self.player["id"]) or {}
                 self.players[self.player["id"]] = {
+                    **prev_pub,
+                    "appearance": self.player.get("appearance") or prev_pub.get("appearance"),
+                    "hd_player": self.player.get("hd_player", prev_pub.get("hd_player", True)),
                     "id": self.player["id"],
                     "name": self.player["name"],
                     "x": self.player["x"],
@@ -1065,6 +1096,8 @@ class GameClient(ScreensMixin, CameraYaw):
             text = msg.get("message") or "Something went wrong."
             self.add_chat(f"[!] {text}", color=(255, 140, 100), highlight=True)
             self._maybe_combat_floater(text)
+            if getattr(self, "outfitters", None) and self.outfitters.active:
+                self.outfitters.on_server_error(text)
             if self.state == "STAT_ALLOC":
                 self.stat_alloc_error = text
                 self.login_error = text
@@ -1506,6 +1539,20 @@ class GameClient(ScreensMixin, CameraYaw):
                         self.travel_scroll = max(0, self.travel_scroll - step * 5)
                     else:
                         self.travel_scroll = min(max_scroll, self.travel_scroll + step * 5)
+                elif self.show_pets and event.key in (
+                    pygame.K_UP, pygame.K_DOWN, pygame.K_PAGEUP, pygame.K_PAGEDOWN,
+                ):
+                    step = 64
+                    meta = self.pets_scroll_meta or {}
+                    max_scroll = float(meta.get("max_scroll", 9999))
+                    if event.key == pygame.K_UP:
+                        self.pets_scroll = max(0, self.pets_scroll - step)
+                    elif event.key == pygame.K_DOWN:
+                        self.pets_scroll = min(max_scroll, self.pets_scroll + step)
+                    elif event.key == pygame.K_PAGEUP:
+                        self.pets_scroll = max(0, self.pets_scroll - step * 4)
+                    else:
+                        self.pets_scroll = min(max_scroll, self.pets_scroll + step * 4)
                 elif emberdeep_v2_client.fp_active(self) and event.key in (pygame.K_q, pygame.K_e):
                     emberdeep_v2_client.turn(self, -1 if event.key == pygame.K_q else 1)
                 elif event.key == pygame.K_e:
@@ -1728,7 +1775,14 @@ class GameClient(ScreensMixin, CameraYaw):
                 self.dungeon_prompt = None
                 self.clear_walk()
         elif event.type == pygame.MOUSEWHEEL:
-            if self.state == "GAME" and self.show_help:
+            if self.state == "GAME" and self.show_pets:
+                dy = getattr(event, "precise_y", None)
+                if dy is None:
+                    dy = float(event.y)
+                meta = self.pets_scroll_meta or {}
+                max_scroll = float(meta.get("max_scroll", 9999))
+                self.pets_scroll = max(0, min(max_scroll, self.pets_scroll - dy * 48))
+            elif self.state == "GAME" and self.show_help:
                 dy = getattr(event, "precise_y", None)
                 if dy is None:
                     dy = float(event.y)
@@ -1878,6 +1932,11 @@ class GameClient(ScreensMixin, CameraYaw):
                     pass
                 else:
                     self.handle_mouse_click(event)
+            elif self.state == "GAME" and self.show_pets and event.button == 1:
+                if self._pets_scrollbar_mousedown(event.pos):
+                    pass
+                else:
+                    self.handle_mouse_click(event)
             elif self.state == "GAME" and self.show_shop_panel and self.shop and event.button == 1:
                 if self._shop_scrollbar_mousedown(event.pos):
                     pass
@@ -1903,6 +1962,8 @@ class GameClient(ScreensMixin, CameraYaw):
                 self._skills_scrollbar_drag(event.pos)
             elif self.travel_drag is not None:
                 self._travel_scrollbar_drag(event.pos)
+            elif self.pets_drag is not None:
+                self._pets_scrollbar_drag(event.pos)
             elif self.shop_drag is not None:
                 self._shop_scrollbar_drag(event.pos)
             elif self.inv_drag is not None:
@@ -1923,6 +1984,8 @@ class GameClient(ScreensMixin, CameraYaw):
                     self.skills_drag = None
                 elif self.travel_drag is not None:
                     self.travel_drag = None
+                elif self.pets_drag is not None:
+                    self.pets_drag = None
                 elif self.shop_drag is not None:
                     self.shop_drag = None
                 elif self.inv_drag is not None:
@@ -2173,6 +2236,8 @@ class GameClient(ScreensMixin, CameraYaw):
             return
         self.show_pets = not self.show_pets
         if self.show_pets:
+            self.pets_scroll = 0
+            self.pets_drag = None
             self.show_forge = False
             self.show_cook = False
             self.show_equipment = False
@@ -2224,6 +2289,29 @@ class GameClient(ScreensMixin, CameraYaw):
                 max(0, min(self.world_h - view_h, py - view_h // 2)),
             ]
             self.world_map_drag = None
+
+    def _home_destination(self):
+        """Travel / map pin for the player's owned house, if any."""
+        home = (self.player or {}).get("home") or {}
+        if not home.get("x") or not home.get("y"):
+            return None
+        name = home.get("name") or "Home"
+        return {
+            "id": "home",
+            "kind": "place",
+            "label": f"My Home ({name})",
+            "blurb": home.get("blurb") or f"Your deed — {name}",
+            "x": int(home["x"]),
+            "y": int(home["y"]),
+            "home": True,
+        }
+
+    def _travel_places(self):
+        places = [d for d in TRAVEL_DESTINATIONS if d["kind"] == "place"]
+        home = self._home_destination()
+        if home:
+            places = [home] + [d for d in places if d.get("id") != "home"]
+        return places
 
     def travel_to_destination(self, dest):
         """Auto-walk to a travel destination (same style as B → bank)."""
@@ -2996,6 +3084,7 @@ class GameClient(ScreensMixin, CameraYaw):
         self._overworld_tiles = None
         self._overworld_size = None
         self._overworld_npcs = None
+        self.dungeon_victory = None
         self.dungeon = None
         self.clear_walk()
         self._minimap_base = None
@@ -3496,14 +3585,14 @@ class GameClient(ScreensMixin, CameraYaw):
             self._zoom_toast_until = time.time() + 1.2
 
     def _pump_zoom(self):
-        """Ease the world toward _zoom_goal over ~200 ms (ease-out cubic).
+        """Ease the world toward _zoom_goal (ease-out cubic).
 
-        The world renders at the smaller of the two endpoint levels (cached
-        tiles), and draw_map scales the map view so the in-between frames sit at
-        the float zoom with the player centred. On arrival the real tile for the
-        goal is applied once. Dragging the bar moves only the knob; the world
-        eases to the snapped level on release. A new tick mid-animation
-        retargets from the current float value (steps are not queued).
+        Keep the current TILE size for the whole ease and only scale the finished
+        map blit — switching TILE mid-zoom (especially zooming out) used to force
+        a full wider redraw every frame and hitch hard. The goal tile size is
+        applied once on arrival. Dragging the bar moves only the knob; the world
+        eases on release. A new tick mid-animation retargets from the current
+        float value (steps are not queued).
         """
         import emberdeep_v2_client
         if emberdeep_v2_client.fp_active(self):
@@ -3518,9 +3607,9 @@ class GameClient(ScreensMixin, CameraYaw):
             self._zoom_t0 = now
             self.zoom_pct = goal
             self._zoom_toast_until = now + 1.2
-            self._apply_zoom_tile(min(self._zoom_from, float(goal)))
         if self._zoom_anim != float(goal):
-            u = min(1.0, (now - self._zoom_t0) / ZOOM_EASE_SECONDS)
+            span = max(1e-6, ZOOM_EASE_SECONDS)
+            u = min(1.0, (now - self._zoom_t0) / span)
             e = 1.0 - (1.0 - u) ** 3
             self._zoom_anim = self._zoom_from + (goal - self._zoom_from) * e
             if u >= 1.0:
@@ -3530,7 +3619,7 @@ class GameClient(ScreensMixin, CameraYaw):
     def _zoom_view_scale(self):
         """Extra scale for the map view while easing (1.0 when settled)."""
         anim = float(getattr(self, "_zoom_anim", self.zoom_pct))
-        return (TILE_ZOOM_BASE * anim / 100.0) / float(TILE)
+        return (TILE_ZOOM_BASE * anim / 100.0) / float(max(1, TILE))
 
     def _blit_zoom_ease(self, cam_x, cam_y):
         """Scale the drawn map around the player for in-between zoom frames."""
@@ -3542,7 +3631,10 @@ class GameClient(ScreensMixin, CameraYaw):
         cx, cy = sx * TILE + TILE / 2.0, sy * TILE + TILE / 2.0
         view = self.screen.subsurface((0, 0, MAP_W, MAP_H)).copy()
         w, h = max(1, int(round(MAP_W * k))), max(1, int(round(MAP_H * k)))
-        scaled = pygame.transform.smoothscale(view, (w, h))
+        # Nearest-neighbour scale is far cheaper than smoothscale on a 900×640
+        # buffer every frame; the ease only lasts ~120ms so the difference is
+        # barely visible and the hitch is gone.
+        scaled = pygame.transform.scale(view, (w, h))
         # Scale about the player's screen point so the player never drifts.
         dx, dy = cx - cx * k, cy - cy * k
         if k < 1.0:
@@ -3766,6 +3858,16 @@ class GameClient(ScreensMixin, CameraYaw):
         if self.show_help and look and look.collidepoint(mx, my):
             enabled = not bool((self.player or {}).get("hd_player", True))
             self.net.send("TOGGLE_HD_PLAYER", enabled=enabled)
+            return
+        ofx = getattr(self, "outfit_fx_rect", None)
+        if self.show_help and ofx and ofx.collidepoint(mx, my):
+            import outfit_fx
+            outfit_fx.cycle_mode()
+            return
+        ofo = getattr(self, "outfit_fx_others_rect", None)
+        if self.show_help and ofo and ofo.collidepoint(mx, my):
+            import outfit_fx
+            outfit_fx.toggle_others()
             return
         follow = getattr(self, "ember_follow_rect", None)
         if self.show_help and follow and follow.collidepoint(mx, my):
@@ -5573,6 +5675,8 @@ class GameClient(ScreensMixin, CameraYaw):
                 else:
                     import void_v2_client
                     void_v2_client.draw_overlay(self, now)
+        if self.dungeon_victory:
+            self.draw_dungeon_victory()
         self.draw_teleport_button()
         if self.dialogue:
             self.draw_dialogue()
@@ -5692,6 +5796,7 @@ class GameClient(ScreensMixin, CameraYaw):
 
         # Tall volcano / lava-chamber cliff faces
         self._queue_volcano_cliffs(draw_list, cam_x, cam_y, vis_w, vis_h, t)
+        wolf_pass_client.queue(self, draw_list, cam_x, cam_y, TILE, t)
 
         # Exit mouth inside private dungeons
         if self.dungeon:
@@ -6460,12 +6565,8 @@ class GameClient(ScreensMixin, CameraYaw):
                         self.draw_level_up_glow(cx, cy, time.time())
                     # HD player rendering (wrap draw_humanoid_detailed)
                     hd_on = (self.player or {}).get("hd_player", True)
-                    appearance = p.get("appearance") or (
-                        {"skin": "skin_light", "hair": "hair_side_part" if gender == "male" else "hair_ponytail",
-                         "hair_colour": "dark_brown", "top": "top_linen_shirt",
-                         "bottom": "bottom_work_trousers" if gender == "male" else "bottom_long_skirt",
-                         "shoes": "shoes_leather", "outfit": None, "accessories": []}
-                    )
+                    # No look in the payload yet: the free starter outfit, never the old layered default
+                    appearance = p.get("appearance") or None
                     hit_t = -1.0 if not is_self else t - self.player_hit_at.get(p["id"], t - 999)
                     death_t = t - self.player_death_at.get(p["id"], t - 999)
                     drawn = False
@@ -6497,6 +6598,9 @@ class GameClient(ScreensMixin, CameraYaw):
                                     fallback=face,
                                 )
                         swing = atk > 0 and not action
+                        import outfit_fx
+                        outfit_fx.set_context(len(getattr(self, "players", None) or ()),
+                                              getattr(self, "combat_target_id", None) is not None)
                         drawn = player_hd_client.draw_player(
                             self.screen, gender, appearance, cx, cy + TILE // 2, int(round(TILE * 1.1)), t,
                             anim=anim, progress=atk if atk > 0 else None, facing=hd_face,
@@ -6504,6 +6608,7 @@ class GameClient(ScreensMixin, CameraYaw):
                             death_t=death_t if 0 <= death_t < 1.2 else -1.0,
                             equipment=eq, fx_seed=eclipse_fx.player_seed(p.get("id")),
                             tool=(gather or {}).get("tool") if action else None,
+                            fx_ctx={"is_self": bool(is_self)},
                         )
                     if not drawn:
                         sprites.draw_humanoid_detailed(
@@ -7156,6 +7261,8 @@ class GameClient(ScreensMixin, CameraYaw):
         return village_ground.draw_path(self.screen, rect, wx, wy, client=self)
 
     def draw_terrain_tile(self, rect, tile_id, wx, wy, t):
+        if tile_id == wm.WALL and wolf_pass_client.draw_ground(self, rect, wx, wy):
+            return
         if self.dungeon and self.dungeon.get("id") == "castle_realm":
             import castle_realm_renderer
             if castle_realm_renderer.draw_terrain_tile(self, rect, tile_id, wx, wy, t):
@@ -8199,6 +8306,8 @@ class GameClient(ScreensMixin, CameraYaw):
                 if py1 <= py0:
                     py1 = py0 + 1
                 surf.fill(color, (px0, py0, px1 - px0, py1 - py0))
+        if not self.dungeon:
+            wolf_pass_client.minimap(self, surf, mm_w, mm_h, vw, vh)
         self._minimap_base = surf
         self._minimap_size = (mm_w, mm_h)
         self._minimap_yaw = int(self.camera_yaw) % 4
@@ -8449,6 +8558,49 @@ class GameClient(ScreensMixin, CameraYaw):
                 self.chat_log = self.chat_log[-8:]
                 self.walk_and_act(goals, None)
 
+    def draw_dungeon_victory(self):
+        """Full-map banner: dungeon cleared, countdown until auto-leave."""
+        victory = self.dungeon_victory
+        if not victory:
+            return
+        left = max(0.0, float(victory.get("until") or 0) - time.time())
+        name = victory.get("name") or "Dungeon"
+        rewards = victory.get("rewards") or []
+
+        dim = pygame.Surface((MAP_W, MAP_H), pygame.SRCALPHA)
+        dim.fill((6, 8, 14, 160))
+        self.screen.blit(dim, (0, 0))
+
+        box = pygame.Rect(0, 0, 520, 200)
+        box.center = (MAP_W // 2, MAP_H // 2 - 10)
+        panel = pygame.Surface((box.w, box.h), pygame.SRCALPHA)
+        panel.fill((18, 22, 34, 240))
+        self.screen.blit(panel, box.topleft)
+        pygame.draw.rect(self.screen, (255, 205, 90), box, 3, border_radius=10)
+
+        title = self.font_big.render("DUNGEON COMPLETE", True, (255, 220, 110))
+        self.screen.blit(title, title.get_rect(centerx=box.centerx, y=box.y + 22))
+        sub = self.font.render(f"{name} conquered", True, (230, 235, 245))
+        self.screen.blit(sub, sub.get_rect(centerx=box.centerx, y=box.y + 64))
+
+        if rewards:
+            loot = " · ".join(rewards[:4])
+            if len(rewards) > 4:
+                loot += f" · +{len(rewards) - 4} more"
+            loot_s = self.font_small.render(loot[:72], True, (200, 210, 180))
+            self.screen.blit(loot_s, loot_s.get_rect(centerx=box.centerx, y=box.y + 100))
+
+        secs = max(1, int(math.ceil(left))) if left > 0 else 0
+        if secs > 0:
+            leave = self.font.render(
+                f"Leaving in {secs}…", True, (255, 230, 150),
+            )
+        else:
+            leave = self.font.render("Returning outside…", True, (255, 230, 150))
+        self.screen.blit(leave, leave.get_rect(centerx=box.centerx, y=box.y + 140))
+        tip = self.font_tiny.render("Esc still leaves early", True, (160, 165, 180))
+        self.screen.blit(tip, tip.get_rect(centerx=box.centerx, y=box.y + 170))
+
     def draw_dungeon_prompt(self):
         box = pygame.Rect(250, 120, 560, 420)
         self.dungeon_prompt_rects = {"box": box}
@@ -8458,12 +8610,12 @@ class GameClient(ScreensMixin, CameraYaw):
         self.screen.blit(title, (box.x + 28, box.y + 22))
 
         rules = [
-            "Private 10-floor instance — only you are inside.",
-            "Clear every beast on a floor to open the next.",
-            "Floors scale from combat level 10 up to 80.",
-            "Dying or pressing Esc returns you to Harbourreach.",
-            "Finish floor 10 for rare loot and the Tidehollow Medal.",
-            "Progress does not save if you leave early.",
+            "Private instance — only you are inside.",
+            "Each chamber seals until its three beasts are dead.",
+            "Every room has three different monsters.",
+            "Dragons wait in the final chamber.",
+            "Clear every chamber for rare loot and the Tidehollow Medal.",
+            "Dying or Esc returns you to Harbourreach; progress does not save.",
         ]
         y = box.y + 72
         for line in rules:
@@ -8526,10 +8678,14 @@ class GameClient(ScreensMixin, CameraYaw):
         if fx and time.time() < fx["until"] - 0.15:
             return
         label = "Teleport"
-        for dest in TELEPORT_DESTINATIONS:
-            if dest["id"] == dest_id:
-                label = dest["label"]
-                break
+        if dest_id == "home":
+            home = self._home_destination()
+            label = (home or {}).get("label") or "My Home"
+        else:
+            for dest in TELEPORT_DESTINATIONS:
+                if dest["id"] == dest_id:
+                    label = dest["label"]
+                    break
         self.show_teleport = False
         self.clear_walk()
         self._start_teleport_fx(label)
@@ -8631,8 +8787,19 @@ class GameClient(ScreensMixin, CameraYaw):
         hint = self.font_tiny.render("The Kingdom and the Castle Realm are separate maps.", True, (190, 170, 210))
         self.screen.blit(hint, (box.x + 18, box.y + 48))
         y = box.y + 72
+        kingdom = [d for d in TELEPORT_DESTINATIONS if d.get("where") == "overworld"]
+        home = self._home_destination()
+        if home:
+            kingdom = [{
+                "id": "home",
+                "label": home["label"],
+                "blurb": home["blurb"],
+                "where": "overworld",
+                "x": home["x"],
+                "y": home["y"],
+            }] + [d for d in kingdom if d.get("id") != "home"]
         groups = (
-            ("The Kingdom", [d for d in TELEPORT_DESTINATIONS if d.get("where") == "overworld"]),
+            ("The Kingdom", kingdom),
             ("Castle Realm", [d for d in TELEPORT_DESTINATIONS if d.get("where") == "castle"]),
         )
         for title_text, dests in groups:
@@ -10679,6 +10846,38 @@ class GameClient(ScreensMixin, CameraYaw):
         if not box.collidepoint(mx, my):
             self.show_fletch = False
 
+
+    def _pets_scrollbar_mousedown(self, pos):
+        meta = self.pets_scroll_meta
+        if not meta or meta.get("max_scroll", 0) <= 0:
+            return False
+        track = meta["track"]
+        thumb = meta.get("thumb")
+        if thumb and thumb.collidepoint(pos):
+            self.pets_drag = {"y0": pos[1], "scroll0": self.pets_scroll}
+            return True
+        if track.collidepoint(pos):
+            view_h = meta["view_h"]
+            max_scroll = meta["max_scroll"]
+            thumb_h = thumb.h if thumb else 28
+            rel = (pos[1] - track.y - thumb_h / 2) / max(1, view_h - thumb_h)
+            self.pets_scroll = max(0, min(max_scroll, rel * max_scroll))
+            self.pets_drag = {"y0": pos[1], "scroll0": self.pets_scroll}
+            return True
+        return False
+
+    def _pets_scrollbar_drag(self, pos):
+        meta = self.pets_scroll_meta
+        drag = self.pets_drag
+        if not meta or not drag or meta.get("max_scroll", 0) <= 0:
+            return
+        view_h = meta["view_h"]
+        max_scroll = meta["max_scroll"]
+        thumb = meta.get("thumb")
+        thumb_h = thumb.h if thumb else 28
+        dy = pos[1] - drag["y0"]
+        span = max(1, view_h - thumb_h)
+        self.pets_scroll = max(0, min(max_scroll, drag["scroll0"] + dy * max_scroll / span))
 
     def _skills_scrollbar_mousedown(self, pos):
         meta = self.skills_scroll_meta
