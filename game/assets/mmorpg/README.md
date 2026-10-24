@@ -1,6 +1,8 @@
-# Mythoscape MMORPG
+# Crownfall
 
 A RuneScape-classic-style multiplayer sandbox: skills, quests, combat, crafting, and a shared overworld.
+
+For install and first-run steps from the repo root, see the top-level [`README.md`](../../../README.md).
 
 ## Building art (3D→2D shells)
 

@@ -1,7 +1,13 @@
 """
-MMORPG v0.1 client. Run with:  python client.py [server_host]
+Crownfall client. Run with:  python client.py [server_host]
 
 Requires: pip install pygame websockets
+
+Examples:
+  python client.py                         # ws://localhost:8765
+  python client.py 192.168.1.5:8765         # LAN without TLS
+  python client.py play.example.com         # wss://play.example.com
+  CROWNFALL_WS_URL=wss://host python client.py
 
 Panda3D building prototype (optional):
   python client.py --panda-building-proto
@@ -78,8 +84,28 @@ import rs_humanoid as _rs_humanoid  # noqa: E402
 _rs_humanoid.USE_NEW_CHARACTERS = USE_NEW_CHARACTERS
 sprites.USE_NEW_ITEM_ICONS = USE_NEW_CHARACTERS
 
+def _resolve_server_uri():
+    """Local uses ws://host:8765; remote defaults to wss://host (TLS proxy on 443).
+
+    Override with CROWNFALL_WS_URL, or pass a full ws:// / wss:// URL as argv[1].
+    For LAN without TLS: python client.py 192.168.1.5:8765
+    """
+    env_url = (os.environ.get("CROWNFALL_WS_URL") or "").strip()
+    if env_url:
+        return env_url
+    arg = sys.argv[1] if len(sys.argv) > 1 else "localhost"
+    if arg.startswith("ws://") or arg.startswith("wss://"):
+        return arg
+    if arg in ("localhost", "127.0.0.1", "::1"):
+        return f"ws://{arg}:8765"
+    if ":" in arg:
+        # host:port — plain WebSocket (LAN / direct)
+        return f"ws://{arg}"
+    return f"wss://{arg}"
+
+
 SERVER_HOST = sys.argv[1] if len(sys.argv) > 1 else "localhost"
-SERVER_URI = f"ws://{SERVER_HOST}:8765"
+SERVER_URI = _resolve_server_uri()
 
 SCREEN_W, SCREEN_H = 1200, 800
 MAP_W, MAP_H = 900, 640

@@ -1,0 +1,12 @@
+# Example Caddyfile for Crownfall behind TLS.
+# Replace play.example.com with your domain. App must bind 127.0.0.1:8765.
+#
+#   caddy run --config Caddyfile
+#
+# Firewall: allow 22, 80, 443 only. Do NOT expose 8765 publicly.
+# Optional: put Cloudflare (orange cloud) in front of this host for DDoS absorption.
+
+play.example.com {
+	encode gzip
+	reverse_proxy 127.0.0.1:8765
+}

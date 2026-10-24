@@ -501,13 +501,16 @@ class ScreensMixin:
                 self.login_error = "Enter a character name."
                 return
             # Match the server's rule so a bad name is rejected before the
-            # round trip. Letters or numbers only; punctuation alone is not a
-            # name, and the server would refuse it anyway.
-            if not u.isascii():
-                self.login_error = "Usernames use letters and numbers only."
+            # round trip. Letters, numbers, underscore; password length 8–128.
+            import re
+            if not re.fullmatch(r"[A-Za-z0-9_]{3,20}", u):
+                self.login_error = "Username: 3–20 letters, numbers, or underscores."
                 return
-            if len(u) < 3:
-                self.login_error = "Username must be at least 3 characters."
+            if len(p) < 8:
+                self.login_error = "Password must be at least 8 characters."
+                return
+            if len(p) > 128:
+                self.login_error = "Password must be at most 128 characters."
                 return
             import feature_flags
             self.opening_comic_pending = bool(feature_flags.USE_OPENING_COMIC)

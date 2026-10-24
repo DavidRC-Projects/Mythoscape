@@ -225,6 +225,16 @@ __marimo__/
 *.db-journal
 *.db-wal
 *.db-shm
+*.db.*.bak
+*.bak
 
-# Local Cursor implementation prompts (rules such as *.mdc stay tracked)
-.cursor/rules/*.md
+# Local Cursor rules / prompts (not part of the game)
+.cursor/
+**/CURSOR_PROMPT.md
+**/*_CURSOR_PROMPT.md
+**/*CURSOR_PROMPT*.md
+
+# One-off QA dumps / tiled backups (not runtime assets)
+game/assets/mmorpg/tools/screens/
+game/assets/characters/_qa_review/
+game/assets/player_hd/assets/_backup_*/

@@ -447,7 +447,8 @@ async def on_login(session):
     if not enabled() or _WORLD is None:
         return
     claim_kings_castle(_WORLD.db.conn)
-    if (getattr(session, "username", "") or "").strip().lower() == "david":
+    import security as _security
+    if _security.is_dev_user(getattr(session, "username", "") or ""):
         seller = load()["by_castle"].get("king")
         if seller:
             await _ensure_deed(session, seller)

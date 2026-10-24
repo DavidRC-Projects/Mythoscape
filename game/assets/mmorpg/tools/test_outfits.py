@@ -339,11 +339,12 @@ def test_layer_order_and_covers():
 
 # ---- dev commands ------------------------------------------------------------------------------
 def test_dev_commands():
+    import os
+    os.environ["CROWNFALL_DEV"] = "1"
+    os.environ["CROWNFALL_DEV_USERS"] = "testdev"
     dev = make("female")
-    dev.username = "david"
-    W.db.conn.execute("UPDATE players SET username = 'david_x' WHERE id = ?", (dev.player_id,))
-    if not server._is_dev(dev):
-        dev.username = server.DEV_ACCOUNT if hasattr(server, "DEV_ACCOUNT") else "david"
+    dev.username = "testdev"
+    W.db.conn.execute("UPDATE players SET username = 'testdev' WHERE id = ?", (dev.player_id,))
     assert server._is_dev(dev)
     for text in ("::rep 850", "::rank 4", "::title Queen Consort", "::favour 600", "::xp etiquette 5000", "::xp mining L40"):
         dev.ws.out.clear()

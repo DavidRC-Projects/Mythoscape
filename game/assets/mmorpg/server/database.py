@@ -1,19 +1,32 @@
 """
 SQLite persistence layer. Handles accounts, character stats, inventory,
-equipment and quest progress. This is a small prototype: passwords are
-hashed with sha256+salt, which is NOT production-grade security, just a
-sanity check against trivial account theft in a v0.1 prototype.
+equipment and quest progress.
+
+Passwords use argon2id (argon2-cffi). Legacy SHA-256+salt hashes are
+accepted once, then upgraded on successful login.
 """
 import sqlite3
 import hashlib
+import hmac
+import logging
 import os
 import time
+
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError, InvalidHashError
 
 from content import STARTER_INVENTORY, XP_SKILLS, INVENTORY_SIZE
 from world_map import SPAWN_POINT
 import combat
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "world.db")
+log = logging.getLogger("database")
+
+DB_PATH = os.environ.get(
+    "CROWNFALL_DB_PATH",
+    os.path.join(os.path.dirname(__file__), "world.db"),
+)
+
+_HASHER = PasswordHasher(time_cost=2, memory_cost=65536, parallelism=2)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS players (
@@ -94,8 +107,32 @@ CREATE TABLE IF NOT EXISTS quest_progress (
 """
 
 
-def _hash_password(password, salt):
+def _hash_password_legacy(password, salt):
     return hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
+
+
+def _is_argon2_hash(stored: str) -> bool:
+    return isinstance(stored, str) and stored.startswith("$argon2")
+
+
+def hash_password(password: str) -> tuple[str, str]:
+    """Return (password_hash, salt_column). Salt is embedded in argon2 hash."""
+    return _HASHER.hash(password), "argon2"
+
+
+def verify_password(password: str, stored_hash: str, salt: str) -> tuple[bool, bool]:
+    """Return (ok, needs_rehash)."""
+    if _is_argon2_hash(stored_hash):
+        try:
+            _HASHER.verify(stored_hash, password)
+        except (VerifyMismatchError, InvalidHashError):
+            return False, False
+        return True, _HASHER.check_needs_rehash(stored_hash)
+    # Legacy SHA-256(salt + password)
+    expected = _hash_password_legacy(password, salt or "")
+    if not hmac.compare_digest(expected, stored_hash or ""):
+        return False, False
+    return True, True
 
 
 class Database:
@@ -103,9 +140,28 @@ class Database:
         self.path = path
         self.conn = sqlite3.connect(path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
+        try:
+            self.conn.execute("PRAGMA journal_mode=WAL")
+            self.conn.execute("PRAGMA synchronous=NORMAL")
+            self.conn.execute("PRAGMA foreign_keys=ON")
+        except sqlite3.Error:
+            log.exception("Failed to enable SQLite WAL mode")
         self.conn.executescript(SCHEMA)
         self._migrate()
         self.conn.commit()
+        self._harden_db_file()
+
+    def _harden_db_file(self):
+        """Restrict DB file permissions to owner read/write (Unix)."""
+        try:
+            if os.path.isfile(self.path):
+                os.chmod(self.path, 0o600)
+            for suffix in ("-wal", "-shm"):
+                side = self.path + suffix
+                if os.path.isfile(side):
+                    os.chmod(side, 0o600)
+        except OSError:
+            pass
 
     def _migrate(self):
         cols = {row[1] for row in self.conn.execute("PRAGMA table_info(players)")}
@@ -318,8 +374,7 @@ class Database:
             self.conn.commit()
 
     def create_account(self, username, password, char_name, gender="male"):
-        salt = os.urandom(8).hex()
-        pw_hash = _hash_password(password, salt)
+        pw_hash, salt = hash_password(password)
         x, y = SPAWN_POINT
         now = time.strftime("%Y-%m-%d %H:%M:%S")
         gender = "female" if str(gender).lower() == "female" else "male"
@@ -339,13 +394,28 @@ class Database:
             self.add_item_to_slot(player_id, slot, item_id, qty)
         return self.get_player_by_id(player_id)
 
+    def _rehash_password(self, player_id, password):
+        pw_hash, salt = hash_password(password)
+        self.conn.execute(
+            "UPDATE players SET password_hash = ?, salt = ? WHERE id = ?",
+            (pw_hash, salt, player_id),
+        )
+
     def verify_login(self, username, password):
         row = self.get_player_by_username(username)
         if row is None:
+            # Dummy verify to reduce timing oracle on missing users.
+            try:
+                _HASHER.hash("dummy-password-timing")
+            except Exception:
+                pass
             return None
-        if _hash_password(password, row["salt"]) != row["password_hash"]:
+        ok, needs_rehash = verify_password(password, row["password_hash"], row["salt"])
+        if not ok:
             return None
         now = time.strftime("%Y-%m-%d %H:%M:%S")
+        if needs_rehash:
+            self._rehash_password(row["id"], password)
         self.conn.execute(
             "UPDATE players SET last_login = ? WHERE id = ?", (now, row["id"]),
         )

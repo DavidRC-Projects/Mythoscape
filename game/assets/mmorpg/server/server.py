@@ -96,8 +96,9 @@ COMBAT_LINGER_TICKS = 17         # 10 s after the last hit
 PK_LINGER_TICKS = 100            # 60 s when PK-flagged
 INPUT_PING_GRACE_TICKS = 50      # 30 s
 PASSIVE_MESSAGE_TYPES = frozenset(("INPUT_PING",))
-HOST = "0.0.0.0"
-PORT = 8765
+import security as _security
+HOST = _security.bind_host()
+PORT = _security.bind_port()
 
 NPC_BY_ID = {n["id"]: n for n in NPCS}
 import housing as _housing
@@ -389,7 +390,7 @@ class PlayerSession:
         return out
 
     def has_unlimited_wishes(self):
-        return (self.username or "").strip().lower() == "david"
+        return _security.is_dev_user(self.username)
 
     def can_wish(self):
         if self.has_unlimited_wishes():
@@ -741,26 +742,50 @@ class PlayerSession:
         return take
 
     def _withdraw_bag_to_inventory(self, bag, save_col):
-        """Move as many bag items as will fit into inventory. Returns (moved, left_in_bag)."""
+        """Move as many bag items as will fit into inventory. Returns (moved, left_in_bag).
+
+        Debit the bag and persist before adding to inventory so a crash cannot
+        leave the item in both places (dupe). Failed adds restore the bag.
+        """
         moved = 0
+
+        def _persist():
+            WORLD.db.save_player_stats(self.player_id, **{save_col: json.dumps(bag)})
+
         for iid in list(bag.keys()):
             qty = int(bag.get(iid) or 0)
             while qty > 0:
                 item = ITEMS.get(iid) or {}
                 chunk = qty if item.get("stackable") else min(1, qty)
-                if WORLD.add_item_to_inventory(self, iid, chunk):
-                    moved += chunk
-                    qty -= chunk
-                elif chunk > 1 and WORLD.add_item_to_inventory(self, iid, 1):
-                    moved += 1
-                    qty -= 1
-                else:
-                    break  # no room for this item — try others
-                if qty <= 0:
+                # Debit bag first, persist, then try inventory.
+                new_qty = qty - chunk
+                if new_qty <= 0:
                     bag.pop(iid, None)
                 else:
+                    bag[iid] = new_qty
+                _persist()
+                if WORLD.add_item_to_inventory(self, iid, chunk):
+                    moved += chunk
+                    qty = new_qty
+                    continue
+                # Restore debit
+                bag[iid] = qty
+                _persist()
+                if chunk > 1:
+                    # Retry one-at-a-time for partial stack room
+                    new_qty = qty - 1
+                    if new_qty <= 0:
+                        bag.pop(iid, None)
+                    else:
+                        bag[iid] = new_qty
+                    _persist()
+                    if WORLD.add_item_to_inventory(self, iid, 1):
+                        moved += 1
+                        qty = new_qty if new_qty > 0 else 0
+                        continue
                     bag[iid] = qty
-        WORLD.db.save_player_stats(self.player_id, **{save_col: json.dumps(bag)})
+                    _persist()
+                break  # no room for this item — try others
         return moved, self._bag_total(bag)
 
     def has_mining_bag(self):
@@ -1580,6 +1605,22 @@ class World:
                 return True
         return False
 
+    def near_shop(self, session, shop_id):
+        """True if standing next to an NPC or interactable that offers this shop."""
+        if not shop_id:
+            return False
+        for n in NPCS:
+            if n.get("shop_id") != shop_id:
+                continue
+            if adjacent_or_same(session.x, session.y, n["x"], n["y"]):
+                return True
+        for spot in INTERACTABLES:
+            if spot.get("shop_id") == shop_id and adjacent_or_same(
+                session.x, session.y, spot["x"], spot["y"],
+            ):
+                return True
+        return False
+
     def grant_xp(self, session, skill, amount):
         # Hitpoints and firemaking are not experience skills.
         if skill in ("hitpoints", "firemaking") or skill not in session.xp:
@@ -1902,19 +1943,41 @@ async def flush_quest_logs():
 # ---------------------------------------------------------------------------
 # Message handlers
 # ---------------------------------------------------------------------------
-async def handle_login(ws, msg, is_register):
+async def handle_login(ws, msg, is_register, peer_ip="unknown"):
     username = (msg.get("username") or "").strip()
     password = msg.get("password") or ""
     if not username or not password:
         await send(ws, "LOGIN_FAIL", reason="Username and password required.")
         return
+    if _security.GUARD.auth_locked(peer_ip, username):
+        log.warning("auth locked out ip=%s user=%s", peer_ip, username)
+        await send(ws, "LOGIN_FAIL", reason="Too many attempts. Try again in a minute.")
+        return
+    user_err = _security.validate_username(username)
+    if user_err and is_register:
+        await send(ws, "LOGIN_FAIL", reason=user_err)
+        return
+    if user_err and not is_register:
+        # Still reject wildly invalid login usernames without revealing policy details.
+        await send(ws, "LOGIN_FAIL", reason="Invalid username or password.")
+        _security.GUARD.record_auth_failure(peer_ip, username)
+        return
+    if len(password) > _security.PASSWORD_MAX:
+        await send(ws, "LOGIN_FAIL", reason="Invalid username or password." if not is_register else
+                   f"Password must be at most {_security.PASSWORD_MAX} characters.")
+        _security.GUARD.record_auth_failure(peer_ip, username)
+        return
     if is_register:
-        # Reject unusable usernames before anything is written. The client
-        # checks this too, but the server is the one that can be talked to
-        # directly. Length bounds also stop a blank or a single character
-        # username becoming an account nobody can identify.
-        if len(username) < 3 or len(username) > 20 or not username.isascii():
-            await send(ws, "LOGIN_FAIL", reason="Usernames need 3-20 letters or numbers.")
+        pw_err = _security.validate_password(password)
+        if pw_err:
+            await send(ws, "LOGIN_FAIL", reason=pw_err)
+            return
+        if not _security.allow_register():
+            await send(ws, "LOGIN_FAIL", reason="New character creation is disabled on this server.")
+            return
+        if not _security.GUARD.allow_register(peer_ip):
+            log.warning("register rate-limited ip=%s", peer_ip)
+            await send(ws, "LOGIN_FAIL", reason="Too many new accounts from this network. Try later.")
             return
         # "   " is truthy, so `msg.get("char_name") or username` passed it
         # straight through and strip() then saved an empty name. Fall back to
@@ -1926,13 +1989,18 @@ async def handle_login(ws, msg, is_register):
         gender = msg.get("gender") or "male"
         if WORLD.db.get_player_by_username(username):
             await send(ws, "LOGIN_FAIL", reason="That username is already taken.")
+            _security.GUARD.record_auth_failure(peer_ip, username)
             return
         row = WORLD.db.create_account(username, password, char_name, gender=gender)
+        _security.GUARD.clear_auth_failures(peer_ip, username)
     else:
         row = WORLD.db.verify_login(username, password)
         if row is None:
+            log.info("failed login ip=%s user=%s", peer_ip, username)
+            _security.GUARD.record_auth_failure(peer_ip, username)
             await send(ws, "LOGIN_FAIL", reason="Invalid username or password.")
             return
+        _security.GUARD.clear_auth_failures(peer_ip, username)
     if row["id"] in WORLD.sessions:
         ghost = WORLD.sessions[row["id"]]
         if getattr(ghost, "linger_until", None) is not None:
@@ -2327,9 +2395,16 @@ async def _handle_move_body(session, msg):
             message=f"You cannot run yet. {left} round{'s' if left != 1 else ''} of fighting left.",
         )
         return
-    dx, dy = msg.get("dx", 0), msg.get("dy", 0)
+    # One step per world tick — blocks MOVE flood speed hacks.
+    if session.last_move_tick >= WORLD.tick_count:
+        return
+    dx = _security.safe_int(msg.get("dx", 0), default=None)
+    dy = _security.safe_int(msg.get("dy", 0), default=None)
+    if dx is None or dy is None:
+        return
     if abs(dx) + abs(dy) != 1:
         return
+    session.last_move_tick = WORLD.tick_count
     nx, ny = session.x + dx, session.y + dy
     if session.dungeon and session.dungeon.get("id") == "castle_realm":
         import castle_realm
@@ -3658,7 +3733,9 @@ async def handle_chat(session, msg):
     if not text:
         return
     if text.startswith("::"):
-        await handle_dev_command(session, text)
+        if _security.is_dev_user(session.username):
+            await handle_dev_command(session, text)
+        # Ignore :: for everyone else (no hint that the prefix is special).
         return
     if text.lower().startswith("/news"):
         for line in politics.latest_news(WORLD.db.conn, politics.NEWS_CMD_LINES) or ["No news yet."]:
@@ -4373,6 +4450,9 @@ async def handle_gather(session, msg):
 
 
 async def handle_craft(session, msg):
+    if _busy_trading(session):
+        await send(session.ws, "ERROR", message="Finish or cancel the trade first.")
+        return
     recipe_id = msg.get("recipe_id")
     recipe = CRAFT_RECIPES.get(recipe_id)
     if not recipe:
@@ -5038,15 +5118,14 @@ async def ruling_daily_tick(now=None):
     conn.commit()
 
 
-# ---- dev commands (testing only; the "david" account, nobody else) -----------------------------
-DEV_ACCOUNT = "david"
+# ---- dev commands (CROWNFALL_DEV=1 and username in CROWNFALL_DEV_USERS only) -------------------
 DEV_SKIP_MAX_HOURS = 24 * 30
 _DEV_TIME_COLS = ("since", "ts", "last_settled", "last_income_settled", "land_fee_paid_through",
                   "last_petition_refused")
 
 
 def _is_dev(session):
-    return (getattr(session, "username", "") or "").strip().lower() == DEV_ACCOUNT
+    return _security.is_dev_user(getattr(session, "username", "") or "")
 
 
 def dev_shift_time(conn, seconds):
@@ -5754,6 +5833,9 @@ async def send_bank_state(session):
 
 
 async def handle_bank_open(session, msg):
+    if _busy_trading(session):
+        await send(session.ws, "ERROR", message="Finish or cancel the trade first.")
+        return
     if not WORLD.near_bank(session):
         await send(session.ws, "ERROR", message="You need to be at the bank booth.")
         return
@@ -5761,6 +5843,9 @@ async def handle_bank_open(session, msg):
 
 
 async def handle_bank_deposit(session, msg):
+    if _busy_trading(session):
+        await send(session.ws, "ERROR", message="Finish or cancel the trade first.")
+        return
     if not WORLD.near_bank(session):
         await send(session.ws, "ERROR", message="You need to be at the bank.")
         return
@@ -5867,6 +5952,9 @@ async def handle_bank_deposit(session, msg):
 
 
 async def handle_bank_withdraw(session, msg):
+    if _busy_trading(session):
+        await send(session.ws, "ERROR", message="Finish or cancel the trade first.")
+        return
     if not WORLD.near_bank(session):
         await send(session.ws, "ERROR", message="You need to be at the bank.")
         return
@@ -5899,15 +5987,25 @@ async def handle_bank_withdraw(session, msg):
     if item_id in ORE_ITEM_IDS and WORLD.count_ores(session) + want > MAX_ORES:
         await send(session.ws, "ERROR", message=f"You can't carry more than {MAX_ORES} ores.")
         return
-    if not WORLD.add_item_to_inventory(session, item_id, want):
-        await send(session.ws, "ERROR", message="Your inventory is full.")
-        return
-    entry["qty"] -= want
-    if entry["qty"] <= 0:
+    # Debit bank first and persist, then add to inventory — crash cannot dupe.
+    left = qty - want
+    if left <= 0:
         del session.bank[slot]
         WORLD.db.clear_bank_slot(session.player_id, slot)
     else:
-        WORLD.db.set_bank_slot(session.player_id, slot, item_id, entry["qty"])
+        entry["qty"] = left
+        WORLD.db.set_bank_slot(session.player_id, slot, item_id, left)
+    if not WORLD.add_item_to_inventory(session, item_id, want):
+        # Restore bank slot
+        if left <= 0:
+            session.bank[slot] = {"item_id": item_id, "qty": want}
+            WORLD.db.set_bank_slot(session.player_id, slot, item_id, want)
+        else:
+            entry["qty"] = qty
+            WORLD.db.set_bank_slot(session.player_id, slot, item_id, qty)
+        await send(session.ws, "ERROR", message="Your inventory is full.")
+        await send_bank_state(session)
+        return
     await send_bank_state(session)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
 
@@ -6342,6 +6440,10 @@ async def handle_save_outfit(session, msg):
     await send(session.ws, "CHAT_MSG", **{"from": "Mae", "text": f"Saved \"{appearance['name']}\" to wardrobe slot {slot + 1}."})
 
 
+def _busy_trading(session):
+    return bool(getattr(session, "trade_partner_id", None))
+
+
 async def handle_shop_buy(session, msg):
     shop_id, item_id, qty = msg.get("shop_id"), msg.get("item_id"), max(1, int(msg.get("qty", 1)))
     shop = SHOPS.get(shop_id)
@@ -6349,6 +6451,12 @@ async def handle_shop_buy(session, msg):
         # A stale shop panel used to swallow the click entirely, so the player
         # saw nothing happen. Tell them the panel is out of date.
         await send(session.ws, "ERROR", message="That shop is no longer open — reopen it.")
+        return
+    if _busy_trading(session):
+        await send(session.ws, "ERROR", message="Finish or cancel the trade first.")
+        return
+    if not WORLD.near_shop(session, shop_id):
+        await send(session.ws, "ERROR", message="You need to be at the shop.")
         return
     if item_id not in shop["stock"]:
         await send(session.ws, "ERROR", message="That shop doesn't sell that.")
@@ -6422,6 +6530,12 @@ async def handle_shop_sell(session, msg):
     shop = SHOPS.get(shop_id)
     if not shop:
         await send(session.ws, "ERROR", message="That shop is no longer open — reopen it.")
+        return
+    if _busy_trading(session):
+        await send(session.ws, "ERROR", message="Finish or cancel the trade first.")
+        return
+    if not WORLD.near_shop(session, shop_id):
+        await send(session.ws, "ERROR", message="You need to be at the shop.")
         return
     if not shop.get("buys"):
         await send(session.ws, "ERROR", message="This shop doesn't buy anything.")
@@ -7331,6 +7445,9 @@ async def handle_quick_consume(session, msg):
 
 
 async def handle_drop(session, msg):
+    if _busy_trading(session):
+        await send(session.ws, "ERROR", message="Finish or cancel the trade first.")
+        return
     try:
         slot_index = int(msg.get("slot_index"))
     except (TypeError, ValueError):
@@ -7518,6 +7635,9 @@ async def handle_quest_turnin(session, msg):
     prog = session.quests.get(quest_id)
     if not qdef or not prog:
         return
+    if prog.get("status") == "complete":
+        await send(session.ws, "ERROR", message="You have already completed that quest.")
+        return
 
     rewards = qdef.get("rewards") or {}
     need_slots = reward_inv_slots_needed(session, rewards)
@@ -7530,12 +7650,18 @@ async def handle_quest_turnin(session, msg):
         return
 
     if qdef["type"] == "collect":
+        if prog.get("status") not in ("active", "ready"):
+            await send(session.ws, "ERROR", message="You haven't accepted this quest.")
+            return
         have = session.available_craft_input(qdef["target"])
         if have < qdef["count"]:
             await send(session.ws, "ERROR", message=f"You need {qdef['count']}x {ITEMS[qdef['target']]['name']}.")
             return
         session.consume_craft_input(qdef["target"], qdef["count"])
     elif qdef["type"] == "collect_multi":
+        if prog.get("status") not in ("active", "ready"):
+            await send(session.ws, "ERROR", message="You haven't accepted this quest.")
+            return
         for iid, need in qdef["targets"].items():
             if session.available_craft_input(iid) < need:
                 await send(session.ws, "ERROR", message=f"You need {need}x {ITEMS[iid]['name']}.")
@@ -7547,17 +7673,21 @@ async def handle_quest_turnin(session, msg):
             await send(session.ws, "ERROR", message="You haven't finished this quest yet.")
             return
     elif qdef["type"] == "oath":
+        if prog.get("status") not in ("active", "ready"):
+            await send(session.ws, "ERROR", message="You haven't accepted this quest.")
+            return
         import fairy_village
         _lines, ready = fairy_village.oath_progress(session)
         if not ready:
             await send(session.ws, "ERROR", message="The Moonwater Oath is not yet fulfilled.")
             return
 
-    # Grant all item rewards without aborting mid-list (slots pre-checked).
-    await grant_quest_rewards(session, rewards)
-
+    # Mark complete before granting rewards so a crash mid-reward cannot re-turn-in.
     prog["status"] = "complete"
     WORLD.db.set_quest_progress(session.player_id, quest_id, "complete", prog.get("progress", 0))
+
+    # Grant all item rewards without aborting mid-list (slots pre-checked).
+    await grant_quest_rewards(session, rewards)
     qp = session.quest_points()
     qp_gain = int(qdef.get("quest_points") or 0)
     await send(session.ws, "QUEST_COMPLETE", quest_id=quest_id, rewards=rewards, quest_points=qp_gain, total_quest_points=qp)
@@ -7647,14 +7777,21 @@ async def handle_trade_offer(session, msg):
         return
     offer = {}
     for item in msg.get("items", []):
-        slot = item.get("slot_index")
+        if not isinstance(item, dict):
+            continue
+        slot = _security.safe_int(item.get("slot_index"), default=None)
+        if slot is None:
+            continue
         entry = session.inventory.get(slot)
         if not entry:
             continue
         if not item_is_tradeable(entry["item_id"]):
             await send(session.ws, "ERROR", message=f"{ITEMS[entry['item_id']]['name']} can't be traded.")
             continue
-        qty = min(item.get("qty", entry["qty"]), entry["qty"])
+        want = _security.safe_int(item.get("qty", entry["qty"]), default=0, min_v=1)
+        if not want:
+            continue
+        qty = min(want, entry["qty"])
         offer[slot] = qty
     session.trade_offer = offer
     session.trade_confirmed = False
@@ -7674,6 +7811,46 @@ async def handle_trade_confirm(session, msg):
         await execute_trade(session, other)
 
 
+def _sim_inv_after_offer(session, offer):
+    """Copy inventory after removing a trade offer (partial stacks kept)."""
+    inv = {slot: {"item_id": e["item_id"], "qty": e["qty"]} for slot, e in session.inventory.items()}
+    for slot, qty in offer.items():
+        entry = inv.get(slot)
+        if not entry or entry["qty"] < qty:
+            return None
+        if entry["qty"] == qty:
+            del inv[slot]
+        else:
+            entry["qty"] -= qty
+    return inv
+
+
+def _sim_can_add(inv, item_id, qty):
+    """True if item_id/qty would fit into simulated inventory dict `inv` (mutates inv)."""
+    item_def = ITEMS.get(item_id) or {}
+    if item_def.get("stackable"):
+        for slot, entry in inv.items():
+            if entry["item_id"] == item_id:
+                entry["qty"] += qty
+                return True
+    bags_tab = 3
+    prefer = inventory_tab_for_item(item_id)
+    if is_storage_bag(item_id):
+        tab_order = [bags_tab] + [t for t in range(len(INVENTORY_TABS)) if t != bags_tab]
+    else:
+        tab_order = [prefer] + [
+            t for t in range(len(INVENTORY_TABS)) if t != prefer and t != bags_tab
+        ]
+    for tab in tab_order:
+        base = tab * INVENTORY_TAB_SIZE
+        for local in range(INVENTORY_TAB_SIZE):
+            slot = base + local
+            if slot not in inv:
+                inv[slot] = {"item_id": item_id, "qty": qty}
+                return True
+    return False
+
+
 async def execute_trade(a, b):
     # Validate both sides still have what they offered.
     for giver, offer in ((a, a.trade_offer), (b, b.trade_offer)):
@@ -7684,14 +7861,34 @@ async def execute_trade(a, b):
                 return
     a_items = [(a.inventory[slot]["item_id"], qty) for slot, qty in a.trade_offer.items()]
     b_items = [(b.inventory[slot]["item_id"], qty) for slot, qty in b.trade_offer.items()]
-    for slot, qty in a.trade_offer.items():
-        WORLD.remove_item_qty(a, a.inventory[slot]["item_id"], qty)
-    for slot, qty in b.trade_offer.items():
-        WORLD.remove_item_qty(b, b.inventory[slot]["item_id"], qty)
+    # Ensure both sides can fit incoming items after removals (no item destruction).
+    a_sim = _sim_inv_after_offer(a, a.trade_offer)
+    b_sim = _sim_inv_after_offer(b, b.trade_offer)
+    if a_sim is None or b_sim is None:
+        await handle_trade_cancel(a, {})
+        return
     for item_id, qty in b_items:
-        WORLD.add_item_to_inventory(a, item_id, qty)
+        if not _sim_can_add(a_sim, item_id, qty):
+            await send(a.ws, "ERROR", message="You don't have room for that trade.")
+            await send(b.ws, "ERROR", message=f"{a.char_name} doesn't have room for that trade.")
+            await handle_trade_cancel(a, {})
+            return
     for item_id, qty in a_items:
-        WORLD.add_item_to_inventory(b, item_id, qty)
+        if not _sim_can_add(b_sim, item_id, qty):
+            await send(b.ws, "ERROR", message="You don't have room for that trade.")
+            await send(a.ws, "ERROR", message=f"{b.char_name} doesn't have room for that trade.")
+            await handle_trade_cancel(a, {})
+            return
+    for item_id, qty in a_items:
+        WORLD.remove_item_qty(a, item_id, qty)
+    for item_id, qty in b_items:
+        WORLD.remove_item_qty(b, item_id, qty)
+    for item_id, qty in b_items:
+        if not WORLD.add_item_to_inventory(a, item_id, qty):
+            log.error("trade add failed for %s after pre-check (%s x%s)", a.username, item_id, qty)
+    for item_id, qty in a_items:
+        if not WORLD.add_item_to_inventory(b, item_id, qty):
+            log.error("trade add failed for %s after pre-check (%s x%s)", b.username, item_id, qty)
     for s in (a, b):
         s.trade_partner_id = None
         s.trade_offer = {}
@@ -7717,160 +7914,182 @@ async def handle_trade_cancel(session, msg):
 # ---------------------------------------------------------------------------
 async def handler(ws):
     session = None
+    peer = _security.peer_ip(ws)
+    if not _security.GUARD.allow_connection(peer):
+        log.warning("connection refused (limit) ip=%s", peer)
+        try:
+            await ws.close(1013, "server busy")
+        except Exception:
+            pass
+        return
     try:
         async for raw in ws:
+            if not _security.GUARD.allow_message(ws):
+                log.warning("message flood close ip=%s", peer)
+                break
             try:
                 msg = json.loads(raw)
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+                continue
+            if not isinstance(msg, dict):
                 continue
             mtype = msg.get("type")
 
-            if session is None:
-                if mtype == "LOGIN":
-                    await handle_login(ws, msg, is_register=False)
-                    session = WORLD.find_session_by_ws(ws)
-                elif mtype == "CREATE_CHARACTER":
-                    await handle_login(ws, msg, is_register=True)
-                    session = WORLD.find_session_by_ws(ws)
-                elif mtype == "LEADERBOARD":
+            try:
+                if session is None:
+                    if mtype == "LOGIN":
+                        await handle_login(ws, msg, is_register=False, peer_ip=peer)
+                        session = WORLD.find_session_by_ws(ws)
+                    elif mtype == "CREATE_CHARACTER":
+                        await handle_login(ws, msg, is_register=True, peer_ip=peer)
+                        session = WORLD.find_session_by_ws(ws)
+                    elif mtype == "LEADERBOARD":
+                        await handle_leaderboard(ws, msg)
+                    continue
+
+                if mtype == "INPUT_PING":
+                    await idle_input_ping(session, msg)
+                    continue
+                if mtype not in PASSIVE_MESSAGE_TYPES:
+                    await note_real_input(session)
+
+                if mtype == "LEADERBOARD":
                     await handle_leaderboard(ws, msg)
-                continue
-
-            if mtype == "INPUT_PING":
-                await idle_input_ping(session, msg)
-                continue
-            if mtype not in PASSIVE_MESSAGE_TYPES:
-                await note_real_input(session)
-
-            if mtype == "LEADERBOARD":
-                await handle_leaderboard(ws, msg)
-            elif mtype == "ALLOCATE_STATS":
-                await handle_allocate_stats(session, msg)
-            elif not session.stats_allocated:
-                await send(session.ws, "ERROR", message="Choose your starting stats first.")
-            elif mtype == "MOVE":
-                await handle_move(session, msg)
-            elif mtype == "CHAT":
-                await handle_chat(session, msg)
-            elif mtype == "ATTACK":
-                await handle_attack(session, msg)
-            elif mtype == "SET_PK":
-                await handle_set_pk(session, msg)
-            elif mtype == "STOP_ATTACK":
-                await handle_stop_attack(session, msg)
-            elif mtype == "ENTER_DUNGEON":
-                await handle_enter_dungeon(session, msg)
-            elif mtype == "LEAVE_DUNGEON":
-                await handle_leave_dungeon(session, msg)
-            elif mtype == "DUNGEON_INTERACT":
-                if session.dungeon and session.dungeon.get("v2") == "depths":
-                    import depths_v2
-                    await depths_v2.handle_interact(session, msg)
-                else:
-                    import void_v2
-                    await void_v2.handle_interact(session, msg)
-            elif mtype == "SET_COMBAT_STYLE":
-                await handle_set_combat_style(session, msg)
-            elif mtype == "CAST_MAGIC":
-                await handle_cast_magic(session, msg)
-            elif mtype == "SET_MAGIC_MODE":
-                await handle_set_magic_mode(session, msg)
-            elif mtype == "GATHER":
-                await handle_gather(session, msg)
-            elif mtype == "CRAFT":
-                await handle_craft(session, msg)
-            elif mtype == "TALK":
-                await handle_talk(session, msg)
-            elif mtype == "PERSUADE":
-                await handle_persuade(session, msg)
-            elif mtype == "NPC_OPTION":
-                await handle_npc_option(session, msg)
-            elif mtype == "WELCOME_SKIP":
-                await welcome_skip(session)
-            elif mtype in ("COURT_CHOOSE", "NEWS_BOARD", "KINGDOM_STATE"):
-                await handle_politics_msg(session, mtype, msg)
-            elif isinstance(mtype, str) and mtype.startswith("RULE_"):
-                await handle_rule(session, mtype, msg)
-            elif mtype == "TELEPORT":
-                await handle_teleport(session, msg)
-            elif mtype == "STAIR":
-                await handle_stair(session, msg)
-            elif mtype == "HOUSING_OPEN":
-                await _housing.open_lots(session)
-            elif mtype == "HOUSING_BUY":
-                await _housing.buy(session, msg.get("key"))
-            elif mtype == "CASTLE_OPTION":
-                import castle_owners
-                await castle_owners.choose(session, msg.get("npc_id"), msg.get("node"), msg.get("option_id"))
-            elif mtype == "SHOP_BUY":
-                await handle_shop_buy(session, msg)
-            elif mtype == "SHOP_SELL":
-                await handle_shop_sell(session, msg)
-            elif mtype == "SET_PET":
-                await handle_set_pet(session, msg)
-            elif mtype == "TOGGLE_HD_PLAYER":
-                await handle_toggle_hd_player(session, msg)
-            elif mtype == "UPDATE_APPEARANCE":
-                await handle_update_appearance(session, msg)
-            elif mtype == "BUY_COSMETICS":
-                await handle_buy_cosmetics(session, msg)
-            elif mtype == "SAVE_OUTFIT":
-                await handle_save_outfit(session, msg)
-            elif mtype in ("BUY_PALETTE", "UPGRADE_OUTFIT"):
-                # Colour options and Plain/Fine/Regal were removed (SIDEBAR_DESIGN §9).
-                await send(session.ws, "ERROR", message="Mae no longer sells colours or upgrades: each set is shown as painted.")
-            elif mtype == "BUY_COLLECTION_SET":
-                await handle_buy_collection_set(session, msg)
-            elif mtype == "SET_GENDER":
-                await handle_set_gender(session, msg)
-            elif mtype == "EQUIP":
-                await handle_equip(session, msg)
-            elif mtype == "UNEQUIP":
-                await handle_unequip(session, msg)
-            elif mtype == "USE_ITEM":
-                await handle_use_item(session, msg)
-            elif mtype == "QUICK_CONSUME":
-                await handle_quick_consume(session, msg)
-            elif mtype == "DROP":
-                await handle_drop(session, msg)
-            elif mtype == "INV_MOVE":
-                await handle_inv_move(session, msg)
-            elif mtype == "PICKUP":
-                await handle_pickup(session, msg)
-            elif mtype == "SET_OPTION":
-                await handle_set_option(session, msg)
-            elif mtype == "BANK_OPEN":
-                await handle_bank_open(session, msg)
-            elif mtype == "BANK_DEPOSIT":
-                await handle_bank_deposit(session, msg)
-            elif mtype == "BANK_WITHDRAW":
-                await handle_bank_withdraw(session, msg)
-            elif mtype == "QUEST_ACCEPT":
-                await handle_quest_accept(session, msg)
-            elif mtype == "QUEST_TURNIN":
-                await handle_quest_turnin(session, msg)
-            elif mtype == "WISH":
-                await handle_wish(session, msg)
-            elif mtype == "WISH_STAT":
-                await handle_wish_stat(session, msg)
-            elif mtype == "TRADE_REQUEST":
-                await handle_trade_request(session, msg)
-            elif mtype == "TRADE_RESPOND":
-                await handle_trade_respond(session, msg, msg.get("from_player_id"))
-            elif mtype == "TRADE_OFFER":
-                await handle_trade_offer(session, msg)
-            elif mtype == "TRADE_CONFIRM":
-                await handle_trade_confirm(session, msg)
-            elif mtype == "TRADE_CANCEL":
-                await handle_trade_cancel(session, msg)
-            elif mtype == "FAIRY_ACT":
-                import fairy_village
-                await fairy_village.act(session, msg.get("id"))
-            elif mtype == "LOGOUT":
-                break
+                elif mtype == "ALLOCATE_STATS":
+                    await handle_allocate_stats(session, msg)
+                elif not session.stats_allocated:
+                    await send(session.ws, "ERROR", message="Choose your starting stats first.")
+                elif mtype == "MOVE":
+                    await handle_move(session, msg)
+                elif mtype == "CHAT":
+                    await handle_chat(session, msg)
+                elif mtype == "ATTACK":
+                    await handle_attack(session, msg)
+                elif mtype == "SET_PK":
+                    await handle_set_pk(session, msg)
+                elif mtype == "STOP_ATTACK":
+                    await handle_stop_attack(session, msg)
+                elif mtype == "ENTER_DUNGEON":
+                    await handle_enter_dungeon(session, msg)
+                elif mtype == "LEAVE_DUNGEON":
+                    await handle_leave_dungeon(session, msg)
+                elif mtype == "DUNGEON_INTERACT":
+                    if session.dungeon and session.dungeon.get("v2") == "depths":
+                        import depths_v2
+                        await depths_v2.handle_interact(session, msg)
+                    else:
+                        import void_v2
+                        await void_v2.handle_interact(session, msg)
+                elif mtype == "SET_COMBAT_STYLE":
+                    await handle_set_combat_style(session, msg)
+                elif mtype == "CAST_MAGIC":
+                    await handle_cast_magic(session, msg)
+                elif mtype == "SET_MAGIC_MODE":
+                    await handle_set_magic_mode(session, msg)
+                elif mtype == "GATHER":
+                    await handle_gather(session, msg)
+                elif mtype == "CRAFT":
+                    await handle_craft(session, msg)
+                elif mtype == "TALK":
+                    await handle_talk(session, msg)
+                elif mtype == "PERSUADE":
+                    await handle_persuade(session, msg)
+                elif mtype == "NPC_OPTION":
+                    await handle_npc_option(session, msg)
+                elif mtype == "WELCOME_SKIP":
+                    await welcome_skip(session)
+                elif mtype in ("COURT_CHOOSE", "NEWS_BOARD", "KINGDOM_STATE"):
+                    await handle_politics_msg(session, mtype, msg)
+                elif isinstance(mtype, str) and mtype.startswith("RULE_"):
+                    await handle_rule(session, mtype, msg)
+                elif mtype == "TELEPORT":
+                    await handle_teleport(session, msg)
+                elif mtype == "STAIR":
+                    await handle_stair(session, msg)
+                elif mtype == "HOUSING_OPEN":
+                    await _housing.open_lots(session)
+                elif mtype == "HOUSING_BUY":
+                    await _housing.buy(session, msg.get("key"))
+                elif mtype == "CASTLE_OPTION":
+                    import castle_owners
+                    await castle_owners.choose(session, msg.get("npc_id"), msg.get("node"), msg.get("option_id"))
+                elif mtype == "SHOP_BUY":
+                    await handle_shop_buy(session, msg)
+                elif mtype == "SHOP_SELL":
+                    await handle_shop_sell(session, msg)
+                elif mtype == "SET_PET":
+                    await handle_set_pet(session, msg)
+                elif mtype == "TOGGLE_HD_PLAYER":
+                    await handle_toggle_hd_player(session, msg)
+                elif mtype == "UPDATE_APPEARANCE":
+                    await handle_update_appearance(session, msg)
+                elif mtype == "BUY_COSMETICS":
+                    await handle_buy_cosmetics(session, msg)
+                elif mtype == "SAVE_OUTFIT":
+                    await handle_save_outfit(session, msg)
+                elif mtype in ("BUY_PALETTE", "UPGRADE_OUTFIT"):
+                    # Colour options and Plain/Fine/Regal were removed (SIDEBAR_DESIGN §9).
+                    await send(session.ws, "ERROR", message="Mae no longer sells colours or upgrades: each set is shown as painted.")
+                elif mtype == "BUY_COLLECTION_SET":
+                    await handle_buy_collection_set(session, msg)
+                elif mtype == "SET_GENDER":
+                    await handle_set_gender(session, msg)
+                elif mtype == "EQUIP":
+                    await handle_equip(session, msg)
+                elif mtype == "UNEQUIP":
+                    await handle_unequip(session, msg)
+                elif mtype == "USE_ITEM":
+                    await handle_use_item(session, msg)
+                elif mtype == "QUICK_CONSUME":
+                    await handle_quick_consume(session, msg)
+                elif mtype == "DROP":
+                    await handle_drop(session, msg)
+                elif mtype == "INV_MOVE":
+                    await handle_inv_move(session, msg)
+                elif mtype == "PICKUP":
+                    await handle_pickup(session, msg)
+                elif mtype == "SET_OPTION":
+                    await handle_set_option(session, msg)
+                elif mtype == "BANK_OPEN":
+                    await handle_bank_open(session, msg)
+                elif mtype == "BANK_DEPOSIT":
+                    await handle_bank_deposit(session, msg)
+                elif mtype == "BANK_WITHDRAW":
+                    await handle_bank_withdraw(session, msg)
+                elif mtype == "QUEST_ACCEPT":
+                    await handle_quest_accept(session, msg)
+                elif mtype == "QUEST_TURNIN":
+                    await handle_quest_turnin(session, msg)
+                elif mtype == "WISH":
+                    await handle_wish(session, msg)
+                elif mtype == "WISH_STAT":
+                    await handle_wish_stat(session, msg)
+                elif mtype == "TRADE_REQUEST":
+                    await handle_trade_request(session, msg)
+                elif mtype == "TRADE_RESPOND":
+                    await handle_trade_respond(session, msg, msg.get("from_player_id"))
+                elif mtype == "TRADE_OFFER":
+                    await handle_trade_offer(session, msg)
+                elif mtype == "TRADE_CONFIRM":
+                    await handle_trade_confirm(session, msg)
+                elif mtype == "TRADE_CANCEL":
+                    await handle_trade_cancel(session, msg)
+                elif mtype == "FAIRY_ACT":
+                    import fairy_village
+                    await fairy_village.act(session, msg.get("id"))
+                elif mtype == "LOGOUT":
+                    break
+            except Exception:
+                log.exception("handler error type=%s ip=%s", mtype, peer)
+                try:
+                    await send(ws, "ERROR", message="Something went wrong with that action.")
+                except Exception:
+                    pass
     except websockets.exceptions.ConnectionClosed:
         pass
     finally:
+        _security.GUARD.clear_message_window(ws)
+        _security.GUARD.release_connection(peer)
         if session and WORLD.sessions.get(session.player_id) is session:
             if _should_linger(session):
                 await begin_linger(session)
@@ -9535,8 +9754,21 @@ def process_monster_ai():
 
 
 async def main():
-    log.info("Starting MMORPG server on ws://%s:%s", HOST, PORT)
-    async with websockets.serve(handler, HOST, PORT, ping_interval=20, ping_timeout=20):
+    log.info(
+        "Starting Crownfall server on ws://%s:%s (env=%s max_size=%s)",
+        HOST, PORT, _security.crownfall_env(), _security.WS_MAX_SIZE,
+    )
+    if _security.is_production() and HOST not in ("127.0.0.1", "localhost", "::1"):
+        log.warning(
+            "CROWNFALL_ENV=production but HOST=%s — bind 127.0.0.1 behind a TLS proxy",
+            HOST,
+        )
+    async with websockets.serve(
+        handler, HOST, PORT,
+        ping_interval=20, ping_timeout=20,
+        max_size=_security.WS_MAX_SIZE,
+        max_queue=32,
+    ):
         await game_loop()
 
 
