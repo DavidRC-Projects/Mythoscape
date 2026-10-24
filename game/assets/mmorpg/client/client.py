@@ -1400,10 +1400,13 @@ class GameClient(ScreensMixin, CameraYaw):
 
     # ------------------------------------------------------------------
     def handle_events(self):
+        import area_music
         for event in pygame.event.get():
             idle_client.note_event(self, event)
             if event.type == pygame.QUIT:
                 self.running = False
+            elif event.type == area_music.end_event_type():
+                area_music.on_track_ended(self)
             elif self.state == "LOGIN":
                 self.handle_login_event(event)
             elif self.state == "STAT_ALLOC":
@@ -3940,13 +3943,13 @@ class GameClient(ScreensMixin, CameraYaw):
         return panel, track
 
     def area_view_button_rect(self):
-        """Button to the right of the zoom bar (not part of the 0–100% track)."""
+        """Button above the zoom bar so it never covers dialogue Shop/Bank buttons."""
         panel, _track = self.zoom_hud_rects()
         label = self.font_tiny.render("Area view", True, WHITE)
         pad_x, pad_y = 10, 7
         w = label.get_width() + pad_x * 2
         h = max(30, label.get_height() + pad_y * 2)
-        return pygame.Rect(panel.right + 8, panel.bottom - h, w, h)
+        return pygame.Rect(panel.x, panel.y - h - 6, w, h)
 
     def _zoom_pct_from_x(self, mx):
         _panel, track = self.zoom_hud_rects()
@@ -4208,20 +4211,35 @@ class GameClient(ScreensMixin, CameraYaw):
                             self.set_zoom(action)
                         return
             else:
-                area_btn = self.area_view_button_rect()
-                if area_btn.collidepoint(mx, my):
-                    self.toggle_area_view()
-                    return
-                panel, track = self.zoom_hud_rects()
-                if panel.collidepoint(mx, my):
-                    if track.inflate(0, 6).collidepoint(mx, my):
-                        if getattr(self, "_area_view", False):
-                            # Dragging the bar leaves area view at the chosen level.
-                            self._set_area_view(False, restore_pct=self._zoom_pct_from_x(mx))
-                        else:
-                            self._zoom_drag = True
-                            self._zoom_goal = self._zoom_pct_from_x(mx)
-                    return
+                # Dialogue / shop / bank buttons sit on the lower map and overlap
+                # the zoom HUD — never steal those clicks for Area view / zoom.
+                zoom_chrome_ok = not (
+                    self.dialogue
+                    or self.show_shop_panel
+                    or self.show_bank
+                    or self.show_travel
+                    or self.show_forge
+                    or self.show_cook
+                    or self.show_teleport
+                    or self.housing_open
+                    or self.trade_state
+                    or self.trade_incoming
+                )
+                if zoom_chrome_ok:
+                    area_btn = self.area_view_button_rect()
+                    if area_btn.collidepoint(mx, my):
+                        self.toggle_area_view()
+                        return
+                    panel, track = self.zoom_hud_rects()
+                    if panel.collidepoint(mx, my):
+                        if track.inflate(0, 6).collidepoint(mx, my):
+                            if getattr(self, "_area_view", False):
+                                # Dragging the bar leaves area view at the chosen level.
+                                self._set_area_view(False, restore_pct=self._zoom_pct_from_x(mx))
+                            else:
+                                self._zoom_drag = True
+                                self._zoom_goal = self._zoom_pct_from_x(mx)
+                        return
         # Leave dungeon button (always on top of the map HUD)
         if self.dungeon and self.dungeon_hud_hidden:
             tab = self.dungeon_hud_tab

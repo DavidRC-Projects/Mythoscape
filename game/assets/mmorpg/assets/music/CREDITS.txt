@@ -1,0 +1,13 @@
+Area music (Suno exports, converted to 22050 Hz WAV for the client)
+
+Rising Theme     → theme.wav          login; also any place without its own song
+The Narrow Way   → narrow_way.wav     village (after Rising Theme)
+Harmonia Restaurativa → fairy_glade.wav  fairy village + entrance/exit paths
+Crypt Entry      → crypt.wav          shadow crypt / Void Sanctum
+Lumière du Château → castle.wav       castle realm / keep
+March of the King → city.wav          Stonehaven
+Welcome to the Hall → harbour.wav     Harbourreach
+Cautious March   → cautious_march.wav Wolf Pass
+
+Dedicated songs above; forest, mine, wilderness, Emberdeep, and other
+dungeons use Rising Theme until a track is assigned.

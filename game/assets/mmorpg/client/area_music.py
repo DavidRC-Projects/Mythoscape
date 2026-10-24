@@ -1,10 +1,12 @@
-"""One looping tune per place.
+"""One tune (or short playlist) per place.
 
 Old School RuneScape keeps a song going until you enter a new region,
 then interrupts it so the new place is heard at once. A boss does the
 same. Login uses the main theme. The opening comic stays silent so the
 narration is alone.
 
+Village plays Rising Theme once, then The Narrow Way, then cycles.
+Places without their own Suno track use Rising Theme until one is added.
 Set USE_AREA_MUSIC=0 to disable this. Missing files are skipped.
 """
 from __future__ import annotations
@@ -20,21 +22,32 @@ _DIR = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "..", "assets", "music",
 ))
 _VOLUME = 0.72
-_current = None
+_END_EVENT = pygame.USEREVENT + 31
 
+# Zone name -> region key (file stem, or "village" for the playlist).
+# Anything not listed falls back to Rising Theme ("theme").
 _ZONE = {
     "village": "village",
     "fairy_village": "fairy_glade",
     "city": "city",
     "fishing_village": "harbour",
-    "forest": "forest",
-    "mountains": "mountains",
-    "mine": "mine",
-    "dungeon": "dungeon",
-    "volcano": "emberdeep",
-    "shadow_crypt": "void",
-    "wilderness": "wilderness",
+    "mountains": "cautious_march",
+    "shadow_crypt": "crypt",
 }
+
+# Places that play a sequence (each track once), then wrap. Login "theme" loops alone.
+_PLAYLISTS = {
+    # Rising Theme → The Narrow Way → … (village only)
+    "village": ("theme", "narrow_way"),
+}
+
+_current = None          # region key currently selected
+_track = None            # file stem currently playing
+_playlist_index = 0
+
+
+def end_event_type():
+    return _END_EVENT
 
 
 def tick(client):
@@ -47,14 +60,33 @@ def tick(client):
     key = _key(client)
     if key == _current:
         return
-    _play(key)
+    _play_region(key)
+
+
+def on_track_ended(client):
+    """Advance village (etc.) playlist when a non-looping track finishes."""
+    global _playlist_index, _track
+    if not feature_flags.USE_AREA_MUSIC:
+        return
+    if _current is None:
+        return
+    # Still in the same region?
+    if _key(client) != _current:
+        return
+    playlist = _PLAYLISTS.get(_current)
+    if not playlist:
+        return
+    _playlist_index = (_playlist_index + 1) % len(playlist)
+    _start_track(playlist[_playlist_index], loop=False)
 
 
 def stop():
-    global _current
-    if _current is None:
+    global _current, _track, _playlist_index
+    if _current is None and _track is None:
         return
     _current = None
+    _track = None
+    _playlist_index = 0
     try:
         if pygame.mixer.get_init():
             pygame.mixer.music.stop()
@@ -69,49 +101,88 @@ def _key(client):
     if state != "GAME" or not getattr(client, "player", None):
         return None
     dungeon = getattr(client, "dungeon", None) or {}
-    if dungeon.get("id") == "emberdeep":
-        if _near_wyrm(client):
-            return "wyrm"
-        return "emberdeep"
     if dungeon.get("id") == "castle_realm":
         return "castle"
-    if dungeon.get("v2") == "depths":
-        return "depths"
-    if dungeon.get("v2"):
-        return "void"
+    # Void Sanctum / crypt dungeon
+    if dungeon.get("v2") or dungeon.get("id") in ("void", "sanctum", "shadow_crypt"):
+        return "crypt"
+    # Emberdeep, depths, generic dungeons — no dedicated song yet
     if dungeon:
-        return "dungeon"
+        return "theme"
     for building in getattr(client, "buildings", None) or []:
         if building.get("kind") == "castle" and client.player_inside_building(building):
             return "castle"
     x, y = client.player_xy()
-    return _ZONE.get(wm.get_zone(int(x), int(y)), "wilderness")
+    x, y = int(x), int(y)
+    if _in_fairy_music(x, y):
+        return "fairy_glade"
+    if _in_wolf_pass(x, y):
+        return "cautious_march"
+    return _ZONE.get(wm.get_zone(x, y), "theme")
 
 
-def _near_wyrm(client):
-    px, py = client.player_xy()
-    for monster in (getattr(client, "monsters", None) or {}).values():
-        if monster.get("type") != "emberdeep_wyrm":
-            continue
-        if max(abs(int(monster.get("x", 0)) - int(px)), abs(int(monster.get("y", 0)) - int(py))) <= 6:
-            return True
+def _in_fairy_music(x, y):
+    """Fairy glade tune covers the village, entrance/exit lanes, and approach roads.
+
+    get_zone('fairy_village') stops at the box edge, so the north arch approach
+    (still village) and the south exit lane (wilderness) would otherwise cut the
+    music short.
+    """
+    if wm.get_zone(x, y) == "fairy_village":
+        return True
+    try:
+        import fairy_glade as fg
+    except Exception:
+        return False
+    if fg.is_lane(x, y):
+        return True
+    # North approach: village road → arch (mouth is y=52; lane starts there).
+    if 27 <= x <= 36 and 43 <= y <= 55:
+        return True
+    # Just past the south arch onto the meadow.
+    if 11 <= x <= 16 and 97 <= y <= 102:
+        return True
     return False
 
 
-def _play(key):
-    global _current
+def _in_wolf_pass(x, y):
+    """Cautious March for the Wolf Pass massif (overlaps the forest zone box)."""
+    try:
+        import wolf_pass
+    except Exception:
+        return False
+    if not wolf_pass.enabled():
+        return wm.get_zone(x, y) == "mountains"
+    return bool(wolf_pass.in_massif(x, y))
+
+
+def _play_region(key):
+    global _current, _playlist_index
     if not key:
         stop()
         return
     _current = key
-    path = os.path.join(_DIR, key + ".wav")
+    _playlist_index = 0
+    playlist = _PLAYLISTS.get(key)
+    if playlist:
+        _start_track(playlist[0], loop=False)
+        return
+    # Login theme and single-track regions loop forever
+    _start_track(key, loop=True)
+
+
+def _start_track(stem, loop=True):
+    global _track
+    _track = stem
+    path = os.path.join(_DIR, stem + ".wav")
     if not os.path.isfile(path):
         return
     try:
         if not pygame.mixer.get_init():
             pygame.mixer.init()
+        pygame.mixer.music.set_endevent(_END_EVENT)
         pygame.mixer.music.set_volume(_VOLUME)
         pygame.mixer.music.load(path)
-        pygame.mixer.music.play(-1)
+        pygame.mixer.music.play(-1 if loop else 0)
     except Exception:
         pass

@@ -220,6 +220,9 @@ __marimo__/
 # macOS
 .DS_Store
 
+# Raw Suno / source music drops (converted copies live under game/.../assets/music)
+/music/
+
 # MMORPG local runtime / player saves (recreated on server start)
 *.db
 *.db-journal
