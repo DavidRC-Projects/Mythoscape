@@ -22,6 +22,13 @@ REGALIA_TITLES = {
 APPEARANCE_KEYS = ("skin", "skin_tone", "hair", "hair_colour", "top", "bottom", "shoes", "outfit",
                    "accessories", "cloak", "head", "jewellery", "held", "palette", "outfit_level")
 SAVED_SLOTS = 6
+# Account-only wardrobe: these usernames skip story unlocks for one sex of set.
+# esteph → every dress (female gown sets). david → every outfit (male coat sets).
+# Anyone else still has to meet the normal reputation, rank and title rules.
+ACCOUNT_WARDROBE = {
+    "esteph": "female",
+    "david": "male",
+}
 
 
 # ---- catalogue ---------------------------------------------------------------------------------
@@ -110,6 +117,34 @@ def reign_days(session, conn):
 
 
 # ---- unlock rules ------------------------------------------------------------------------------
+def _account_name(session):
+    return (getattr(session, "username", "") or "").strip().lower()
+
+
+def account_wardrobe(session):
+    """'female' (dresses), 'male' (outfits), or None when the account earns sets normally."""
+    return ACCOUNT_WARDROBE.get(_account_name(session))
+
+
+def _item_sex(item):
+    """Sex of a set entry or catalogue piece (via its set when the piece has no sex)."""
+    if not item:
+        return None
+    sex = item.get("sex")
+    if sex in ("female", "male"):
+        return sex
+    sid = item.get("set") or item.get("id")
+    entry = sets().get(sid) if sid else None
+    sex = (entry or {}).get("sex")
+    return sex if sex in ("female", "male") else None
+
+
+def account_unlocks(session, item):
+    """True when this account is gifted every set of the item's sex."""
+    gift = account_wardrobe(session)
+    return bool(gift and _item_sex(item) == gift)
+
+
 def _rank_hint(rank, sex):
     name = nobility.rank_name(rank, sex)
     return f"Become a {name} (noble rank {rank}) — petition Lord Chamberlain Aric."
@@ -192,6 +227,8 @@ def outfit_unlocked(session, item, conn=None):
     sex = item.get("sex")
     if sex and sex != _sex(getattr(session, "gender", "")):
         return False, "That isn't cut for you.", None
+    if account_unlocks(session, item):
+        return True, "", None
     if tier_hidden(session, item.get("tier")):
         return False, "Mae won't show that to someone of your standing.", None
     return check_rule(item.get("unlock"), session, conn)
@@ -206,8 +243,13 @@ def tier_unlocked(session, tier, conn=None):
     return False
 
 
+REGALIA_REFUSED = "Regalia are worn only while you hold the title."
+
+
 def regalia_ok(session, item):
     if not item or not item.get("regalia"):
+        return True
+    if account_unlocks(session, item):
         return True
     allowed = (REGALIA_TITLES.get(int(item.get("tier") or 0)) or {}).get(_sex(getattr(session, "gender", ""))) or ()
     return getattr(session, "royal_title", None) in allowed
@@ -218,6 +260,9 @@ def unlocks(session, conn=None):
     out = {}
     for sid in set_order(getattr(session, "gender", "")):
         entry = sets().get(sid) or {}
+        if account_unlocks(session, entry):
+            out[sid] = {"state": "unlocked", "hint": "", "progress": None}
+            continue
         if tier_hidden(session, entry.get("tier")):
             out[sid] = {"state": "hidden", "hint": "", "progress": None}
             continue
@@ -244,6 +289,8 @@ def palette_owned(owned, item, palette_id):
 
 def upgrade_requirement(session, set_entry, level, conn=None):
     """(ok, hint) for reaching Fine (2) or Regal (3)."""
+    if account_unlocks(session, set_entry):
+        return True, ""
     tier = int(set_entry.get("tier") or 1)
     need_tier = min(7, tier + (1 if level == 2 else 2))
     names = {}
@@ -298,6 +345,37 @@ def _free_regalia(session, item):
     return bool(item and item.get("regalia") and int(item.get("tier") or 0) == 7 and regalia_ok(session, item))
 
 
+# ---- starter outfit ----------------------------------------------------------------------------
+def starter_set(sex):
+    """Everyone starts as a peasant: the tier 1 set for their sex (catalogue starter_sets)."""
+    return (catalogue().get("starter_sets") or {}).get(_sex(sex))
+
+
+def starter_look(sex, base=None):
+    """The free tier 1 set worn over a base look (tone, hair colour, shoes kept), like picking the set at Mae's."""
+    sex = _sex(sex)
+    look = normalise(dict(base or (catalogue().get("defaults") or {}).get(sex) or {}))
+    entry = sets().get(starter_set(sex) or "") or {}
+    if not entry:
+        return look
+    table = items()
+    pals = entry.get("palettes") or [None]
+    look.update(outfit=None, cloak=None, head=None, held=None, jewellery=[], outfit_level=1,
+                palette=look.get("palette") if look.get("palette") in pals else pals[0])
+    for pid in entry.get("pieces") or []:
+        slot = (table.get(pid) or {}).get("slot")
+        if slot == "jewellery":
+            look["jewellery"].append(pid)
+        elif slot in ("outfit", "cloak", "head", "held"):
+            look[slot] = pid
+    # hair stays the player's own pick: the set's styled hair is a shop item, not part of the free starter
+    return look
+
+
+def has_outfit(look):
+    return bool((look or {}).get("outfit") or (look or {}).get("set"))
+
+
 # ---- appearance --------------------------------------------------------------------------------
 def normalise(appearance):
     """Fill new keys on an old saved look (legacy skin ids -> tones). Never fails."""
@@ -332,8 +410,8 @@ def strip_regalia(session, look):
     return out
 
 
-def clean(session, appearance, owned):
-    """(look, None) or (None, error). Ownership, sex and regalia are checked; unlocks gate buying only."""
+def clean_legacy(session, appearance, owned):
+    """Pre-sidebar layered validator. Kept only as the error fallback of clean() (SIDEBAR_DESIGN §8)."""
     if not isinstance(appearance, dict):
         return None, "Invalid appearance data."
     cat = catalogue()
@@ -419,6 +497,295 @@ def clean(session, appearance, owned):
         return None, "Upgrade that outfit first."
     look["outfit_level"] = level
     return look, None
+
+# ---- sidebar v2: painted sets + small overlays (SIDEBAR_DESIGN.md) ---------------------------------
+APPEARANCE_VERSION = 2
+OVERLAY_SLOTS = ("head", "cloak", "jewellery")
+TRADE_IN_MAIL = "Your old clothing was traded in"
+
+
+def hair_swatches():
+    cat = catalogue()
+    ids = list(cat.get("hair_swatches") or [])
+    return ids or [h.get("id") for h in cat.get("hair_palette") or [] if not h.get("legacy")]
+
+
+def nearest_swatch(colour_id):
+    """Old or retired hair colour -> nearest of the 10 swatches (RGB distance)."""
+    swatches = hair_swatches()
+    if colour_id in swatches:
+        return colour_id
+    pal = {h.get("id"): h for h in catalogue().get("hair_palette") or []}
+    src = (pal.get(colour_id) or {}).get("mul")
+    if not src:
+        return swatches[1] if len(swatches) > 1 else (swatches[0] if swatches else colour_id)
+    def dist(sid):
+        rgb = (pal.get(sid) or {}).get("mul") or (0, 0, 0)
+        return sum((int(a) - int(b)) ** 2 for a, b in zip(src, rgb))
+    return min(swatches, key=dist)
+
+
+def collection(sex=None):
+    rows = list(catalogue().get("collection") or [])
+    if sex is not None:
+        rows = [r for r in rows if r.get("sex") == _sex(sex)]
+    return rows
+
+
+def collection_entry(set_id):
+    return next((r for r in collection() if r.get("id") == set_id), None)
+
+
+def collection_live(entry):
+    """Live only when released and reviewed >= 8/10 (§6.2: the server refuses live below 8)."""
+    if not entry or entry.get("release") != "live":
+        return False
+    try:
+        return float(entry.get("review_score") or 0) >= 8
+    except (TypeError, ValueError):
+        return False
+
+
+def set_of(look):
+    """The painted set a look wears: 'set', else the set of its outfit piece."""
+    if not isinstance(look, dict):
+        return None
+    if look.get("set"):
+        return look["set"]
+    outfit = items().get(look.get("outfit") or "") or {}
+    return outfit.get("set")
+
+
+def painted(set_id):
+    entry = sets().get(set_id) or collection_entry(set_id) or {}
+    flags = entry.get("painted") or {}
+    return {k: bool(flags.get(k)) for k in ("head", "neck", "cloak")}
+
+
+def overlay_blocked(item, set_id):
+    """Why an overlay can't go on this set (None when it can)."""
+    flags = painted(set_id)
+    slot = item.get("slot")
+    if slot == "head" and flags["head"]:
+        return "This set wears its own crown."
+    if slot == "cloak" and flags["cloak"]:
+        return "This set has its own cloak."
+    if slot == "jewellery" and flags["neck"] and item.get("anchor") == "neck":
+        return "This set has its own necklace."
+    return None
+
+
+def set_render(set_id, sex):
+    """Render fields for a set: its painted pieces in the old slots, so the renderer is unchanged."""
+    entry = sets().get(set_id) or {}
+    defaults = (catalogue().get("defaults") or {}).get(_sex(sex)) or {}
+    out = {"top": defaults.get("top"), "bottom": defaults.get("bottom"), "shoes": defaults.get("shoes"),
+           "outfit": None, "cloak": None, "head": None, "held": None, "jewellery": [], "accessories": [],
+           "palette": None}
+    for pid in entry.get("pieces") or []:
+        slot = (items().get(pid) or {}).get("slot")
+        if slot == "jewellery":
+            out["jewellery"].append(pid)
+        elif slot in ("outfit", "cloak", "head", "held"):
+            out[slot] = pid
+    return out
+
+
+def _set_owned(session, set_id, owned):
+    entry = sets().get(set_id)
+    if entry is None:
+        return set_id in owned
+    if set_id == starter_set(getattr(session, "gender", "")):
+        return True
+    pieces = [p for p in entry.get("pieces") or [] if (items().get(p) or {}).get("slot") == "outfit"]
+    return all((items().get(p) or {}).get("starter") or p in owned for p in pieces)
+
+
+def clean_v2(session, appearance, owned):
+    """New canonical block {set, skin_tone, hair_colour, head, cloak, jewellery} -> saved look.
+
+    Overlays blocked by painted flags are stripped (not refused) and reported in look['_notes'].
+    """
+    if not isinstance(appearance, dict):
+        return None, "Invalid appearance data."
+    cat = catalogue()
+    table = items()
+    sex = _sex(getattr(session, "gender", ""))
+    set_id = set_of(appearance) or starter_set(sex)
+    entry = sets().get(set_id)
+    coll = collection_entry(set_id) if entry is None else None
+    if entry is None and coll is None:
+        return None, "That set is not in the catalogue."
+    if (entry or coll).get("sex") != sex:
+        return None, "That isn't cut for you."
+    if coll is not None:
+        if not collection_live(coll):
+            return None, "That design is coming soon."
+        if set_id not in owned:
+            return None, "Buy that design first."
+    elif not _set_owned(session, set_id, owned):
+        return None, "You do not own that set."
+    # Set regalia the player didn't ask for are stripped below so the rest of the set still wears;
+    # regalia the player explicitly asks to wear without the title are refused (REGALIA_REFUSED).
+    tone = appearance.get("skin_tone")
+    if tone not in tone_ids():
+        tone = (cat.get("skin_aliases") or {}).get(appearance.get("skin")) if tone is None else tone
+        if tone not in tone_ids():
+            return None, "That skin tone is not in the catalogue."
+    hair_colour = appearance.get("hair_colour")
+    if hair_colour not in hair_swatches():
+        return None, "That hair colour is not in the catalogue."
+    look = {"set": set_id, "skin": "skin_base" if "skin_base" in table else appearance.get("skin"),
+            "skin_tone": tone, "hair": appearance.get("hair"), "hair_colour": hair_colour,
+            "appearance_version": APPEARANCE_VERSION}
+    look.update(set_render(set_id, sex) if entry else set_render(starter_set(sex), sex))
+    if coll is not None:
+        look["outfit"] = None
+    notes = []
+    # Drop set regalia the player cannot hold yet (crown etc.); coat/cloak still wear.
+    for slot in ("head", "cloak", "held"):
+        pid = look.get(slot)
+        if pid and not regalia_ok(session, table.get(pid)):
+            notes.append(f"{(table.get(pid) or {}).get('name') or 'Regalia'} needs the matching title")
+            look[slot] = None
+    look["jewellery"] = [j for j in look.get("jewellery") or [] if regalia_ok(session, table.get(j))]
+
+    def overlay(item_id, slot):
+        item = table.get(item_id)
+        if not item or item.get("slot") != slot:
+            return None, "That look uses an unknown item."
+        if not regalia_ok(session, item):
+            return None, REGALIA_REFUSED     # asked to wear regalia (set piece or overlay) without the title
+        if item.get("set") == set_id:
+            return None, None          # the set's own painted piece: already in the look
+        if not item.get("overlay"):
+            notes.append("Updated for the new outfits")
+            return None, None          # legacy layered piece: cleared (§3.6)
+        if item.get("sex") and item["sex"] != sex:
+            return None, "That isn't cut for you."
+        if not item.get("starter") and item_id not in owned:
+            return None, f"You do not own that {'headwear' if slot == 'head' else slot}."
+        why = overlay_blocked(item, set_id)
+        if why:
+            notes.append(why)
+            return None, None
+        return item_id, None
+
+    for slot in ("head", "cloak"):
+        if appearance.get(slot):
+            got, err = overlay(appearance[slot], slot)
+            if err:
+                return None, err
+            if got:
+                look[slot] = got
+    jmax = int(cat.get("jewellery_max") or 2)
+    chosen = []
+    for item_id in appearance.get("jewellery") or []:
+        got, err = overlay(item_id, "jewellery")
+        if err:
+            return None, err
+        if got and got not in chosen:
+            chosen.append(got)
+    if len(chosen) > jmax:
+        return None, f"Too much jewellery ({jmax} at most)."
+    look["jewellery"] = [j for j in look["jewellery"] if j not in chosen] + chosen
+    if notes:
+        look["_notes"] = sorted(set(notes))
+    return look, None
+
+
+def clean(session, appearance, owned):
+    """(look, None) or (None, error). v2 painted-set rules; the old layered validator only if v2 crashes."""
+    try:
+        look, err = clean_v2(session, appearance, owned)
+    except Exception:
+        import logging
+        logging.getLogger("outfits").exception("clean_v2 failed; legacy fallback")
+        return clean_legacy(session, appearance, owned)
+    if look is not None:
+        look.pop("_notes", None)
+    return look, err
+
+
+def clean_notes(session, appearance, owned):
+    """Messages for what clean() stripped (painted crown, legacy pieces)."""
+    try:
+        look, _err = clean_v2(session, appearance, owned)
+    except Exception:
+        return []
+    return list((look or {}).get("_notes") or [])
+
+
+def legacy_refund(owned):
+    """100% coin refund (base price) for what v2 retires: paid layered pieces (top/bottom/shoes/coat/
+    accessory), bought colour palettes ("palette:<set|item>:<pal>") and Fine/Regal upgrades ("<set>@<n>")."""
+    table = items()
+    lp = catalogue().get("legacy_prices") or {}
+    gpal = lp.get("garment_palettes") or {}
+    lsets = lp.get("sets") or {}
+    total, ids = 0, []
+    for item_id in dict.fromkeys(owned or []):
+        if not isinstance(item_id, str):
+            continue
+        price = 0
+        if item_id.startswith("palette:"):
+            _, owner, pal = (item_id.split(":", 2) + ["", ""])[:3]
+            sid = owner if owner in lsets else (table.get(owner) or {}).get("set")
+            price = int(gpal.get(pal) or 0) or int((lsets.get(sid) or {}).get("palette_price") or 0)
+        elif "@" in item_id:
+            sid, _, lvl = item_id.rpartition("@")
+            ups = (lsets.get(sid) or {}).get("upgrade_prices") or []
+            if lvl.isdigit() and 2 <= int(lvl) <= len(ups) + 1:
+                price = int(ups[int(lvl) - 2])
+        else:
+            item = table.get(item_id)
+            if item and item.get("legacy") and not item.get("starter") and int(item.get("price") or 0) > 0 \
+                    and item.get("slot") != "skin":
+                price = int(item["price"])
+        if price > 0:
+            total += price
+            ids.append(item_id)
+    return total, ids
+
+
+def migrate_v2(look, owned, sex, tier_ok):
+    """One-off v2 migration. Returns (new_look, refund_coins, refunded_ids). Idempotent on version 2.
+
+    tier_ok(tier) -> bool is the story unlock check (outfit_noble -> T3 when unlocked, else T1).
+    """
+    sex = _sex(sex)
+    if isinstance(look, dict) and int(look.get("appearance_version") or 0) >= APPEARANCE_VERSION:
+        return look, 0, []
+    old = dict(look or {})
+    order = set_order(sex)
+    table = items()
+    set_id = set_of(old)
+    if set_id and (sets().get(set_id) or {}).get("sex") != sex:
+        set_id = None
+    if not set_id:
+        lmap = catalogue().get("legacy_map") or {}
+        rule = lmap.get(old.get("outfit") or "") or lmap.get("_default") or {"tier": 1}
+        tier = int(rule.get("tier") or 1)
+        if tier > 1 and not tier_ok(tier):
+            tier = int(rule.get("fallback_tier") or 1)
+        set_id = order[tier - 1] if len(order) >= tier else starter_set(sex)
+    tone = old.get("skin_tone")
+    if tone not in tone_ids():
+        skin_map = (catalogue().get("legacy_map") or {}).get("skin") or {}
+        tone = skin_map.get(old.get("skin")) or default_tone()
+    new = {"set": set_id, "skin_tone": tone, "hair": old.get("hair"),
+           "hair_colour": nearest_swatch(old.get("hair_colour") or old.get("hair_tint") or "dark_brown"),
+           "head": None, "cloak": None, "jewellery": [], "appearance_version": APPEARANCE_VERSION}
+    for slot in ("head", "cloak"):
+        item = table.get(old.get(slot) or "") or {}
+        if item.get("overlay"):
+            new[slot] = old[slot]
+    new["jewellery"] = [j for j in old.get("jewellery") or [] if (table.get(j) or {}).get("overlay")][:2]
+    refund, ids = legacy_refund(owned or [])
+    new["appearance_legacy"] = {k: v for k, v in old.items() if k != "appearance_legacy"}
+    new["appearance_legacy"]["migrated_at"] = int(time.time())
+    new.update({k: v for k, v in set_render(set_id, sex).items()})
+    return new, refund, ids
 
 
 def saved_slots(raw):

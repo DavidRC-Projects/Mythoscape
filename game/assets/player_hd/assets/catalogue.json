@@ -1170,7 +1170,8 @@
     }
    },
    "sex": null,
-   "tier": 0
+   "tier": 0,
+   "legacy": true
   },
   {
    "id": "top_wool_tunic",
@@ -1271,7 +1272,8 @@
     }
    },
    "sex": null,
-   "tier": 0
+   "tier": 0,
+   "legacy": true
   },
   {
    "id": "top_leather_jerkin",
@@ -1372,7 +1374,8 @@
     }
    },
    "sex": null,
-   "tier": 0
+   "tier": 0,
+   "legacy": true
   },
   {
    "id": "top_ranger_tunic",
@@ -1473,7 +1476,8 @@
     }
    },
    "sex": null,
-   "tier": 0
+   "tier": 0,
+   "legacy": true
   },
   {
    "id": "top_gambeson",
@@ -1574,7 +1578,8 @@
     }
    },
    "sex": null,
-   "tier": 0
+   "tier": 0,
+   "legacy": true
   },
   {
    "id": "top_noble_doublet",
@@ -1675,7 +1680,8 @@
     }
    },
    "sex": null,
-   "tier": 0
+   "tier": 0,
+   "legacy": true
   },
   {
    "id": "bottom_work_trousers",
@@ -1776,7 +1782,8 @@
     }
    },
    "sex": null,
-   "tier": 0
+   "tier": 0,
+   "legacy": true
   },
   {
    "id": "bottom_long_skirt",
@@ -1877,7 +1884,8 @@
     }
    },
    "sex": null,
-   "tier": 0
+   "tier": 0,
+   "legacy": true
   },
   {
    "id": "bottom_leather_breeches",
@@ -1978,7 +1986,8 @@
     }
    },
    "sex": null,
-   "tier": 0
+   "tier": 0,
+   "legacy": true
   },
   {
    "id": "bottom_kilt",
@@ -2079,7 +2088,8 @@
     }
    },
    "sex": null,
-   "tier": 0
+   "tier": 0,
+   "legacy": true
   },
   {
    "id": "bottom_noble_hose",
@@ -2180,7 +2190,8 @@
     }
    },
    "sex": null,
-   "tier": 0
+   "tier": 0,
+   "legacy": true
   },
   {
    "id": "shoes_leather",
@@ -2281,7 +2292,8 @@
     }
    },
    "sex": null,
-   "tier": 0
+   "tier": 0,
+   "legacy": true
   },
   {
    "id": "shoes_sandals",
@@ -2382,7 +2394,8 @@
     }
    },
    "sex": null,
-   "tier": 0
+   "tier": 0,
+   "legacy": true
   },
   {
    "id": "shoes_riding_boots",
@@ -2483,7 +2496,8 @@
     }
    },
    "sex": null,
-   "tier": 0
+   "tier": 0,
+   "legacy": true
   },
   {
    "id": "shoes_fur_boots",
@@ -2584,7 +2598,8 @@
     }
    },
    "sex": null,
-   "tier": 0
+   "tier": 0,
+   "legacy": true
   },
   {
    "id": "outfit_hunter",
@@ -2685,7 +2700,8 @@
     }
    },
    "sex": null,
-   "tier": 0
+   "tier": 0,
+   "legacy": true
   },
   {
    "id": "outfit_festival",
@@ -2786,7 +2802,8 @@
     }
    },
    "sex": null,
-   "tier": 0
+   "tier": 0,
+   "legacy": true
   },
   {
    "id": "outfit_mage_robe",
@@ -2887,7 +2904,8 @@
     }
    },
    "sex": null,
-   "tier": 0
+   "tier": 0,
+   "legacy": true
   },
   {
    "id": "outfit_noble",
@@ -2988,7 +3006,8 @@
     }
    },
    "sex": null,
-   "tier": 0
+   "tier": 0,
+   "legacy": true
   },
   {
    "id": "acc_scarf",
@@ -3089,7 +3108,8 @@
     }
    },
    "sex": null,
-   "tier": 0
+   "tier": 0,
+   "legacy": true
   },
   {
    "id": "acc_leather_gloves",
@@ -3190,7 +3210,8 @@
     }
    },
    "sex": null,
-   "tier": 0
+   "tier": 0,
+   "legacy": true
   },
   {
    "id": "acc_satchel",
@@ -3291,7 +3312,8 @@
     }
    },
    "sex": null,
-   "tier": 0
+   "tier": 0,
+   "legacy": true
   },
   {
    "id": "acc_travel_cloak",
@@ -3392,17 +3414,19 @@
     }
    },
    "sex": null,
-   "tier": 0
+   "tier": 0,
+   "legacy": true
   },
   {
    "id": "village_lady_gown",
    "slot": "outfit",
    "name": "Village Lady's Bodice & Skirt",
    "price": 420,
-   "starter": false,
+   "starter": true,
    "tintable": true,
    "layer": "outfit_festival",
    "art_layer": "outfit_village_lady",
+   "hd_art": "outfit_village_lady_hd",
    "sex": "female",
    "set": "set_village_lady",
    "tier": 1,
@@ -3418,17 +3442,6 @@
     "e": 45,
     "w": 45,
     "n": 45
-   },
-   "upgrade": {
-    "levels": [
-     "Plain",
-     "Fine",
-     "Regal"
-    ],
-    "overlays": [
-     "outfit_village_lady_l2",
-     "outfit_village_lady_l3"
-    ]
    }
   },
   {
@@ -3436,7 +3449,7 @@
    "slot": "head",
    "name": "Flower Crown",
    "price": 140,
-   "starter": false,
+   "starter": true,
    "tintable": false,
    "layer": null,
    "art_layer": "head_village_lady_flower_crown",
@@ -3462,7 +3475,7 @@
    "slot": "jewellery",
    "name": "Wooden-bead Necklace",
    "price": 70,
-   "starter": false,
+   "starter": true,
    "tintable": false,
    "layer": null,
    "art_layer": "jwl_village_lady_bead_necklace",
@@ -3488,7 +3501,7 @@
    "slot": "held",
    "name": "Basket Purse",
    "price": 70,
-   "starter": false,
+   "starter": true,
    "tintable": false,
    "layer": null,
    "art_layer": "held_village_lady_basket",
@@ -3518,6 +3531,7 @@
    "tintable": true,
    "layer": "outfit_festival",
    "art_layer": "outfit_court_gown",
+   "hd_art": "outfit_court_gown_hd",
    "sex": "female",
    "set": "set_court_gown",
    "tier": 2,
@@ -3535,17 +3549,6 @@
     "e": 45,
     "w": 45,
     "n": 45
-   },
-   "upgrade": {
-    "levels": [
-     "Plain",
-     "Fine",
-     "Regal"
-    ],
-    "overlays": [
-     "outfit_court_gown_l2",
-     "outfit_court_gown_l3"
-    ]
    }
   },
   {
@@ -3613,6 +3616,7 @@
    "tintable": true,
    "layer": "outfit_noble",
    "art_layer": "outfit_noble_lady",
+   "hd_art": "outfit_noble_lady_hd",
    "sex": "female",
    "set": "set_noble_lady",
    "tier": 3,
@@ -3630,17 +3634,6 @@
     "e": 45,
     "w": 45,
     "n": 45
-   },
-   "upgrade": {
-    "levels": [
-     "Plain",
-     "Fine",
-     "Regal"
-    ],
-    "overlays": [
-     "outfit_noble_lady_l2",
-     "outfit_noble_lady_l3"
-    ]
    }
   },
   {
@@ -3708,6 +3701,7 @@
    "tintable": true,
    "layer": "outfit_noble",
    "art_layer": "outfit_countess",
+   "hd_art": "outfit_countess_hd",
    "sex": "female",
    "set": "set_countess",
    "tier": 4,
@@ -3725,17 +3719,6 @@
     "e": 45,
     "w": 45,
     "n": 45
-   },
-   "upgrade": {
-    "levels": [
-     "Plain",
-     "Fine",
-     "Regal"
-    ],
-    "overlays": [
-     "outfit_countess_l2",
-     "outfit_countess_l3"
-    ]
    }
   },
   {
@@ -3831,6 +3814,7 @@
    "tintable": true,
    "layer": "outfit_noble",
    "art_layer": "outfit_royal_favourite",
+   "hd_art": "outfit_royal_favourite_hd",
    "sex": "female",
    "set": "set_royal_favourite",
    "tier": 5,
@@ -3856,17 +3840,6 @@
     "e": 45,
     "w": 45,
     "n": 45
-   },
-   "upgrade": {
-    "levels": [
-     "Plain",
-     "Fine",
-     "Regal"
-    ],
-    "overlays": [
-     "outfit_royal_favourite_l2",
-     "outfit_royal_favourite_l3"
-    ]
    }
   },
   {
@@ -3986,6 +3959,7 @@
    "tintable": true,
    "layer": "outfit_noble",
    "art_layer": "outfit_princess_consort",
+   "hd_art": "outfit_princess_consort_hd",
    "sex": "female",
    "set": "set_princess_consort",
    "tier": 6,
@@ -4013,17 +3987,6 @@
     "e": 45,
     "w": 45,
     "n": 45
-   },
-   "upgrade": {
-    "levels": [
-     "Plain",
-     "Fine",
-     "Regal"
-    ],
-    "overlays": [
-     "outfit_princess_consort_l2",
-     "outfit_princess_consort_l3"
-    ]
    }
   },
   {
@@ -4149,6 +4112,7 @@
    "tintable": true,
    "layer": "outfit_noble",
    "art_layer": "outfit_queen",
+   "hd_art": "outfit_queen_hd",
    "sex": "female",
    "set": "set_queen",
    "tier": 7,
@@ -4168,17 +4132,6 @@
     "e": 45,
     "w": 45,
     "n": 45
-   },
-   "upgrade": {
-    "levels": [
-     "Plain",
-     "Fine",
-     "Regal"
-    ],
-    "overlays": [
-     "outfit_queen_l2",
-     "outfit_queen_l3"
-    ]
    }
   },
   {
@@ -4276,10 +4229,11 @@
    "slot": "outfit",
    "name": "Green Jerkin & Shirt",
    "price": 470,
-   "starter": false,
+   "starter": true,
    "tintable": true,
    "layer": "outfit_festival",
    "art_layer": "outfit_villager",
+   "hd_art": "outfit_villager_hd",
    "sex": "male",
    "set": "set_villager",
    "tier": 1,
@@ -4295,17 +4249,6 @@
     "e": 45,
     "w": 45,
     "n": 45
-   },
-   "upgrade": {
-    "levels": [
-     "Plain",
-     "Fine",
-     "Regal"
-    ],
-    "overlays": [
-     "outfit_villager_l2",
-     "outfit_villager_l3"
-    ]
    }
   },
   {
@@ -4313,7 +4256,7 @@
    "slot": "head",
    "name": "Cloth Cap",
    "price": 160,
-   "starter": false,
+   "starter": true,
    "tintable": false,
    "layer": null,
    "art_layer": "head_villager_cap",
@@ -4339,7 +4282,7 @@
    "slot": "held",
    "name": "Belt Pouch",
    "price": 80,
-   "starter": false,
+   "starter": true,
    "tintable": false,
    "layer": null,
    "art_layer": "held_villager_belt_pouch",
@@ -4369,6 +4312,7 @@
    "tintable": true,
    "layer": "outfit_festival",
    "art_layer": "outfit_squire",
+   "hd_art": "outfit_squire_hd",
    "sex": "male",
    "set": "set_squire",
    "tier": 2,
@@ -4386,17 +4330,6 @@
     "e": 45,
     "w": 45,
     "n": 45
-   },
-   "upgrade": {
-    "levels": [
-     "Plain",
-     "Fine",
-     "Regal"
-    ],
-    "overlays": [
-     "outfit_squire_l2",
-     "outfit_squire_l3"
-    ]
    }
   },
   {
@@ -4492,6 +4425,7 @@
    "tintable": true,
    "layer": "outfit_noble",
    "art_layer": "outfit_noble_lord",
+   "hd_art": "outfit_noble_lord_hd",
    "sex": "male",
    "set": "set_noble_lord",
    "tier": 3,
@@ -4509,17 +4443,6 @@
     "e": 45,
     "w": 45,
     "n": 45
-   },
-   "upgrade": {
-    "levels": [
-     "Plain",
-     "Fine",
-     "Regal"
-    ],
-    "overlays": [
-     "outfit_noble_lord_l2",
-     "outfit_noble_lord_l3"
-    ]
    }
   },
   {
@@ -4587,6 +4510,7 @@
    "tintable": true,
    "layer": "outfit_noble",
    "art_layer": "outfit_count",
+   "hd_art": "outfit_count_hd",
    "sex": "male",
    "set": "set_count",
    "tier": 4,
@@ -4604,17 +4528,6 @@
     "e": 45,
     "w": 45,
     "n": 45
-   },
-   "upgrade": {
-    "levels": [
-     "Plain",
-     "Fine",
-     "Regal"
-    ],
-    "overlays": [
-     "outfit_count_l2",
-     "outfit_count_l3"
-    ]
    }
   },
   {
@@ -4710,6 +4623,7 @@
    "tintable": true,
    "layer": "outfit_noble",
    "art_layer": "outfit_kings_champion",
+   "hd_art": "outfit_kings_champion_hd",
    "sex": "male",
    "set": "set_kings_champion",
    "tier": 5,
@@ -4729,17 +4643,6 @@
     "e": 45,
     "w": 45,
     "n": 45
-   },
-   "upgrade": {
-    "levels": [
-     "Plain",
-     "Fine",
-     "Regal"
-    ],
-    "overlays": [
-     "outfit_kings_champion_l2",
-     "outfit_kings_champion_l3"
-    ]
    }
   },
   {
@@ -4841,6 +4744,7 @@
    "tintable": true,
    "layer": "outfit_noble",
    "art_layer": "outfit_prince_consort",
+   "hd_art": "outfit_prince_consort_hd",
    "sex": "male",
    "set": "set_prince_consort",
    "tier": 6,
@@ -4861,17 +4765,6 @@
     "e": 45,
     "w": 45,
     "n": 45
-   },
-   "upgrade": {
-    "levels": [
-     "Plain",
-     "Fine",
-     "Regal"
-    ],
-    "overlays": [
-     "outfit_prince_consort_l2",
-     "outfit_prince_consort_l3"
-    ]
    }
   },
   {
@@ -4976,6 +4869,7 @@
    "tintable": true,
    "layer": "outfit_noble",
    "art_layer": "outfit_king",
+   "hd_art": "outfit_king_hd",
    "sex": "male",
    "set": "set_king",
    "tier": 7,
@@ -4995,17 +4889,6 @@
     "e": 45,
     "w": 45,
     "n": 45
-   },
-   "upgrade": {
-    "levels": [
-     "Plain",
-     "Fine",
-     "Regal"
-    ],
-    "overlays": [
-     "outfit_king_l2",
-     "outfit_king_l3"
-    ]
    }
   },
   {
@@ -5097,6 +4980,804 @@
     "w": 85,
     "n": 85
    }
+  },
+  {
+   "id": "ov_flower_crown",
+   "slot": "head",
+   "name": "Flower Crown",
+   "price": 0,
+   "starter": true,
+   "overlay": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "ov_flower_crown",
+   "sex": "female",
+   "anchor": "head_top",
+   "regalia": false,
+   "z": {
+    "s": 74,
+    "e": 74,
+    "w": 74,
+    "n": 74
+   },
+   "tier": null,
+   "set": null
+  },
+  {
+   "id": "ov_cloth_cap",
+   "slot": "head",
+   "name": "Cloth Cap",
+   "price": 0,
+   "starter": true,
+   "overlay": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "ov_cloth_cap",
+   "sex": "male",
+   "anchor": "head_top",
+   "regalia": false,
+   "z": {
+    "s": 74,
+    "e": 74,
+    "w": 74,
+    "n": 74
+   },
+   "tier": null,
+   "set": null
+  },
+  {
+   "id": "ov_circlet",
+   "slot": "head",
+   "name": "Simple Circlet",
+   "price": 0,
+   "starter": true,
+   "overlay": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "ov_circlet",
+   "sex": null,
+   "anchor": "head_top",
+   "regalia": false,
+   "z": {
+    "s": 74,
+    "e": 74,
+    "w": 74,
+    "n": 74
+   },
+   "tier": null,
+   "set": null
+  },
+  {
+   "id": "ov_wool_cloak",
+   "slot": "cloak",
+   "name": "Plain Wool Cloak",
+   "price": 0,
+   "starter": true,
+   "overlay": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "ov_wool_cloak",
+   "sex": null,
+   "anchor": "shoulders",
+   "regalia": false,
+   "z": {
+    "s": 74,
+    "e": 74,
+    "w": 74,
+    "n": 74
+   },
+   "tier": null,
+   "set": null
+  },
+  {
+   "id": "ov_bead_necklace",
+   "slot": "jewellery",
+   "name": "Wooden-bead Necklace",
+   "price": 0,
+   "starter": true,
+   "overlay": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "ov_bead_necklace",
+   "sex": "female",
+   "anchor": "neck",
+   "regalia": false,
+   "z": {
+    "s": 74,
+    "e": 74,
+    "w": 74,
+    "n": 74
+   },
+   "tier": null,
+   "set": null
+  },
+  {
+   "id": "ov_signet_ring",
+   "slot": "jewellery",
+   "name": "Brass Signet Ring",
+   "price": 0,
+   "starter": true,
+   "overlay": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "ov_signet_ring",
+   "sex": "male",
+   "anchor": "hand_r",
+   "regalia": false,
+   "z": {
+    "s": 74,
+    "e": 74,
+    "w": 74,
+    "n": 74
+   },
+   "tier": null,
+   "set": null
+  },
+  {
+   "id": "ov_brooch",
+   "slot": "jewellery",
+   "name": "Brass Brooch",
+   "price": 0,
+   "starter": true,
+   "overlay": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": "ov_brooch",
+   "sex": null,
+   "anchor": "chest",
+   "regalia": false,
+   "z": {
+    "s": 74,
+    "e": 74,
+    "w": 74,
+    "n": 74
+   },
+   "tier": null,
+   "set": null
+  },
+  {
+   "id": "jw_m_iron_tooth_pendant",
+   "slot": "jewellery",
+   "name": "Iron Tooth Pendant",
+   "price": 0,
+   "starter": true,
+   "free_starter": true,
+   "overlay": true,
+   "hd_jewellery": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": null,
+   "card": "jewellery/cards/jw_m_iron_tooth_pendant.png",
+   "sex": "male",
+   "tier": null,
+   "set": null,
+   "anchor": "neck",
+   "regalia": false,
+   "fx": null,
+   "release": "live",
+   "review_score": 8,
+   "row": null,
+   "z": {
+    "s": 47,
+    "e": 47,
+    "w": 47,
+    "n": 47
+   }
+  },
+  {
+   "id": "jw_m_brass_signet_ring",
+   "slot": "jewellery",
+   "name": "Brass Signet Ring",
+   "price": 0,
+   "starter": true,
+   "free_starter": true,
+   "overlay": true,
+   "hd_jewellery": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": null,
+   "card": "jewellery/cards/jw_m_brass_signet_ring.png",
+   "sex": "male",
+   "tier": null,
+   "set": null,
+   "anchor": "hand",
+   "regalia": false,
+   "fx": null,
+   "release": "live",
+   "review_score": 8,
+   "row": null,
+   "z": {
+    "s": 47,
+    "e": 47,
+    "w": 47,
+    "n": 47
+   }
+  },
+  {
+   "id": "jw_u_brass_brooch",
+   "slot": "jewellery",
+   "name": "Brass Cloak Brooch",
+   "price": 0,
+   "starter": true,
+   "free_starter": true,
+   "overlay": true,
+   "hd_jewellery": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": null,
+   "card": "jewellery/cards/jw_u_brass_brooch.png",
+   "sex": null,
+   "tier": null,
+   "set": null,
+   "anchor": "chest",
+   "regalia": false,
+   "fx": null,
+   "release": "live",
+   "review_score": 8.5,
+   "row": null,
+   "z": {
+    "s": 47,
+    "e": 47,
+    "w": 47,
+    "n": 47
+   }
+  },
+  {
+   "id": "jw_f_bone_hair_comb",
+   "slot": "jewellery",
+   "name": "Bone Hair Comb",
+   "price": 0,
+   "starter": true,
+   "free_starter": true,
+   "overlay": true,
+   "hd_jewellery": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": null,
+   "card": "jewellery/cards/jw_f_bone_hair_comb.png",
+   "sex": "female",
+   "tier": null,
+   "set": null,
+   "anchor": "head_back",
+   "regalia": false,
+   "fx": null,
+   "release": "live",
+   "review_score": 8,
+   "row": null,
+   "z": {
+    "s": 47,
+    "e": 47,
+    "w": 47,
+    "n": 47
+   }
+  },
+  {
+   "id": "jw_f_silver_vine_bangle",
+   "slot": "jewellery",
+   "name": "Silver Vine Bangle",
+   "price": 0,
+   "starter": true,
+   "free_starter": true,
+   "overlay": true,
+   "hd_jewellery": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": null,
+   "card": "jewellery/cards/jw_f_silver_vine_bangle.png",
+   "sex": "female",
+   "tier": null,
+   "set": null,
+   "anchor": "wrist",
+   "regalia": false,
+   "fx": null,
+   "release": "live",
+   "review_score": 8,
+   "row": null,
+   "z": {
+    "s": 47,
+    "e": 47,
+    "w": 47,
+    "n": 47
+   }
+  },
+  {
+   "id": "jw_f_pearl_drop_earrings",
+   "slot": "jewellery",
+   "name": "Pearl Drop Earrings",
+   "price": 0,
+   "starter": true,
+   "free_starter": true,
+   "overlay": true,
+   "hd_jewellery": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": null,
+   "card": "jewellery/cards/jw_f_pearl_drop_earrings.png",
+   "sex": "female",
+   "tier": null,
+   "set": null,
+   "anchor": "ears",
+   "regalia": false,
+   "fx": null,
+   "release": "live",
+   "review_score": 8,
+   "row": null,
+   "z": {
+    "s": 47,
+    "e": 47,
+    "w": 47,
+    "n": 47
+   }
+  },
+  {
+   "id": "jw_f_wood_bead_necklace",
+   "slot": "jewellery",
+   "name": "Wood Bead Necklace",
+   "price": 0,
+   "starter": true,
+   "free_starter": true,
+   "overlay": true,
+   "hd_jewellery": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": null,
+   "card": "jewellery/cards/jw_f_wood_bead_necklace.png",
+   "sex": "female",
+   "tier": null,
+   "set": null,
+   "anchor": "neck",
+   "regalia": false,
+   "fx": null,
+   "release": "live",
+   "review_score": 8,
+   "row": null,
+   "z": {
+    "s": 47,
+    "e": 47,
+    "w": 47,
+    "n": 47
+   }
+  },
+  {
+   "id": "lx_f_diamond_gold_necklace",
+   "slot": "jewellery",
+   "name": "Diamond Gold Necklace",
+   "price": 40000,
+   "starter": false,
+   "free_starter": false,
+   "overlay": true,
+   "hd_jewellery": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": null,
+   "card": "jewellery/cards/lx_f_diamond_gold_necklace.png",
+   "sex": "female",
+   "tier": null,
+   "set": null,
+   "anchor": "neck",
+   "regalia": false,
+   "fx": {
+    "kind": "jw_sparkle",
+    "frames": 12,
+    "loop_s": 1.8,
+    "gem": "diamond"
+   },
+   "release": "live",
+   "review_score": 8.5,
+   "row": "Crown Jewels",
+   "z": {
+    "s": 47,
+    "e": 47,
+    "w": 47,
+    "n": 47
+   }
+  },
+  {
+   "id": "lx_f_ruby_ring",
+   "slot": "jewellery",
+   "name": "Ruby Ring",
+   "price": 12000,
+   "starter": false,
+   "free_starter": false,
+   "overlay": true,
+   "hd_jewellery": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": null,
+   "card": "jewellery/cards/lx_f_ruby_ring.png",
+   "sex": "female",
+   "tier": null,
+   "set": null,
+   "anchor": "hand",
+   "regalia": false,
+   "fx": {
+    "kind": "jw_sparkle",
+    "frames": 12,
+    "loop_s": 1.8,
+    "gem": "ruby"
+   },
+   "release": "live",
+   "review_score": 8,
+   "row": "Crown Jewels",
+   "z": {
+    "s": 47,
+    "e": 47,
+    "w": 47,
+    "n": 47
+   }
+  },
+  {
+   "id": "lx_f_ruby_parure",
+   "slot": "jewellery",
+   "name": "Ruby Parure",
+   "price": 50000,
+   "starter": false,
+   "free_starter": false,
+   "overlay": true,
+   "hd_jewellery": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": null,
+   "card": "jewellery/cards/lx_f_ruby_parure.png",
+   "sex": "female",
+   "tier": null,
+   "set": null,
+   "anchor": "neck+ears",
+   "regalia": false,
+   "fx": {
+    "kind": "jw_sparkle",
+    "frames": 12,
+    "loop_s": 1.8,
+    "gem": "ruby"
+   },
+   "release": "live",
+   "review_score": 8.5,
+   "row": "Crown Jewels",
+   "z": {
+    "s": 47,
+    "e": 47,
+    "w": 47,
+    "n": 47
+   }
+  },
+  {
+   "id": "lx_f_emerald_ring",
+   "slot": "jewellery",
+   "name": "Emerald Ring",
+   "price": 12000,
+   "starter": false,
+   "free_starter": false,
+   "overlay": true,
+   "hd_jewellery": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": null,
+   "card": "jewellery/cards/lx_f_emerald_ring.png",
+   "sex": "female",
+   "tier": null,
+   "set": null,
+   "anchor": "hand",
+   "regalia": false,
+   "fx": {
+    "kind": "jw_sparkle",
+    "frames": 12,
+    "loop_s": 1.8,
+    "gem": "emerald"
+   },
+   "release": "live",
+   "review_score": 8,
+   "row": "Crown Jewels",
+   "z": {
+    "s": 47,
+    "e": 47,
+    "w": 47,
+    "n": 47
+   }
+  },
+  {
+   "id": "lx_f_emerald_parure",
+   "slot": "jewellery",
+   "name": "Emerald Parure",
+   "price": 50000,
+   "starter": false,
+   "free_starter": false,
+   "overlay": true,
+   "hd_jewellery": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": null,
+   "card": "jewellery/cards/lx_f_emerald_parure.png",
+   "sex": "female",
+   "tier": null,
+   "set": null,
+   "anchor": "neck+ears",
+   "regalia": false,
+   "fx": {
+    "kind": "jw_sparkle",
+    "frames": 12,
+    "loop_s": 1.8,
+    "gem": "emerald"
+   },
+   "release": "live",
+   "review_score": 8.5,
+   "row": "Crown Jewels",
+   "z": {
+    "s": 47,
+    "e": 47,
+    "w": 47,
+    "n": 47
+   }
+  },
+  {
+   "id": "lx_f_sapphire_ring",
+   "slot": "jewellery",
+   "name": "Sapphire Ring",
+   "price": 12000,
+   "starter": false,
+   "free_starter": false,
+   "overlay": true,
+   "hd_jewellery": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": null,
+   "card": "jewellery/cards/lx_f_sapphire_ring.png",
+   "sex": "female",
+   "tier": null,
+   "set": null,
+   "anchor": "hand",
+   "regalia": false,
+   "fx": {
+    "kind": "jw_sparkle",
+    "frames": 12,
+    "loop_s": 1.8,
+    "gem": "sapphire"
+   },
+   "release": "live",
+   "review_score": 8,
+   "row": "Crown Jewels",
+   "z": {
+    "s": 47,
+    "e": 47,
+    "w": 47,
+    "n": 47
+   }
+  },
+  {
+   "id": "lx_f_sapphire_parure",
+   "slot": "jewellery",
+   "name": "Sapphire Parure",
+   "price": 50000,
+   "starter": false,
+   "free_starter": false,
+   "overlay": true,
+   "hd_jewellery": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": null,
+   "card": "jewellery/cards/lx_f_sapphire_parure.png",
+   "sex": "female",
+   "tier": null,
+   "set": null,
+   "anchor": "neck+ears",
+   "regalia": false,
+   "fx": {
+    "kind": "jw_sparkle",
+    "frames": 12,
+    "loop_s": 1.8,
+    "gem": "sapphire"
+   },
+   "release": "live",
+   "review_score": 8,
+   "row": "Crown Jewels",
+   "z": {
+    "s": 47,
+    "e": 47,
+    "w": 47,
+    "n": 47
+   }
+  },
+  {
+   "id": "lx_f_diamond_tiara",
+   "slot": "head",
+   "name": "Diamond Tiara",
+   "price": 60000,
+   "starter": false,
+   "free_starter": false,
+   "overlay": true,
+   "hd_jewellery": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": null,
+   "card": "jewellery/cards/lx_f_diamond_tiara.png",
+   "sex": "female",
+   "tier": null,
+   "set": null,
+   "anchor": "head_top",
+   "regalia": false,
+   "fx": {
+    "kind": "jw_sparkle",
+    "frames": 12,
+    "loop_s": 1.8,
+    "gem": "diamond"
+   },
+   "release": "live",
+   "review_score": 8,
+   "row": "Crown Jewels",
+   "z": {
+    "s": 47,
+    "e": 47,
+    "w": 47,
+    "n": 47
+   }
+  },
+  {
+   "id": "lx_f_diamond_drop_earrings",
+   "slot": "jewellery",
+   "name": "Diamond Drop Earrings",
+   "price": 25000,
+   "starter": false,
+   "free_starter": false,
+   "overlay": true,
+   "hd_jewellery": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": null,
+   "card": "jewellery/cards/lx_f_diamond_drop_earrings.png",
+   "sex": "female",
+   "tier": null,
+   "set": null,
+   "anchor": "ears",
+   "regalia": false,
+   "fx": {
+    "kind": "jw_sparkle",
+    "frames": 12,
+    "loop_s": 1.8,
+    "gem": "diamond"
+   },
+   "release": "live",
+   "review_score": 8,
+   "row": "Crown Jewels",
+   "z": {
+    "s": 47,
+    "e": 47,
+    "w": 47,
+    "n": 47
+   }
+  },
+  {
+   "id": "lx_f_gem_bracelet",
+   "slot": "jewellery",
+   "name": "Celestial Gem Bracelet",
+   "price": 30000,
+   "starter": false,
+   "free_starter": false,
+   "overlay": true,
+   "hd_jewellery": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": null,
+   "card": "jewellery/cards/lx_f_gem_bracelet.png",
+   "sex": "female",
+   "tier": null,
+   "set": null,
+   "anchor": "wrist",
+   "regalia": false,
+   "fx": {
+    "kind": "jw_sparkle",
+    "frames": 12,
+    "loop_s": 1.8,
+    "gem": "ruby"
+   },
+   "release": "live",
+   "review_score": 8,
+   "row": "Crown Jewels",
+   "z": {
+    "s": 47,
+    "e": 47,
+    "w": 47,
+    "n": 47
+   }
+  },
+  {
+   "id": "lx_f_lilac_necklace",
+   "slot": "jewellery",
+   "name": "Lilac Necklace",
+   "price": 45000,
+   "starter": false,
+   "free_starter": false,
+   "overlay": true,
+   "hd_jewellery": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": null,
+   "card": "jewellery/cards/lx_f_lilac_necklace.png",
+   "sex": "female",
+   "tier": null,
+   "set": null,
+   "anchor": "neck",
+   "regalia": false,
+   "fx": {
+    "kind": "jw_sparkle",
+    "frames": 12,
+    "loop_s": 1.8,
+    "gem": "lilac"
+   },
+   "release": "live",
+   "review_score": 8.5,
+   "row": "Crown Jewels",
+   "z": {
+    "s": 47,
+    "e": 47,
+    "w": 47,
+    "n": 47
+   }
+  },
+  {
+   "id": "lx_f_lilac_ring",
+   "slot": "jewellery",
+   "name": "Lilac Cocktail Ring",
+   "price": 20000,
+   "starter": false,
+   "free_starter": false,
+   "overlay": true,
+   "hd_jewellery": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": null,
+   "card": "jewellery/cards/lx_f_lilac_ring.png",
+   "sex": "female",
+   "tier": null,
+   "set": null,
+   "anchor": "hand",
+   "regalia": false,
+   "fx": {
+    "kind": "jw_sparkle",
+    "frames": 12,
+    "loop_s": 1.8,
+    "gem": "lilac"
+   },
+   "release": "live",
+   "review_score": 8,
+   "row": "Crown Jewels",
+   "z": {
+    "s": 47,
+    "e": 47,
+    "w": 47,
+    "n": 47
+   }
+  },
+  {
+   "id": "lx_bundle_lilac_set",
+   "slot": "bundle",
+   "name": "Lilac Set",
+   "price": 55000,
+   "starter": false,
+   "free_starter": false,
+   "overlay": true,
+   "hd_jewellery": true,
+   "tintable": false,
+   "layer": null,
+   "art_layer": null,
+   "card": "jewellery/cards/lx_bundle_lilac_set.png",
+   "sex": "female",
+   "tier": null,
+   "set": null,
+   "anchor": null,
+   "regalia": false,
+   "fx": null,
+   "release": "live",
+   "review_score": 8,
+   "row": null,
+   "z": {
+    "s": 47,
+    "e": 47,
+    "w": 47,
+    "n": 47
+   },
+   "bundle": [
+    "lx_f_lilac_necklace",
+    "lx_f_lilac_ring"
+   ]
   }
  ],
  "hair_palette": [
@@ -5106,7 +5787,8 @@
     62,
     54,
     50
-   ]
+   ],
+   "name": "Black"
   },
   {
    "id": "dark_brown",
@@ -5114,7 +5796,8 @@
     112,
     76,
     52
-   ]
+   ],
+   "name": "Dark brown"
   },
   {
    "id": "chestnut",
@@ -5122,7 +5805,8 @@
     150,
     92,
     52
-   ]
+   ],
+   "name": "Chestnut"
   },
   {
    "id": "auburn",
@@ -5130,7 +5814,8 @@
     168,
     74,
     44
-   ]
+   ],
+   "name": "Auburn"
   },
   {
    "id": "copper",
@@ -5138,7 +5823,17 @@
     210,
     112,
     58
-   ]
+   ],
+   "name": "Copper"
+  },
+  {
+   "id": "ginger",
+   "mul": [
+    196,
+    92,
+    40
+   ],
+   "name": "Ginger"
   },
   {
    "id": "honey",
@@ -5146,7 +5841,8 @@
     226,
     170,
     96
-   ]
+   ],
+   "name": "Honey blonde"
   },
   {
    "id": "blonde",
@@ -5154,15 +5850,8 @@
     250,
     216,
     150
-   ]
-  },
-  {
-   "id": "platinum",
-   "mul": [
-    255,
-    248,
-    228
-   ]
+   ],
+   "name": "Ash blonde"
   },
   {
    "id": "ash_grey",
@@ -5170,7 +5859,26 @@
     200,
     200,
     204
-   ]
+   ],
+   "name": "Grey"
+  },
+  {
+   "id": "white",
+   "mul": [
+    236,
+    232,
+    226
+   ],
+   "name": "White"
+  },
+  {
+   "id": "platinum",
+   "mul": [
+    255,
+    248,
+    228
+   ],
+   "legacy": true
   },
   {
    "id": "forest",
@@ -5178,7 +5886,8 @@
     88,
     140,
     84
-   ]
+   ],
+   "legacy": true
   },
   {
    "id": "azure",
@@ -5186,7 +5895,8 @@
     92,
     128,
     214
-   ]
+   ],
+   "legacy": true
   },
   {
    "id": "rose",
@@ -5194,7 +5904,8 @@
     222,
     116,
     160
-   ]
+   ],
+   "legacy": true
   }
  ],
  "armour_layers": [
@@ -10449,8 +11160,8 @@
  "skin_palette": [
   {
    "id": "tone_1",
-   "name": "Porcelain",
-   "hex": "#F6E3D6"
+   "name": "Light fair",
+   "hex": "#F5DAC7"
   },
   {
    "id": "tone_2",
@@ -10687,19 +11398,15 @@
     "village_lady_basket"
    ],
    "hair": "hair_braid",
-   "palettes": [
-    "t1_moss",
-    "t1_earth",
-    "t1_cornflower"
-   ],
    "price": 600,
-   "upgrade_prices": [
-    300,
-    600
-   ],
-   "palette_price": 100,
    "unlock": null,
-   "back_hint": false
+   "back_hint": false,
+   "painted": {
+    "head": true,
+    "neck": false,
+    "cloak": false
+   },
+   "anchors": "hd/assets_out/female/set_village_lady/anchors.json"
   },
   "set_court_gown": {
    "id": "set_court_gown",
@@ -10712,21 +11419,17 @@
     "court_gown_pearl_earrings"
    ],
    "hair": "hair_long_straight",
-   "palettes": [
-    "t2_royal_blue",
-    "t2_forest",
-    "t2_chestnut"
-   ],
    "price": 2500,
-   "upgrade_prices": [
-    1250,
-    2500
-   ],
-   "palette_price": 400,
    "unlock": {
     "rep": "Respected"
    },
-   "back_hint": false
+   "back_hint": false,
+   "painted": {
+    "head": true,
+    "neck": false,
+    "cloak": false
+   },
+   "anchors": "hd/assets_out/female/set_court_gown/anchors.json"
   },
   "set_noble_lady": {
    "id": "set_noble_lady",
@@ -10739,21 +11442,17 @@
     "noble_lady_hair_pins"
    ],
    "hair": "hair_shoulder_wavy",
-   "palettes": [
-    "t3_plum",
-    "t3_blue",
-    "t3_black"
-   ],
    "price": 7500,
-   "upgrade_prices": [
-    3750,
-    7500
-   ],
-   "palette_price": 1000,
    "unlock": {
     "rank": 2
    },
-   "back_hint": false
+   "back_hint": false,
+   "painted": {
+    "head": false,
+    "neck": true,
+    "cloak": false
+   },
+   "anchors": "hd/assets_out/female/set_noble_lady/anchors.json"
   },
   "set_countess": {
    "id": "set_countess",
@@ -10767,21 +11466,17 @@
     "countess_ruby_choker"
    ],
    "hair": "hair_long_straight",
-   "palettes": [
-    "t4_crimson",
-    "t4_green",
-    "t4_purple"
-   ],
    "price": 25000,
-   "upgrade_prices": [
-    12500,
-    25000
-   ],
-   "palette_price": 3000,
    "unlock": {
     "rank": 4
    },
-   "back_hint": true
+   "back_hint": true,
+   "painted": {
+    "head": true,
+    "neck": true,
+    "cloak": true
+   },
+   "anchors": "hd/assets_out/female/set_countess/anchors.json"
   },
   "set_royal_favourite": {
    "id": "set_royal_favourite",
@@ -10795,17 +11490,7 @@
     "royal_favourite_pearl_drop"
    ],
    "hair": "hair_shoulder_wavy",
-   "palettes": [
-    "t5_ivory",
-    "t5_pale_blue",
-    "t5_blush"
-   ],
    "price": 60000,
-   "upgrade_prices": [
-    30000,
-    60000
-   ],
-   "palette_price": 6000,
    "unlock": {
     "any": [
      {
@@ -10817,7 +11502,13 @@
      }
     ]
    },
-   "back_hint": false
+   "back_hint": false,
+   "painted": {
+    "head": true,
+    "neck": true,
+    "cloak": false
+   },
+   "anchors": "hd/assets_out/female/set_royal_favourite/anchors.json"
   },
   "set_princess_consort": {
    "id": "set_princess_consort",
@@ -10831,17 +11522,7 @@
     "princess_consort_sapphire_parure"
    ],
    "hair": "hair_long_straight",
-   "palettes": [
-    "t6_pale_blue",
-    "t6_ivory",
-    "t6_purple"
-   ],
    "price": 120000,
-   "upgrade_prices": [
-    60000,
-    120000
-   ],
-   "palette_price": 10000,
    "unlock": {
     "any": [
      {
@@ -10855,7 +11536,13 @@
      }
     ]
    },
-   "back_hint": true
+   "back_hint": true,
+   "painted": {
+    "head": true,
+    "neck": true,
+    "cloak": true
+   },
+   "anchors": "hd/assets_out/female/set_princess_consort/anchors.json"
   },
   "set_queen": {
    "id": "set_queen",
@@ -10869,23 +11556,19 @@
     "queen_gold_collar"
    ],
    "hair": "hair_long_straight",
-   "palettes": [
-    "t7_black",
-    "t7_crimson",
-    "t7_royal_blue"
-   ],
    "price": 250000,
-   "upgrade_prices": [
-    125000,
-    250000
-   ],
-   "palette_price": 20000,
    "unlock": {
     "title": [
      "Queen"
     ]
    },
-   "back_hint": true
+   "back_hint": true,
+   "painted": {
+    "head": true,
+    "neck": true,
+    "cloak": true
+   },
+   "anchors": "hd/assets_out/female/set_queen/anchors.json"
   },
   "set_villager": {
    "id": "set_villager",
@@ -10898,19 +11581,15 @@
     "villager_belt_pouch"
    ],
    "hair": "hair_crop",
-   "palettes": [
-    "t1_moss",
-    "t1_earth",
-    "t1_cornflower"
-   ],
    "price": 600,
-   "upgrade_prices": [
-    300,
-    600
-   ],
-   "palette_price": 100,
    "unlock": null,
-   "back_hint": false
+   "back_hint": false,
+   "painted": {
+    "head": false,
+    "neck": false,
+    "cloak": false
+   },
+   "anchors": "hd/assets_out/male/set_villager/anchors.json"
   },
   "set_squire": {
    "id": "set_squire",
@@ -10924,21 +11603,17 @@
     "squire_signet"
    ],
    "hair": "hair_side_part",
-   "palettes": [
-    "t2_royal_blue",
-    "t2_forest",
-    "t2_chestnut"
-   ],
    "price": 2500,
-   "upgrade_prices": [
-    1250,
-    2500
-   ],
-   "palette_price": 400,
    "unlock": {
     "rep": "Respected"
    },
-   "back_hint": false
+   "back_hint": false,
+   "painted": {
+    "head": false,
+    "neck": false,
+    "cloak": false
+   },
+   "anchors": "hd/assets_out/male/set_squire/anchors.json"
   },
   "set_noble_lord": {
    "id": "set_noble_lord",
@@ -10951,21 +11626,17 @@
     "noble_lord_amethyst_brooch"
    ],
    "hair": "hair_side_part",
-   "palettes": [
-    "t3_plum",
-    "t3_blue",
-    "t3_black"
-   ],
    "price": 7500,
-   "upgrade_prices": [
-    3750,
-    7500
-   ],
-   "palette_price": 1000,
    "unlock": {
     "rank": 2
    },
-   "back_hint": false
+   "back_hint": false,
+   "painted": {
+    "head": false,
+    "neck": true,
+    "cloak": false
+   },
+   "anchors": "hd/assets_out/male/set_noble_lord/anchors.json"
   },
   "set_count": {
    "id": "set_count",
@@ -10979,21 +11650,17 @@
     "count_ruby_signet"
    ],
    "hair": "hair_side_part",
-   "palettes": [
-    "t4_crimson",
-    "t4_green",
-    "t4_purple"
-   ],
    "price": 25000,
-   "upgrade_prices": [
-    12500,
-    25000
-   ],
-   "palette_price": 3000,
    "unlock": {
     "rank": 4
    },
-   "back_hint": true
+   "back_hint": true,
+   "painted": {
+    "head": true,
+    "neck": true,
+    "cloak": true
+   },
+   "anchors": "hd/assets_out/male/set_count/anchors.json"
   },
   "set_kings_champion": {
    "id": "set_kings_champion",
@@ -11007,23 +11674,19 @@
     "kings_champion_sash_knot"
    ],
    "hair": "hair_crop",
-   "palettes": [
-    "t5_ivory",
-    "t5_pale_blue",
-    "t5_blush"
-   ],
    "price": 60000,
-   "upgrade_prices": [
-    30000,
-    60000
-   ],
-   "palette_price": 6000,
    "unlock": {
     "rank": 4,
     "rep": "Revered",
     "challenge_guild": true
    },
-   "back_hint": false
+   "back_hint": false,
+   "painted": {
+    "head": true,
+    "neck": true,
+    "cloak": false
+   },
+   "anchors": "hd/assets_out/male/set_kings_champion/anchors.json"
   },
   "set_prince_consort": {
    "id": "set_prince_consort",
@@ -11037,24 +11700,20 @@
     "prince_consort_order_star"
    ],
    "hair": "hair_side_part",
-   "palettes": [
-    "t6_pale_blue",
-    "t6_ivory",
-    "t6_purple"
-   ],
    "price": 120000,
-   "upgrade_prices": [
-    60000,
-    120000
-   ],
-   "palette_price": 10000,
    "unlock": {
     "title": [
      "Prince Consort",
      "King"
     ]
    },
-   "back_hint": false
+   "back_hint": false,
+   "painted": {
+    "head": true,
+    "neck": true,
+    "cloak": true
+   },
+   "anchors": "hd/assets_out/male/set_prince_consort/anchors.json"
   },
   "set_king": {
    "id": "set_king",
@@ -11068,23 +11727,19 @@
     "king_sceptre_chain"
    ],
    "hair": "hair_side_part",
-   "palettes": [
-    "t7_black",
-    "t7_crimson",
-    "t7_royal_blue"
-   ],
    "price": 250000,
-   "upgrade_prices": [
-    125000,
-    250000
-   ],
-   "palette_price": 20000,
    "unlock": {
     "title": [
      "King"
     ]
    },
-   "back_hint": true
+   "back_hint": true,
+   "painted": {
+    "head": true,
+    "neck": true,
+    "cloak": true
+   },
+   "anchors": "hd/assets_out/male/set_king/anchors.json"
   }
  },
  "set_order": {
@@ -11108,7 +11763,7 @@
   ]
  },
  "set_bundle_discount": 0.15,
- "jewellery_max": 3,
+ "jewellery_max": 2,
  "saved_outfit_slots": 6,
  "tier_colours": {
   "1": [
@@ -11146,5 +11801,441 @@
    175,
    90
   ]
+ },
+ "starter_sets": {
+  "male": "set_villager",
+  "female": "set_village_lady"
+ },
+ "hair_swatches": [
+  "black",
+  "dark_brown",
+  "chestnut",
+  "auburn",
+  "copper",
+  "ginger",
+  "honey",
+  "blonde",
+  "ash_grey",
+  "white"
+ ],
+ "appearance_version": 2,
+ "sidebar_tabs": [
+  "sets",
+  "head",
+  "accessories",
+  "hair",
+  "body",
+  "wardrobe"
+ ],
+ "collection": [
+  {
+   "id": "set_fire_f",
+   "name": "Ember Court",
+   "sex": "female",
+   "tier": null,
+   "purchase_only": true,
+   "price": 25000,
+   "release": "live",
+   "element": "fire",
+   "art": "hd/sets/set_fire_f/{s,e,n}.png",
+   "ref": "sidebar/elemental/set_fire_f.jpg",
+   "regalia": false,
+   "review_score": 8,
+   "review_notes": "",
+   "hd_art": "outfit_set_fire_f_hd",
+   "fx": {
+    "element": "fire",
+    "frames": 16,
+    "fps": 8,
+    "layers": [
+     "back",
+     "front"
+    ]
+   },
+   "painted": {
+    "neck": true
+   }
+  },
+  {
+   "id": "set_fire_m",
+   "name": "Ember Lord",
+   "sex": "male",
+   "tier": null,
+   "purchase_only": true,
+   "price": 25000,
+   "release": "live",
+   "element": "fire",
+   "art": "hd/sets/set_fire_m/{s,e,n}.png",
+   "ref": "sidebar/elemental/set_fire_m.jpg",
+   "regalia": false,
+   "review_score": 8,
+   "review_notes": "",
+   "hd_art": "outfit_set_fire_m_hd",
+   "fx": {
+    "element": "fire",
+    "frames": 16,
+    "fps": 8,
+    "layers": [
+     "back",
+     "front"
+    ]
+   }
+  },
+  {
+   "id": "set_frost_f",
+   "name": "Frost Queen",
+   "sex": "female",
+   "tier": null,
+   "purchase_only": true,
+   "price": 25000,
+   "release": "coming_soon",
+   "element": "frost",
+   "art": "hd/sets/set_frost_f/{s,e,n}.png",
+   "ref": "sidebar/elemental/set_frost_f.jpg",
+   "regalia": false,
+   "review_score": null,
+   "review_notes": ""
+  },
+  {
+   "id": "set_frost_m",
+   "name": "Frost King",
+   "sex": "male",
+   "tier": null,
+   "purchase_only": true,
+   "price": 25000,
+   "release": "coming_soon",
+   "element": "frost",
+   "art": "hd/sets/set_frost_m/{s,e,n}.png",
+   "ref": "sidebar/elemental/set_frost_m.jpg",
+   "regalia": false,
+   "review_score": null,
+   "review_notes": ""
+  },
+  {
+   "id": "set_storm_f",
+   "name": "Tempest",
+   "sex": "female",
+   "tier": null,
+   "purchase_only": true,
+   "price": 25000,
+   "release": "coming_soon",
+   "element": "storm",
+   "art": "hd/sets/set_storm_f/{s,e,n}.png",
+   "ref": "sidebar/elemental/set_storm_f.jpg",
+   "regalia": false,
+   "review_score": null,
+   "review_notes": ""
+  },
+  {
+   "id": "set_storm_m",
+   "name": "Storm Coat",
+   "sex": "male",
+   "tier": null,
+   "purchase_only": true,
+   "price": 25000,
+   "release": "coming_soon",
+   "element": "storm",
+   "art": "hd/sets/set_storm_m/{s,e,n}.png",
+   "ref": "sidebar/elemental/set_storm_m.jpg",
+   "regalia": false,
+   "review_score": null,
+   "review_notes": ""
+  },
+  {
+   "id": "set_shadow_f",
+   "name": "Midnight Rose",
+   "sex": "female",
+   "tier": null,
+   "purchase_only": true,
+   "price": 25000,
+   "release": "coming_soon",
+   "element": "shadow",
+   "art": "hd/sets/set_shadow_f/{s,e,n}.png",
+   "ref": "sidebar/elemental/set_shadow_f.jpg",
+   "regalia": false,
+   "review_score": null,
+   "review_notes": ""
+  },
+  {
+   "id": "set_shadow_m",
+   "name": "Shadow Cloak",
+   "sex": "male",
+   "tier": null,
+   "purchase_only": true,
+   "price": 25000,
+   "release": "coming_soon",
+   "element": "shadow",
+   "art": "hd/sets/set_shadow_m/{s,e,n}.png",
+   "ref": "sidebar/elemental/set_shadow_m.jpg",
+   "regalia": false,
+   "review_score": null,
+   "review_notes": ""
+  },
+  {
+   "id": "set_nature_f",
+   "name": "Verdant",
+   "sex": "female",
+   "tier": null,
+   "purchase_only": true,
+   "price": 25000,
+   "release": "coming_soon",
+   "element": "nature",
+   "art": "hd/sets/set_nature_f/{s,e,n}.png",
+   "ref": "sidebar/elemental/set_nature_f.jpg",
+   "regalia": false,
+   "review_score": null,
+   "review_notes": ""
+  },
+  {
+   "id": "set_nature_m",
+   "name": "Vine Lord",
+   "sex": "male",
+   "tier": null,
+   "purchase_only": true,
+   "price": 25000,
+   "release": "coming_soon",
+   "element": "nature",
+   "art": "hd/sets/set_nature_m/{s,e,n}.png",
+   "ref": "sidebar/elemental/set_nature_m.jpg",
+   "regalia": false,
+   "review_score": null,
+   "review_notes": ""
+  },
+  {
+   "id": "set_water_f",
+   "name": "Tide Gown",
+   "sex": "female",
+   "tier": null,
+   "purchase_only": true,
+   "price": 25000,
+   "release": "live",
+   "element": "water",
+   "art": "hd/sets/set_water_f/{s,e,n}.png",
+   "ref": "sidebar/elemental/set_water_f.jpg",
+   "regalia": false,
+   "review_score": 8,
+   "review_notes": "",
+   "hd_art": "outfit_set_water_f_hd",
+   "fx": {
+    "element": "water",
+    "frames": 16,
+    "fps": 8,
+    "layers": [
+     "back",
+     "front"
+    ]
+   },
+   "painted": {
+    "neck": true,
+    "head": true
+   }
+  },
+  {
+   "id": "set_water_m",
+   "name": "Tide Lord",
+   "sex": "male",
+   "tier": null,
+   "purchase_only": true,
+   "price": 25000,
+   "release": "live",
+   "element": "water",
+   "art": "hd/sets/set_water_m/{s,e,n}.png",
+   "ref": "sidebar/elemental/set_water_m.jpg",
+   "regalia": false,
+   "review_score": 8,
+   "review_notes": "",
+   "hd_art": "outfit_set_water_m_hd",
+   "fx": {
+    "element": "water",
+    "frames": 16,
+    "fps": 8,
+    "layers": [
+     "back",
+     "front"
+    ]
+   },
+   "painted": {
+    "collar": true
+   }
+  },
+  {
+   "id": "set_light_f",
+   "name": "Sun Queen",
+   "sex": "female",
+   "tier": null,
+   "purchase_only": true,
+   "price": 25000,
+   "release": "coming_soon",
+   "element": "light",
+   "art": "hd/sets/set_light_f/{s,e,n}.png",
+   "ref": "sidebar/elemental/set_light_f.jpg",
+   "regalia": false,
+   "review_score": null,
+   "review_notes": ""
+  },
+  {
+   "id": "set_light_m",
+   "name": "Sun King",
+   "sex": "male",
+   "tier": null,
+   "purchase_only": true,
+   "price": 25000,
+   "release": "coming_soon",
+   "element": "light",
+   "art": "hd/sets/set_light_m/{s,e,n}.png",
+   "ref": "sidebar/elemental/set_light_m.jpg",
+   "regalia": false,
+   "review_score": null,
+   "review_notes": ""
+  }
+ ],
+ "legacy_map": {
+  "outfit_noble": {
+   "tier": 3,
+   "fallback_tier": 1
+  },
+  "_default": {
+   "tier": 1
+  },
+  "skin": {
+   "skin_light": "tone_2",
+   "skin_tan": "tone_5",
+   "skin_deep": "tone_8",
+   "skin_base": "tone_3"
+  }
+ },
+ "legacy_prices": {
+  "garment_palettes": {
+   "t1_moss": 100,
+   "t1_earth": 100,
+   "t1_cornflower": 100,
+   "t2_royal_blue": 400,
+   "t2_forest": 400,
+   "t2_chestnut": 400,
+   "t3_plum": 1000,
+   "t3_blue": 1000,
+   "t3_black": 1000,
+   "t4_crimson": 3000,
+   "t4_green": 3000,
+   "t4_purple": 3000,
+   "t5_ivory": 6000,
+   "t5_pale_blue": 6000,
+   "t5_blush": 6000,
+   "t6_pale_blue": 10000,
+   "t6_ivory": 10000,
+   "t6_purple": 10000,
+   "t7_black": 20000,
+   "t7_crimson": 20000,
+   "t7_royal_blue": 20000
+  },
+  "sets": {
+   "set_village_lady": {
+    "palette_price": 100,
+    "upgrade_prices": [
+     300,
+     600
+    ]
+   },
+   "set_court_gown": {
+    "palette_price": 400,
+    "upgrade_prices": [
+     1250,
+     2500
+    ]
+   },
+   "set_noble_lady": {
+    "palette_price": 1000,
+    "upgrade_prices": [
+     3750,
+     7500
+    ]
+   },
+   "set_countess": {
+    "palette_price": 3000,
+    "upgrade_prices": [
+     12500,
+     25000
+    ]
+   },
+   "set_royal_favourite": {
+    "palette_price": 6000,
+    "upgrade_prices": [
+     30000,
+     60000
+    ]
+   },
+   "set_princess_consort": {
+    "palette_price": 10000,
+    "upgrade_prices": [
+     60000,
+     120000
+    ]
+   },
+   "set_queen": {
+    "palette_price": 20000,
+    "upgrade_prices": [
+     125000,
+     250000
+    ]
+   },
+   "set_villager": {
+    "palette_price": 100,
+    "upgrade_prices": [
+     300,
+     600
+    ]
+   },
+   "set_squire": {
+    "palette_price": 400,
+    "upgrade_prices": [
+     1250,
+     2500
+    ]
+   },
+   "set_noble_lord": {
+    "palette_price": 1000,
+    "upgrade_prices": [
+     3750,
+     7500
+    ]
+   },
+   "set_count": {
+    "palette_price": 3000,
+    "upgrade_prices": [
+     12500,
+     25000
+    ]
+   },
+   "set_kings_champion": {
+    "palette_price": 6000,
+    "upgrade_prices": [
+     30000,
+     60000
+    ]
+   },
+   "set_prince_consort": {
+    "palette_price": 10000,
+    "upgrade_prices": [
+     60000,
+     120000
+    ]
+   },
+   "set_king": {
+    "palette_price": 20000,
+    "upgrade_prices": [
+     125000,
+     250000
+    ]
+   }
+  }
+ },
+ "anchors": {
+  "ear_l": "jw_anchors.json:ear_l",
+  "ear_r": "jw_anchors.json:ear_r",
+  "head_back": "jw_anchors.json:head_back"
+ },
+ "painting_flags": {
+  "hair_covers_ears": "Earrings hidden when the painted hair covers the ears",
+  "painted.sleeves_long": "Bracelets/bangles hidden under long painted sleeves"
  }
 }

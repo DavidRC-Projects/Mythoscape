@@ -9,12 +9,12 @@ import feature_flags
 import reputation
 import royal_treasury
 
-# Houses are re-laid on open grass. The office is the northernmost building
-# so it is the first thing you reach. Gaps between footprints are 5 or 6 tiles.
-# King's Folly's pack spot crossed the dungeon, and the row is too wide for
-# the west meadow, so the smaller homes continue on the grass south of the city.
+# Houses are re-laid on open grass. The estate office door sits at the
+# village north fringe (player stand). King's Folly's pack spot crossed the
+# dungeon, and the row is too wide for the west meadow, so the smaller homes
+# continue on the grass south of the city.
 _LAYOUT = {
-    "estate_office": (2, 94),
+    "estate_office": (81, 6),       # NW corner → door (85, 10)
     "kings_folly": (2, 109),
     "crown_villa": (25, 109),
     "cedar_townhouse": (16, 111),
@@ -137,10 +137,10 @@ def attach(npcs):
         "x": int(enter[0]),
         "y": int(enter[1]),
         "lines": [
-            "King's Row. The office is the building to the north. Homes are south of it, and more stand along the south road.",
+            "Estate office. Cottages and manors also line King's Row and the south road by Stonehaven.",
+            "If you already own a home: press M for Travel → My Home, or Teleport → My Home.",
             "The weekly lease is 50,000 gold. Miss it, and you have a week of grace.",
-            "The King also takes a land fee of 500 gold a day.",
-            "Press B to see what is still for sale.",
+            "The King also takes a land fee of 500 gold a day. Press B to browse vacant homes and plots.",
         ],
         "housing": True,
     })
@@ -195,7 +195,8 @@ def stamp(grid, wm):
     def claim(x, y, tile):
         if not (0 <= y < len(grid) and 0 <= x < len(grid[0])):
             return
-        if 44 <= x <= 90:
+        # Old overworld dungeon field (explore_dungeons hide rect) — leave alone.
+        if 44 <= x <= 90 and 54 <= y <= 143:
             return
         if grid[y][x] not in (wm.GRASS, wm.TREE, wm.PATH, wm.WALL, wm.FLOOR):
             return
@@ -249,6 +250,34 @@ def public_owners(conn):
     return {key: row["owner_name"] for key, row in owners(conn).items()}
 
 
+def owned_house_key(conn, player_id):
+    row = conn.execute(
+        "SELECT house_key FROM housing_deeds WHERE owner_id = ?", (int(player_id),),
+    ).fetchone()
+    return row[0] if row else None
+
+
+def home_info(conn, player_id):
+    """Public home pin for travel / teleport / map. None if the player has no deed."""
+    key = owned_house_key(conn, player_id)
+    if not key:
+        return None
+    house = house_by_key(key)
+    if not house or house.get("office"):
+        return None
+    door = house.get("door") or {}
+    exit_xy = door.get("exit") or [door.get("x"), door.get("y")]
+    if exit_xy[0] is None or exit_xy[1] is None:
+        return None
+    return {
+        "key": key,
+        "name": house.get("name") or key,
+        "x": int(exit_xy[0]),
+        "y": int(exit_xy[1]),
+        "blurb": f"Your home — {house.get('name') or key}",
+    }
+
+
 def lots(conn):
     owned = owners(conn)
     out = []
@@ -286,6 +315,15 @@ async def on_login(session):
     await settle_lease(session, quiet=False)
     await settle_land_fee(session, quiet=False)
     await _send(session.ws, "HOUSING_OWNERS", owners=public_owners(_WORLD.db.conn))
+    home = home_info(_WORLD.db.conn, session.player_id)
+    if home:
+        await _send(session.ws, "CHAT_MSG", **{
+            "from": "Estate",
+            "text": (
+                f"Your home is {home['name']} at ({home['x']}, {home['y']}) — "
+                f"south road, east of Stonehaven. Press M → My Home, or Teleport → My Home."
+            ),
+        })
 
 
 async def open_lots(session):
@@ -327,9 +365,14 @@ async def buy(session, key):
             "text": "Your pack is full. The deed is recorded at the office; make a space and speak to Mira again.",
         })
     await _send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    door = house.get("door") or {}
+    ex, ey = door.get("exit") or [door.get("x"), door.get("y")]
     await _send(session.ws, "CHAT_MSG", **{
         "from": "Estate Agent Mira",
-        "text": f"{house['name']} is yours. The first lease is due in seven days.",
+        "text": (
+            f"{house['name']} is yours. Door at ({int(ex)}, {int(ey)}). "
+            f"Press M → My Home anytime. First lease is due in seven days."
+        ),
     })
     await _broadcast_owners()
     await open_lots(session)

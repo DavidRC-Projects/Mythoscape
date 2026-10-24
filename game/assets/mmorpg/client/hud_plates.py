@@ -438,12 +438,15 @@ def _draw_minimap(client):
         client.draw_minimap(plate_rect=hole)
     else:
         client.minimap_rect = hole
-    zone = hud_v2._zone(client)
-    name = hud_v2.ZONE_NAMES.get(zone, str(zone).replace("_", " ").title())
-    px, py = client.player_xy()
+    env = getattr(client, "env", None) or {}
+    lab = env.get("label") or {}
+    line = lab.get("line") or f"{lab.get('season', '')} · {lab.get('phase', '')}".strip(" ·")
+    if not line or line == "·":
+        zone = hud_v2._zone(client)
+        line = hud_v2.ZONE_NAMES.get(zone, str(zone).replace("_", " ").title())
     label = _local(client, "minimap", _plate("minimap")["holes"]["location_text"]["box"])
     _clear(label, client.screen)
-    _clip_text(client, client.font_tiny, f"{name}  {int(px)}, {int(py)}", label, INK, align="center")
+    _clip_text(client, client.font_tiny, line, label, INK, align="center")
 
 
 def _draw_nav(client):
@@ -902,13 +905,19 @@ def _dispatch(client, action, hit, button):
         client.add_chat(f"You: {phrase}", color=hud_v2.CHANNEL_COLOR["world"])
         return
     if action == "chat_focus":
-        client.chat_typing = True
+        if hasattr(client, "_begin_chat_typing"):
+            client._begin_chat_typing()
+        else:
+            client.chat_typing = True
         return
     if action == "chat_send":
         if client.chat_text.strip():
             client.net.send("CHAT", text=client.chat_text.strip())
-        client.chat_typing = False
-        client.chat_text = ""
+        if hasattr(client, "_end_chat_typing"):
+            client._end_chat_typing()
+        else:
+            client.chat_typing = False
+            client.chat_text = ""
         return
 
 

@@ -1,5 +1,6 @@
 """Fishing spots deplete and move (COMBAT_SKILLING_SPEC part 3, 10-20 shared catches). Run: python3 tools/test_fishing_spots.py"""
 import asyncio
+import json
 import os
 import random
 import sys
@@ -130,7 +131,8 @@ def test_one_start_per_tick():
     assert a.gathering_node == pos and n >= 1
     a.gathering_node = None
     _run(server.handle_gather(a, {"x": pos[0], "y": pos[1]}))
-    assert a.gathering_node is None and len(a.ws.sent) == n      # ignored, same tick
+    assert a.gathering_node is None and len(a.ws.sent) == n + 1  # refused this tick, with a message
+    assert "already gathering" in json.dumps(a.ws.sent[-1])
     W.tick_count += 1
     _run(server.handle_gather(a, {"x": pos[0], "y": pos[1]}))
     assert a.gathering_node == pos

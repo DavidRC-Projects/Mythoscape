@@ -79,11 +79,10 @@ def test_catalogue():
     for sid, entry in cat["sets"].items():
         for p in entry["pieces"]:
             assert p in ids and ids[p]["set"] == sid, (sid, p)
-        for pal in entry["palettes"]:
-            assert pal in cat["garment_palettes"], pal
+        assert "palettes" not in entry and set(entry["painted"]) == {"head", "neck", "cloak"}, sid   # sidebar v2
     for slot in ("head", "jewellery", "cloak", "held"):
         assert slot in cat["slots"]
-    assert cat["jewellery_max"] == 3
+    assert cat["jewellery_max"] == 2      # sidebar v2: max 2 in v1
     for i in cat["items"]:
         assert "sex" in i and "tier" in i, i["id"]
         assert "gender_exclusive" not in i
@@ -125,10 +124,11 @@ def test_legacy_skin_alias_and_render():
 
 
 def _render(sex, tone, anim="idle", facing="s", tile=80):
-    surf = pygame.Surface((240, 240), pygame.SRCALPHA)
+    size = max(240, tile * 4)          # a 160 px tile overflowed the old 240 px canvas (face cut off)
+    surf = pygame.Surface((size, size), pygame.SRCALPHA)
     look = hd.get_default_appearance(sex)
     look["skin_tone"] = tone
-    assert hd.draw_player(surf, sex, look, 120, 220, tile, 0.1, anim=anim, facing=facing)
+    assert hd.draw_player(surf, sex, look, size // 2, size - 20, tile, 0.1, anim=anim, facing=facing)
     return surf
 
 
@@ -150,7 +150,8 @@ def test_tones_tint_skin_only():
                                 diff += 1
                             else:
                                 same += 1
-                    assert diff > 0, (sex, anim, facing, tile)          # skin changed
+                    if facing != "n":   # tint is face-only; from behind no face shows
+                        assert diff > 0, (sex, anim, facing, tile)      # skin changed
                     assert same > diff, (sex, anim, facing, tile)       # clothing/hair did not
 
 
@@ -243,16 +244,18 @@ def test_pricing_and_buy():
     import reputation
     duke = make("male", rep=900, rank=5)
     assert reputation.buy_price(100, duke.reputation, server._shop_discount(duke)) == 90
-    s = make("female", coins=10_000, rep=0)
-    pieces = outfits.sets()["set_village_lady"]["pieces"]
-    look = look_for(s, outfit="village_lady_gown", head="village_lady_flower_crown",
-                    jewellery=["village_lady_bead_necklace"], held="village_lady_basket")
-    q = outfits.quote(s, pieces, set(), server._shop_discount(s), "set_village_lady")
+    # T1 (Village Lady) is now the free starter set, so the bundle price is checked on T2 (Court Gown)
+    s = make("female", coins=300_000, rep=850)
+    entry = outfits.sets()["set_court_gown"]
+    pieces = entry["pieces"]
+    look = look_for(s, outfit="court_gown_gown", head="court_gown_slim_tiara")
+    q = outfits.quote(s, pieces, set(), server._shop_discount(s), "set_court_gown")
     import royal_treasury
     expect = q["total"] + royal_treasury.buy_tax(q["total"])
-    assert q["total"] == reputation.buy_price(600, 0, server._shop_discount(s))
+    assert q["total"] == reputation.buy_price(int(entry["price"]), s.reputation, server._shop_discount(s)) > 0, q
+    assert outfits.quote(s, outfits.sets()["set_village_lady"]["pieces"], set(), 0, "set_village_lady")["total"] == 0
     before = s.coins
-    run(server.handle_buy_cosmetics(s, {"items": pieces, "appearance": look, "set": "set_village_lady"}))
+    run(server.handle_buy_cosmetics(s, {"items": pieces, "appearance": look, "set": "set_court_gown"}))
     assert last_error(s) is None, last_error(s)
     assert before - s.coins == expect, (before - s.coins, expect)
     assert set(pieces) <= set(s._json_list("owned_cosmetics"))
@@ -265,21 +268,14 @@ def test_pricing_and_buy():
     assert last_error(m) == "That isn't cut for you."
 
 
-def test_palette_upgrade_wardrobe_persist():
+def test_wardrobe_persist():
+    """Sidebar v2: colours and Plain/Fine/Regal are gone; set + skin tone + wardrobe persist."""
     s = make("female", coins=300_000, rep=850)
     pieces = outfits.sets()["set_court_gown"]["pieces"]
     look = look_for(s, outfit="court_gown_gown", head="court_gown_slim_tiara", skin_tone="tone_5")
     run(server.handle_buy_cosmetics(s, {"items": pieces, "appearance": look, "set": "set_court_gown"}))
     assert last_error(s) is None, last_error(s)
-    # Fine needs the next tier (Noble Lady, rank 2)
-    run(server.handle_upgrade_outfit(s, {"set": "set_court_gown", "level": 2}))
-    assert "Noble Lady" in last_error(s)
-    s.noble_rank = 2
-    s.ws.out.clear()
-    run(server.handle_upgrade_outfit(s, {"set": "set_court_gown", "level": 2}))
-    assert "set_court_gown@2" in s._json_list("owned_cosmetics"), last_error(s)
-    run(server.handle_buy_palette(s, {"set": "set_court_gown", "palette": "t2_forest"}))
-    assert "palette:set_court_gown:t2_forest" in s._json_list("owned_cosmetics"), last_error(s)
+    run(server.handle_upgrade_outfit(s, {"set": "set_court_gown", "level": 2}))   # handler kept, not routed
     worn = dict(look, palette="t2_forest", outfit_level=2)
     s.ws.out.clear()
     run(server.handle_update_appearance(s, {"appearance": worn}))
@@ -289,10 +285,8 @@ def test_palette_upgrade_wardrobe_persist():
     state = again.full_state()
     assert len(state["saved_outfits"]) == 6 and state["saved_outfits"][3]["name"] == "Court day"
     a = state["appearance"]
-    assert (a["palette"], a["outfit_level"], a["skin_tone"]) == ("t2_forest", 2, "tone_5")
-    # unowned palette refused
-    run(server.handle_update_appearance(s, {"appearance": dict(worn, palette="t2_chestnut")}))
-    assert last_error(s) == "Buy that colour first."
+    assert (a["set"], a["skin_tone"]) == ("set_court_gown", "tone_5")
+    assert a.get("palette") is None and int(a.get("outfit_level") or 1) == 1
 
 
 def test_regalia():

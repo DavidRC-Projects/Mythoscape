@@ -1,16 +1,19 @@
 """Stonehaven castle v2 layout.
 
 The pack was authored for an older map (footprint x 100–123, y 31–54).
-This world keeps the keep on the live city plaza, so every pack coordinate
-is shifted by (DX, DY) = (+18, +16), landing on x 118–141, y 47–70.
+The keep now stands against the south face of Wolf Pass, gate facing south
+onto Stonehaven's north-east corner: every pack coordinate is shifted by
+(DX, DY) = (+42, +2), landing on x 142–165, y 33–56. (It used to sit on the
+city plaza at +18, +16, x 118–141, y 47–70.)
 """
 import json
 import os
 
 import feature_flags
 
-# pack (100, 31) -> world (118, 47)
-DX, DY = 18, 16
+# pack (100, 31) -> world (142, 33)
+DX, DY = 42, 2
+OLD_DX, OLD_DY = 18, 16   # where the keep stood before the Wolf Pass move
 
 _JSON = os.path.join(
     os.path.dirname(__file__),
@@ -122,6 +125,67 @@ def apply_stamp(grid, wm):
         bx, by = w(px, 55)
         grid[by][bx] = wm.PATH
         grid[by + 1][bx] = wm.PATH
+    return grid
+
+
+def old_v2_footprint():
+    """24x24 block the keep covered before the move (for the player migration)."""
+    fp = meta()["footprint"]
+    return (fp["x0"] + OLD_DX, fp["y0"] + OLD_DY, fp["x1"] + OLD_DX, fp["y1"] + OLD_DY)
+
+
+# Outer moat added with the move: 4 tiles of water across the back (up to the
+# mountain) and down both sides. The front stays open for the bridge.
+MOAT_BACK = 4
+MOAT_SIDE = 4
+
+
+def outer_moat_cells():
+    if not active():
+        return set()
+    x0, y0, x1, y1 = footprint_tiles()
+    cells = set()
+    for y in range(y0 - MOAT_BACK, y1 + 1):
+        for x in range(x0 - MOAT_SIDE, x1 + MOAT_SIDE + 1):
+            if x0 <= x <= x1 and y0 <= y <= y1:
+                continue
+            cells.add((x, y))
+    cells |= ridge_moat_cells(x0 - MOAT_SIDE, x1 + MOAT_SIDE, y0 - MOAT_BACK)
+    return cells
+
+
+RIDGE_REACH = 2  # rows of the wolf-pass ridge foot (blocked anyway) turned to water
+
+
+def ridge_moat_cells(xa, xb, y_top):
+    """The back moat runs right up under the mountain: the last RIDGE_REACH rows of
+    the wolf-pass south ridge mask above the moat become water. They were already
+    unwalkable cliff, but drew as a strip of plain grass below the ridge art."""
+    try:
+        import wolf_pass as _wp
+        cols = _wp.geo()["cols"]
+    except Exception:
+        return set()
+    out = set()
+    for x in range(xa, xb + 1):
+        col = cols.get(str(x))
+        if not col or len(col) < 4 or not col[3]:
+            continue
+        foot = max(col[3])
+        if foot >= y_top or y_top - 1 - foot > 1:
+            continue
+        # ridge foot rows, plus a one-row grass gap where the ridge ends a row short
+        for y in range(y_top - RIDGE_REACH, y_top):
+            if y in col[3] or y > foot:
+                out.add((x, y))
+    return out
+
+
+def apply_outer_moat(grid, wm):
+    """Runs after the roads so nothing paves over the water."""
+    for x, y in outer_moat_cells():
+        if 0 <= y < len(grid) and 0 <= x < len(grid[0]):
+            grid[y][x] = wm.WATER
     return grid
 
 

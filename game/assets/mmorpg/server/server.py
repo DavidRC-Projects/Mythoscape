@@ -28,7 +28,8 @@ from content import (
     is_mining_bag_item, is_log_item, is_fletch_pouch_item, fletch_pouch_capacity, is_potion_item,
     is_gem_item,
     inventory_tab_for_item, is_storage_bag,
-    TELEPORT_DESTINATIONS, WIZARD_ID, drops_for_kill, LOW_LEVEL_DROP_CAP,
+    TELEPORT_DESTINATIONS, TELEPORT_STARTER_MARKS, TELEPORT_DISCOVER_RADIUS,
+    WIZARD_ID, drops_for_kill, LOW_LEVEL_DROP_CAP,
 )
 from database import Database
 import explore_dungeons
@@ -121,8 +122,12 @@ for _c in politics.CRIERS:
     NPCS.append({"id": _c["id"], "name": _c["name"], "x": _c["x"], "y": _c["y"], "crier": True,
                  "lines": ["Hear ye! The notice boards carry the kingdom's news. Say /news for the latest."]})
 for _b in politics.BOARDS:
-    INTERACTABLES.append({"id": _b["id"], "kind": "signpost", "name": "Notice Board", "x": _b["x"], "y": _b["y"],
-                          "facing": "s", "lines": ["Notice Board"]})
+    INTERACTABLES.append({
+        "id": _b["id"], "kind": "signpost", "name": "Notice Board",
+        "x": _b["x"], "y": _b["y"], "facing": "s",
+        "lines": ["Village Notice Board", "Click for kingdom news"],
+        "notice_board": True,
+    })
 _SHOP_STOCK_START = {sid: {iid: info.get("qty") for iid, info in shop["stock"].items()} for sid, shop in SHOPS.items()}
 _housing.attach(NPCS)
 for _n in NPCS:
@@ -163,6 +168,14 @@ class PlayerSession:
         self.gender = "female" if str(raw_gender).lower() == "female" else "male"
         self.last_wish_date = row["last_wish_date"] if "last_wish_date" in row.keys() else None
         self.knows_teleport = bool(row["knows_teleport"]) if "knows_teleport" in row.keys() else False
+        self.teleport_marks = _parse_teleport_marks(
+            row["teleport_marks"] if "teleport_marks" in row.keys() else "[]"
+        )
+        # Already taught before marks existed: keep the spell, seed the starters.
+        self._teleport_marks_dirty = False
+        if self.knows_teleport and not self.teleport_marks:
+            self.teleport_marks = list(TELEPORT_STARTER_MARKS)
+            self._teleport_marks_dirty = True
         self.player_killer = bool(row["player_killer"]) if "player_killer" in row.keys() else False
         self.pk_kills = int(row["pk_kills"]) if "pk_kills" in row.keys() else 0
         self.pk_locked_until = float(row["pk_locked_until"]) if "pk_locked_until" in row.keys() else 0.0
@@ -206,7 +219,17 @@ class PlayerSession:
             "amulet": row["equip_amulet"] if "equip_amulet" in row.keys() else None,
             "ring": row["equip_ring"] if "equip_ring" in row.keys() else None,
             "ammo": row["equip_ammo"] if "equip_ammo" in row.keys() else None,
+            "tool": row["equip_tool"] if "equip_tool" in row.keys() else None,
         }
+        # Hatchets and pickaxes used to sit in the weapon slot; they live in the tool slot now.
+        _w = self.equipment.get("weapon")
+        if _w and (ITEMS.get(_w) or {}).get("equip_slot") == "tool" and not self.equipment.get("tool"):
+            self.equipment["tool"], self.equipment["weapon"] = _w, None
+            try:
+                WORLD.db.set_equipment(self.player_id, "tool", _w)
+                WORLD.db.set_equipment(self.player_id, "weapon", None)
+            except Exception:
+                pass
         self.inventory = {}  # slot -> {"item_id":, "qty":}
         self.quests = {}     # quest_id -> {"status":, "progress":}
         self.quest_log_dirty = False  # push QUEST_LOG on next tick flush
@@ -936,6 +959,12 @@ class PlayerSession:
         # None is only for a brand-new account. That is what opens the creator.
         # Anyone who already spent their stat points gets a look in the payload
         # only — nothing is written back to the database.
+        # Only the new HD skins are shown: a look without any outfit is shown in the free starter set
+        # (Villager / Village Lady), armour or not. Payload only; the saved look is untouched.
+        if self.stats_allocated:
+            base = outfits.normalise(appearance) if isinstance(appearance, dict) else None
+            if not outfits.has_outfit(base):
+                appearance = outfits.starter_look(self.gender, base)
         if appearance is None and self.stats_allocated:
             if self.gender == "female":
                 appearance = {
@@ -1098,10 +1127,15 @@ class PlayerSession:
             "inventory_tab_size": int(INVENTORY_TAB_SIZE),
             "inventory_size": int(INVENTORY_SIZE),
             "knows_teleport": bool(self.knows_teleport),
+            "teleport_marks": list(self.teleport_marks),
             "player_killer": bool(self.player_killer),
             "pk_kills": int(self.pk_kills or 0),
             "pk_locked_until": float(self.pk_locked_until or 0),
             "house_level": int(getattr(self, "house_level", 0) or 0),
+            "home": (
+                _housing.home_info(WORLD.db.conn, self.player_id)
+                if feature_flags.USE_PLAYER_HOUSING and WORLD is not None else None
+            ),
         }
 
     def quest_points(self):
@@ -1308,10 +1342,22 @@ class World:
         import castle_owners
         castle_owners.bind(self)
         explore_dungeons.capture_and_hide(self.grid)
-        stamp_emberdeep_mouth(self.grid)
         stamp_volcano_mine(self.grid)
         stamp_outfitters_shell(self.grid)
+        # After roads — cone WALL must not be punched by the y=73 city cut.
+        stamp_emberdeep_mouth(self.grid)
         self.resource_nodes = build_resource_nodes(self.grid)
+        # One-time save fix for the castle move / harbour seal / Fairy Glade.
+        try:
+            import position_migrations
+            from database import DB_PATH as _DBP
+            from world_map import WALKABLE_TILES as _WT
+            position_migrations.run_once(
+                self.db.conn, self.grid, _WT, SPAWN_POINT,
+                db_path=getattr(self.db, "path", None) or _DBP, log=log.info,
+            )
+        except Exception:
+            log.exception("castle-move position migration failed; positions left as saved")
         for _pos, _node in self.resource_nodes.items():
             if fishing_spots.is_spot(_node, RESOURCE_YIELDS.get(_node["type"])):
                 fishing_spots.init_spot(_node, _pos, RESOURCE_YIELDS.get(_node["type"]))
@@ -1470,7 +1516,7 @@ class World:
         return sum(e["qty"] for e in session.inventory.values() if e["item_id"] == item_id)
 
     def gather_tool_id(self, session, skill, allowed_tools=None):
-        """The tool item in use: the equipped weapon if it qualifies, else the first one in the pack."""
+        """The tool item in use: the one in the tool slot, if it fits this skill / spot."""
         def ok(item_id):
             if not item_id:
                 return False
@@ -1478,16 +1524,11 @@ class World:
                 return item_id in allowed_tools
             return ITEMS.get(item_id, {}).get("tool_for") == skill
 
-        weapon = session.equipment.get("weapon")
-        if ok(weapon):
-            return weapon
-        for entry in session.inventory.values():
-            if ok(entry["item_id"]):
-                return entry["item_id"]
-        return None
+        tool = session.equipment.get("tool")
+        return tool if ok(tool) else None
 
     def has_gather_tool(self, session, skill, allowed_tools=None):
-        """True if inventory or equipped weapon is a valid gather tool.
+        """True if the equipped tool (tool slot) is a valid gather tool.
 
         If allowed_tools is a list of item ids, one of those must be present.
         Otherwise any item with tool_for == skill counts.
@@ -1499,13 +1540,7 @@ class World:
                 return item_id in allowed_tools
             return ITEMS.get(item_id, {}).get("tool_for") == skill
 
-        weapon = session.equipment.get("weapon")
-        if ok(weapon):
-            return True
-        for entry in session.inventory.values():
-            if ok(entry["item_id"]):
-                return True
-        return False
+        return ok(session.equipment.get("tool"))
 
     def count_item_bank(self, session, item_id):
         return sum(e["qty"] for e in session.bank.values() if e["item_id"] == item_id)
@@ -1901,11 +1936,18 @@ async def handle_login(ws, msg, is_register):
     WORLD.rearrange_bags_tab(session)
     # Persist owned-pets list (includes migrated active_pet)
     WORLD.db.save_player_stats(session.player_id, owned_pets=json.dumps(session.owned_pets))
+    if getattr(session, "_teleport_marks_dirty", False):
+        _save_teleport_marks(session)
+        session._teleport_marks_dirty = False
+    _discover_teleport_marks(session)
     if WORLD.ensure_tinderbox(session):
         log.info("%s received a starter tinderbox", session.char_name)
 
+    trade_in = _outfits_migrate_v2(session)
     needs_alloc = not session.stats_allocated
     await send(ws, "LOGIN_OK", player=session.full_state(), needs_stat_alloc=needs_alloc)
+    if trade_in:
+        await send(ws, "CHAT_MSG", **{"from": "Mae", "text": trade_in})
     if needs_alloc:
         await send(
             ws, "STAT_ALLOC_REQUIRED",
@@ -1923,6 +1965,7 @@ async def handle_login(ws, msg, is_register):
 
 
 async def send_world_join(session):
+    import world_clock
     await send(
         session.ws, "WORLD_STATE",
         width=WIDTH, height=HEIGHT, tiles=WORLD.grid,
@@ -1931,6 +1974,7 @@ async def send_world_join(session):
         interactables=INTERACTABLES,
         craft_recipes=CRAFT_RECIPES,
         buildings=BUILDINGS,
+        env=world_clock.snapshot(),
     )
     quest_log = {qid: quest_status_for(session, qid) for qid in QUESTS}
     await send(session.ws, "QUEST_LOG", quests=quest_log)
@@ -2289,6 +2333,7 @@ async def _handle_move_body(session, msg):
         else:
             _pet_keep_up(session, dx, dy)
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        await _notify_teleport_marks(session, _discover_teleport_marks(session))
         return
     if session.dungeon:
         if session.dungeon.get("v2"):
@@ -2304,6 +2349,14 @@ async def _handle_move_body(session, msg):
         session.x, session.y = nx, ny
         session.gathering_node = None
         _release_monster_fight_on_step(session)
+        # Tidehollow: seal the active chamber behind the player once they step
+        # inside, and keep further chambers locked until each one is cleared.
+        if (
+            session.dungeon.get("id") == "tidehollow"
+            and session.dungeon.get("rooms")
+            and hasattr(mod, "apply_seals")
+        ):
+            await _refresh_tidehollow_seals(session)
         ex = session.dungeon.get("exit_x")
         ey = session.dungeon.get("exit_y")
         if ex is not None and (session.x, session.y) == (int(ex), int(ey)):
@@ -2329,9 +2382,12 @@ async def _handle_move_body(session, msg):
     await vacuum_ground_loot(session)
     _pet_keep_up(session, dx, dy)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    await _notify_teleport_marks(session, _discover_teleport_marks(session))
     # Walking into a dungeon mouth enters it — same as clicking the entrance.
     spot, dungeon_id = _find_dungeon_entrance(session)
-    if dungeon_id and (session.x, session.y) in entrance_mouth_tiles(spot["x"], spot["y"]):
+    if dungeon_id and (session.x, session.y) in entrance_mouth_tiles(
+        spot["x"], spot["y"], spot.get("kind"),
+    ):
         await handle_enter_dungeon(session, {"dungeon_id": dungeon_id})
 
 
@@ -2376,32 +2432,49 @@ def _build_dungeon_floor(session, floor: int, dungeon_id: str = None):
         import emberdeep_creatures
         reserved = emberdeep_creatures.reserved_tiles(tiles)
     spot_room = {}
+    spot_visual = {}
+    spot_level = {}
     if rooms:
         # Spread the floor's monsters across the chambers, leaving the
         # entrance hall empty so the player gets a moment to orient.
         #
-        # Deep floors carry more chambers than monsters (floor 10 has three
-        # beasts and six rooms). Any chamber left holding no monsters must be
-        # considered cleared, or its doors seal forever with no fight to open
-        # them — an unwinnable soft-lock.
+        # Any chamber left holding no monsters must be considered cleared, or
+        # its doors seal forever with no fight to open them.
         fight_rooms = [r for r in rooms if not r["cleared"]] or rooms
         spots = []
-        used = set()
         per_room = mod.room_spawn_count(floor) if hasattr(mod, "room_spawn_count") else 3
         # Populate every chamber individually. Each room's kill target is the
         # number that actually spawned inside it, so "kill N to open the door"
         # is always achievable without farming respawns.
         claimed = set()
         for room in fight_rooms:
-            pool = [p for p in mod.spawn_tiles_for_room(room, tiles, 64)
-                    if p not in blocked and p not in reserved and p not in claimed]
+            if dungeon_id == "tidehollow":
+                pool = [
+                    p for p in mod.spawn_tiles_for_room(room, tiles, 64, rooms=rooms)
+                    if p not in blocked and p not in reserved and p not in claimed
+                ]
+            else:
+                pool = [
+                    p for p in mod.spawn_tiles_for_room(room, tiles, 64)
+                    if p not in blocked and p not in reserved and p not in claimed
+                ]
             mod.random.Random(floor * 131 + room["id"]).shuffle(pool)
             room_spots = pool[:per_room]
             claimed.update(room_spots)
-            for pos in room_spots:
+            types = ()
+            if dungeon_id == "tidehollow" and hasattr(mod, "room_monster_types"):
+                types = mod.room_monster_types(room["id"])
+            room_level = (
+                mod.room_combat_level(room["id"])
+                if dungeon_id == "tidehollow" and hasattr(mod, "room_combat_level")
+                else info["level"]
+            )
+            for i, pos in enumerate(room_spots):
                 spot_room[pos] = room["id"]
+                spot_level[pos] = room_level
+                if types:
+                    spot_visual[pos] = types[i % len(types)]
             spots.extend(room_spots)
-            used.add(room["id"])
             room["kills"] = 0
             # The target is the number that *actually* spawned here. Rooms are
             # only ever credited by looking up the tile a monster died on, and
@@ -2428,49 +2501,61 @@ def _build_dungeon_floor(session, floor: int, dungeon_id: str = None):
             p for p in mod.pick_spawn_tiles(tiles, info["count"] + len(blocked) + len(reserved))
             if p not in blocked and p not in reserved
         ][: info["count"]]
-    stats = mod.scaled_monster_stats(info["level"])
-    visual = mod.visual_type_for_floor(floor)
+    default_stats = mod.scaled_monster_stats(info["level"])
+    default_visual = mod.visual_type_for_floor(floor)
     if hasattr(mod, "monster_display_name"):
-        stats["name"] = mod.monster_display_name(visual, stats["level"])
+        default_stats["name"] = mod.monster_display_name(default_visual, default_stats["level"])
     # Named encounters. These replace ordinary monsters rather than adding to
-    # them, so info["count"] — and therefore the floor's clear condition — is
-    # unchanged. The last-drawn chamber gets the elite; the two milestone
-    # floors also get a boss in the final chamber.
+    # them. Tidehollow puts the elite + Leviathan in the final (dragon) chamber.
     elite_name = info.get("elite") if dungeon_id == "tidehollow" else None
     boss_info = info.get("boss") if dungeon_id == "tidehollow" else None
 
-    def _in_last_room():
-        """Index of the monster in the most advanced chamber.
-
-        "Last chamber" must mean the chamber furthest along the chain, not the
-        last spawn: monsters are dealt round-robin, so the final spawn often
-        lands back in the first room.
-        """
+    def _indices_in_last_room():
+        """Spawn indices in the furthest chamber (finale), furthest first."""
+        if not spots:
+            return []
         if rooms is None:
-            return len(spots) - 1
-        best_index, best_room = -1, -1
-        for idx, pos in enumerate(spots):
-            room = mod.room_at(rooms, pos[0], pos[1])
-            if room is not None and room["id"] >= best_room:
-                best_room, best_index = room["id"], idx
-        return best_index
+            return [len(spots) - 1]
+        best_room = -1
+        for pos in spots:
+            rid = spot_room.get(pos)
+            if rid is None:
+                room = mod.room_at(rooms, pos[0], pos[1])
+                rid = room["id"] if room is not None else -1
+            if rid > best_room:
+                best_room = rid
+        return [idx for idx, pos in enumerate(spots) if spot_room.get(pos) == best_room]
 
-    elite_index = _in_last_room() if elite_name and spots else -1
-    # A milestone floor puts its boss in the final chamber in place of the
-    # elite, so the floor still ends on one decisive fight.
-    boss_index = _in_last_room() if boss_info and spots else -1
+    finale = _indices_in_last_room()
+    boss_index = finale[-1] if boss_info and finale else -1
+    elite_index = -1
+    if elite_name and finale:
+        # Prefer a different dragon than the Leviathan when the finale has 2+.
+        for idx in reversed(finale):
+            if idx != boss_index:
+                elite_index = idx
+                break
+        if elite_index < 0 and boss_index < 0:
+            elite_index = finale[-1]
 
     monsters = {}
     for index, (sx, sy) in enumerate(spots):
         mid = next_id()
-        mstats = dict(stats)
+        visual = spot_visual.get((sx, sy), default_visual)
+        level = int(spot_level.get((sx, sy), info["level"]))
+        mstats = mod.scaled_monster_stats(level)
+        if hasattr(mod, "monster_display_name"):
+            mstats["name"] = mod.monster_display_name(visual, mstats["level"])
+        else:
+            mstats["name"] = default_stats.get("name") or mstats.get("name")
         if index == boss_index and boss_info:
             bonus = int(boss_info.get("level_bonus") or 0)
-            mstats = mod.scaled_monster_stats(info["level"] + bonus)
+            mstats = mod.scaled_monster_stats(level + bonus)
             mstats["name"] = boss_info["name"]
             mstats["boss"] = True
             mstats["hp"] = int(mstats["hp"] * 1.35)
             mstats["xp"] = int(mstats["xp"] * 2.2)
+            visual = "dragon" if dungeon_id == "tidehollow" else visual
         elif index == elite_index and elite_name:
             mstats["name"] = elite_name
             mstats["elite"] = True
@@ -2484,9 +2569,21 @@ def _build_dungeon_floor(session, floor: int, dungeon_id: str = None):
         respawns = dungeon_id == "tidehollow" and rooms
         m = MonsterInstance(mid, visual, sx, sy, stats=mstats,
                             no_respawn=not respawns)
-        # Stay near where they spawned. They stop chasing once you leave that patch.
+        # Remember the chamber this beast belongs to. Kills are credited to
+        # that room even if it wanders down a corridor into another.
+        m._dungeon_room_id = spot_room.get((sx, sy))
+        # Stay inside their chamber. A loose leash let Tidehollow beasts walk
+        # into the next room before the door sealed, leaving the player in an
+        # empty chamber with the exit barred.
         if dungeon_id == "emberdeep" and feature_flags.USE_EMBERDEEP_V2:
             m.home_room = emberdeep.room_box(tiles, sx, sy)
+        elif dungeon_id == "tidehollow" and rooms is not None and m._dungeon_room_id is not None:
+            home = next((r for r in rooms if r["id"] == m._dungeon_room_id), None)
+            if home is not None and hasattr(mod, "room_interior_box"):
+                m.home_room = mod.room_interior_box(home)
+            else:
+                cx, cy = (home or {}).get("center") or (sx, sy)
+                m.home_room = (cx - 5, cy - 3, cx + 5, cy + 3)
         else:
             leash = 6
             m.home_room = (
@@ -2495,9 +2592,6 @@ def _build_dungeon_floor(session, floor: int, dungeon_id: str = None):
                 min(mod.DUNGEON_W - 1, sx + leash),
                 min(mod.DUNGEON_H - 1, sy + leash),
             )
-        # Remember the chamber this beast belongs to. Kills are credited to
-        # that room even if it wanders down a corridor into another.
-        m._dungeon_room_id = spot_room.get((sx, sy))
         monsters[mid] = m
     if dungeon_id == "emberdeep" and feature_flags.USE_EMBERDEEP_CREATURES and feature_flags.USE_EMBERDEEP_V2:
         import emberdeep_creatures
@@ -2727,7 +2821,7 @@ async def _grant_monster_table(session, monster):
 async def _finish_dungeon_kill(session, monster=None):
     """Floor dungeons advance when cleared. Explore maps drop normal loot and stay open."""
     d = session.dungeon
-    if not d:
+    if not d or d.get("completed"):
         return
     if d.get("explore"):
         if monster is not None:
@@ -2869,6 +2963,35 @@ async def credit_dungeon_room_kill(session, monster):
     await _open_cleared_rooms(session)
 
 
+async def _refresh_tidehollow_seals(session):
+    """Recompute chamber seals from clear progress + player position.
+
+    Returns the list of ``[x, y, tile]`` changes pushed to the client (may be empty).
+    """
+    d = session.dungeon
+    if not d or d.get("id") != "tidehollow" or not d.get("rooms"):
+        return []
+    tiles = d.get("tiles") or []
+    before = {
+        (x, y): tile
+        for y, row in enumerate(tiles)
+        for x, tile in enumerate(row)
+        if tile in (tidehollow.FLOOR, tidehollow.SEALED)
+    }
+    tidehollow.apply_seals(tiles, d["rooms"], player_xy=(session.x, session.y))
+    _nudge_off_sealed_door(session)
+    changes = []
+    for y, row in enumerate(tiles):
+        for x, tile in enumerate(row):
+            if tile not in (tidehollow.FLOOR, tidehollow.SEALED):
+                continue
+            if before.get((x, y)) != tile:
+                changes.append([int(x), int(y), tile])
+    if changes:
+        await send(session.ws, "DUNGEON_TILES", changes=changes)
+    return changes
+
+
 async def _open_cleared_rooms(session):
     """Unseal any chamber whose kill target has been reached."""
     d = session.dungeon
@@ -2883,7 +3006,7 @@ async def _open_cleared_rooms(session):
             continue
         if not room["doors"]:
             continue
-        tidehollow.open_room(d["tiles"], rooms, room)
+        room["cleared"] = True
         opened.append(room)
     if not opened:
         return
@@ -2911,14 +3034,7 @@ async def _open_cleared_rooms(session):
                     "from": "Cache", "text": "Hidden cache: " + ", ".join(got) + ".",
                 })
                 await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
-    # The client renders from its own tile grid, so push only the tiles that
-    # changed doors. DUNGEON_TILES takes a `changes` list, not a whole map.
-    changes = []
-    for room in opened:
-        for x, y in room["doors"]:
-            changes.append([int(x), int(y), d["tiles"][y][x]])
-    if changes:
-        await send(session.ws, "DUNGEON_TILES", changes=changes)
+    await _refresh_tidehollow_seals(session)
 
 
 def _find_dungeon_entrance(session, preferred_id=None):
@@ -2930,9 +3046,15 @@ def _find_dungeon_entrance(session, preferred_id=None):
         kind = spot.get("kind")
         if kind not in kinds:
             continue
-        on_mouth = (session.x, session.y) in entrance_mouth_tiles(spot["x"], spot["y"])
-        if not on_mouth and not adjacent_or_same(session.x, session.y, spot["x"], spot["y"]):
-            continue
+        on_mouth = (session.x, session.y) in entrance_mouth_tiles(
+            spot["x"], spot["y"], kind,
+        )
+        # Volcano: door tiles only — never enter from adjacent cone/apron sides.
+        if not on_mouth:
+            if kind == "volcano_entrance":
+                continue
+            if not adjacent_or_same(session.x, session.y, spot["x"], spot["y"]):
+                continue
         did = spot.get("dungeon_id")
         if not did:
             # Infer from entrance kind
@@ -3115,7 +3237,7 @@ async def handle_enter_dungeon(session, msg):
     if not dungeon_id:
         await send(session.ws, "ERROR", message="Stand at a dungeon entrance.")
         return
-    missing = gear_rules.gate_missing(session)
+    missing = gear_rules.gate_missing(session, ITEMS)
     if missing:
         await send(session.ws, "ERROR", message=gear_rules.gate_message(missing))
         return
@@ -3123,8 +3245,13 @@ async def handle_enter_dungeon(session, msg):
     meta = _dungeon_meta(dungeon_id)
     # Step back off the mouth so leaving doesn't drop you straight back inside.
     rx, ry = session.x, session.y
-    if (rx, ry) in entrance_mouth_tiles(spot["x"], spot["y"]):
-        rx, ry = spot["x"], spot["y"] + 1
+    if (rx, ry) in entrance_mouth_tiles(spot["x"], spot["y"], spot.get("kind")):
+        stand = spot.get("stand") or []
+        if len(stand) == 2:
+            rx, ry = int(stand[0]), int(stand[1])
+        else:
+            # South of a 3-wide door + apron enter zone.
+            rx, ry = spot["x"], spot["y"] + 3
     session._dungeon_return = (rx, ry)
     # Keep the overworld tile. A later logout must not store the dungeon coordinates.
     WORLD.db.save_player_position(session.player_id, rx, ry)
@@ -3147,38 +3274,49 @@ async def handle_enter_dungeon(session, msg):
     session.dungeon["return_y"] = mod.CAVE_RETURN[1]
     await send(session.ws, "DUNGEON_ENTER", **_dungeon_payload(session))
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
-    await send(
-        session.ws, "CHAT_MSG",
-        **{"from": meta["chat_from"],
-           "text": f"Floor 1/{session.dungeon['floors']}: {session.dungeon['label']}. Slay every beast to advance. Leave anytime from the EXIT."},
-    )
     if dungeon_id == "tidehollow":
-        # Say how the dungeon works before the first door shuts behind them,
-        # and name what is waiting at the end of the floor.
-        intro = ("Each chamber seals until its beasts are dead. Clear it, and the way "
-                 "ahead grinds open — and something is always left behind.")
+        rooms_n = len([r for r in (session.dungeon.get("rooms") or []) if r["doors"]])
+        await send(session.ws, "CHAT_MSG", **{
+            "from": meta["chat_from"],
+            "text": (f"You enter Tidehollow Cave — {rooms_n} chambers. "
+                     "Three beasts share each room with you; clear them to open the way. "
+                     "Dragons wait in the last. The EXIT behind you always stays open."),
+        })
         info = tidehollow.floor_info(1)
-        if info.get("elite"):
-            intro += f" Watch for {info['elite']} in the last chamber."
-        await send(session.ws, "CHAT_MSG", **{"from": meta["chat_from"], "text": intro})
-        # Warn rather than block: an under-levelled player should be able to
-        # try it, but they deserve to know before the first door seals.
+        if info.get("boss"):
+            await send(session.ws, "CHAT_MSG", **{
+                "from": meta["chat_from"],
+                "text": f"{info['boss']['name']} coils in the final chamber.",
+                "style": "gold",
+            })
         try:
             my_level = session.combat_level()
         except Exception:
             my_level = 0
-        if my_level and my_level < info["level"] - 5:
+        # First chamber is easy; warn against the finale tier.
+        if my_level and my_level < 60:
             await send(session.ws, "CHAT_MSG", **{
                 "from": meta["chat_from"],
-                "text": (f"Caution: these beasts are level {info['level']}, and you are "
+                "text": (f"Caution: the deepest beasts climb toward level 80, and you are "
                          f"combat level {my_level}. Bring food, and remember the EXIT."),
                 "style": "gold",
             })
+    else:
+        await send(
+            session.ws, "CHAT_MSG",
+            **{"from": meta["chat_from"],
+               "text": f"Floor 1/{session.dungeon['floors']}: {session.dungeon['label']}. "
+                       "Slay every beast to advance. Leave anytime from the EXIT."},
+        )
 
 
 async def handle_leave_dungeon(session, msg=None, silent=False):
     if not session.dungeon:
         return
+    task = getattr(session, "_dungeon_victory_task", None)
+    if task and not task.done():
+        task.cancel()
+    session._dungeon_victory_task = None
     if session.dungeon.get("id") == "castle_realm":
         import castle_realm
         castle_realm.leave(session)
@@ -3216,10 +3354,31 @@ async def handle_leave_dungeon(session, msg=None, silent=False):
         await send(session.ws, "CHAT_MSG", **{"from": meta["chat_from"], "text": f"You leave {meta['name']}."})
 
 
+DUNGEON_VICTORY_HOLD_S = 5.0
+
+
+async def _leave_after_dungeon_victory(session, delay):
+    """Wait, then eject a player who finished a private dungeon."""
+    try:
+        await asyncio.sleep(max(0.0, float(delay)))
+    except asyncio.CancelledError:
+        return
+    d = getattr(session, "dungeon", None)
+    if not d or not d.get("completed"):
+        return
+    meta = _dungeon_meta(d.get("id") or "tidehollow")
+    await handle_leave_dungeon(session, silent=True)
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    await send(session.ws, "CHAT_MSG", **{
+        "from": meta["chat_from"],
+        "text": f"You leave {meta['name']}.",
+    })
+
+
 async def _dungeon_on_clear(session):
     """Called when the last monster on the current floor dies."""
     d = session.dungeon
-    if not d:
+    if not d or d.get("completed"):
         return
     dungeon_id = d.get("id") or "tidehollow"
     mod = DUNGEON_MODS.get(dungeon_id, tidehollow)
@@ -3227,7 +3386,8 @@ async def _dungeon_on_clear(session):
     chat_from = meta["chat_from"]
     floor = d["floor"]
     if floor >= d["floors"]:
-        # Complete!
+        # Complete! Hold the player in the instance briefly so the victory
+        # screen can read, then auto-leave.
         item_id, qty = mod.pick_completion_reward()
         medal_id = meta["medal_id"]
         drop_xy = (mod.CAVE_RETURN[0], mod.CAVE_RETURN[1])
@@ -3242,25 +3402,36 @@ async def _dungeon_on_clear(session):
         else:
             WORLD.ground_items.setdefault(drop_xy, []).append(_ground_drop(item_id, qty))
             rewards.append({"item_id": item_id, "qty": qty, "ground": True})
-        # Medal — inventory or equip if free
-        has_medal = (
+        # Medal — guaranteed drop on first clear (bag → ground at the mouth → equip).
+        has_medal = bool(medal_id) and (
             session.equipment.get("amulet") == medal_id
             or any(e and e.get("item_id") == medal_id for e in session.inventory.values())
+            or WORLD.count_item_bank(session, medal_id) > 0
         )
-        if not has_medal:
-            if not session.equipment.get("amulet"):
-                session.equipment["amulet"] = medal_id
-                WORLD.db.set_equipment(session.player_id, "amulet", medal_id)
-            elif WORLD.add_item_to_inventory(session, medal_id, 1):
+        if medal_id and not has_medal:
+            if WORLD.add_item_to_inventory(session, medal_id, 1):
                 pass
             else:
+                # Bag full: leave it on the ground at the cave mouth so it is never lost.
                 WORLD.ground_items.setdefault(drop_xy, []).append(_ground_drop(medal_id, 1))
-            rewards.append({"item_id": medal_id, "qty": 1})
+                rewards.append({"item_id": medal_id, "qty": 1, "ground": True})
+            if not any(r.get("item_id") == medal_id for r in rewards):
+                rewards.append({"item_id": medal_id, "qty": 1})
         name = session.char_name
         reward_name = ITEMS.get(item_id, {}).get("name", item_id)
-        await handle_leave_dungeon(session, silent=True)
-        await send(session.ws, "DUNGEON_COMPLETE", rewards=rewards)
+        hold = DUNGEON_VICTORY_HOLD_S
+        d["completed"] = True
+        d["leave_at"] = time.time() + hold
+        session.in_combat_with = None
+        await send(session.ws, "DUNGEON_COMPLETE", rewards=rewards,
+                   name=meta["name"], leave_in=hold)
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        await send(session.ws, "CHAT_MSG", **{
+            "from": chat_from,
+            "text": (f"{meta['name']} conquered! Returning outside in "
+                     f"{int(hold)} seconds…"),
+            "style": "gold",
+        })
         # Golden global announcement
         for s in WORLD.sessions.values():
             await send(
@@ -3271,6 +3442,12 @@ async def _dungeon_on_clear(session):
                     "style": "gold",
                 },
             )
+        task = getattr(session, "_dungeon_victory_task", None)
+        if task and not task.done():
+            task.cancel()
+        session._dungeon_victory_task = asyncio.create_task(
+            _leave_after_dungeon_victory(session, hold)
+        )
         return
 
     # Advance to next floor
@@ -3780,7 +3957,7 @@ async def handle_attack(session, msg):
     if monster is None or not monster.alive:
         await send(session.ws, "ERROR", message="That target isn't there.")
         return
-    if not gear_rules.can_fight(session):
+    if not gear_rules.can_fight(session, ITEMS):
         session.in_combat_with = None
         await send(session.ws, "ERROR", message=gear_rules.NO_FIGHT_MSG)
         return
@@ -3894,7 +4071,7 @@ async def handle_set_pk(session, msg):
     _save_pk(session)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     if session.player_killer:
-        text = "Player killer mode on for 10 minutes. A red skull shows over your head."
+        text = "Player killer mode on for 10 minutes. Others see your PK status when they examine you."
     else:
         text = "Player killer mode off. You cannot change it again for 10 minutes."
     await send(session.ws, "CHAT_MSG", **{"from": "Combat", "text": text})
@@ -4154,10 +4331,10 @@ async def handle_gather(session, msg):
             if allowed:
                 names = [ITEMS[t]["name"] for t in allowed if t in ITEMS]
                 need = names[0] if len(names) == 1 else " or ".join(names)
-                await send(session.ws, "ERROR", message=f"You need a {need} for this spot.")
+                await send(session.ws, "ERROR", message=f"Equip a {need} to fish this spot.")
             else:
                 tool_name = {"woodcutting": "an axe", "mining": "a pickaxe", "fishing": "a fishing tool"}.get(skill)
-                await send(session.ws, "ERROR", message=f"You need {tool_name} to do that.")
+                await send(session.ws, "ERROR", message=f"Equip {tool_name} to do that (click it in your bag).")
             return
     session.gathering_node = (x, y)
     label = yield_def.get("cast") or {
@@ -4331,7 +4508,106 @@ async def light_fire(session, log_item_id):
     )
 
 
-def _teleport_dest(dest_id):
+def _parse_teleport_marks(raw):
+    """JSON list of destination ids the player has unlocked."""
+    if isinstance(raw, (list, tuple)):
+        vals = raw
+    else:
+        try:
+            vals = json.loads(raw or "[]")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            vals = []
+    known = {d["id"] for d in TELEPORT_DESTINATIONS}
+    out = []
+    seen = set()
+    for item in vals:
+        mid = str(item or "")
+        if mid in known and mid not in seen:
+            seen.add(mid)
+            out.append(mid)
+    return out
+
+
+def _save_teleport_marks(session):
+    WORLD.db.save_player_stats(
+        session.player_id, teleport_marks=json.dumps(list(session.teleport_marks)),
+    )
+
+
+def _grant_teleport_marks(session, mark_ids):
+    """Add marks; return newly granted destination dicts (for chat)."""
+    known = {d["id"]: d for d in TELEPORT_DESTINATIONS}
+    have = set(session.teleport_marks)
+    newly = []
+    for mid in mark_ids:
+        if mid in have or mid not in known:
+            continue
+        session.teleport_marks.append(mid)
+        have.add(mid)
+        newly.append(known[mid])
+    if newly:
+        _save_teleport_marks(session)
+    return newly
+
+
+def _teleport_plane(session):
+    """Map plane used for discovery, or None inside unrelated instances."""
+    data = session.dungeon
+    if data and data.get("id") == "castle_realm":
+        return "castle"
+    if data:
+        return None
+    return "overworld"
+
+
+def _discover_teleport_marks(session):
+    """Unlock teleport landings the player has walked near. Returns new dests."""
+    plane = _teleport_plane(session)
+    if plane is None:
+        return []
+    have = set(session.teleport_marks)
+    found = []
+    for dest in TELEPORT_DESTINATIONS:
+        if dest["id"] in have:
+            continue
+        if dest.get("where") != plane:
+            continue
+        if max(abs(session.x - int(dest["x"])), abs(session.y - int(dest["y"]))) <= TELEPORT_DISCOVER_RADIUS:
+            found.append(dest["id"])
+    return _grant_teleport_marks(session, found)
+
+
+async def _notify_teleport_marks(session, newly):
+    if not newly:
+        return
+    # Marks still save before the spell is taught; only announce once Elowen has.
+    if session.knows_teleport:
+        for dest in newly:
+            await send(
+                session.ws, "CHAT_MSG",
+                **{"from": "You", "text": f"You mark {dest['label']} on your teleport spell."},
+            )
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+
+
+def _teleport_unlocked(session, dest_id):
+    if dest_id == "home":
+        return True
+    return dest_id in set(session.teleport_marks)
+
+
+def _teleport_dest(dest_id, session=None):
+    if dest_id == "home" and session is not None and feature_flags.USE_PLAYER_HOUSING:
+        home = _housing.home_info(WORLD.db.conn, session.player_id)
+        if home:
+            return {
+                "id": "home",
+                "label": f"My Home ({home['name']})",
+                "blurb": home["blurb"],
+                "where": "overworld",
+                "x": home["x"],
+                "y": home["y"],
+            }
     for dest in TELEPORT_DESTINATIONS:
         if dest["id"] == dest_id:
             return dest
@@ -4387,9 +4663,19 @@ async def handle_teleport(session, msg):
     if now < session.teleport_ready_at:
         await send(session.ws, "ERROR", message="The spell is still settling.")
         return
-    dest = _teleport_dest(msg.get("dest"))
+    dest_id = msg.get("dest")
+    dest = _teleport_dest(dest_id, session)
     if dest is None:
-        await send(session.ws, "ERROR", message="That place isn't marked.")
+        if dest_id == "home":
+            await send(session.ws, "ERROR", message="You don't own a home yet. Speak to Estate Agent Mira.")
+        else:
+            await send(session.ws, "ERROR", message="That place isn't marked.")
+        return
+    if not _teleport_unlocked(session, dest["id"]):
+        await send(
+            session.ws, "ERROR",
+            message="You haven't explored that place yet. Walk there to mark it on your spell.",
+        )
         return
     label = dest["label"]
     tx, ty = int(dest["x"]), int(dest["y"])
@@ -4444,6 +4730,7 @@ async def handle_teleport(session, msg):
     await send(session.ws, "TELEPORT", x=session.x, y=session.y, label=label, map=arrived)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     await send(session.ws, "CHAT_MSG", **{"from": "You", "text": f"You teleport to {label}."})
+    await _notify_teleport_marks(session, _discover_teleport_marks(session))
 
 
 async def handle_talk(session, msg):
@@ -4489,9 +4776,19 @@ async def handle_talk(session, msg):
         if not session.knows_teleport:
             session.knows_teleport = True
             WORLD.db.save_player_stats(session.player_id, knows_teleport=1)
+        newly = _grant_teleport_marks(session, TELEPORT_STARTER_MARKS)
+        # Also mark anywhere they're standing near when they learn the spell.
+        newly.extend(_discover_teleport_marks(session))
         await send(session.ws, "DIALOGUE", npc_id=npc["id"], npc_name=npc["name"],
                    lines=npc["lines"], teleport=True)
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        for dest in newly:
+            if dest["id"] in TELEPORT_STARTER_MARKS:
+                continue
+            await send(
+                session.ws, "CHAT_MSG",
+                **{"from": "You", "text": f"You mark {dest['label']} on your teleport spell."},
+            )
         return
     check_quest_progress_on_talk(session, npc_id)
     # Collect quests can become ready just from carrying items
@@ -4856,10 +5153,36 @@ async def handle_dev_command(session, text):
                                     "VALUES (?, ?, ?, 'Member')", (-(cid * 1000 + i + 1), cid, time.time()))
             clans._db().commit()
             await say(f"Guild now has {clans.member_count(cid)} members ({n} fake). {clans.strength_line(cid)}")
+        elif cmd == "env":
+            import world_clock
+            if len(parts) < 2 or parts[1].lower() in ("?", "help"):
+                await say("::env auto | ::env <season> [weather] [phase] | ::env skip [days] | "
+                          "::env weather <name> | ::env phase <dawn|day|dusk|night>")
+                return
+            sub = parts[1].lower()
+            if sub == "auto":
+                snap = world_clock.clear_override()
+            elif sub == "skip":
+                days = max(1, min(28, int(float(parts[2])))) if len(parts) >= 3 else 1
+                snap = world_clock.advance_days(days)
+            elif sub == "weather" and len(parts) >= 3:
+                snap = world_clock.force_env(weather=parts[2])
+            elif sub == "phase" and len(parts) >= 3:
+                snap = world_clock.force_env(phase=parts[2])
+            elif sub in world_clock.SEASONS:
+                weather = parts[2] if len(parts) >= 3 else None
+                phase = parts[3] if len(parts) >= 4 else None
+                snap = world_clock.force_env(season=sub, weather=weather, phase=phase)
+            else:
+                await say("Unknown ::env. Try ::env winter snow night")
+                return
+            await broadcast("ENV_UPDATE", env=snap)
+            lab = snap.get("label") or {}
+            await say(f"Env: {lab.get('date')} — {lab.get('line')}")
         else:
             await say("Dev: ::skip <hours> · ::rep <value> (sets) · ::rank <0-5> · ::title <King|Queen|Prince Consort|"
                       "Queen Consort|none> · ::favour <n> · ::xp <skill> <amount | L<level>> · ::give <item_id> [qty]"
-                      " · ::fakeguild <n> · ::idle <on|off> · ::welcome <reset|skip>")
+                      " · ::fakeguild <n> · ::idle <on|off> · ::welcome <reset|skip> · ::env …")
             return
     except (ValueError, TypeError):
         await say("Bad number.")
@@ -5674,6 +5997,92 @@ def _outfit_pricing(session):
             "tax_rate": royal_treasury.sales_tax_rate()}
 
 
+def _outfits_migrate_v2(session):
+    """SIDEBAR_DESIGN §4: one-off, idempotent move of a saved look (and wardrobe) to the painted-set block.
+
+    Paid layered pieces are refunded 100% to the bank (purse if the vault is full). Returns the
+    "Your old clothing was traded in" note to post, or None.
+    """
+    raw = session._row_val("appearance")
+    if not raw:
+        return None
+    try:
+        look = json.loads(raw)
+    except Exception:
+        return None
+    if not isinstance(look, dict) or int(look.get("appearance_version") or 0) >= outfits.APPEARANCE_VERSION:
+        return None
+    try:
+        owned = session._json_list("owned_cosmetics")
+        tier_ok = lambda tier: outfits.tier_unlocked(session, tier, WORLD.db.conn)
+        new, refund, ids = outfits.migrate_v2(look, owned, session.gender, tier_ok)
+        slots = []
+        for entry in session._json_list("saved_outfits") or []:
+            if isinstance(entry, dict):
+                moved, _r, _i = outfits.migrate_v2(entry, [], session.gender, tier_ok)
+                moved.pop("appearance_legacy", None)
+                moved["name"] = entry.get("name") or "Outfit"
+                moved["note"] = "Updated for the new outfits"
+                slots.append(moved)
+            else:
+                slots.append(entry)
+        to_bank = min(refund, max(0, MAX_BANK_COINS - int(session.bank_coins)))
+        session.bank_coins += to_bank
+        session.coins += refund - to_bank
+        WORLD.db.save_player_stats(session.player_id, appearance=json.dumps(new), saved_outfits=json.dumps(slots),
+                                   coins=session.coins, bank_coins=session.bank_coins)
+        session.row = WORLD.db.get_player_by_id(session.player_id)
+        logging.getLogger("outfits").info("migrate_v2 %s: set=%s refund=%d items=%d slots=%d",
+                                          session.char_name, new.get("set"), refund, len(ids), len(slots))
+    except Exception:
+        logging.getLogger("outfits").exception("migrate_v2 failed for %s", getattr(session, "char_name", "?"))
+        return None
+    if refund:
+        return f"{outfits.TRADE_IN_MAIL}: {refund:,} coins for {len(ids)} old purchase{'s' if len(ids) != 1 else ''} (clothing, colours, upgrades) went to your bank."
+    return None
+
+
+async def handle_buy_collection_set(session, msg):
+    """BUY_COLLECTION_SET {set}: buy a live Collection design (§6.1) and wear it. Re-buy refused."""
+    set_id = str(msg.get("set") or "")
+    entry = outfits.collection_entry(set_id)
+    if not entry:
+        await send(session.ws, "ERROR", message="That design is not in the catalogue.")
+        return
+    if not outfits.collection_live(entry):
+        await send(session.ws, "ERROR", message="That design is coming soon.")
+        return
+    if entry.get("sex") != outfits._sex(session.gender):
+        await send(session.ws, "ERROR", message="That isn't cut for you.")
+        return
+    owned = session._json_list("owned_cosmetics")
+    if set_id in owned:
+        await send(session.ws, "ERROR", message="You already own that design.")
+        return
+    if entry.get("tier") and not outfits.tier_unlocked(session, entry["tier"], WORLD.db.conn):
+        await send(session.ws, "ERROR", message="That design needs its story tier first.")
+        return
+    charge = await _charge_outfitter(session, int(entry.get("price") or 0))
+    if charge is None:
+        return
+    cost, tax = charge
+    owned.append(set_id)
+    base = session.appearance_state() or {}
+    look, error = _clean_appearance(session, dict(base, set=set_id), set(owned))
+    if error:
+        await send(session.ws, "ERROR", message=error)
+        return
+    _pay_purse_then_bank(session, cost + tax)
+    WORLD.db.save_player_stats(session.player_id, coins=session.coins, bank_coins=session.bank_coins,
+                               owned_cosmetics=json.dumps(owned), appearance=json.dumps(look))
+    session.row = WORLD.db.get_player_by_id(session.player_id)
+    if tax:
+        await _pay_royal_tax(session, "sales_tax_buy", tax)
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    await broadcast_player_state(session)
+    await send(session.ws, "CHAT_MSG", **{"from": "Mae", "text": f"{entry.get('name')} is yours: {cost:,} coins (+{tax:,} royal tax)."})
+
+
 async def handle_set_gender(session, msg):
     gender = "female" if str(msg.get("gender") or "").lower() == "female" else "male"
     session.gender = gender
@@ -5697,7 +6106,21 @@ async def handle_update_appearance(session, msg):
     session.row = WORLD.db.get_player_by_id(session.player_id)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     await broadcast_player_state(session)
-    await send(session.ws, "CHAT_MSG", **{"from": "Mae", "text": "Look saved."})
+    notes = outfits.clean_notes(session, msg.get("appearance"), set(session._json_list("owned_cosmetics")))
+    await send(session.ws, "CHAT_MSG", **{"from": "Mae", "text": "Look saved." + (" " + " ".join(notes) if notes else "")})
+
+
+def _wallet_total(session):
+    """Purse + bank. Outfitter prices can exceed the 65k purse cap."""
+    return int(session.coins) + int(session.bank_coins)
+
+
+def _pay_purse_then_bank(session, amount):
+    """Spend from the purse first, then the bank. Caller must have checked affordability."""
+    amount = int(amount)
+    take_purse = min(int(session.coins), amount)
+    session.coins -= take_purse
+    session.bank_coins -= amount - take_purse
 
 
 async def handle_buy_cosmetics(session, msg):
@@ -5707,6 +6130,8 @@ async def handle_buy_cosmetics(session, msg):
     owned = session._json_list("owned_cosmetics")
     owned_set = set(owned)
     ids = [i for i in dict.fromkeys(msg.get("items") or [])]
+    buy_ids = []
+    skipped_regalia = []
     for item_id in ids:
         item = table.get(item_id)
         if not item:
@@ -5719,15 +6144,20 @@ async def handle_buy_cosmetics(session, msg):
             await send(session.ws, "ERROR", message=hint or "That piece is locked.")
             return
         if not outfits.regalia_ok(session, item):
-            await send(session.ws, "ERROR", message="Regalia are worn only while you hold the title.")
-            return
-    q = outfits.quote(session, ids, owned_set, _shop_discount(session), msg.get("set"))
+            # Title regalia (King's crown, etc.): skip and still buy/wear the rest of the set.
+            skipped_regalia.append(item.get("name") or item_id)
+            continue
+        buy_ids.append(item_id)
+    q = outfits.quote(session, buy_ids, owned_set, _shop_discount(session), msg.get("set"))
     cost = int(q["total"])
     tax = royal_treasury.buy_tax(cost)
-    if cost + tax > session.coins:
-        await send(session.ws, "ERROR", message=f"You need {cost + tax - session.coins:,} more coins.")
+    due = cost + tax
+    if due > _wallet_total(session):
+        await send(session.ws, "ERROR", message=f"You need {due - _wallet_total(session):,} more coins (purse + bank).")
         return
-    buying = q["pieces"]
+    buying = list(q["pieces"])
+    for b_id in list(buying):            # jewellery bundles (Crown Jewels): grant the pieces at the bundle price
+        buying += [p for p in (table.get(b_id) or {}).get("bundle") or [] if p not in buying and p not in owned_set]
     appearance, error = _clean_appearance(session, msg.get("appearance"), owned_set | set(buying))
     if error:
         await send(session.ws, "ERROR", message=error)
@@ -5737,10 +6167,11 @@ async def handle_buy_cosmetics(session, msg):
         await send(session.ws, "ERROR", message=error)
         return
     owned.extend(b for b in buying if b not in owned_set)
-    session.coins -= cost + tax
+    _pay_purse_then_bank(session, due)
     WORLD.db.save_player_stats(
         session.player_id,
         coins=session.coins,
+        bank_coins=session.bank_coins,
         owned_cosmetics=json.dumps(owned),
         appearance=json.dumps(appearance),
     )
@@ -5749,18 +6180,27 @@ async def handle_buy_cosmetics(session, msg):
         await _pay_royal_tax(session, "sales_tax_buy", tax)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     await broadcast_player_state(session)
+    note = ""
+    if skipped_regalia:
+        note = " " + (", ".join(skipped_regalia[:2]) + ("…" if len(skipped_regalia) > 2 else "")
+                      + " need the matching title.")
     if cost:
-        await send(session.ws, "CHAT_MSG", **{"from": "Mae", "text": f"Bought and worn for {cost:,} coins (+{tax:,} royal tax)."})
+        await send(session.ws, "CHAT_MSG", **{"from": "Mae",
+                   "text": f"Bought and worn for {cost:,} coins (+{tax:,} royal tax).{note}"})
     else:
-        await send(session.ws, "CHAT_MSG", **{"from": "Mae", "text": "Worn."})
+        await send(session.ws, "CHAT_MSG", **{"from": "Mae", "text": f"Worn.{note}"})
 
 
 async def _charge_outfitter(session, base):
-    """Shop price (standing x discount, -10% cap) + royal tax. Returns (cost, tax) or None when short."""
+    """Shop price (standing x discount, -10% cap) + royal tax. Returns (cost, tax) or None when short.
+
+    Purse first, then bank — sets can cost more than the 65k purse holds.
+    """
     cost = reputation.buy_price(base, getattr(session, "reputation", 0), _shop_discount(session)) if base else 0
     tax = royal_treasury.buy_tax(cost)
-    if cost + tax > session.coins:
-        await send(session.ws, "ERROR", message=f"You need {cost + tax - session.coins:,} more coins.")
+    due = cost + tax
+    if due > _wallet_total(session):
+        await send(session.ws, "ERROR", message=f"You need {due - _wallet_total(session):,} more coins (purse + bank).")
         return None
     return cost, tax
 
@@ -5796,8 +6236,11 @@ async def handle_buy_palette(session, msg):
         return
     cost, tax = charged
     owned.append(key)
-    session.coins -= cost + tax
-    WORLD.db.save_player_stats(session.player_id, coins=session.coins, owned_cosmetics=json.dumps(owned))
+    _pay_purse_then_bank(session, cost + tax)
+    WORLD.db.save_player_stats(
+        session.player_id, coins=session.coins, bank_coins=session.bank_coins,
+        owned_cosmetics=json.dumps(owned),
+    )
     session.row = WORLD.db.get_player_by_id(session.player_id)
     if tax:
         await _pay_royal_tax(session, "sales_tax_buy", tax)
@@ -5836,8 +6279,11 @@ async def handle_upgrade_outfit(session, msg):
         return
     cost, tax = charged
     owned.append(f"{set_id}@{level}")
-    session.coins -= cost + tax
-    WORLD.db.save_player_stats(session.player_id, coins=session.coins, owned_cosmetics=json.dumps(owned))
+    _pay_purse_then_bank(session, cost + tax)
+    WORLD.db.save_player_stats(
+        session.player_id, coins=session.coins, bank_coins=session.bank_coins,
+        owned_cosmetics=json.dumps(owned),
+    )
     session.row = WORLD.db.get_player_by_id(session.player_id)
     if tax:
         await _pay_royal_tax(session, "sales_tax_buy", tax)
@@ -6037,8 +6483,24 @@ async def handle_equip(session, msg):
             return
         await send(session.ws, "ERROR", message="You can only equip arrows or an Arrow Quiver as ammo.")
         return
-    if eq_slot in gear_rules.ARMOUR_SLOTS:
-        await _take_outfit_off(session)
+    # David, 23 Oct 2026: equipping armour no longer takes the outfit off. Partial armour keeps the outfit's
+    # painted figure (stats apply, the gear isn't drawn); a full matching tier set shows its painted armour.
+    # David, 23 Oct 2026: body and legs go on together and both are needed (gear_rules pair rule).
+    if eq_slot in gear_rules.PAIR_SLOTS:
+        found = gear_rules.find_partner_in_bag(entry["item_id"], session.inventory, ITEMS)
+        if found is None:
+            await send(session.ws, "ERROR", message=gear_rules.pair_need_message(entry["item_id"], ITEMS))
+            return
+        if found[0] != "solo":
+            p_slot = gear_rules.pair_slot(eq_slot)
+            p_id = found[1]
+            p_old = session.equipment.get(p_slot)
+            session.equipment[p_slot] = p_id
+            WORLD.db.set_equipment(session.player_id, p_slot, p_id)
+            WORLD.remove_item_qty(session, p_id, 1)
+            if p_old:
+                WORLD.add_item_to_inventory(session, p_old, 1)
+            item = dict(item, name=f"{item['name']} and {ITEMS.get(p_id, {}).get('name', p_id)}")
     old = session.equipment.get(eq_slot)
     session.equipment[eq_slot] = entry["item_id"]
     WORLD.db.set_equipment(session.player_id, eq_slot, entry["item_id"])
@@ -6046,7 +6508,9 @@ async def handle_equip(session, msg):
     if old:
         WORLD.add_item_to_inventory(session, old, 1)
     auto_quiver = False
-    if is_bow(entry["item_id"]):
+    if eq_slot != "weapon":
+        pass
+    elif is_bow(entry["item_id"]):
         session.combat_style = "archery"
         auto_quiver = session.auto_equip_quiver()
     elif session.combat_style == "archery":
@@ -6115,18 +6579,17 @@ async def _outfit_gear_check(session, appearance):
     """Before an outfit is worn: refuse inside a dungeon, otherwise take the armour off. Returns an error or None."""
     if not gear_rules.wearing_outfit(appearance):
         return None
+    # David, 23 Oct 2026: the outfit is the look, armour gives the stats, so putting an outfit on keeps
+    # every armour piece equipped (_take_armour_off is kept unused). The dungeon lock still applies.
     if gear_rules.worn_armour(session) and gear_rules.in_real_dungeon(session):
         return "You can't change into an outfit inside a dungeon."
-    return await _take_armour_off(session)
+    return None
 
 
 async def handle_unequip(session, msg):
     slot_name = msg.get("equip_slot")
     item_id = session.equipment.get(slot_name)
     if not item_id:
-        return
-    if slot_name in gear_rules.LOCKED_IN_DUNGEON and gear_rules.in_real_dungeon(session):
-        await send(session.ws, "ERROR", message=gear_rules.unequip_locked_message(slot_name))
         return
     # Ammo: unequipping a quiver returns the pouch; contents stay stored for next equip.
     if slot_name == "ammo":
@@ -6148,12 +6611,25 @@ async def handle_unequip(session, msg):
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
         await send(session.ws, "CHAT_MSG", **{"from": "You", "text": "You put your ammo away."})
         return
+    p_slot = gear_rules.pair_slot(slot_name)
+    p_id = session.equipment.get(p_slot) if p_slot else None
+    if p_id:
+        # Body and legs come off together: check room for both before moving either.
+        free = sum(1 for i in range(int(INVENTORY_SIZE))
+                   if i // INVENTORY_TAB_SIZE != 3 and i not in session.inventory)   # Bags tab holds bags only
+        if free < 2:
+            await send(session.ws, "ERROR", message=gear_rules.PAIR_ROOM_MSG)
+            return
     if not WORLD.add_item_to_inventory(session, item_id, 1):
         await send(session.ws, "ERROR", message="Your inventory is full.")
         return
     name = ITEMS.get(item_id, {}).get("name", "item")
     session.equipment[slot_name] = None
     WORLD.db.set_equipment(session.player_id, slot_name, None)
+    if p_id and WORLD.add_item_to_inventory(session, p_id, 1):
+        session.equipment[p_slot] = None
+        WORLD.db.set_equipment(session.player_id, p_slot, None)
+        name = f"{name} and {ITEMS.get(p_id, {}).get('name', p_id)}"
     if slot_name == "weapon" and session.combat_style == "archery":
         session.combat_style = getattr(session, "melee_style", None) or "attack"
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
@@ -7311,10 +7787,11 @@ async def handler(ws):
                 await handle_buy_cosmetics(session, msg)
             elif mtype == "SAVE_OUTFIT":
                 await handle_save_outfit(session, msg)
-            elif mtype == "BUY_PALETTE":
-                await handle_buy_palette(session, msg)
-            elif mtype == "UPGRADE_OUTFIT":
-                await handle_upgrade_outfit(session, msg)
+            elif mtype in ("BUY_PALETTE", "UPGRADE_OUTFIT"):
+                # Colour options and Plain/Fine/Regal were removed (SIDEBAR_DESIGN §9).
+                await send(session.ws, "ERROR", message="Mae no longer sells colours or upgrades: each set is shown as painted.")
+            elif mtype == "BUY_COLLECTION_SET":
+                await handle_buy_collection_set(session, msg)
             elif mtype == "SET_GENDER":
                 await handle_set_gender(session, msg)
             elif mtype == "EQUIP":
@@ -7582,6 +8059,11 @@ async def game_loop():
                 await politics_live.tick()
             if WORLD.tick_count % 100 == 0:
                 await ruling_daily_tick()
+            if WORLD.tick_count % 10 == 0:
+                import world_clock
+                env_snap = world_clock.poll_update()
+                if env_snap is not None:
+                    await broadcast("ENV_UPDATE", env=env_snap)
             if WORLD.tick_count % 500 == 0:
                 for _s in list(WORLD.sessions.values()):
                     await settle_work(_s)
@@ -7775,7 +8257,7 @@ async def process_combat(events):
                     if wyrm is False:
                         session.in_combat_with = None
                     primary = None
-        fights = gear_rules.can_fight(session)
+        fights = gear_rules.can_fight(session, ITEMS)
         if not fights:
             if primary is not None:
                 session.in_combat_with = None
@@ -8174,7 +8656,7 @@ def _pet_step_toward(session, tx, ty, avoid=None):
     """Move pet one tile toward (tx, ty) if walkable. Never onto avoid."""
     px, py = session.pet_x, session.pet_y
     if (px, py) == (tx, ty):
-        return
+        return False
     options = []
     dx = 0 if px == tx else (1 if tx > px else -1)
     dy = 0 if py == ty else (1 if ty > py else -1)
@@ -8185,13 +8667,71 @@ def _pet_step_toward(session, tx, ty, avoid=None):
         if _pet_walkable(session, nx, ny):
             options.append((nx, ny))
     if not options:
-        return
+        return False
     options.sort(key=lambda p: max(abs(p[0] - tx), abs(p[1] - ty)))
-    session.pet_x, session.pet_y = options[0]
+    nx, ny = options[0]
+    sdx, sdy = nx - px, ny - py
+    if abs(sdx) >= abs(sdy) and sdx:
+        session.pet_facing = "e" if sdx > 0 else "w"
+    elif sdy:
+        session.pet_facing = "s" if sdy > 0 else "n"
+    session.pet_x, session.pet_y = nx, ny
+    return True
+
+
+def _pet_follow_tile(session):
+    """Preferred stand spot: about two tiles behind the player."""
+    free = _pet_preferred_tiles(session)
+    return free[0] if free else None
+
+
+def _pet_chebyshev(session):
+    return max(abs(int(session.pet_x) - int(session.x)), abs(int(session.pet_y) - int(session.y)))
+
+
+# Pets step on the world tick, not on every player keypress — keeps follow cheap.
+_PET_STEP_EVERY = 2   # ~1.2s at TICK_SECONDS=0.6
+
+
+def _pet_walk_follow(session):
+    """Slow walk toward the follow spot. Teleport only when off-screen (or stuck on the player)."""
+    if not getattr(session, "pet_id", None) or session.pet_id not in PETS:
+        return
+    if session.pet_target_id:
+        return
+    if _pet_off_screen(session):
+        _pet_reappear(session)
+        return
+    tick = int(getattr(WORLD, "tick_count", 0) or 0)
+    ready = int(getattr(session, "_pet_step_ready", 0) or 0)
+    if tick < ready:
+        _pet_face_owner(session)
+        return
+    dist = _pet_chebyshev(session)
+    # Close enough: don't thrash pathfinding every tick.
+    if dist <= 2 and (int(session.pet_x), int(session.pet_y)) != (int(session.x), int(session.y)):
+        _pet_face_owner(session)
+        return
+    target = _pet_follow_tile(session)
+    if (int(session.pet_x), int(session.pet_y)) == (int(session.x), int(session.y)):
+        if target and _pet_step_toward(session, target[0], target[1], avoid=(session.x, session.y)):
+            session._pet_step_ready = tick + _PET_STEP_EVERY
+        elif not target:
+            _pet_reappear(session)
+        return
+    if not target:
+        _pet_face_owner(session)
+        return
+    if dist > 2 and _pet_step_toward(session, target[0], target[1], avoid=(session.x, session.y)):
+        session._pet_step_ready = tick + _PET_STEP_EVERY
+    _pet_face_owner(session)
 
 
 def _pet_keep_up(session, dx=0, dy=0):
-    """Let the pet fall behind. It only returns once it has left the screen."""
+    """On each player step: remember facing; teleport only if the pet left the screen.
+
+    Walking is handled on the slower pet tick so rapid player moves don't stall the server.
+    """
     if dx or dy:
         if abs(dx) >= abs(dy) and dx:
             session.last_step = (1 if dx > 0 else -1, 0)
@@ -8202,9 +8742,9 @@ def _pet_keep_up(session, dx=0, dy=0):
     if session.pet_target_id:
         return
     if _pet_off_screen(session) or (session.pet_x, session.pet_y) == (session.x, session.y):
-        _pet_reappear(session)
-        return
-    _pet_face_owner(session)
+        # Same-tile: nudge off on the next pet tick instead of scanning rings here.
+        if _pet_off_screen(session):
+            _pet_reappear(session)
 
 
 def _pet_note_player_step(session):
@@ -8231,8 +8771,6 @@ def process_pets(events):
             session.pet_hp = pdef["hp"]
 
         _pet_note_player_step(session)
-        if _pet_off_screen(session):
-            _pet_reappear(session)
 
         dungeon_tag = session.player_id if session.dungeon else None
 
@@ -8249,6 +8787,8 @@ def process_pets(events):
                 session.pet_target_id = None
 
         if target is not None:
+            if _pet_off_screen(session):
+                _pet_reappear(session)
             if adjacent_or_same(session.pet_x, session.pet_y, target.x, target.y):
                 mstats = target.def_stats()
                 dmg, hit = combat.resolve_hit(
@@ -8294,15 +8834,15 @@ def process_pets(events):
                             }})
                         check_quest_progress_on_kill(session, target.type)
             else:
-                _pet_step_toward(session, target.x, target.y, avoid=(session.x, session.y))
+                tick = int(getattr(WORLD, "tick_count", 0) or 0)
+                if tick >= int(getattr(session, "_pet_step_ready", 0) or 0):
+                    if _pet_step_toward(session, target.x, target.y, avoid=(session.x, session.y)):
+                        session._pet_step_ready = tick + _PET_STEP_EVERY
             if (session.pet_x, session.pet_y) == (session.x, session.y):
                 _park_pet(session)
             continue
 
-        if _pet_off_screen(session) or (session.pet_x, session.pet_y) == (session.x, session.y):
-            _pet_reappear(session)
-        else:
-            _pet_face_owner(session)
+        _pet_walk_follow(session)
 
 
 async def process_gathering(events):

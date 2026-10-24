@@ -14,6 +14,9 @@ _DIR = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "..", "..", "npc_hd", "assets", "npcs",
 ))
 
+# Screen Y passed to blit_nameplate for the last HD NPC (badges / hints).
+last_nameplate_y = None
+
 OVERWORLD_HD = {
     "shopkeeper_joe",
     "jeweler_lira",
@@ -166,7 +169,10 @@ def draw_npc(client, n, cx, cy, tile, t, face="s", moving=False):
     left = cx - fx
     top = foot_y - fy
     client.screen.blit(image, (left, top))
-    client.blit_nameplate(n.get("name") or npc_id, cx, int(top) - 2, (255, 230, 160))
+    # Canvas has empty padding above the scalp; sit the plate just above the head.
+    global last_nameplate_y
+    last_nameplate_y = int(top + fy * 0.30)
+    client.blit_nameplate(n.get("name") or npc_id, cx, last_nameplate_y, (255, 230, 160))
     return True
 
 

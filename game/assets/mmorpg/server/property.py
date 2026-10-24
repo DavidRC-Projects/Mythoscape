@@ -26,12 +26,17 @@ BACKLOG_DAYS = 3
 # property kind -> apprentice workplace for players working there
 WORKPLACE_FOR = {"farm": "farm", "workshop": "workshop"}
 
-# Four plot sites on the grass between the office and the King's Row lanes.
+# Plot sites: King's Row lanes, plus village / harbour / city / south-road lots.
+# King's Row plots sit south of the Fairy Glade exit (arch ~y=97).
 SITES = {
-    "kings_row_plot_1": (15, 99),
-    "kings_row_plot_2": (20, 99),
-    "kings_row_plot_3": (15, 104),
-    "kings_row_plot_4": (20, 104),
+    "kings_row_plot_1": (18, 100),
+    "kings_row_plot_2": (23, 100),
+    "kings_row_plot_3": (18, 105),
+    "kings_row_plot_4": (23, 105),
+    "village_green_plot": (34, 47),   # was (38, 54), now Fairy Glade trees
+    "harbour_plot": (176, 32),   # was (168, 22), now the Wolf Pass rock spur
+    "stonehaven_south_plot": (110, 90),
+    "south_road_plot": (105, 144),
 }
 
 OFFICE_OPTIONS = [

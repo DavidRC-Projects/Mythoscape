@@ -1,0 +1,212 @@
+{
+"bronze_male_s": {
+"crown": 108,
+"Hb": 966,
+"cx": 63.8
+},
+"bronze_male_e": {
+"crown": 107,
+"Hb": 960,
+"cx": 76.9
+},
+"bronze_male_n": {
+"crown": 106,
+"Hb": 958,
+"cx": 61.7
+},
+"bronze_female_s": {
+"crown": 73,
+"Hb": 974,
+"cx": 58.8
+},
+"bronze_female_e": {
+"crown": 73,
+"Hb": 982,
+"cx": 122.9
+},
+"bronze_female_n": {
+"crown": 71,
+"Hb": 961,
+"cx": 86.8
+},
+"iron_male_s": {
+"crown": 65,
+"Hb": 979,
+"cx": 65.0
+},
+"iron_male_e": {
+"crown": 64,
+"Hb": 967,
+"cx": 86.5
+},
+"iron_male_n": {
+"crown": 63,
+"Hb": 949,
+"cx": 64.2
+},
+"iron_female_s": {
+"crown": 62,
+"Hb": 970,
+"cx": 59.6
+},
+"iron_female_e": {
+"crown": 61,
+"Hb": 964,
+"cx": 75.6
+},
+"iron_female_n": {
+"crown": 60,
+"Hb": 950,
+"cx": 73.9
+},
+"steel_male_s": {
+"crown": 70,
+"Hb": 991,
+"cx": 63.8
+},
+"steel_male_e": {
+"crown": 68,
+"Hb": 971,
+"cx": 88.0
+},
+"steel_male_n": {
+"crown": 68,
+"Hb": 968,
+"cx": 64.0
+},
+"steel_female_s": {
+"crown": 62,
+"Hb": 977,
+"cx": 59.7
+},
+"steel_female_e": {
+"crown": 61,
+"Hb": 971,
+"cx": 82.5
+},
+"steel_female_n": {
+"crown": 61,
+"Hb": 967,
+"cx": 58.7
+},
+"mithril_male_s": {
+"crown": 76,
+"Hb": 993,
+"cx": 63.9
+},
+"mithril_male_e": {
+"crown": 75,
+"Hb": 987,
+"cx": 77.7
+},
+"mithril_male_n": {
+"crown": 74,
+"Hb": 974,
+"cx": 64.2
+},
+"mithril_female_s": {
+"crown": 65,
+"Hb": 978,
+"cx": 72.2
+},
+"mithril_female_e": {
+"crown": 64,
+"Hb": 976,
+"cx": 69.8
+},
+"mithril_female_n": {
+"crown": 64,
+"Hb": 973,
+"cx": 58.9
+},
+"adamant_male_s": {
+"crown": 72,
+"Hb": 995,
+"cx": 64.3
+},
+"adamant_male_e": {
+"crown": 70,
+"Hb": 968,
+"cx": 84.3
+},
+"adamant_male_n": {
+"crown": 70,
+"Hb": 970,
+"cx": 63.7
+},
+"adamant_female_s": {
+"crown": 61,
+"Hb": 981,
+"cx": 59.1
+},
+"adamant_female_e": {
+"crown": 60,
+"Hb": 974,
+"cx": 82.3
+},
+"adamant_female_n": {
+"crown": 60,
+"Hb": 976,
+"cx": 58.9
+},
+"mythos_male_s": {
+"crown": 45,
+"Hb": 1011,
+"cx": 126.9
+},
+"mythos_male_e": {
+"crown": 44,
+"Hb": 1011,
+"cx": 73.3
+},
+"mythos_male_n": {
+"crown": 44,
+"Hb": 997,
+"cx": 77.8
+},
+"mythos_female_s": {
+"crown": 42,
+"Hb": 985,
+"cx": 154.4
+},
+"mythos_female_e": {
+"crown": 42,
+"Hb": 987,
+"cx": 88.6
+},
+"mythos_female_n": {
+"crown": 41,
+"Hb": 977,
+"cx": 155.6
+},
+"eclipse_male_s": {
+"crown": 69,
+"Hb": 1000,
+"cx": 62.6
+},
+"eclipse_male_e": {
+"crown": 68,
+"Hb": 989,
+"cx": 88.0
+},
+"eclipse_male_n": {
+"crown": 67,
+"Hb": 982,
+"cx": 62.6
+},
+"eclipse_female_s": {
+"crown": 62,
+"Hb": 986,
+"cx": 134.2
+},
+"eclipse_female_e": {
+"crown": 62,
+"Hb": 991,
+"cx": 82.4
+},
+"eclipse_female_n": {
+"crown": 61,
+"Hb": 976,
+"cx": 58.2
+}
+}

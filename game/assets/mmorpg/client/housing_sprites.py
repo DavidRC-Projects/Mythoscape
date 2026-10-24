@@ -133,10 +133,10 @@ def _decorate_floor(image, accent, style):
     return pygame.image.frombytes(bytes(data), (width, height), "RGBA").convert_alpha()
 
 
-def _surface(relative, tile, style=0):
+def _surface(relative, tile, style=0, hd_tag=None):
     bucket, base = ("2x", 80) if tile > 40 else ("1x", 40)
     rel = relative.replace("/1x/", f"/{bucket}/") if bucket == "2x" else relative
-    key = (rel, int(tile), int(style))
+    key = (rel, int(tile), int(style), hd_tag)
     if key in _CACHE:
         return _CACHE[key]
     path = os.path.join(_DIR, rel)
@@ -146,8 +146,21 @@ def _surface(relative, tile, style=0):
     if not os.path.isfile(path):
         _CACHE[key] = None
         return None
-    image = pygame.image.load(path).convert_alpha()
-    if rel.endswith("cutaway.png"):
+    image = None
+    if hd_tag:
+        # Building-specific painted art (e.g. Mythos Outfitters reuses the
+        # King's Folly layout). Missing or unreadable: old art is the fallback.
+        hd = path[:-4] + f"_{hd_tag}_hd.png"
+        if os.path.isfile(hd):
+            try:
+                image = pygame.image.load(hd).convert_alpha()
+            except Exception:
+                image = None
+        if image is not None:
+            style = -1
+    if image is None:
+        image = pygame.image.load(path).convert_alpha()
+    if style != -1 and rel.endswith("cutaway.png"):
         key_name = rel.split("/")[-2]
         house = None
         try:
@@ -207,16 +220,22 @@ def queue(client, draw_list, cam_x, cam_y, tile):
 
 
 def queue_outfitters(client, draw_list, cam_x, cam_y, tile, inside):
-    """Mythos Outfitters uses the King's Folly house art. The door stays at (52, 64)."""
+    """Mythos Outfitters uses the King's Folly house art on the south spur."""
+    x0, y0, x1, y1 = 50, 74, 63, 84
+    for b in getattr(client, "buildings", None) or ():
+        if b.get("id") == "mythos_outfitters":
+            x0 = int(b["x0"]); y0 = int(b["y0"])
+            x1 = int(b["x1"]); y1 = int(b["y1"])
+            break
     _queue_piece(
         client, draw_list, cam_x, cam_y, tile, "kings_folly",
-        45, 54, 58, 64, inside,
+        x0, y0, x1, y1, inside,
         label=None if inside else "Mythos Outfitters",
-        floor_style=0,
+        floor_style=0, hd_tag="outfitters",
     )
 
 
-def _queue_piece(client, draw_list, cam_x, cam_y, tile, key, x0, y0, x1, y1, inside, label, clip_x=None, screen=None, sign=False, floor_style=None):
+def _queue_piece(client, draw_list, cam_x, cam_y, tile, key, x0, y0, x1, y1, inside, label, clip_x=None, screen=None, sign=False, floor_style=None, hd_tag=None):
     meta = _meta(key)
     if not meta:
         return
@@ -241,7 +260,7 @@ def _queue_piece(client, draw_list, cam_x, cam_y, tile, key, x0, y0, x1, y1, ins
 
     def blit(relative, x=left, y=top, n=tile, clip=clip_x, floor_style=floor_style):
         style = floor_style if relative and str(relative).endswith("cutaway.png") else 0
-        image = _surface(relative, n, style)
+        image = _surface(relative, n, style, hd_tag)
         if image is None:
             return
         previous = screen.get_clip()

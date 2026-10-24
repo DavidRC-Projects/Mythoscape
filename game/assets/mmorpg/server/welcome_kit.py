@@ -29,20 +29,28 @@ SWORD_COOLDOWN_S = 3600
 OPT_WEAR, OPT_TAKE, OPT_COLLECT, OPT_EQUIP = "kit_wear", "kit_take", "kit_collect", "kit_equip"
 OPT_SWORD, OPT_REMIND, OPT_SKIP = "kit_sword", "remind", "skip"
 
+TOOLS_STEP = (
+    "Tools: your hatchet, pickaxe and fishing net are in your bag. Click one to equip it. It moves into the "
+    "tool slot on your Equipment screen and leaves your bag.",
+    "You chop, mine or fish with the tool you have equipped, so swap to the right one first: "
+    "hatchet for trees, pickaxe for rocks, net or rod for fishing spots.",
+)
+
 TOUR = (
     ("Walking: click the ground and you'll walk there. The arrow keys move you one tile at a time.",
      "Zoom with the mouse wheel over the map, or with - and =. The minimap shows where you are. "
      "Right-click it to open the world map. M opens Travel. H lists every control."),
-    ("Fighting: you need a weapon in your hand. Click a monster to attack, or press Space for the nearest one. "
-     "R eats food.",
+    ("Fighting: you need a sword or axe in your hand. Click a monster to attack, or press Space for the nearest "
+     "one. R eats food.",
      "Nameplates are coloured against your level: green you'll win, yellow it's even, orange it's risky, "
      "red you should leave alone.",
-     "You can't fight in an outfit or with empty hands. If something attacks you dressed like that, run."),
-    ("Dungeons: the gate only opens if you're wearing a chest plate, leg armour, a helmet and a weapon. "
-     "Once you're inside, those four stay on until you leave.",),
-    ("Outfits and armour don't mix. Put on any armour or a weapon and your outfit comes off.",
+     "Armour helps but isn't required. Without a sword or axe you can't fight at all, so if something "
+     "attacks you empty-handed, run."),
+    ("Dungeons: the gate opens for anyone with a sword or axe equipped. Armour is up to you.",),
+    ("Outfits and armour don't mix. Put on any armour piece and your outfit comes off.",
      "Put on an outfit from Mae and your armour goes to your bag, or the bank if your bag is full. "
-     "Nothing is ever lost."),
+     "Nothing is ever lost. Your sword or axe stays in your hand either way."),
+    TOOLS_STEP,
     ("Skills: chop, mine, fish, cook, smith, fletch and more. Each one levels up as you use it. "
      "Press Tab to see them all.",
      "Gareth's smithy, far to the north-east, sells bronze to mithril and buys ore. "
@@ -176,8 +184,9 @@ def _owned_ids(session):
 
 
 def has_weapon_slot_item(session, items):
-    """Anything that can go in the weapon slot (tools count: gear_rules lets you fight with an axe)."""
-    return any((items.get(i) or {}).get("equip_slot") == "weapon" for i in _owned_ids(session))
+    """Owns something to fight with: a sword or axe (gear_rules). Gathering tools and bows don't count."""
+    import gear_rules
+    return any(gear_rules.weapon_kind(i, items) in gear_rules.FIGHT_KINDS for i in _owned_ids(session))
 
 
 def geared(session, items):

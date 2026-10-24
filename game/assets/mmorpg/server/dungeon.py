@@ -1,8 +1,8 @@
 """
-Tidehollow Cave — private 10-floor instance dungeon by Harbourreach.
+Tidehollow Cave — private chamber-chain instance by Harbourreach.
 
-Floors scale combat level 10 → 80. Creature count shrinks each floor.
-Clear every monster to advance; finish floor 10 for a high-value reward,
+One map of ten chambers. Each fight room spawns three different beasts;
+the final chamber is dragons. Clear every chamber for a completion reward,
 the Tidehollow Medal, and a golden chat announcement outside.
 """
 from __future__ import annotations
@@ -11,35 +11,10 @@ import random
 
 from world_map import WALL, FLOOR, widen_single_file_passages, is_walkable as _world_walkable
 
-# Floor combat levels (1..10) and spawn counts (fewer, harder deeper).
-#
-# `name`  — the floor title shown on the HUD.
-# `elite` — a named creature that anchors the floor's hardest chamber. It is
-#           one of the floor's monsters, made tougher and better paying, so the
-#           count never changes and the clear condition is unaffected.
-# `boss`  — set on the two milestone floors. The boss is the last chamber's
-#           encounter; killing it clears the floor (and, on 10, the dungeon).
+# Single run: the ten chambers on the map *are* the dungeon.
+# `elite` / `boss` land in the final (dragon) chamber.
 TIDEHOLLOW_FLOORS = [
-    {"floor": 1, "level": 10, "count": 27, "label": "Dripping Halls",
-     "elite": "The Drowned Warden"},
-    {"floor": 2, "level": 18, "count": 27, "label": "Salted Tunnels",
-     "elite": "Brinerot, the Tunneller"},
-    {"floor": 3, "level": 26, "count": 27, "label": "Barnacle Gallery",
-     "elite": "The Barnacled Choir"},
-    {"floor": 4, "level": 34, "count": 27, "label": "Echoing Grotto",
-     "elite": "Echo of Hulls Past"},
-    {"floor": 5, "level": 42, "count": 27, "label": "Blackwater Bend",
-     "elite": "The Drowned Warden",
-     "boss": {"name": "Marrowfin the Drowned", "level_bonus": 6}},
-    {"floor": 6, "level": 49, "count": 27, "label": "Kraken's Teeth",
-     "elite": "Kraken's First Tooth"},
-    {"floor": 7, "level": 57, "count": 27, "label": "Abyss Antechamber",
-     "elite": "The Antechamber Warden"},
-    {"floor": 8, "level": 65, "count": 18, "label": "Pearl Vault",
-     "elite": "The Pearl Keeper"},
-    {"floor": 9, "level": 72, "count": 18, "label": "Sunken Throne",
-     "elite": "The Usurper's Shade"},
-    {"floor": 10, "level": 80, "count": 18, "label": "Tidehollow Heart",
+    {"floor": 1, "level": 40, "count": 30, "label": "Tidehollow Cave",
      "elite": "Heart of the Deep",
      "boss": {"name": "The Tidehollow Leviathan", "level_bonus": 8}},
 ]
@@ -50,14 +25,24 @@ DUNGEON_W, DUNGEON_H = 71, 38
 DUNGEON_SPAWN = (7, 33)
 CAVE_RETURN = (189, 54)  # just south of the cave mouth
 
-# Visual monster type by floor band (uses existing drawers)
-_FLOOR_VISUAL = {
-    1: "goblin", 2: "goblin",
-    3: "skeleton", 4: "skeleton",
-    5: "wolf", 6: "wolf",
-    7: "spider", 8: "spider",
-    9: "big_skeleton", 10: "dragon",
+# Per chamber: combat level + three distinct monster types.
+# Room 0 is the entrance (EXIT south) — it fights too, so the first sealed door
+# always has beasts in the room you are standing in. Room 9 is dragons.
+ROOM_ENCOUNTERS = {
+    0: {"level": 12, "types": ("goblin", "wolf", "skeleton"), "label": "Dripping Halls"},
+    1: {"level": 20, "types": ("goblin", "skeleton", "giant"), "label": "Salted Tunnels"},
+    2: {"level": 28, "types": ("wolf", "skeleton", "giant"), "label": "Barnacle Gallery"},
+    3: {"level": 36, "types": ("skeleton", "giant", "big_skeleton"), "label": "Echoing Grotto"},
+    4: {"level": 44, "types": ("wolf", "giant", "spider"), "label": "Blackwater Bend"},
+    5: {"level": 52, "types": ("giant", "spider", "big_skeleton"), "label": "Kraken's Teeth"},
+    6: {"level": 60, "types": ("spider", "big_skeleton", "giant"), "label": "Abyss Antechamber"},
+    7: {"level": 68, "types": ("big_skeleton", "spider", "wolf"), "label": "Pearl Vault"},
+    8: {"level": 74, "types": ("spider", "giant", "big_skeleton"), "label": "Sunken Throne"},
+    9: {"level": 80, "types": ("dragon", "dragon", "dragon"), "label": "Tidehollow Heart"},
 }
+
+# Fallback visual when a room has no encounter table entry.
+_FLOOR_VISUAL = {1: "goblin"}
 
 TIDEHOLLOW_REWARDS = [
     ("mithril_body", 1),
@@ -68,6 +53,9 @@ TIDEHOLLOW_REWARDS = [
     ("super_attack_potion", (2, 4)),
     ("super_strength_potion", (2, 4)),
 ]
+
+# Always granted on first clear (also listed so completion UI can show it).
+TIDEHOLLOW_MEDAL_ID = "tidehollow_amulet"
 
 
 def roll_kill_loot(floor: int, level: int):
@@ -185,14 +173,46 @@ _ROOM_SLOTS = [
     (63, 14), (49, 14), (35, 14), (21, 14), (7, 14),   # upper rank, east→west
 ]
 
-# How many monsters live in each chamber, and therefore how many kills open
-# its door. Sized to the map: nine chambers (the entrance hall is free) with a
-# handful of beasts each, rather than one open room holding the whole floor.
-ROOM_SPAWNS = {1: 3, 2: 3, 3: 3, 4: 3, 5: 3, 6: 3, 7: 3, 8: 2, 9: 2, 10: 2}
+# Three beasts per fight chamber — always. The types come from ROOM_ENCOUNTERS.
+ROOM_SPAWNS_PER_CHAMBER = 3
 
 
 def room_spawn_count(floor: int) -> int:
-    return ROOM_SPAWNS.get(int(floor), 3)
+    return ROOM_SPAWNS_PER_CHAMBER
+
+
+def room_encounter(room_id: int) -> dict:
+    """Level + three monster types for a fight chamber."""
+    return ROOM_ENCOUNTERS.get(int(room_id)) or {
+        "level": 20, "types": ("goblin", "wolf", "skeleton"), "label": "Tidehollow",
+    }
+
+
+def room_monster_types(room_id: int) -> tuple:
+    """Exactly three types for the chamber. Final room is dragons."""
+    types = tuple(room_encounter(room_id).get("types") or ("goblin", "wolf", "skeleton"))
+    if len(types) >= 3:
+        return types[:3]
+    # Pad without duplicating when possible.
+    pool = ("goblin", "wolf", "skeleton", "giant", "spider", "big_skeleton")
+    out = list(types)
+    for t in pool:
+        if len(out) >= 3:
+            break
+        if t not in out:
+            out.append(t)
+    while len(out) < 3:
+        out.append(out[-1] if out else "goblin")
+    return tuple(out[:3])
+
+
+def room_combat_level(room_id: int) -> int:
+    return int(room_encounter(room_id).get("level") or 20)
+
+
+def is_finale_room(room_id: int) -> bool:
+    """True for the last chamber — dragons + Leviathan."""
+    return int(room_id) == max(ROOM_ENCOUNTERS)
 
 
 def _carve_room(tiles, cx, cy, w, h):
@@ -281,7 +301,9 @@ def generate_rooms(floor: int, rng=None):
             "cells": cells,
             "center": (cx, cy),
             "doors": set(),
-            "cleared": index == 0,          # the entrance hall is always open
+            # Every chamber starts uncleared — including the entrance — so the
+            # first sealed door always has three beasts in the room you are in.
+            "cleared": False,
             "kills": 0,
             # Provisional; the server replaces this with the number that
             # actually spawned in the room.
@@ -330,39 +352,40 @@ def generate_rooms(floor: int, rng=None):
     return tiles, rooms
 
 
+def _is_exit_tile(x, y) -> bool:
+    """Southern leave-passage — must never be sealed."""
+    sx, sy = DUNGEON_SPAWN
+    return abs(int(x) - sx) <= 1 and int(y) >= sy
+
+
 def _recompute_doors(tiles, rooms):
     """Refresh each room's doorway set from the final tile layout.
 
-    A door is a room cell that touches a non-room passage tile and is on the
-    room's edge. Recomputing after any carving keeps the seal in step with the
-    geometry instead of sealing tiles that were later widened away.
+    A door is a floor cell owned by this chamber that touches a floor cell
+    owned by a *different* chamber (the corridor boundary). The southern EXIT
+    passage is never a door — sealing it would trap the player inside.
     """
-    for index, room in enumerate(rooms):
-        others = set()
-        for other in rooms:
-            if other is not room:
-                others |= other["cells"]
+    for room in rooms:
         doors = set()
         for x, y in room["cells"]:
-            # Only the room's own interior counts; skip corridor cells that were
-            # merged into this room's footprint.
-            if (x, y) in others:
+            if _is_exit_tile(x, y):
                 continue
-            passage = False
+            owner = room_at(rooms, x, y)
+            if owner is None or owner["id"] != room["id"]:
+                continue
             for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
                 nx, ny = x + dx, y + dy
                 if not (0 <= ny < len(tiles) and 0 <= nx < len(tiles[ny])):
                     continue
-                if tiles[ny][nx] != FLOOR:
+                if tiles[ny][nx] not in (FLOOR, SEALED):
                     continue
-                if (nx, ny) in room["cells"]:
+                if _is_exit_tile(nx, ny):
                     continue
-                passage = True
-                break
-            if passage:
-                doors.add((x, y))
-        if doors:
-            room["doors"] = doors
+                neighbor = room_at(rooms, nx, ny)
+                if neighbor is not None and neighbor["id"] != room["id"]:
+                    doors.add((x, y))
+                    break
+        room["doors"] = doors
 
 
 def _rooms_connected(tiles):
@@ -451,35 +474,97 @@ def pick_completion_reward():
 
 
 def visual_type_for_floor(floor: int) -> str:
+    """Legacy single-type helper; Tidehollow now prefers room_monster_types."""
     return _FLOOR_VISUAL.get(floor, "skeleton")
+
+
+def monster_display_name(visual: str, level: int) -> str:
+    """Readable name for a Tidehollow spawn (overworld names + cavern flavour)."""
+    base = {
+        "goblin": "Cave Goblin",
+        "wolf": "Brine Wolf",
+        "skeleton": "Salt Skeleton",
+        "giant": "Drowned Giant",
+        "big_skeleton": "Barnacle Skeleton",
+        "spider": "Tide Spider",
+        "dragon": "Tidehollow Dragon",
+    }.get(visual, "Cavern Beast")
+    return f"{base} (lvl {int(level)})"
 
 
 # ---------------------------------------------------------------------------
 # Sealing
 #
-# A door is solid while its room is uncleared. Entrances are sealed behind the
-# player as they enter, so the fight has to be finished before they can leave.
+# Cleared chambers stay open. The next fight chamber stays open so the player
+# can walk in and meet its beasts. Further chambers stay sealed until the one
+# before them is cleared. Once the player is *inside* an uncleared chamber,
+# that chamber's doors seal behind them until its kill target is met.
 # ---------------------------------------------------------------------------
 
-def apply_seals(tiles, rooms):
-    """Write SEALED into every doorway belonging to an uncleared room."""
-    for room in rooms:
-        if room["cleared"]:
+def frontier_room_id(rooms) -> int | None:
+    """Id of the next uncleared fight chamber, or None if the chain is done."""
+    for room in sorted(rooms, key=lambda r: r["id"]):
+        if room.get("cleared"):
             continue
-        for x, y in room["doors"]:
+        if not room.get("doors") and int(room.get("kill_target") or 0) <= 0:
+            continue
+        return int(room["id"])
+    return None
+
+
+def apply_seals(tiles, rooms, player_xy=None):
+    """Seal only rooms the player should not enter yet (and the active fight).
+
+    Passing ``player_xy`` seals the chamber they currently stand in when that
+    chamber is still uncleared, so the fight cannot be abandoned by walking out.
+    """
+    # Clear every former seal first so reopening a frontier never leaves a
+    # stale SEALED tile from a previous layout pass.
+    for y, row in enumerate(tiles):
+        for x, tile in enumerate(row):
+            if tile == SEALED:
+                row[x] = FLOOR
+
+    frontier = frontier_room_id(rooms)
+    inside_id = None
+    if player_xy is not None and frontier is not None:
+        here = room_at(rooms, player_xy[0], player_xy[1])
+        if here is not None and not here.get("cleared") and int(here["id"]) == frontier:
+            # Only seal behind once they have stepped past the doorway into the
+            # chamber proper — standing on a door tile must not trap them outside.
+            if (int(player_xy[0]), int(player_xy[1])) not in here.get("doors", ()):
+                inside_id = int(here["id"])
+
+    for room in rooms:
+        if room.get("cleared"):
+            continue
+        rid = int(room["id"])
+        # Keep the frontier open until the player is inside it. Seal every
+        # chamber beyond that so they cannot skip ahead.
+        if frontier is not None and rid == frontier and inside_id != rid:
+            continue
+        if frontier is not None and rid > frontier:
+            pass  # seal
+        elif inside_id is not None and rid == inside_id:
+            pass  # seal behind
+        elif frontier is None:
+            continue
+        else:
+            # Uncleared rooms behind the frontier should not exist in a healthy
+            # chain; leave them open rather than soft-locking.
+            continue
+        for x, y in room.get("doors") or ():
+            if _is_exit_tile(x, y):
+                continue
             if 0 <= y < len(tiles) and 0 <= x < len(tiles[0]):
                 tiles[y][x] = SEALED
     return tiles
 
 
 def open_room(tiles, rooms, room):
-    """Unseal a room's doorways (called once its wave is dead)."""
+    """Mark a room cleared and refresh seals so the next chamber opens."""
     room["cleared"] = True
-    for x, y in room["doors"]:
-        if 0 <= y < len(tiles) and 0 <= x < len(tiles[0]) \
-                and tiles[y][x] == SEALED:
-            tiles[y][x] = FLOOR
-    return tiles
+    return apply_seals(tiles, rooms)
 
 
 def room_at(rooms, x, y):
@@ -525,21 +610,41 @@ def room_clear_reward(floor: int):
     return out
 
 
-def spawn_tiles_for_room(room, tiles, limit):
-    """Free floor tiles inside a room, away from its doorways."""
+def room_interior_box(room):
+    """Axis-aligned leash box for the carved chamber (not the corridor)."""
+    cx, cy = room["center"]
+    hw, hh = _ROOM_W // 2, _ROOM_H // 2
+    return (cx - hw, cy - hh, cx + hw, cy + hh)
+
+
+def spawn_tiles_for_room(room, tiles, limit, rooms=None):
+    """Free floor tiles in the chamber proper — never corridors or the EXIT.
+
+    When ``rooms`` is given, only tiles whose nearest chamber is this room are
+    used, so beasts cannot spawn in a neighbour's footprint and open the wrong
+    door.
+    """
     doors = room["doors"]
-    out = []
-    for x, y in sorted(room["cells"]):
-        if len(out) >= limit:
-            break
+    cx, cy = room["center"]
+    hw, hh = _ROOM_W // 2, _ROOM_H // 2
+    candidates = []
+    for x, y in room["cells"]:
         if tiles[y][x] != FLOOR:
             continue
+        if _is_exit_tile(x, y):
+            continue
+        # Stay inside the carved box so corridor merges never host a spawn.
+        if abs(x - cx) > hw or abs(y - cy) > hh:
+            continue
+        if rooms is not None:
+            owner = room_at(rooms, x, y)
+            if owner is None or owner["id"] != room["id"]:
+                continue
         if (x, y) in doors:
             continue
         # Keep a tile between monsters and the doorway so nothing plugs it.
         if any((x + dx, y + dy) in doors for dx in (-1, 0, 1) for dy in (-1, 0, 1)):
             continue
-        if int(x) == DUNGEON_SPAWN[0] and int(y) >= DUNGEON_SPAWN[1] - 3:
-            continue
-        out.append((x, y))
-    return out
+        candidates.append((abs(x - cx) + abs(y - cy), x, y))
+    candidates.sort()
+    return [(x, y) for _d, x, y in candidates[:limit]]

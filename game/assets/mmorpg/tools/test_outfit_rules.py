@@ -1,4 +1,4 @@
-"""Outfit / armour / dungeon / fighting rules (David, 17 Oct 2026). Run: python3 tools/test_outfit_rules.py"""
+"""Outfit / armour / dungeon / fighting rules (David, 17 Oct 2026; weapon-only rules 23 Oct 2026). Run: python3 tools/test_outfit_rules.py"""
 import asyncio
 import json
 import os
@@ -18,6 +18,7 @@ W = server.WORLD
 _N = [0]
 KIT = {"helmet": "bone_crown", "body": "mythos_body", "legs": "mythos_legs",
        "weapon": "bronze_sword", "shield": "mythos_shield"}
+ARMOUR = ("helmet", "body", "legs", "shield")
 
 
 class WS:
@@ -81,80 +82,92 @@ def stand_at_dungeon(s):
     raise AssertionError("no dungeon entrance in INTERACTABLES")
 
 
-# ---- 1. dungeon gate ---------------------------------------------------------------------------
-def test_gate_needs_four_slots():
+# ---- 1. dungeon gate: a sword or axe, nothing else (23 Oct 2026) ------------------------------------
+def test_gate_needs_sword_or_axe():
     s = make()
     stand_at_dungeon(s)
     run(server.handle_enter_dungeon(s, {}))
-    assert not s.dungeon
-    msg = errors(s)[-1]
-    assert msg.startswith("The dungeon gate stays shut.") and "chest plate" in msg and "a weapon" in msg, msg
-    wear_kit(s, {"body": KIT["body"], "legs": KIT["legs"], "helmet": KIT["helmet"]})
-    run(server.handle_enter_dungeon(s, {}))
-    assert not s.dungeon and errors(s)[-1].endswith("Missing: a weapon."), errors(s)[-1]
-
-
-def test_gate_opens_with_full_kit():
-    s = make()
-    stand_at_dungeon(s)
-    wear_kit(s)
-    try:
+    assert not s.dungeon and errors(s)[-1] == gear_rules.GATE_MSG, errors(s)
+    # full armour but no weapon, a bow, or a gathering tool: still shut
+    wear_kit(s, {"body": KIT["body"], "legs": KIT["legs"], "helmet": KIT["helmet"], "shield": KIT["shield"]})
+    for weapon, tool in ((None, None), ("shortbow", None), (None, "bronze_axe"), (None, "bronze_pickaxe")):
+        s.equipment["weapon"], s.equipment["tool"] = weapon, tool
+        s.ws.out.clear()
         run(server.handle_enter_dungeon(s, {}))
-    except Exception:
-        pass      # entering needs a live world; only the gate is under test
-    assert not any(e.startswith("The dungeon gate") for e in errors(s)), errors(s)
+        assert not s.dungeon and errors(s)[-1] == gear_rules.GATE_MSG, (weapon, tool, errors(s))
 
 
-# ---- 2. no unequipping in a dungeon ------------------------------------------------------------
-def test_dungeon_unequip_lock():
+def test_gate_opens_with_weapon_only():
+    for weapon in ("bronze_sword", "steel_longsword", "iron_battleaxe", "recruit_bronze_sword"):
+        s = make()
+        stand_at_dungeon(s)
+        wear_kit(s, {"weapon": weapon})            # no armour at all
+        try:
+            run(server.handle_enter_dungeon(s, {}))
+        except Exception:
+            pass      # entering needs a live world; only the gate is under test
+        assert not any(e.startswith("The dungeon gate") for e in errors(s)), (weapon, errors(s))
+
+
+# ---- 2. nothing is locked on inside a dungeon ----------------------------------------------------------
+def test_dungeon_no_unequip_lock():
     s = make()
     wear_kit(s)
     s.dungeon = {"id": "tidehollow"}
-    for slot in ("body", "legs", "helmet", "weapon"):
+    for slot in ("body", "legs", "helmet", "weapon", "shield"):
         run(server.handle_unequip(s, {"equip_slot": slot}))
-        assert s.equipment[slot] == KIT[slot], slot
-        assert errors(s)[-1] == gear_rules.unequip_locked_message(slot)
-    run(server.handle_unequip(s, {"equip_slot": "shield"}))   # not one of the gate slots
-    assert s.equipment["shield"] is None
-    s.dungeon = None
-    run(server.handle_unequip(s, {"equip_slot": "helmet"}))
-    assert s.equipment["helmet"] is None
-    t = make()
-    wear_kit(t)
-    t.dungeon = {"id": "castle_realm"}                        # the Castle Realm isn't a dungeon
-    run(server.handle_unequip(t, {"equip_slot": "body"}))
-    assert t.equipment["body"] is None
+        assert s.equipment[slot] is None, (slot, errors(s))
+    assert not any("can't take off" in e for e in errors(s)), errors(s)
+    assert not hasattr(gear_rules, "LOCKED_IN_DUNGEON")
 
 
-# ---- 3. who can fight ---------------------------------------------------------------------------
+# ---- 3. who can fight: a sword or axe, any armour or none, outfit or not -------------------------
 def test_no_weapon_cannot_attack():
     s = make()
+    wear_kit(s, {"body": KIT["body"], "legs": KIT["legs"], "helmet": KIT["helmet"]})   # armour is not enough
     s.in_combat_with = ("monster", 1)
     run(server.handle_attack(s, {"target_id": 1}))
-    assert errors(s)[-1] == "You can't fight dressed like this, run!"
-    assert s.in_combat_with is None and not gear_rules.can_fight(s)
+    assert errors(s)[-1] == gear_rules.NO_FIGHT_MSG
+    assert s.in_combat_with is None and not gear_rules.can_fight(s, server.ITEMS)
 
 
-def test_outfit_cannot_attack():
+def test_bow_or_tool_cannot_attack():
+    for weapon, tool in (("shortbow", None), (None, "bronze_axe"), (None, "bronze_pickaxe")):
+        s = make()
+        s.equipment["weapon"], s.equipment["tool"] = weapon, tool
+        assert not gear_rules.can_fight(s, server.ITEMS), (weapon, tool)
+
+
+def test_armed_can_attack_without_armour():
+    for weapon in ("bronze_sword", "mithril_battleaxe", "eclipse_cleaver"):
+        s = make()
+        wear_kit(s, {"weapon": weapon})
+        assert gear_rules.can_fight(s, server.ITEMS), weapon
+        run(server.handle_attack(s, {"target_id": -999}))
+        assert gear_rules.NO_FIGHT_MSG not in errors(s)
+    s = make()
+    wear_kit(s, {"weapon": "bronze_sword", "helmet": KIT["helmet"]})   # partial armour
+    assert gear_rules.can_fight(s, server.ITEMS)
+
+
+def test_outfit_keeps_weapon_and_fights():
     s = make()
     own_queen(s)
     run(server.handle_update_appearance(s, {"appearance": queen_look(s)}))
     assert s.appearance_state()["outfit"] == "queen_gown", errors(s)
-    s.equipment["weapon"] = "bronze_sword"     # even forced back in, an outfit never fights
-    run(server.handle_attack(s, {"target_id": 1}))
-    assert errors(s)[-1] == gear_rules.NO_FIGHT_MSG and not gear_rules.can_fight(s)
-
-
-def test_armed_can_attack():
-    s = make()
-    wear_kit(s, {"weapon": "bronze_sword"})
-    assert gear_rules.can_fight(s)
+    W.add_item_to_inventory(s, "iron_battleaxe", 1)
+    idx = next(i for i, e in s.inventory.items() if e["item_id"] == "iron_battleaxe")
+    run(server.handle_equip(s, {"slot_index": idx}))
+    assert s.equipment["weapon"] == "iron_battleaxe"
+    assert s.appearance_state()["outfit"] == "queen_gown"         # a weapon never takes the outfit off
+    assert gear_rules.OUTFIT_OFF_MSG not in chats(s)
+    assert gear_rules.can_fight(s, server.ITEMS)
     run(server.handle_attack(s, {"target_id": -999}))
     assert gear_rules.NO_FIGHT_MSG not in errors(s)
 
 
 # ---- 4. an outfit is one whole piece -----------------------------------------------------------
-def test_equipping_armour_takes_outfit_off():
+def test_equipping_armour_keeps_outfit():   # David, 23 Oct 2026 (was: armour takes the outfit off)
     for sex, bottom in (("female", "bottom_long_skirt"), ("male", "bottom_work_trousers")):
         s = make(sex, title="Queen" if sex == "female" else "King")
         if sex == "female":
@@ -167,44 +180,28 @@ def test_equipping_armour_takes_outfit_off():
         run(server.handle_update_appearance(s, {"appearance": look}))
         assert s.appearance_state()["outfit"], errors(s)
         W.add_item_to_inventory(s, "mythos_body", 1)
+        W.add_item_to_inventory(s, "mythos_legs", 1)      # body and legs are a pair (23 Oct 2026)
         idx = next(i for i, e in s.inventory.items() if e["item_id"] == "mythos_body")
         run(server.handle_equip(s, {"slot_index": idx}))
         a = s.appearance_state()
-        assert s.equipment["body"] == "mythos_body"
-        assert a["outfit"] is None and a["cloak"] is None and a["head"] is None, a
-        assert a["top"] == "top_linen_shirt" and a["bottom"] == bottom, a
-        assert gear_rules.OUTFIT_OFF_MSG in chats(s)
+        assert s.equipment["body"] == "mythos_body" and s.equipment["legs"] == "mythos_legs", errors(s)
+        assert a["outfit"] == look["outfit"], a
+        assert gear_rules.OUTFIT_OFF_MSG not in chats(s)
 
 
-def test_wearing_outfit_takes_armour_off_to_bag():
+def test_wearing_outfit_keeps_armour():   # David, 23 Oct 2026 (was: outfit takes the armour off to the bag)
     s = make()
     own_queen(s)
     wear_kit(s)
+    bag_before = sorted(e["item_id"] for e in s.inventory.values())
     run(server.handle_update_appearance(s, {"appearance": queen_look(s)}))
     assert s.appearance_state()["outfit"] == "queen_gown", errors(s)
-    assert all(s.equipment[k] is None for k in KIT)
-    bag = sorted(e["item_id"] for e in s.inventory.values())
-    assert bag == sorted(KIT.values()), bag
-    assert W.db.get_equipment(s.player_id).get("body") in (None, "") if hasattr(W.db, "get_equipment") else True
+    assert all(s.equipment[k] == KIT[k] for k in ARMOUR)
+    assert s.equipment["weapon"] == KIT["weapon"]
+    assert sorted(e["item_id"] for e in s.inventory.values()) == bag_before
 
 
-def test_full_bag_goes_to_bank_never_lost():
-    s = make()
-    own_queen(s)
-    wear_kit(s)
-    filler = "bronze_sword"
-    while W.add_item_to_inventory(s, filler, 1):
-        pass
-    bag_before = len(s.inventory)
-    run(server.handle_update_appearance(s, {"appearance": queen_look(s)}))
-    assert s.appearance_state()["outfit"] == "queen_gown", errors(s)
-    assert len(s.inventory) == bag_before
-    banked = sorted(e["item_id"] for e in s.bank.values())
-    assert banked == sorted(KIT.values()), banked
-    assert all(s.equipment[k] is None for k in KIT)
-
-
-def test_bag_and_bank_full_refuses_outfit():
+def test_full_bag_and_bank_still_wear_outfit():
     s = make()
     own_queen(s)
     wear_kit(s, {"body": "mythos_body"})
@@ -214,8 +211,7 @@ def test_bag_and_bank_full_refuses_outfit():
         s.bank[b] = {"item_id": "bronze_sword", "qty": 1}
     run(server.handle_update_appearance(s, {"appearance": queen_look(s)}))
     assert s.equipment["body"] == "mythos_body"
-    assert not s.appearance_state().get("outfit")
-    assert "both full" in errors(s)[-1]
+    assert s.appearance_state()["outfit"] == "queen_gown", errors(s)
 
 
 def test_no_outfit_change_in_dungeon():
@@ -225,7 +221,7 @@ def test_no_outfit_change_in_dungeon():
     s.dungeon = {"id": "tidehollow"}
     run(server.handle_update_appearance(s, {"appearance": queen_look(s)}))
     assert errors(s)[-1] == "You can't change into an outfit inside a dungeon."
-    assert s.equipment["body"] == KIT["body"] and not s.appearance_state().get("outfit")
+    assert s.equipment["body"] == KIT["body"] and s.appearance_state().get("outfit") != "queen_gown"
 
 
 def test_base_look_helper():
@@ -255,6 +251,81 @@ def test_tick_no_swing_no_retaliate():
         W.sessions.pop(s.player_id, None)
     assert m.hp == hp0, (m.hp, hp0)
     assert s.in_combat_with is None
+
+
+# ---- 5. body + legs are a pair (David, 23 Oct 2026) -----------------------------------------------
+def _bag(s, *ids):
+    for i in ids:
+        W.add_item_to_inventory(s, i, 1)
+
+
+def _idx(s, item_id):
+    return next(i for i, e in s.inventory.items() if e and e["item_id"] == item_id)
+
+
+def test_pair_body_needs_legs():
+    s = make()
+    _bag(s, "bronze_body")
+    run(server.handle_equip(s, {"slot_index": _idx(s, "bronze_body")}))
+    assert s.equipment["body"] is None and s.equipment["legs"] is None
+    assert errors(s)[-1] == gear_rules.pair_need_message("bronze_body", server.ITEMS), errors(s)
+    assert "Bronze" in errors(s)[-1] or "legs" in errors(s)[-1].lower()
+
+
+def test_pair_equip_puts_both_on():
+    for body, legs, click in (("bronze_body", "bronze_legs", "bronze_body"), ("iron_chainbody", "iron_chainlegs", "iron_chainlegs"),
+                              ("recruit_bronze_body", "recruit_bronze_legs", "recruit_bronze_legs"),
+                              ("leather_body", "leather_chaps", "leather_body")):
+        s = make()
+        _bag(s, body, legs)
+        run(server.handle_equip(s, {"slot_index": _idx(s, click)}))
+        assert s.equipment["body"] == body and s.equipment["legs"] == legs, (body, errors(s))
+        assert not any(e["item_id"] in (body, legs) for e in s.inventory.values() if e)
+
+
+def test_pair_swap_returns_old_pair():
+    s = make()
+    wear_kit(s, {"body": "bronze_body", "legs": "bronze_legs"})
+    _bag(s, "steel_body", "steel_legs")
+    run(server.handle_equip(s, {"slot_index": _idx(s, "steel_legs")}))
+    assert (s.equipment["body"], s.equipment["legs"]) == ("steel_body", "steel_legs"), errors(s)
+    bag = sorted(e["item_id"] for e in s.inventory.values() if e)
+    assert bag == ["bronze_body", "bronze_legs"], bag
+
+
+def test_pair_unequip_takes_both_off():
+    for slot in ("body", "legs"):
+        s = make()
+        wear_kit(s, {"body": "mithril_body", "legs": "mithril_legs"})
+        run(server.handle_unequip(s, {"equip_slot": slot}))
+        assert s.equipment["body"] is None and s.equipment["legs"] is None, (slot, errors(s))
+        bag = sorted(e["item_id"] for e in s.inventory.values() if e)
+        assert bag == ["mithril_body", "mithril_legs"], bag
+
+
+def test_pair_unequip_needs_two_spaces():
+    s = make()
+    wear_kit(s, {"body": "mithril_body", "legs": "mithril_legs"})
+    while W.add_item_to_inventory(s, "bronze_sword", 1):
+        pass
+    s.inventory.pop(_idx(s, "bronze_sword"))          # exactly one free space
+    run(server.handle_unequip(s, {"equip_slot": "body"}))
+    assert errors(s)[-1] == gear_rules.PAIR_ROOM_MSG
+    assert s.equipment["body"] == "mithril_body" and s.equipment["legs"] == "mithril_legs"
+
+
+def test_pair_solo_piece_works_alone():
+    s = make()
+    _bag(s, "goblin_mail")
+    run(server.handle_equip(s, {"slot_index": _idx(s, "goblin_mail")}))
+    assert s.equipment[server.ITEMS["goblin_mail"]["equip_slot"]] == "goblin_mail", errors(s)
+
+
+def test_pair_ui_hint():
+    sys.path.insert(0, os.path.join(ROOT, "client"))
+    import equipment_ui_v2
+    assert "pair" in equipment_ui_v2._slot_hint("body") and "pair" in equipment_ui_v2._slot_hint("legs")
+    assert equipment_ui_v2._slot_hint("helmet").startswith("Helmet slot")
 
 
 if __name__ == "__main__":

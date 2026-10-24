@@ -14,7 +14,7 @@
  "draw_order": "terrain -> edge overlays -> contact skirts -> ground decals -> entities/buildings (y-sorted)",
  "draw_rule": "blit decal image at (x*TILE - origin_px[scale][0]*TILE/tile_px[scale], y*TILE - origin_px[scale][1]*TILE/tile_px[scale]) where (x, y) is the decal's NW footprint tile. Purely visual: no collision, no clicks.",
  "placement": "deterministic (src/ground_layout.py: hash(x,y) + lantern rows); checked by src/decal_check.py",
- "count": 66,
+ "count": 65,
  "decals": [
   {
    "id": "fairy_lantern",
@@ -74,7 +74,7 @@
   },
   {
    "id": "fairy_lantern",
-   "x": 35,
+   "x": 36,
    "y": 69,
    "w": 1,
    "h": 1
@@ -313,13 +313,6 @@
   {
    "id": "glow_stones",
    "x": 1,
-   "y": 66,
-   "w": 1,
-   "h": 1
-  },
-  {
-   "id": "fallen_petals",
-   "x": 34,
    "y": 66,
    "w": 1,
    "h": 1

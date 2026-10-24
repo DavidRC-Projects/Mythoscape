@@ -76,7 +76,8 @@ def test_dungeon_labels_match_stats():
             assert st["tier"] == lv
             assert st["level"] == combat.monster_combat_level(st)
             assert f"(lvl {st['level']})" in st["name"], st["name"]
-    assert dungeon.scaled_monster_stats(50)["level"] == 125
+    # Since 21 Oct the requested level IS the combat level (no more "level 10" floors spawning level 38s).
+    assert dungeon.scaled_monster_stats(50)["level"] == 50
 
 
 if __name__ == "__main__":

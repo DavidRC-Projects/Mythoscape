@@ -144,13 +144,36 @@ PROTESTER_SPOTS = ((128, 61), (128, 63), (128, 65))
 PROTESTER_NAMES = ("Angry Farmer", "Angry Tanner", "Angry Weaver")
 CRIERS = ({"id": "crier_square", "name": "Town Crier Hob", "x": 131, "y": 64},
           {"id": "crier_village", "name": "Town Crier Nell", "x": 25, "y": 19})
-BOARDS = ({"id": "notice_board_square", "x": 130, "y": 61},
-          {"id": "notice_board_village", "x": 27, "y": 19},
-          {"id": "notice_board_kingsrow", "x": 11, "y": 98})
-ENVOYS = ({"id": "envoy_valcrest", "house": "valcrest", "name": "Lady Ismay, Valcrest Envoy", "x": 153, "y": 78},
-          {"id": "envoy_thornmere", "house": "thornmere", "name": "Master Corvin, Thornmere Envoy", "x": 153, "y": 80},
-          {"id": "envoy_ironhold", "house": "ironhold", "name": "Captain Brand, Ironhold Envoy", "x": 153, "y": 82},
-          {"id": "envoy_commons", "house": "commons", "name": "Goodwife Tansy, Commons Envoy", "x": 155, "y": 82})
+# Starter-village board only — wayfinder signposts were removed from the overworld.
+BOARDS = ({"id": "notice_board_village", "x": 27, "y": 19},)
+
+
+def _follow_castle():
+    """Protesters, the castle crier and the castle notice board stand in the
+    keep's bailey. They follow the keep (castle_v2.DX/DY), now by Wolf Pass."""
+    global PROTESTER_SPOTS
+    try:
+        import castle_v2
+        if not castle_v2.active():
+            return
+        dx, dy = castle_v2.DX - castle_v2.OLD_DX, castle_v2.DY - castle_v2.OLD_DY
+    except Exception:
+        return
+    PROTESTER_SPOTS = tuple((x + dx, y + dy) for x, y in PROTESTER_SPOTS)
+    for item in CRIERS + BOARDS:
+        if item["id"] in ("crier_square", "notice_board_square"):
+            item["x"] += dx
+            item["y"] += dy
+
+
+_follow_castle()
+
+# Spread around Stonehaven (not piled at the old plaza — that court block
+# was never shifted when the keep moved to Wolf Pass).
+ENVOYS = ({"id": "envoy_valcrest", "house": "valcrest", "name": "Lady Ismay, Valcrest Envoy", "x": 155, "y": 58},
+          {"id": "envoy_thornmere", "house": "thornmere", "name": "Master Corvin, Thornmere Envoy", "x": 116, "y": 76},
+          {"id": "envoy_ironhold", "house": "ironhold", "name": "Captain Brand, Ironhold Envoy", "x": 140, "y": 98},
+          {"id": "envoy_commons", "house": "commons", "name": "Goodwife Tansy, Commons Envoy", "x": 122, "y": 74})
 ENVOY_OPTIONS = [
     {"id": "house_pledge", "label": "Pledge to this house"},
     {"id": "house_errand", "label": "Daily errand"},

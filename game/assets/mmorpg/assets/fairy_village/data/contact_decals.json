@@ -5,8 +5,8 @@
    "id": "queens_tree_hall_skirt",
    "for": "queens_tree_hall",
    "anchor_tile": [
-    4,
-    77
+    7,
+    75
    ],
    "meta": {
     "id": "queens_tree_hall_skirt",
@@ -101,8 +101,8 @@
    "id": "lily_fountain_rim",
    "for": "lily_fountain",
    "anchor_tile": [
-    32,
-    77
+    34,
+    76
    ],
    "meta": {
     "id": "lily_fountain_rim",

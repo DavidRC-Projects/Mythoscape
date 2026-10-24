@@ -364,10 +364,10 @@ def draw_stone_floor(surf, rect, seed_x, seed_y):
 
 
 def draw_wall(surf, rect, zone, seed_x, seed_y, material=None):
-    # Village/city/harbour building shells are drawn as cottage volumes in the
-    # client — never paint old 2D wood/brick wall tiles for those zones.
+    # Village/city/harbour shells are cottage volumes — never mountain cones.
     if zone in ("village", "fishing_village", "city"):
-        draw_mountain_rock(surf, rect, seed_x, seed_y)
+        pygame.draw.rect(surf, (72, 88, 58), rect)
+        pygame.draw.rect(surf, (48, 60, 40), rect, 1)
     elif zone == "mine":
         draw_cave_wall(surf, rect)
     elif zone == "dungeon":

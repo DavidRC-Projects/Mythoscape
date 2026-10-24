@@ -6,10 +6,10 @@
   7
  ],
  "footprint": {
-  "x0": 34,
-  "y0": 58,
-  "x1": 40,
-  "y1": 64,
+  "x0": 33,
+  "y0": 61,
+  "x1": 39,
+  "y1": 67,
   "w": 7,
   "h": 7
  },
@@ -42,16 +42,16 @@
  },
  "collision": "json/collision/mushroom_apothecary.json",
  "interaction_tile": [
-  37,
-  64
+  36,
+  67
  ],
  "stand_tile": [
-  37,
-  65
+  36,
+  68
  ],
  "door_tile": [
-  37,
-  64
+  36,
+  67
  ],
  "files": {
   "1x": "mushroom_apothecary_1x.png",

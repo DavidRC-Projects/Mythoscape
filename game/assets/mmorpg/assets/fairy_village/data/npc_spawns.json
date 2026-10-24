@@ -3,30 +3,30 @@
   {
    "id": "elowen_moonwhisper",
    "name": "Lady Elowen Moonwhisper",
-   "x": 24,
-   "y": 67,
+   "x": 18,
+   "y": 68,
    "role": "story fairy",
    "dialogue": "dialogue/fairy_story.json"
   },
   {
    "id": "warden_thorne",
    "name": "Warden Thorne Briarwing",
-   "x": 25,
-   "y": 57,
+   "x": 24,
+   "y": 60,
    "role": "fairy elder / gate guard"
   },
   {
    "id": "tumbleroot",
    "name": "Tumbleroot the Gnome",
-   "x": 39,
-   "y": 66,
+   "x": 38,
+   "y": 72,
    "role": "gnome potion shopkeeper"
   },
   {
    "id": "pip_dewdrop",
    "name": "Pip Dewdrop",
-   "x": 31,
-   "y": 78,
+   "x": 32,
+   "y": 82,
    "role": "child fairy gardener"
   }
  ],

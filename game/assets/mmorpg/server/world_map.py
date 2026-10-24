@@ -222,21 +222,23 @@ def generate_world():
             grid[y0][x] = behind
 
 
-    # Spaced ~11×11 shells — readable iso cottage volumes
-    # NW cottage (Elder Miriam)
-    _building(4, 4, 15, 15, door_x=9)
-    # NE shop (Shopkeeper Joe)
-    _building(40, 4, 51, 15, door_x=45)
-    # SW inn (Innkeeper Sarah)
-    _building(4, 36, 15, 47, door_x=9)
-    # SE cottage (Farmer Tom), four tiles west of the old plot
-    _building(36, 36, 47, 47, door_x=41)
-    # Bank sits on the old Outfitters plot. The v2 stamp fits the real bank on this shell.
-    _building(60, 37, 72, 47, door_x=66)
-    # Smithy — large workshop
-    _building(78, 4, 94, 18, door_x=86)
-    # Pet Emporium
-    _building(78, 36, 92, 48, door_x=85)
+    # Spacious village ring around spawn (28,24) / well (32,22).
+    # Shells match buildings_v2._OLD_SHELL (v2 stamp grows to pack art).
+    # Plaza ~x20–48, y14–30 stays open so roofs cannot cover the hub.
+    # NW cottage (Elder Miriam) — door (14, 13)
+    _building(8, 3, 25, 13, door_x=14)
+    # NE shop (Shopkeeper Joe) — door (42, 13)
+    _building(37, 3, 49, 13, door_x=42)
+    # SW inn (Innkeeper Sarah) — door (14, 42)
+    _building(8, 30, 23, 42, door_x=14)
+    # SE cottage (Farmer Tom) — door (56, 64), east of Fairy Glade
+    _building(51, 54, 65, 64, door_x=56)
+    # Bank — door (44, 33), east of the plaza
+    _building(38, 25, 50, 33, door_x=44)
+    # Smithy — door (88, 52), south of the crypt / east of pet
+    _building(80, 38, 96, 52, door_x=88)
+    # Pet Emporium — door (70, 52), north of the dungeon capture rect
+    _building(64, 41, 79, 52, door_x=70)
 
     # Restore village roads (do not punch through walls)
     for x in range(vx0, min(vx1, 94) + 1):
@@ -247,8 +249,9 @@ def generate_world():
             grid[y][road_x] = PATH
     # 3-wide apron tiles outside village doors + wishing-well plaza
     door_aprons = (
-        (9, 16), (45, 16), (9, 48), (41, 48),
-        (64, 29), (86, 19), (85, 49), (66, 48),
+        (14, 14), (42, 14), (14, 43), (56, 65),
+        (44, 34), (70, 53), (88, 53), (56, 85),
+        (9, 19), (9, 20), (8, 19), (10, 19),  # Castle Realm portal apron
     )
     for cx, cy in door_aprons:
         for ox in (-1, 0, 1):
@@ -256,19 +259,23 @@ def generate_world():
             if 0 <= dx < WIDTH and 0 <= dy < HEIGHT and grid[dy][dx] != WALL:
                 grid[dy][dx] = PATH
     for dx, dy in (
-        (32, 22), (31, 22), (33, 22), (32, 21), (32, 23),  # wishing well plaza
+        (32, 22), (31, 22), (33, 22), (32, 21), (32, 23),  # wishing well
+        (28, 24), (27, 24), (29, 24), (28, 23), (28, 25),  # spawn plaza
+        (30, 22), (34, 22), (32, 24), (30, 24), (34, 24),
     ):
         if 0 <= dx < WIDTH and 0 <= dy < HEIGHT and grid[dy][dx] != WALL:
             grid[dy][dx] = PATH
 
-    # --- Starter trees on village fringe (normal + sparse oak) ---
+    # --- Starter trees on village fringe (outside the open plaza + ring) ---
+    # Core stays clear so hub sightlines and door approaches stay open.
     village_fringe = []
     for y in range(vy0 + 1, vy1):
-        for x in range(vx0 + 1, min(vx1, 48)):
+        for x in range(vx0 + 1, min(vx1, 90)):
             if grid[y][x] != GRASS:
                 continue
-            if x < 14 or x > 46 or y < 14 or y > 34:
-                village_fringe.append((x, y))
+            if 6 <= x <= 96 and 2 <= y <= 88:
+                continue
+            village_fringe.append((x, y))
     rng.shuffle(village_fringe)
     tree_positions = []
     for x, y in village_fringe:
@@ -375,6 +382,15 @@ def generate_world():
             grid[by][bx] = WALL
     # Exit into fishing village
     _rect(grid, mx1, 15, mx1 + 1, 17, PATH)
+    if getattr(feature_flags, "USE_WOLF_PASS", False):
+        import wolf_pass
+        if wolf_pass.geo():
+            # Painted massif (MOUNTAIN_SPEC.md): clear every old grey ridge tile, then the art's collision.
+            for y in range(my0, my1 + 1):
+                for x in range(mx0, mx1 + 1):
+                    if grid[y][x] == WALL:
+                        grid[y][x] = GRASS
+            wolf_pass.apply(grid, PATH, GRASS, WALL)
 
     # Tidehollow Cave mouth — rocky alcove north of Harbourreach, clear of buildings
     for dx, dy in (
@@ -580,31 +596,33 @@ def generate_world():
             if 0 <= dx < WIDTH and 0 <= dy < HEIGHT and grid[dy][dx] != WALL:
                 grid[dy][dx] = PATH
 
-    # Castle keep (north plaza) — thick walls, courtyard, battlements
-    _rect(grid, 118, 58, 136, 70, WALL)
-    _rect(grid, 120, 60, 134, 68, FLOOR)
-    # Inner throne hall
-    _rect(grid, 124, 61, 132, 66, FLOOR)
-    # Gatehouse opening south into the plaza — wide entrance (5 tiles)
-    for gx in range(126, 131):
-        grid[70][gx] = PATH
-        grid[69][gx] = PATH
-        grid[68][gx] = STONE  # threshold into the courtyard
-    # Courtyard stones just south of the keep (don't seal the gate)
-    _rect(grid, 122, 71, 132, 74, STONE)
-    # Keep apron + gate row stay walkable path
-    for gx in range(126, 131):
-        grid[70][gx] = PATH
-        grid[71][gx] = PATH
-        grid[72][gx] = PATH
-    # Walkable stone behind the keep (north plaza continues outside the shell)
-    for x in range(119, 136):
-        grid[58][x] = STONE
-    # Interior reads as flagstone (not grass under the keep volume)
-    for y in range(60, 69):
-        for x in range(120, 135):
-            if grid[y][x] == FLOOR:
-                grid[y][x] = STONE
+    # Castle keep (north plaza). With the v2 castle on, the keep stands by
+    # Wolf Pass instead (castle_v2.DX/DY) and this ground stays open plaza.
+    if not castle_v2.active():
+        _rect(grid, 118, 58, 136, 70, WALL)
+        _rect(grid, 120, 60, 134, 68, FLOOR)
+        # Inner throne hall
+        _rect(grid, 124, 61, 132, 66, FLOOR)
+        # Gatehouse opening south into the plaza — wide entrance (5 tiles)
+        for gx in range(126, 131):
+            grid[70][gx] = PATH
+            grid[69][gx] = PATH
+            grid[68][gx] = STONE  # threshold into the courtyard
+        # Courtyard stones just south of the keep (don't seal the gate)
+        _rect(grid, 122, 71, 132, 74, STONE)
+        # Keep apron + gate row stay walkable path
+        for gx in range(126, 131):
+            grid[70][gx] = PATH
+            grid[71][gx] = PATH
+            grid[72][gx] = PATH
+        # Walkable stone behind the keep (north plaza continues outside the shell)
+        for x in range(119, 136):
+            grid[58][x] = STONE
+        # Interior reads as flagstone (not grass under the keep volume)
+        for y in range(60, 69):
+            for x in range(120, 135):
+                if grid[y][x] == FLOOR:
+                    grid[y][x] = STONE
 
     # Road from forest south into the city gate
     for y in range(40, cy0 + 1):
@@ -641,68 +659,13 @@ def generate_world():
         else:
             grid[y][x] = MAPLE_TREE
 
-    # --- Emberdeep volcano (far east edge) — conical massif + crater mouth ---
-    vx0, vy0, vx1, vy1 = ZONES["volcano"]
-    # Scorched foothills (ash grass)
-    for y in range(vy0, vy1 + 1):
-        for x in range(vx0, vx1 + 1):
-            if grid[y][x] in (GRASS, *TREE_TILES):
-                grid[y][x] = GRASS
-    # Concentric basalt rings → reads as a rising cone
-    rings = [
-        (176, 58, 198, 80),  # outer foothills
-        (178, 60, 196, 78),
-        (180, 62, 194, 76),
-        (182, 64, 192, 74),
-    ]
-    for i, (x0, y0, x1, y1) in enumerate(rings):
-        _border(grid, x0, y0, x1, y1, WALL)
-        # Fill ring band with rock (not the very outer — leave approach)
-        if i >= 1:
-            for y in range(y0 + 1, y1):
-                for x in range(x0 + 1, x1):
-                    if grid[y][x] in (GRASS, PATH, *TREE_TILES):
-                        grid[y][x] = WALL
-    # Inner crater bowl (walkable floor when roof lifts)
-    _rect(grid, 183, 65, 191, 71, WALL)
-    _rect(grid, 184, 66, 190, 70, FLOOR)
-    # Magma glow pit in crater center (blocked lava tile)
-    grid[68][186] = WATER
-    grid[68][187] = WATER
-    grid[69][186] = WATER
-    # Mouth tunnel opening south through the rings
-    for y in range(70, 74):
-        for x in range(185, 188):
-            grid[y][x] = FLOOR
-    # Apron / landing in front of the mouth
-    _rect(grid, 182, 73, 191, 77, PATH)
-    grid[72][186] = PATH  # old mouth; lair entrance moved south of the crater
-    # Jagged outer peaks
-    for _ in range(55):
-        x = rng.randint(174, 198)
-        y = rng.randint(57, 81)
-        # Keep mouth corridor clear
-        if 184 <= x <= 188 and 70 <= y <= 74:
-            continue
-        if abs(x - 186) + abs(y - 68) < 5:
-            continue
-        if grid[y][x] in (GRASS, PATH):
-            grid[y][x] = WALL
-    # Road from Stonehaven east gate to the far-east crater
-    for x in range(cx1, 184):
+    # --- City east approach (south bypass under Emberdeep is laid with roads) ---
+    for x in range(cx1, min(WIDTH - 1, 190)):
         for y in (72, 73, 74):
             if 0 <= x < WIDTH and grid[y][x] in (GRASS, *TREE_TILES, PATH, WALL, STONE):
                 grid[y][x] = PATH
     for y in (72, 73, 74):
-        grid[y][cx1] = PATH  # east city gate
-    # Dragon-lair mouth south of the crater, with a walk-in pad.
-    _rect(grid, 180, 80, 194, 90, PATH)
-    for y in range(78, 85):
-        grid[y][186] = PATH
-    for dx in (-1, 0, 1):
-        grid[84][186 + dx] = PATH
-        grid[83][186 + dx] = PATH
-    grid[84][186] = FLOOR
+        grid[y][cx1] = PATH
 
     # --- Void Sanctum (SE mystical crypt) — dark building + 6 sealed rooms ---
     sx0, sy0, sx1, sy1 = ZONES["shadow_crypt"]
@@ -777,19 +740,36 @@ def generate_world():
     _clear_trees_near_buildings(grid)
     _paint_void_grounds(grid)
     _lay_wayfinder_roads(grid)
+    # Last: the castle's outer moat, the harbour seal and the Fairy Glade ring.
+    # They run after the roads so no road reopens a gap through them.
+    castle_v2.apply_outer_moat(grid, sys.modules[__name__])
+    import harbour_seal
+    harbour_seal.stamp(grid, sys.modules[__name__])
+    import fairy_glade
+    fairy_glade.stamp(grid, sys.modules[__name__])
+    lay_fairy_glade_approach(grid)
+    # Aprons + orphan trim after seals so harbour/fairy stamps cannot wipe them.
+    _stamp_exterior_door_aprons(grid)
+    trim_orphan_village_paths(grid)
+    # Arch posts must stay trunks after apron/trim road stamps.
+    for ax, ay in fairy_glade.arch_posts():
+        if 0 <= ay < HEIGHT and 0 <= ax < WIDTH:
+            grid[ay][ax] = WALL
     return grid
 
 
 # Building footprints — keep in sync with content.BUILDINGS (avoid import cycle)
 _BUILDING_FOOTPRINTS = [
-    # village
-    (4, 4, 15, 15), (40, 4, 51, 15), (4, 36, 15, 47), (37, 38, 49, 47),
-    (60, 37, 72, 47), (78, 4, 94, 18), (78, 36, 92, 48),
-    (45, 54, 58, 64),
+    # spacious village ring (plaza clear around spawn/well)
+    (8, 3, 25, 13), (37, 3, 49, 13), (8, 30, 23, 42), (51, 54, 65, 64),
+    (38, 25, 50, 33), (80, 38, 96, 52), (64, 41, 79, 52),
+    (50, 74, 63, 84),  # outfitters
+    (81, 6, 89, 10),   # estate office (door 85, 10)
     (135, 105, 145, 112),
     # harbour
     (172, 6, 182, 14), (172, 20, 182, 28),
-    # city — tree clearing keeps the old keep rect. The v2 stamp already
+    # city — tree clearing keeps the old keep rect (now open plaza; the keep
+    # moved by Wolf Pass, see castle_v2.DX/DY). The v2 stamp already
     # replaces every tile inside the new footprint, and the client hides
     # canopy sprites against the expanded building rect. Widening this rect
     # would turn margin trees into grass and open new walkable tiles.
@@ -798,15 +778,12 @@ _BUILDING_FOOTPRINTS = [
     (166, 102, 176, 108),
     # tidehollow cave mouth, south of Harbourreach
     (186, 49, 194, 56),
-    # emberdeep lair mouth
-    (180, 78, 194, 90),
-    # crypt graveyard behind the bank, including the west approach
+    # crypt graveyard east of the plaza
     (52, 4, 74, 20),
 ]
 
 
-# Graveyard north of the village bank. Inclusive outer wall.
-# The bank footprint starts at y=21, so the yard fits without moving it.
+# Graveyard east of the compact plaza. Inclusive outer wall.
 GRAVEYARD = (54, 4, 74, 18)
 GRAVEYARD_GATE = ((63, 18), (64, 18), (65, 18))
 CRYPT_MOUTH = (64, 11)
@@ -834,11 +811,12 @@ def is_grave(x, y) -> bool:
 
 # Crater on the open ground south of the castle. The mouth is the tile the
 # player was standing on; the walk-up is the two tiles south of it.
-EMBERDEEP_MOUTH = (67, 78)
-EMBERDEEP_RETURN = (67, 80)
+# East volcano massif — 3-wide cave door faces south onto the apron.
+EMBERDEEP_MOUTH = (175, 78)
+EMBERDEEP_RETURN = (175, 81)
 
-# Giant-rat mine, 17 tiles south of the first volcano pit. The south end is
-# the mithril and adamantite chamber. Painted after the dungeon field is grass.
+# Giant-rat mine (village-south pit). Door x is fixed — not the Emberdeep mouth.
+VOLCANO_MINE_DOOR_X = 67
 VOLCANO_MINE = (50, 99, 84, 132)
 VOLCANO_MINE_FLOOR = (51, 100, 83, 131)
 VOLCANO_MINE_REVEAL = (50, 98, 84, 132)
@@ -846,9 +824,80 @@ VOLCANO_RAT_LEASH = (51, 100, 83, 113)
 VOLCANO_WOLF_LEASH = (51, 114, 83, 131)
 
 
+def relayout_village_south_roads(grid):
+    """Re-paint south-spur roads after explore_dungeons.capture_and_hide.
+
+    Roads jog around building shells (never through floors) and meet every door.
+    """
+    for seg in (
+        (56, 43, 56, 53),       # plaza south toward farm (stop north of shell)
+        (56, 53, 67, 53),       # jog east around the farm (east of x65 shell)
+        (67, 24, 67, 53),       # east spur: hub → south of Pet / Smithy row
+        (67, 53, 89, 53),       # Pet + Smithy door aprons
+        (49, 53, 49, 66),       # west of farm: fairy road → farm door row
+        (49, 65, 57, 66),       # into Farmhouse door
+        (56, 65, 56, 73),       # farm door → north of Outfitters shell
+        (56, 65, 88, 65),       # farm / smithy east link
+        (56, 85, 56, 86),       # Outfitters door apron
+        # South bypass under Emberdeep (city road y=73 is blocked by the cone).
+        (150, 80, 186, 80),
+        (186, 73, 186, 80),
+    ):
+        _stamp_road(grid, *seg)
+
+
+def trim_orphan_village_paths(grid):
+    """Turn PATH that leads nowhere into grass (whole map, fairy-safe).
+
+    Keeps anything reachable from spawn, Fairy Glade lanes, and petal avenues
+    inside the fairy_village zone. STONE plazas are never touched.
+    """
+    from collections import deque
+    import fairy_glade
+
+    h = len(grid)
+    w = len(grid[0]) if h else 0
+    sx, sy = SPAWN_POINT
+    if not (0 <= sy < h and 0 <= sx < w) or grid[sy][sx] != PATH:
+        # Prefer a PATH neighbour of spawn if the spawn tile itself is grass.
+        start = None
+        for dx, dy in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)):
+            nx, ny = sx + dx, sy + dy
+            if 0 <= ny < h and 0 <= nx < w and grid[ny][nx] == PATH:
+                start = (nx, ny)
+                break
+        if start is None:
+            return
+        sx, sy = start
+    seen = {(sx, sy)}
+    q = deque([(sx, sy)])
+    while q:
+        x, y = q.popleft()
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nx, ny = x + dx, y + dy
+            if not (0 <= ny < h and 0 <= nx < w) or (nx, ny) in seen:
+                continue
+            if grid[ny][nx] != PATH:
+                continue
+            seen.add((nx, ny))
+            q.append((nx, ny))
+    lane = fairy_glade.lane_cells()
+    fx0, fy0, fx1, fy1 = ZONES["fairy_village"]
+    for y in range(h):
+        for x in range(w):
+            if grid[y][x] != PATH or (x, y) in seen:
+                continue
+            if (x, y) in lane:
+                continue
+            if fx0 <= x <= fx1 and fy0 <= y <= fy1:
+                continue
+            grid[y][x] = GRASS
+
+
 def stamp_outfitters_shell(grid):
-    """King's Folly shell on the grass at (52, 64). Redrawn after the dungeon wipe."""
-    x0, y0, x1, y1, door_x = 45, 54, 58, 64, 52
+    """Outfitters south of the farm (door 56, 84), clear of Fairy Glade."""
+    relayout_village_south_roads(grid)
+    x0, y0, x1, y1, door_x = 50, 74, 63, 84, 56
     _rect(grid, x0, y0, x1, y1, WALL)
     _rect(grid, x0 + 1, y0 + 1, x1 - 1, y1 - 1, FLOOR)
     for x in range(x0, x1 + 1):
@@ -858,16 +907,58 @@ def stamp_outfitters_shell(grid):
             grid[y1][x] = PATH
     for x in range(x0 + 1, x1):
         grid[y0][x] = GRASS
+    for ox in (-1, 0, 1):
+        ax, ay = door_x + ox, y1 + 1
+        if 0 <= ax < WIDTH and 0 <= ay < HEIGHT and grid[ay][ax] != WATER:
+            grid[ay][ax] = PATH
+    # Approach from the farm stops at the north wall — skirt west around the
+    # shell to the south door instead of punching through the floor.
+    _stamp_road(grid, door_x, 65, door_x, y0 - 1)   # farm → north of shell
+    _stamp_road(grid, door_x, y0 - 1, x0 - 2, y0 - 1)
+    _stamp_road(grid, x0 - 2, y0 - 1, x0 - 2, y1 + 1)
+    _stamp_road(grid, x0 - 2, y1 + 1, door_x + 1, y1 + 1)
+    lay_void_sanctum_approach(grid)
+    lay_fairy_glade_approach(grid)
+    lay_east_village_road(grid)
+    _stamp_exterior_door_aprons(grid)
+    trim_orphan_village_paths(grid)
+    import fairy_glade
+    for ax, ay in fairy_glade.arch_posts():
+        if 0 <= ay < HEIGHT and 0 <= ax < WIDTH:
+            grid[ay][ax] = WALL
 
 
 def stamp_emberdeep_mouth(grid):
-    """Paint the volcano mouth after the dungeon field has been cleared to grass."""
+    """Solid volcano cone (WALL) with a south-facing 3-wide cave door.
+
+    Players approach from the south apron, stand on any of the three door
+    tiles, then enter. The cone itself is not walkable.
+    """
     mx, my = EMBERDEEP_MOUTH
-    for y in range(my, my + 3):
-        for x in range(mx - 1, mx + 2):
-            if 0 <= x < WIDTH and 0 <= y < HEIGHT and grid[y][x] != WATER:
+    # Unwalkable basalt mass north of the door (under the oversized sprite).
+    for y in range(my - 7, my):
+        for x in range(mx - 6, mx + 7):
+            if not (0 <= x < WIDTH and 0 <= y < HEIGHT) or grid[y][x] == WATER:
+                continue
+            if ((x - mx) / 5.5) ** 2 + ((y - (my - 3)) / 4.2) ** 2 <= 1.0:
+                grid[y][x] = WALL
+    # Scorched walkable apron at the door and south of it (enter zone).
+    for y in range(my, my + 4):
+        for x in range(mx - 2, mx + 3):
+            if not (0 <= x < WIDTH and 0 <= y < HEIGHT) or grid[y][x] == WATER:
+                continue
+            if grid[y][x] in (GRASS, PATH, FLOOR, STONE, WALL, *TREE_TILES):
                 grid[y][x] = PATH
-    grid[my][mx] = FLOOR
+    # 3-wide cave mouth + apron in front (enter from the opening, not past it).
+    for ax in (mx - 1, mx, mx + 1):
+        if not (0 <= ax < WIDTH):
+            continue
+        for ay in (my, my + 1, my + 2, my + 3):
+            if 0 <= ay < HEIGHT:
+                grid[ay][ax] = PATH
+    # Keep the south city bypass clear after the cone stamp.
+    _stamp_road(grid, 150, 80, 186, 80)
+    _stamp_road(grid, 186, 73, 186, 80)
 
 
 def near_volcano_mine(x, y) -> bool:
@@ -876,11 +967,14 @@ def near_volcano_mine(x, y) -> bool:
 
 
 def stamp_volcano_mine(grid):
-    """Rat mine south of the volcano, with a wide mithril and adamantite end."""
+    """Rat mine south of the village pit, with a wide mithril and adamantite end."""
     x0, y0, x1, y1 = VOLCANO_MINE
     _rect(grid, x0, y0, x1, y1, WALL)
     _rect(grid, x0 + 1, y0 + 1, x1 - 1, y1 - 1, FLOOR)
-    for x in (66, 67, 68):
+    mx = VOLCANO_MINE_DOOR_X
+    for x in (mx - 1, mx, mx + 1):
+        if not (0 <= x < WIDTH):
+            continue
         grid[y0][x] = PATH
         for y in range(81, y0):
             if grid[y][x] in (GRASS, PATH, FLOOR):
@@ -911,13 +1005,14 @@ def _stamp_crypt_graveyard(grid):
             if 0 <= x < WIDTH and 0 <= y < HEIGHT and grid[y][x] != WATER:
                 grid[y][x] = PATH
     grid[my][mx] = FLOOR
-    # Along the north side of the bank (chests sit on y=19), then west to the road.
-    for x in range(52, mx + 3):
-        if grid[20][x] not in (WATER, WALL):
-            grid[20][x] = PATH
-    for y in range(20, 25):
-        if grid[y][52] not in (WATER, WALL):
-            grid[y][52] = PATH
+    # Path from the graveyard gate south/west into the compact plaza roads.
+    for y in range(18, 25):
+        for x in range(mx - 1, mx + 2):
+            if grid[y][x] not in (WATER, WALL):
+                grid[y][x] = PATH
+    for x in range(48, mx + 2):
+        if grid[24][x] not in (WATER, WALL):
+            grid[24][x] = PATH
 
 
 def _clear_trees_near_buildings(grid, margin=2, canopy_south=4):
@@ -935,9 +1030,173 @@ def _clear_trees_near_buildings(grid, margin=2, canopy_south=4):
                     grid[y][x] = GRASS
 
 
-def _stamp_road(grid, x0, y0, x1, y1, half=1):
-    """Axis-aligned road, three tiles wide. Skips walls, water, and ore."""
-    ok = {GRASS, PATH, STONE, FLOOR, *TREE_TILES}
+def lay_fairy_glade_approach(grid):
+    """Join Guard Aldric's apron to the fairy road and keep the arch mouth open.
+
+    fairy_glade.stamp leaves a 1-tile grass cut at (30,50)-(30,51) between the
+    north pad and the east–west lane — that is the broken path in the arch shots.
+    """
+    import fairy_glade
+
+    # Three-wide bridge: Aldric pad (27-29) → mouth lane (30-33) → east road.
+    _stamp_road(grid, 27, 50, 36, 50)
+    _stamp_road(grid, 27, 51, 36, 51)
+    # Mouth under the arch (posts are restored to WALL after trim).
+    _stamp_road(grid, 30, 51, 33, 56)
+    # North spur from the village south lane down to the arch.
+    _stamp_road(grid, 31, 43, 31, 52)
+    # Fill the grass bite in the east–west approach (y45 x33-35).
+    _stamp_road(grid, 30, 44, 36, 46)
+    for ax, ay in fairy_glade.arch_posts():
+        if 0 <= ay < HEIGHT and 0 <= ax < WIDTH:
+            grid[ay][ax] = WALL
+
+
+def lay_east_village_road(grid):
+    """Village east road → Stonehaven gate.
+
+    explore_dungeons.capture_and_hide clears depths to grass including the
+    north edge row (y=54, x<=90), which punches a hole in this corridor.
+    Safe to call after capture.
+    """
+    _stamp_road(grid, 80, 53, 108, 53)
+    _stamp_road(grid, 80, 54, 108, 54)
+    # Exact boundary cell the depths wipe leaves as grass.
+    if 0 <= 54 < HEIGHT and 0 <= 90 < WIDTH and grid[54][90] in (GRASS, PATH, *TREE_TILES):
+        grid[54][90] = PATH
+
+
+def lay_void_sanctum_approach(grid):
+    """Dirt corridor from the east city road to the Void Sanctum door.
+
+    Safe to call after capture_and_hide — overwrites GRASS/FLOOR/trees.
+    """
+    for seg in (
+        (148, 97, 174, 97),
+        (148, 98, 174, 98),
+        (148, 99, 174, 99),
+        (170, 97, 172, 110),
+    ):
+        _stamp_road(grid, *seg, also=(FLOOR,))
+    for x, y in (
+        (170, 108), (171, 108), (172, 108),
+        (170, 109), (171, 109), (172, 109),
+    ):
+        if 0 <= x < WIDTH and 0 <= y < HEIGHT and grid[y][x] not in (WATER,):
+            # Door gap may sit on the shell — force PATH for the mouth only.
+            if grid[y][x] != WALL or (y == 108 and 170 <= x <= 172):
+                grid[y][x] = PATH
+    # Punch the three-wide door if the south wall resealed.
+    for ax in (170, 171, 172):
+        if 0 <= ax < WIDTH:
+            grid[108][ax] = PATH
+
+
+def _path_spur_to_network(grid, ax, ay, ignore=None, limit=48):
+    """Paint a 1-wide PATH spur from (ax,ay) to the nearest network PATH.
+
+    Walks only through soft tiles (not WALL/WATER) so spurs skirt buildings.
+    Returns True if a connection was made (or the cell is already on PATH).
+    """
+    from collections import deque
+
+    ignore = ignore or set()
+    soft = {GRASS, PATH, STONE, FLOOR, *TREE_TILES}
+    if not (0 <= ax < WIDTH and 0 <= ay < HEIGHT):
+        return False
+    if grid[ay][ax] == PATH and (ax, ay) not in ignore:
+        # Already on the network if some neighbour PATH is outside the apron.
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nx, ny = ax + dx, ay + dy
+            if 0 <= nx < WIDTH and 0 <= ny < HEIGHT and grid[ny][nx] == PATH:
+                if (nx, ny) not in ignore:
+                    return True
+    q = deque([(ax, ay)])
+    prev = {(ax, ay): None}
+    found = None
+    while q and found is None and len(prev) < limit * limit:
+        x, y = q.popleft()
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nx, ny = x + dx, y + dy
+            if not (0 <= nx < WIDTH and 0 <= ny < HEIGHT) or (nx, ny) in prev:
+                continue
+            t = grid[ny][nx]
+            if t not in soft:
+                continue
+            prev[(nx, ny)] = (x, y)
+            if t == PATH and (nx, ny) not in ignore and (nx, ny) != (ax, ay):
+                found = (nx, ny)
+                break
+            q.append((nx, ny))
+    if found is None:
+        return False
+    cur = found
+    while cur is not None:
+        cx, cy = cur
+        if grid[cy][cx] in soft:
+            grid[cy][cx] = PATH
+        cur = prev[cur]
+    return True
+
+
+def _stamp_exterior_door_aprons(grid):
+    """3-wide PATH apron at every overworld door, spurred into the main road.
+
+    Skips indoor/plane spots. Does not paint through WATER or solid WALL.
+    """
+    try:
+        import content
+    except Exception:
+        return
+    for spot in content.INTERACTABLES:
+        if spot.get("plane"):
+            continue
+        kind = spot.get("kind")
+        if kind not in ("door", "dungeon_entrance", "cave_entrance", "volcano_entrance"):
+            continue
+        x = int(spot.get("x", 0))
+        y = int(spot.get("y", 0))
+        # Prefer authored exit/stand south of the shell when present.
+        if isinstance(spot.get("stand"), (list, tuple)) and len(spot["stand"]) >= 2:
+            ax, ay = int(spot["stand"][0]), int(spot["stand"][1])
+        elif spot.get("exit_x") is not None and spot.get("exit_y") is not None:
+            ax, ay = int(spot["exit_x"]), int(spot["exit_y"])
+        else:
+            ax, ay = x, y + 1
+        # Door gap + apron pad (south-facing shells).
+        for nx, ny in ((x, y), (ax, ay)):
+            if 0 <= nx < WIDTH and 0 <= ny < HEIGHT:
+                if grid[ny][nx] in (GRASS, PATH, STONE, FLOOR, *TREE_TILES):
+                    grid[ny][nx] = PATH
+        apron = set()
+        for ox in (-1, 0, 1):
+            for oy in (0, 1):
+                nx, ny = ax + ox, ay + oy
+                if not (0 <= nx < WIDTH and 0 <= ny < HEIGHT):
+                    continue
+                if grid[ny][nx] in (GRASS, PATH, STONE, FLOOR, *TREE_TILES):
+                    grid[ny][nx] = PATH
+                    apron.add((nx, ny))
+        apron.add((ax, ay))
+        apron.add((x, y))
+        # Soft BFS spur into the main PATH network (skirts walls).
+        if not _path_spur_to_network(grid, ax, ay, ignore=apron, limit=64):
+            _stamp_road(grid, ax, max(1, ay - 2), ax, ay, half=1, also=(FLOOR,))
+        # Widen the apron after the spur lands.
+        for ox in (-1, 0, 1):
+            for oy in (0, 1):
+                nx, ny = ax + ox, ay + oy
+                if 0 <= nx < WIDTH and 0 <= ny < HEIGHT:
+                    if grid[ny][nx] in (GRASS, PATH, STONE, FLOOR, *TREE_TILES):
+                        grid[ny][nx] = PATH
+
+
+def _stamp_road(grid, x0, y0, x1, y1, half=1, also=()):
+    """Axis-aligned road, three tiles wide. Skips walls, water, and ore by default.
+
+    Pass also=(FLOOR,) when reclaiming void grounds or similar walkable fills.
+    """
+    ok = {GRASS, PATH, STONE, *TREE_TILES, *also}
     if x0 > x1:
         x0, x1 = x1, x0
     if y0 > y1:
@@ -959,33 +1218,50 @@ def _lay_wayfinder_roads(grid):
     Walls, water, and the castle moat stay put. The road jogs around them.
     """
     roads = (
-        # Village spine and the shop rows off it.
-        (8, 24, 54, 24),
-        (28, 16, 28, 52),
-        (8, 17, 50, 17),
-        (48, 17, 48, 21),
-        (6, 50, 96, 50),
-        (28, 50, 28, 56),
-        # Around the bank, then east clear of the lake.
-        (54, 24, 54, 32),
-        (54, 32, 74, 32),
-        (64, 28, 64, 32),
-        (72, 24, 72, 32),
-        (74, 32, 74, 25),
-        (86, 19, 86, 26),
-        (74, 25, 130, 25),
+        # Spacious village spokes around spawn (28,24) / well (32,22).
+        (12, 24, 80, 24),       # east–west hub through plaza
+        (28, 12, 28, 51),       # north–south hub (stops north of Fairy thicket)
+        (12, 14, 44, 14),       # north lane: Elder ↔ Store aprons
+        (12, 43, 80, 43),       # south lane from Inn
+        (28, 34, 45, 34),       # plaza → Bank door (south of shell, not through it)
+        (9, 19, 28, 19),        # Castle Realm portal → west hub
+        (56, 43, 56, 53),       # plaza south (stops north of farm)
+        (56, 53, 67, 53),       # jog east around the farm
+        (67, 24, 67, 53),       # east spur: hub → Pet / Smithy row
+        (67, 53, 89, 53),       # Pet + Smithy door aprons
+        (49, 53, 49, 66),       # west of farm → farm door row
+        (49, 65, 57, 66),       # Farmhouse door
+        (56, 65, 56, 73),       # farm door → north of Outfitters
+        (56, 65, 88, 65),       # farm / smithy east link
+        (56, 85, 56, 86),       # Outfitters door apron
+        # Out of village east toward forest / lake / mad scientist.
+        (84, 24, 130, 24),
+        (85, 11, 85, 24),       # estate office apron → east hub road
         (98, 22, 98, 25),
         # Forest up to the pass, across to Harbourreach, south to Tidehollow.
         (130, 16, 130, 25),
         (130, 16, 176, 16),
         (170, 15, 178, 15),
-        (166, 16, 166, 36),
-        (166, 36, 184, 36),
-        (184, 36, 184, 44),
-        # Mine's east side, down to the dungeon mouth.
-        (42, 52, 42, 72),
-        (36, 71, 42, 71),
-        # West of the castle moat, into Stonehaven's west gate.
+        # Harbourreach is reached only through the pass now; the old
+        # south road out of the harbour ends at the Harbour Inlet.
+        (171, 16, 171, 36),
+        (171, 36, 184, 36),
+        (184, 36, 184, 41),
+        # Tidehollow from the castle side, south of the inlet.
+        (154, 58, 172, 58),
+        (172, 48, 172, 58),
+        (172, 48, 188, 48),
+        (188, 48, 188, 52),
+        # Fairy Glade approach — village dirt up to the arch mouth.
+        (31, 51, 54, 51),
+        (31, 52, 54, 52),
+        # East village → Stonehaven west gate (closes the grass cut at ~90,54).
+        (80, 53, 108, 53),
+        (80, 54, 108, 54),
+        # Emberdeep south apron bypass (cone blocks the old y=73 cut).
+        (150, 80, 186, 80),
+        (186, 73, 186, 80),
+        # West of the old castle site, into Stonehaven's west gate.
         (108, 25, 108, 54),
         (92, 54, 108, 54),
         (92, 54, 92, 72),
@@ -1001,13 +1277,15 @@ def _lay_wayfinder_roads(grid):
     )
     for seg in roads:
         _stamp_road(grid, *seg)
+    lay_void_sanctum_approach(grid)
     # Designed mouths. These few cells are the gates, not building walls.
     for x, y in (
         (94, 71), (94, 72), (94, 73),
         (152, 72), (152, 73), (152, 74),
         (170, 108), (171, 108), (172, 108),
+        (170, 109), (171, 109), (172, 109),
     ):
-        if 0 <= x < WIDTH and 0 <= y < HEIGHT and grid[y][x] != WATER:
+        if 0 <= x < WIDTH and 0 <= y < HEIGHT and grid[y][x] not in (WATER, WALL):
             grid[y][x] = PATH
     for y in range(74, 87):
         for x in (185, 186, 187):
@@ -1020,6 +1298,8 @@ def _lay_wayfinder_roads(grid):
                 grid[y][x] = PATH
     grid[52][189] = FLOOR
     _stamp_crypt_graveyard(grid)
+    # Door aprons + orphan trim run again at end of generate_world (after seals)
+    # and in stamp_outfitters_shell (after capture_and_hide).
 
 
 def _paint_void_grounds(grid):
@@ -1052,6 +1332,11 @@ def _paint_void_grounds(grid):
                 or any(_ring(x, y, room) for room in rooms)
             ):
                 continue
+            # Keep the north approach / door apron as PATH so city dirt reaches
+            # the sanctum mouth (wayfinder reclaims FLOOR afterward too).
+            if 168 <= x <= 174 and 96 <= y <= 110 and tile == PATH:
+                if not (building[0] < x < building[2] and building[1] < y < building[3]):
+                    continue
             if tile in (WALL, GRASS, PATH, *TREE_TILES):
                 grid[y][x] = FLOOR
 

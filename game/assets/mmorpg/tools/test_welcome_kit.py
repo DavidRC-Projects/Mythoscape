@@ -265,14 +265,18 @@ def test_softlock_replacement_sword():
     W.db.conn.commit()
     _opt(s, wk.OPT_SWORD)
     assert _count(s, wk.SWORD) == 1
-    # an axe is enough to fight with, so no free sword
+    # a woodcutting hatchet is a tool, not a fighting axe (23 Oct rules): still offered the sword
     t = _player()
     _opt(t, wk.OPT_TAKE)
     t.inventory = {k: e for k, e in t.inventory.items() if e["item_id"] != wk.SWORD}
+    assert any(e["item_id"] == "bronze_axe" for e in t.inventory.values())
+    assert not wk.has_weapon_slot_item(t, ITEMS) and wk.status(W.db.conn, t, ITEMS)["sword_offer"]
+    # a battleaxe is enough to fight with, so no free sword
+    server.WORLD.add_item_to_inventory(t, "bronze_battleaxe", 1)
     assert wk.has_weapon_slot_item(t, ITEMS) and not wk.status(W.db.conn, t, ITEMS)["sword_offer"]
 
 
-def test_equip_for_me_takes_outfit_off():
+def test_equip_for_me_keeps_outfit():   # David, 23 Oct 2026: armour no longer takes the outfit off
     s = _player()
     look = {"skin": "skin_base", "hair": "hair_side_part", "top": "top_linen_shirt",
             "bottom": "bottom_work_trousers", "outfit": "set_kings_champion"}
@@ -281,7 +285,7 @@ def test_equip_for_me_takes_outfit_off():
     assert gear_rules.wearing_outfit(gear_rules.saved_look(s)) and not gear_rules.can_fight(s)
     _opt(s, wk.OPT_WEAR)
     assert [s.equipment[slot] for _i, slot in wk.KIT] == list(wk.KIT_IDS)
-    assert not gear_rules.wearing_outfit(gear_rules.saved_look(s))
+    assert gear_rules.saved_look(s).get("outfit") == "set_kings_champion"
     assert gear_rules.can_fight(s) and gear_rules.gate_missing(s) == []
     # take-only, then Equip it for me later
     t = _player()
@@ -305,7 +309,9 @@ def test_path_visibility_flag():
     assert wk.status(W.db.conn, s, ITEMS)["can_claim"]           # skipping keeps the kit claimable
     t = _player()
     _opt(t, wk.OPT_TAKE)
-    assert not t.ws.last("WELCOME_STATE")["show_path"]
+    # Since 21 Oct a claim keeps the trail on for stage 2 (to Elder Miriam): show_path stays, claimed flips.
+    after = t.ws.last("WELCOME_STATE")
+    assert after["show_path"] and after["claimed"], after
     # client side: only in the overworld, only while the server says so
     import types
     import new_player_guide as g
@@ -327,8 +333,8 @@ def test_dialogue_flow():
     ids = [o["id"] for o in d["options"]]
     assert ids[:2] == [wk.OPT_WEAR, wk.OPT_TAKE] and wk.OPT_REMIND in ids and wk.OPT_SKIP in ids
     text = " ".join(" ".join(p) for p in d["pages"]).lower()
-    for word in ("walk", "zoom", "weapon", "outfit", "run", "chest plate", "leg armour", "helmet", "skills",
-                 "bank", "reputation", "throne", "miriam"):
+    for word in ("walk", "zoom", "sword or axe", "outfit", "run", "chest plate", "leg armour", "helmet", "skills",
+                 "bank", "reputation", "throne", "miriam", "tool slot", "hatchet", "pickaxe"):
         assert word in text, word
     _opt(s, wk.OPT_WEAR)
     d = s.ws.last("DIALOGUE")

@@ -24,7 +24,7 @@ _current = None
 
 _ZONE = {
     "village": "village",
-    "fairy_village": "village",
+    "fairy_village": "fairy_glade",
     "city": "city",
     "fishing_village": "harbour",
     "forest": "forest",

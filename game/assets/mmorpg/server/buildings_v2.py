@@ -10,22 +10,24 @@ import os
 import feature_flags
 
 # Pack door -> live door. (dx, dy) added to every pack coordinate.
+# Spacious ring around spawn (28,24) / well (32,22): plaza ~x20–48, y14–30
+# stays clear so roofs cannot cover the hub or outdoor NPCs.
 _SHIFT = {
-    "cottage_nw": (2, 4),       # (7, 11) -> (9, 15)
-    "cottage_ne": (18, 4),      # (27, 11) -> (45, 15)
-    "cottage_sw": (2, 15),      # (7, 32) -> (9, 47)
-    "cottage_se": (14, 15),     # (27, 32) -> (41, 47)
-    "bank": (28, 27),           # (38, 20) -> (66, 47) outfitters' old door
+    "cottage_nw": (7, 2),       # (7, 11) -> (14, 13)
+    "cottage_ne": (15, 2),      # (27, 11) -> (42, 13)
+    "cottage_sw": (7, 10),      # (7, 32) -> (14, 42)
+    "cottage_se": (29, 32),     # (27, 32) -> (56, 64) east of Fairy Glade
+    "bank": (6, 13),            # (38, 20) -> (44, 33) player stand east of plaza
     "city_bank": (102, 92),     # (38, 20) -> (140, 112) south of the barracks
-    "pet_emporium": (30, 16),   # (55, 32) -> (85, 48)
+    "pet_emporium": (15, 20),   # (55, 32) -> (70, 52) north of dungeon hide rect
     "harbour_tackle": (39, 0),  # (138, 14) -> (177, 14)
     "harbour_fishmonger": (39, 0),  # (138, 28) -> (177, 28)
     # Spread below the castle. Doors face south onto the new streets.
     "city_house_nw": (19, 44),  # (86, 52) -> (105, 96)
     "city_house_sw": (20, 56),  # (86, 66) -> (106, 122)
     "city_barracks": (26, 28),  # (114, 68) -> (140, 96)
-    # Authored on the live smithy. No shift, and the stamp is left alone.
-    "smithy": (0, 0),
+    # Pack authored at old NE yard (door 86,18); east of pet.
+    "smithy": (2, 34),          # (86, 18) -> (88, 52)
 }
 
 _KEY = {
@@ -46,18 +48,19 @@ _KEY = {
 
 # Shell stamped by world_map before this module runs.
 _OLD_SHELL = {
-    "cottage_nw": (4, 4, 15, 15),
-    "cottage_ne": (40, 4, 51, 15),
-    "cottage_sw": (4, 36, 15, 47),
-    "cottage_se": (36, 36, 47, 47),
-    "bank": (60, 37, 72, 47),
+    "cottage_nw": (8, 3, 25, 13),
+    "cottage_ne": (37, 3, 49, 13),
+    "cottage_sw": (8, 30, 23, 42),
+    "cottage_se": (51, 54, 65, 64),
+    "bank": (38, 25, 50, 33),
     "city_bank": (135, 105, 145, 112),
-    "pet_emporium": (78, 36, 92, 48),
+    "pet_emporium": (64, 41, 79, 52),
     "harbour_tackle": (172, 6, 182, 14),
     "harbour_fishmonger": (172, 20, 182, 28),
     "city_house_nw": (102, 60, 110, 68),
     "city_house_sw": (102, 74, 110, 82),
     "city_barracks": (130, 74, 138, 84),
+    "smithy": (80, 38, 96, 52),
 }
 
 _DIR = os.path.join(

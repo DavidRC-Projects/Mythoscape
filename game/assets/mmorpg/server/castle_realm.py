@@ -248,7 +248,7 @@ def build_plane(name: str) -> dict:
             _add_transition(
                 transitions, name,
                 int(return_portal["x"]), int(return_portal["y"]),
-                "overworld", REALM["overworld_portal"]["return_arrival"],
+                "overworld", list(overworld_return_xy()),
                 "return_portal",
             )
         for blob in CASTLE_DATA.values():
@@ -338,11 +338,24 @@ def transition_at(plane, x: int, y: int):
     return data.get("transitions", {}).get((int(x), int(y)))
 
 
+def overworld_return_xy():
+    """Tile beside the live overworld portal (content is source of truth)."""
+    try:
+        import content
+        for spot in content.INTERACTABLES:
+            if spot.get("id") == "castle_realm_portal":
+                return int(spot["x"]), int(spot["y"]) + 1
+    except Exception:
+        pass
+    arrival = REALM.get("overworld_portal", {}).get("return_arrival", [9, 20])
+    return int(arrival[0]), int(arrival[1])
+
+
 def enter(session) -> None:
     if session.dungeon:
         raise RuntimeError('session is already inside an instance')
     spawn = REALM.get('spawn', {})
-    return_arrival = REALM.get('overworld_portal', {}).get('return_arrival', [32, 34])
+    rx, ry = overworld_return_xy()
     plane = build_plane('realm')
     session.dungeon = {
         'id': 'castle_realm',
@@ -358,11 +371,12 @@ def enter(session) -> None:
         'transitions': plane['transitions'],
         'exit_x': int(REALM['return_portal']['x']),
         'exit_y': int(REALM['return_portal']['y']),
-        'return_x': int(return_arrival[0]),
-        'return_y': int(return_arrival[1]),
+        'return_x': rx,
+        'return_y': ry,
         'explore': True,
         'realm': True,
     }
+    session._dungeon_return = (rx, ry)
     session.x = int(spawn.get('x', 150))
     session.y = int(spawn.get('y', 182))
     session.in_combat_with = None
@@ -376,8 +390,13 @@ def leave(session) -> None:
     data = session.dungeon or {}
     if data.get('id') != 'castle_realm':
         raise ValueError('session is not in Castle Realm')
-    x = int(data.get('return_x', 111))
-    y = int(data.get('return_y', 45))
+    rx, ry = overworld_return_xy()
+    x = int(data.get('return_x', rx))
+    y = int(data.get('return_y', ry))
+    # Prefer the live portal exit even if an older session still carries a
+    # stale return_x/return_y from a previous map layout.
+    if (x, y) != (rx, ry):
+        x, y = rx, ry
     session.dungeon = None
     session.in_combat_with = None
     session.pet_target_id = None

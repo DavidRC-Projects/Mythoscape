@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS players (
     equip_amulet TEXT,
     equip_ring TEXT,
     equip_ammo TEXT,
+    equip_tool TEXT,
     auto_pickup_items INTEGER NOT NULL DEFAULT 1,
     stats_allocated INTEGER NOT NULL DEFAULT 0,
     bank_coins INTEGER NOT NULL DEFAULT 0,
@@ -99,6 +100,7 @@ def _hash_password(password, salt):
 
 class Database:
     def __init__(self, path=DB_PATH):
+        self.path = path
         self.conn = sqlite3.connect(path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
@@ -173,6 +175,8 @@ class Database:
             )
         if "equip_ammo" not in cols:
             self.conn.execute("ALTER TABLE players ADD COLUMN equip_ammo TEXT")
+        if "equip_tool" not in cols:
+            self.conn.execute("ALTER TABLE players ADD COLUMN equip_tool TEXT")
         if "quiver_contents" not in cols:
             self.conn.execute(
                 "ALTER TABLE players ADD COLUMN quiver_contents TEXT NOT NULL DEFAULT '{}'"
@@ -212,6 +216,10 @@ class Database:
         if "knows_teleport" not in cols:
             self.conn.execute(
                 "ALTER TABLE players ADD COLUMN knows_teleport INTEGER NOT NULL DEFAULT 0"
+            )
+        if "teleport_marks" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN teleport_marks TEXT NOT NULL DEFAULT '[]'"
             )
         if "player_killer" not in cols:
             self.conn.execute(

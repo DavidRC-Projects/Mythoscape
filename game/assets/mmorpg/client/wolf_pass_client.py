@@ -49,11 +49,15 @@ def draw_ground(client, rect, wx, wy):
     """Cliff tiles under the painted ridge: draw grass (the ridge art covers them). True when handled."""
     if not active(client) or not WP.is_cliff(wx, wy):
         return False
-    import procedural_sprites_finished as sprites
-    paint = getattr(client, "_paint_meadow", None)
-    if not (paint and paint(rect, wx, wy, "mountains")):
-        sprites.draw_grass(client.screen, rect, wx, wy)
+    # Same ground painter as the surrounding open tiles, so no rectangle shows where the ridge base feathers out.
+    import world_map as wm
+    client.draw_terrain_tile(rect, wm.GRASS, wx, wy, 0.0)
     return True
+
+
+def _south_base_row():
+    rows = [max(c[3]) for c in WP.geo()["cols"].values() if c and len(c) > 3 and c[3]]
+    return max(rows) if rows else 28
 
 
 def _origin(client, cam_x, cam_y, tile):
@@ -121,8 +125,10 @@ def queue(client, draw_list, cam_x, cam_y, tile, t=0.0):
     # North ridge base sits on the canyon's north edge: everything on the floor sorts after it.
     draw_list.append((-10 ** 6, -1, _shadow))
     draw_list.append((int(oy + (g["road"][0] - 0.6) * tile), 0, _north))
-    # South ridge: foreground (L3) over anything on the floor.
-    draw_list.append((10 ** 6, 9, _south))
+    # South ridge: foreground (L3) over anything on the canyon floor, but y-sorted at
+    # its own base row so whatever stands south of the ridge (the castle and its
+    # tower roofs) draws over the mountain instead of being cut off by it.
+    draw_list.append((int(oy + (_south_base_row() + 1) * tile), 9, _south))
 
 
 def minimap(client, surf, mm_w, mm_h, vw, vh):

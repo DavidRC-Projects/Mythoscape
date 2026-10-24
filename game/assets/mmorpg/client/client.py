@@ -46,9 +46,12 @@ from content import (
 import world_map as wm  # noqa: E402
 import wolf_pass_client  # noqa: E402
 import fairy_ground  # noqa: E402
+import fairy_glade_client  # noqa: E402
+_SHORE_LAND_TILES = (wm.GRASS, wm.PATH, wm.STONE)
 import village_ground  # noqa: E402
 import combat  # noqa: E402
 import procedural_sprites_finished as sprites  # noqa: E402
+import hd_trees  # noqa: E402
 import dungeon_interior_3d  # noqa: E402 — 3D dungeon interior props
 import building_volume as bvol  # noqa: E402 — iso cottage shells (Panda look)
 import lowpoly_dragon_sprites  # noqa: E402 — offline-baked OSRS dragon sheets
@@ -79,16 +82,19 @@ SERVER_URI = f"ws://{SERVER_HOST}:8765"
 SCREEN_W, SCREEN_H = 1200, 800
 MAP_W, MAP_H = 900, 640
 SIDEBAR_X = MAP_W
-# World tile size. 40px is 100%. The slider runs from 40% to 200% in 20% steps.
+# World tile size. 40px is 100%. Slider 100–200% in 20% steps.
+# Below ~100% the terrain pass alone exceeds a frame budget (~100ms at 40%).
 TILE_ZOOM_BASE = 40
-ZOOM_MIN = 40
+# Internal scale used for TILE math (100 = default/widest bar level, 200 = closest).
+# UI shows these as 0% … 100% zoom-in.
+ZOOM_MIN = 100
 ZOOM_MAX = 200
 ZOOM_STEP = 20
 ZOOM_LEVELS = tuple(range(ZOOM_MIN, ZOOM_MAX + 1, ZOOM_STEP))
-ZOOM_DEFAULT = 140
-# Short ease; the world keeps its current TILE until the end so zoom-out never
-# suddenly redraws a wider map mid-animation (that was the main hitch).
-ZOOM_EASE_SECONDS = 0.12
+ZOOM_DEFAULT = ZOOM_MIN
+# Wide "Area view" — not on the zoom bar; toggled by its own button.
+AREA_VIEW_PCT = 50
+# Bar zoom keeps TILE at ZOOM_MIN; zooming in is a cheap view-scale of the map.
 TILE = max(8, int(round(TILE_ZOOM_BASE * ZOOM_DEFAULT / 100.0)))
 
 # Low-poly dragon visuals (pre-baked sheets). False = original procedural draw_dragon.
@@ -197,11 +203,14 @@ class GameClient(ScreensMixin, CameraYaw):
         self.BUILDING_WORLD_ROTATION_DEG = 0
         self.zoom_pct = ZOOM_DEFAULT
         self._zoom_goal = ZOOM_DEFAULT
-        self._zoom_anim = float(ZOOM_DEFAULT)  # eased float zoom drawn on screen
+        self._zoom_anim = float(ZOOM_DEFAULT)
         self._zoom_from = float(ZOOM_DEFAULT)
         self._zoom_t0 = 0.0
         self._zoom_drag = False
         self._zoom_toast_until = 0.0
+        self._area_view = False
+        self._zoom_before_area = ZOOM_DEFAULT
+        self._area_view_busy = False
         self._ember_yaw = 0.0
         self._ember_yaw_draw = 0.0
         self._ember_pitch_bias = 0.0
@@ -214,7 +223,11 @@ class GameClient(ScreensMixin, CameraYaw):
         self.font_small = pygame.font.SysFont(ui or mono, 18)
         self.font_big = pygame.font.SysFont(ui or mono, 30, bold=True)
         self.font_tiny = pygame.font.SysFont(ui or mono, 15)
-        self.font_label = pygame.font.SysFont(ui or mono, 16, bold=True)
+        # Crisp entity labels (drawn after zoom so they stay sharp)
+        self.font_label = pygame.font.SysFont(ui or mono, 18, bold=True)
+        self._nameplate_queue = []
+        self._badge_queue = []
+        self._defer_nameplates = False
         self.font_inv = pygame.font.SysFont(ui or mono, 18)  # inventory qty / sidebar hints
         # Fantasy login / register branding (serif)
         serif = pygame.font.match_font(
@@ -368,6 +381,9 @@ class GameClient(ScreensMixin, CameraYaw):
         self.show_teleport = False
         self.teleport_btn_rect = None
         self.teleport_row_rects = []
+        self.teleport_scroll = 0
+        self.teleport_drag = None
+        self.teleport_scroll_meta = None
         self.teleport_fx = None
         self.stair_prompt = None
         self.stair_choice_rects = []
@@ -379,9 +395,10 @@ class GameClient(ScreensMixin, CameraYaw):
         self.world_map_drag = None  # (mx, my, scroll_x, scroll_y) while dragging
         self.world_map_scale = 5  # pixels per world tile in the scrollable map
         self.minimap_rect = None
-        self.minimap_collapsed = False
+        self.minimap_collapsed = False  # also collapses the Crownfall clock HUD
         self._minimap_base = None
         self._minimap_size = (0, 0)
+        self.env = {}  # Crownfall calendar from WORLD_STATE / ENV_UPDATE
         self.fire_prompt = None  # {"slot": int, "item_id": str, "name": str} or None
         self.fire_prompt_rects = {}
         self.drop_prompt = None  # {"slot", "item_id", "name", "qty"} or None
@@ -446,6 +463,7 @@ class GameClient(ScreensMixin, CameraYaw):
         self.pending_action = None  # {"type": "ATTACK"|"TALK"|..., ...}
         self._next_walk_at = 0.0
         self.combat_target_id = None  # monster id currently fighting
+        self._attack_intent_id = None  # last foe we meant to walk up and hit
         self.combat_rounds = 0
         self.fleeing_combat = False  # click-away: don't path back until re-attack
         self._low_hp_warn_until = 0.0  # pulse timer for sidebar warning
@@ -586,6 +604,7 @@ class GameClient(ScreensMixin, CameraYaw):
             self.interactables = msg.get("interactables") or []
             self.craft_recipes = msg.get("craft_recipes") or {}
             self.buildings = msg.get("buildings") or []
+            self.env = msg.get("env") or {}
             import feature_flags
             if self.opening_comic_pending and feature_flags.USE_OPENING_COMIC:
                 self.state = "OPENING_COMIC"
@@ -599,6 +618,14 @@ class GameClient(ScreensMixin, CameraYaw):
             self.stat_alloc_error = ""
             self._minimap_base = None  # rebuild when world loads
             self._capture_home_map(force=True)
+        elif t == "ENV_UPDATE":
+            prev = (self.env or {}).get("season")
+            self.env = msg.get("env") or self.env or {}
+            if (self.env or {}).get("season") != prev:
+                try:
+                    village_ground.clear_season_cache()
+                except Exception:
+                    pass
         elif t == "STATE_UPDATE":
             incoming_dungeon = msg.get("dungeon")
             if self.dungeon and not incoming_dungeon:
@@ -687,9 +714,10 @@ class GameClient(ScreensMixin, CameraYaw):
             self.dungeon_victory = None
             self._exit_dungeon_view()
             self.stair_prompt = None
-            if self.player:
-                self.player["x"] = msg.get("x", self.player["x"])
-                self.player["y"] = msg.get("y", self.player["y"])
+            self._snap_local_player(
+                msg.get("x", (self.player or {}).get("x", 0)),
+                msg.get("y", (self.player or {}).get("y", 0)),
+            )
         elif t == "DUNGEON_COMPLETE":
             # Stay inside briefly — server ejects after leave_in seconds.
             rewards = msg.get("rewards") or []
@@ -1094,6 +1122,12 @@ class GameClient(ScreensMixin, CameraYaw):
             self.trade_state = None
         elif t == "ERROR":
             text = msg.get("message") or "Something went wrong."
+            low = text.lower()
+            # Out-of-range swing: auto-walk into range instead of only scolding.
+            if "too far" in low and "attack" in low:
+                if self._approach_attack_intent():
+                    self._maybe_combat_floater("Running in…")
+                    return
             self.add_chat(f"[!] {text}", color=(255, 140, 100), highlight=True)
             self._maybe_combat_floater(text)
             if getattr(self, "outfitters", None) and self.outfitters.active:
@@ -1377,6 +1411,20 @@ class GameClient(ScreensMixin, CameraYaw):
             return
         if event.type == pygame.KEYDOWN:
             if self.chat_typing:
+                # Direction keys leave chat and walk — otherwise focus eats the pad.
+                step = self._arrow_step(event)
+                if step is not None:
+                    self._end_chat_typing()
+                    dx, dy = step
+                    if emberdeep_v2_client.fp_active(self):
+                        if dy == 0:
+                            emberdeep_v2_client.turn(self, 1 if dx > 0 else -1)
+                        else:
+                            self._ember_key_move(1 if dy < 0 else -1, 0)
+                    elif self._begin_key_step():
+                        dx, dy = self.rotate_move_delta(dx, dy)
+                        self.try_move(dx, dy)
+                    return
                 self.handle_chat_typing(event)
                 return
             if event.key == pygame.K_ESCAPE and self.context_menu:
@@ -1424,6 +1472,19 @@ class GameClient(ScreensMixin, CameraYaw):
             if self.show_teleport:
                 if event.key in (pygame.K_ESCAPE, pygame.K_t):
                     self.show_teleport = False
+                    return
+                if event.key in (pygame.K_UP, pygame.K_DOWN, pygame.K_PAGEUP, pygame.K_PAGEDOWN):
+                    meta = self.teleport_scroll_meta or {}
+                    max_scroll = int(meta.get("max_scroll") or 0)
+                    step = 36
+                    if event.key == pygame.K_UP:
+                        self.teleport_scroll = max(0, self.teleport_scroll - step)
+                    elif event.key == pygame.K_DOWN:
+                        self.teleport_scroll = min(max_scroll, self.teleport_scroll + step)
+                    elif event.key == pygame.K_PAGEUP:
+                        self.teleport_scroll = max(0, self.teleport_scroll - step * 5)
+                    else:
+                        self.teleport_scroll = min(max_scroll, self.teleport_scroll + step * 5)
                 return
             if self.stair_prompt:
                 if event.key == pygame.K_ESCAPE:
@@ -1587,9 +1648,7 @@ class GameClient(ScreensMixin, CameraYaw):
                 return
 
             if event.key == pygame.K_RETURN:
-                self.chat_typing = True
-                self.chat_text = ""
-                pygame.key.start_text_input()
+                self._begin_chat_typing()
             elif self.show_skills and event.key in (pygame.K_UP, pygame.K_DOWN, pygame.K_PAGEUP, pygame.K_PAGEDOWN):
                 step = 42
                 meta = self.skills_scroll_meta or {}
@@ -1804,6 +1863,13 @@ class GameClient(ScreensMixin, CameraYaw):
                 meta = self.travel_scroll_meta or {}
                 max_scroll = float(meta.get("max_scroll", 9999))
                 self.travel_scroll = max(0, min(max_scroll, self.travel_scroll - dy * 48))
+            elif self.state == "GAME" and self.show_teleport:
+                dy = getattr(event, "precise_y", None)
+                if dy is None:
+                    dy = float(event.y)
+                meta = self.teleport_scroll_meta or {}
+                max_scroll = float(meta.get("max_scroll", 9999))
+                self.teleport_scroll = max(0, min(max_scroll, self.teleport_scroll - dy * 40))
             elif self.state == "GAME" and self.sidebar_tab == "quests":
                 mx, my = pygame.mouse.get_pos()
                 if mx >= SIDEBAR_X:
@@ -1895,6 +1961,11 @@ class GameClient(ScreensMixin, CameraYaw):
                 max_scroll = float(meta.get("max_scroll", 9999))
                 delta = -48 if event.button == 4 else 48
                 self.travel_scroll = max(0, min(max_scroll, self.travel_scroll + delta))
+            elif self.state == "GAME" and self.show_teleport and event.button in (4, 5):
+                meta = self.teleport_scroll_meta or {}
+                max_scroll = float(meta.get("max_scroll", 9999))
+                delta = -40 if event.button == 4 else 40
+                self.teleport_scroll = max(0, min(max_scroll, self.teleport_scroll + delta))
             elif (
                 self.state == "GAME" and event.button in (4, 5) and event.pos[0] >= SIDEBAR_X
                 and not self.show_shop_panel
@@ -1932,6 +2003,11 @@ class GameClient(ScreensMixin, CameraYaw):
                     pass
                 else:
                     self.handle_mouse_click(event)
+            elif self.state == "GAME" and self.show_teleport and event.button == 1:
+                if self._teleport_scrollbar_mousedown(event.pos):
+                    pass
+                else:
+                    self.handle_mouse_click(event)
             elif self.state == "GAME" and self.show_pets and event.button == 1:
                 if self._pets_scrollbar_mousedown(event.pos):
                     pass
@@ -1962,6 +2038,8 @@ class GameClient(ScreensMixin, CameraYaw):
                 self._skills_scrollbar_drag(event.pos)
             elif self.travel_drag is not None:
                 self._travel_scrollbar_drag(event.pos)
+            elif self.teleport_drag is not None:
+                self._teleport_scrollbar_drag(event.pos)
             elif self.pets_drag is not None:
                 self._pets_scrollbar_drag(event.pos)
             elif self.shop_drag is not None:
@@ -1984,6 +2062,8 @@ class GameClient(ScreensMixin, CameraYaw):
                     self.skills_drag = None
                 elif self.travel_drag is not None:
                     self.travel_drag = None
+                elif self.teleport_drag is not None:
+                    self.teleport_drag = None
                 elif self.pets_drag is not None:
                     self.pets_drag = None
                 elif self.shop_drag is not None:
@@ -2186,12 +2266,15 @@ class GameClient(ScreensMixin, CameraYaw):
         if px is None or py is None:
             px, py = self.player_xy()
         for spot in self.interactables:
-            if spot.get("kind") not in ("cave_entrance", "volcano_entrance", "dungeon_entrance"):
+            kind = spot.get("kind")
+            if kind not in ("cave_entrance", "volcano_entrance", "dungeon_entrance"):
                 continue
-            if not spot.get("dungeon_id") and spot.get("kind") == "dungeon_entrance":
+            if not spot.get("dungeon_id") and kind == "dungeon_entrance":
                 continue
-            if (px, py) not in entrance_mouth_tiles(spot["x"], spot["y"]):
-                if max(abs(spot["x"] - px), abs(spot["y"] - py)) > 1:
+            on_mouth = (px, py) in entrance_mouth_tiles(spot["x"], spot["y"], kind)
+            if not on_mouth:
+                # Volcano: door tiles only — no adjacent-cone early enter.
+                if kind == "volcano_entrance" or max(abs(spot["x"] - px), abs(spot["y"] - py)) > 1:
                     continue
             if dungeon_id and spot.get("dungeon_id") and spot.get("dungeon_id") != dungeon_id:
                 continue
@@ -2388,6 +2471,10 @@ class GameClient(ScreensMixin, CameraYaw):
         if self.player_using_bow():
             return self.attack_range_goals(tx, ty)
         if mtype and self.is_side_by_side_monster(mtype):
+            # Prefer the proper engage gap first; fall back to any flank tile.
+            goals = self.side_engage_goals(tx, ty, mtype)
+            if goals:
+                return goals
             return self.melee_flank_goals(tx, ty)
         return self.attack_range_goals(tx, ty)
 
@@ -2399,6 +2486,18 @@ class GameClient(ScreensMixin, CameraYaw):
         if not monster:
             return set()
         return self.combat_approach_goals(monster["x"], monster["y"], monster.get("type"))
+
+    def attack_goals_with_fallback(self, monster):
+        """Engage tiles, then any in-range tile, then adjacent — so far clicks still path."""
+        if not monster:
+            return set()
+        goals = set(self.approach_goals_for(monster) or ())
+        if goals:
+            return goals
+        goals = set(self.attack_range_goals(monster["x"], monster["y"]) or ())
+        if goals:
+            return goals
+        return self.adjacent_goals(monster["x"], monster["y"])
 
     def is_side_by_side_monster(self, mtype) -> bool:
         """True when combat snaps foe beside you on the same row (content flag)."""
@@ -2598,7 +2697,7 @@ class GameClient(ScreensMixin, CameraYaw):
             self.clear_walk()
             self.begin_attack(best["id"])
         else:
-            self.walk_and_act(self.approach_goals_for(best), {
+            self.walk_and_act(self.attack_goals_with_fallback(best), {
                 "type": "ATTACK", "target_id": best["id"],
             })
 
@@ -2661,17 +2760,26 @@ class GameClient(ScreensMixin, CameraYaw):
                     opts[skill] = True
         return opts
 
+    def _begin_chat_typing(self):
+        self.chat_typing = True
+        self.chat_text = ""
+        pygame.key.start_text_input()
+
+    def _end_chat_typing(self):
+        """Leave chat focus so arrow / keypad movement works again."""
+        was = self.chat_typing
+        self.chat_typing = False
+        self.chat_text = ""
+        if was:
+            pygame.key.stop_text_input()
+
     def handle_chat_typing(self, event):
         if event.key == pygame.K_RETURN:
             if self.chat_text.strip():
                 self.net.send("CHAT", text=self.chat_text.strip())
-            self.chat_typing = False
-            self.chat_text = ""
-            pygame.key.stop_text_input()
+            self._end_chat_typing()
         elif event.key == pygame.K_ESCAPE:
-            self.chat_typing = False
-            self.chat_text = ""
-            pygame.key.stop_text_input()
+            self._end_chat_typing()
         elif event.key == pygame.K_BACKSPACE:
             self.chat_text = self.chat_text[:-1]
         elif event.unicode and event.unicode.isprintable():
@@ -2849,28 +2957,32 @@ class GameClient(ScreensMixin, CameraYaw):
             return
         keys = pygame.key.get_pressed()
         import emberdeep_v2_client
+        up = keys[pygame.K_UP] or keys[pygame.KSCAN_UP] or keys[pygame.K_KP8] or keys[pygame.KSCAN_KP8]
+        down = keys[pygame.K_DOWN] or keys[pygame.KSCAN_DOWN] or keys[pygame.K_KP2] or keys[pygame.KSCAN_KP2]
+        left = keys[pygame.K_LEFT] or keys[pygame.KSCAN_LEFT] or keys[pygame.K_KP4] or keys[pygame.KSCAN_KP4]
+        right = keys[pygame.K_RIGHT] or keys[pygame.KSCAN_RIGHT] or keys[pygame.K_KP6] or keys[pygame.KSCAN_KP6]
         if emberdeep_v2_client.fp_active(self):
             if time.time() < getattr(self, "_next_walk_at", 0):
                 return
-            if keys[pygame.K_w] or keys[pygame.K_UP] or keys[pygame.KSCAN_UP]:
+            if keys[pygame.K_w] or up:
                 self._ember_key_move(1, 0)
-            elif keys[pygame.K_s] or keys[pygame.K_DOWN] or keys[pygame.KSCAN_DOWN]:
+            elif keys[pygame.K_s] or down:
                 self._ember_key_move(-1, 0)
-            elif keys[pygame.K_a]:
+            elif keys[pygame.K_a] or left:
                 self._ember_key_move(0, -1)
-            elif keys[pygame.K_d]:
+            elif keys[pygame.K_d] or right:
                 self._ember_key_move(0, 1)
             return
         if time.time() < getattr(self, "_next_walk_at", 0):
             return
         step = None
-        if keys[pygame.K_UP] or keys[pygame.KSCAN_UP]:
+        if up:
             step = (0, -1)
-        elif keys[pygame.K_DOWN] or keys[pygame.KSCAN_DOWN]:
+        elif down:
             step = (0, 1)
-        elif keys[pygame.K_LEFT] or keys[pygame.KSCAN_LEFT]:
+        elif left:
             step = (-1, 0)
-        elif keys[pygame.K_RIGHT] or keys[pygame.KSCAN_RIGHT]:
+        elif right:
             step = (1, 0)
         if step is None:
             return
@@ -3025,6 +3137,28 @@ class GameClient(ScreensMixin, CameraYaw):
         self._home_size = (int(self.world_w), int(self.world_h))
         self._home_npcs = list(self.npcs)
 
+    def _snap_local_player(self, x, y):
+        """Instant teleport: keep player dict, public mirror, and walk anim in sync.
+
+        Without this, player_xy() keeps reading the old self.players entry for a
+        frame after DUNGEON_ENTER / DUNGEON_EXIT, so the sprite flashes elsewhere.
+        """
+        x, y = int(x), int(y)
+        if self.player:
+            self.player["x"], self.player["y"] = x, y
+        pid = (self.player or {}).get("id")
+        if pid is not None:
+            live = self.players.get(pid)
+            if live is not None:
+                live["x"], live["y"] = x, y
+            key = ("p", pid)
+            if isinstance(getattr(self, "_prev_entity_pos", None), dict):
+                self._prev_entity_pos[key] = (x, y)
+            if isinstance(getattr(self, "_entity_moving_until", None), dict):
+                self._entity_moving_until.pop(key, None)
+        self._predicted_step = None
+        self.clear_walk()
+
     def _enter_dungeon_view(self, msg, advance=False):
         """Swap client map to the private Tidehollow floor tiles."""
         if not self.dungeon:
@@ -3060,14 +3194,13 @@ class GameClient(ScreensMixin, CameraYaw):
         self.ground_items = {}
         self.fires = set()
         self.npcs = list(msg.get("npcs") or [])
-        self.clear_walk()
         self._minimap_base = None
         if msg.get("v2"):
             import void_v2_client
             void_v2_client.attach(self, msg)
-        if self.player:
-            self.player["x"] = msg.get("player_x", self.player.get("x", 0))
-            self.player["y"] = msg.get("player_y", self.player.get("y", 0))
+        px = msg.get("player_x", (self.player or {}).get("x", 0))
+        py = msg.get("player_y", (self.player or {}).get("y", 0))
+        self._snap_local_player(px, py)
         if msg.get("realm"):
             self._realm_fade_until = time.time() + 0.45
 
@@ -3104,12 +3237,11 @@ class GameClient(ScreensMixin, CameraYaw):
             self.dungeon["label"] = msg.get("label") or self.dungeon.get("label")
             self.dungeon["exit_x"] = int(msg.get("exit_x", -1))
             self.dungeon["exit_y"] = int(msg.get("exit_y", -1))
-        if self.player:
-            self.player["x"] = msg.get("player_x", self.player.get("x", 0))
-            self.player["y"] = msg.get("player_y", self.player.get("y", 0))
+        px = msg.get("player_x", (self.player or {}).get("x", 0))
+        py = msg.get("player_y", (self.player or {}).get("y", 0))
+        self._snap_local_player(px, py)
         self.npcs = list(msg.get("npcs") or [])
         self._realm_fade_until = time.time() + 0.45
-        self.clear_walk()
         self._minimap_base = None
 
     # -- click-to-walk --------------------------------------------------
@@ -3402,12 +3534,41 @@ class GameClient(ScreensMixin, CameraYaw):
                 self._say_combat_lock()
                 return
             self._clear_combat_target(notify_server=True)
+        if action and action.get("type") == "ATTACK" and action.get("target_id") is not None:
+            self._attack_intent_id = action.get("target_id")
+            self.fleeing_combat = False
         px, py = self.player_xy()
         if action and self.can_do_action(action, px, py):
             self.fire_action(action)
             self.clear_walk()
             return
-        path = self.find_path(px, py, goals)
+        goal_set = set(goals or ())
+        # Out-of-range attack: widen goals so we still run in when the ideal
+        # flank tile is blocked (duelist / dragons / any side-by-side foe).
+        if action and action.get("type") == "ATTACK" and action.get("target_id") is not None:
+            m = self.monsters.get(action["target_id"]) or self._monster_by_id(action.get("target_id"))
+            if m and m.get("alive"):
+                if not goal_set:
+                    goal_set = self.attack_goals_with_fallback(m)
+                path = self.find_path(px, py, goal_set)
+                if path is None:
+                    wider = self.attack_range_goals(m["x"], m["y"]) | self.adjacent_goals(m["x"], m["y"])
+                    path = self.find_path(px, py, wider)
+                    if path is not None:
+                        goal_set = wider
+                if path is None:
+                    self.add_chat("[!] Can't reach that enemy.", color=(255, 140, 100))
+                    self.clear_walk()
+                    return
+                self.walk_path = path
+                self.walk_goal = path[-1] if path else None
+                self.pending_action = action
+                self._next_walk_at = 0.0
+                if not path and action:
+                    self.fire_action(action)
+                    self.clear_walk()
+                return
+        path = self.find_path(px, py, goal_set)
         if path is None:
             self.chat_log.append("[!] Can't reach that.")
             self.chat_log = self.chat_log[-8:]
@@ -3446,12 +3607,7 @@ class GameClient(ScreensMixin, CameraYaw):
                         self.clear_walk()
                         return
                     # Side-fight: approach once, then stand — don't orbit their moving flank
-                    if m.get("type") == "emberdeep_wyrm":
-                        goals = self.approach_goals_for(m)
-                    elif self.is_side_by_side_monster(m.get("type")) and not self.player_using_bow():
-                        goals = self.side_engage_goals(m["x"], m["y"], m.get("type"))
-                    else:
-                        goals = self.combat_approach_goals(m["x"], m["y"], m.get("type"))
+                    goals = self.attack_goals_with_fallback(m)
                     need = True
                     if self.walk_path and self.walk_path[-1] in goals:
                         need = False
@@ -3528,8 +3684,17 @@ class GameClient(ScreensMixin, CameraYaw):
         if mx < 0 or my < 0 or mx >= MAP_W or my >= MAP_H:
             return None
         cam_x, cam_y = self.camera_origin()
-        vx = cam_x + mx // TILE
-        vy = cam_y + my // TILE
+        # Inverse of the post-draw view zoom (scaled about the player).
+        k = self._zoom_view_scale()
+        if abs(k - 1.0) > 1e-3 and self.player:
+            px, py = self.player_xy()
+            sx, sy = self.world_to_view_offset(px, py, cam_x, cam_y)
+            cx = sx * TILE + TILE / 2.0
+            cy = sy * TILE + TILE / 2.0
+            mx = (mx - cx) / k + cx
+            my = (my - cy) / k + cy
+        vx = cam_x + int(mx) // TILE
+        vy = cam_y + int(my) // TILE
         return self.view_to_world(vx, vy)
 
     def adjust_zoom(self, delta):
@@ -3539,6 +3704,11 @@ class GameClient(ScreensMixin, CameraYaw):
             emberdeep_v2_client.adjust_zoom(self, delta)
             return
         if not delta or getattr(self, "_zoom_drag", False) or getattr(self, "_zoom_latched", False):
+            return
+        if getattr(self, "_area_view", False):
+            # Leave the wide view; zoom-in restores the prior bar level.
+            if delta > 0:
+                self._set_area_view(False)
             return
         self._zoom_latched = True
         self._zoom_goal = self._snap_zoom(self._zoom_goal + (ZOOM_STEP if delta > 0 else -ZOOM_STEP))
@@ -3553,15 +3723,32 @@ class GameClient(ScreensMixin, CameraYaw):
         snapped = int(math.floor(float(pct) / ZOOM_STEP + 0.5)) * ZOOM_STEP
         return max(ZOOM_MIN, min(ZOOM_MAX, snapped))
 
+    def _zoom_ui_pct(self, pct=None):
+        """Map internal zoom (100–200) to the on-screen 0–100% scale."""
+        src = self.zoom_pct if pct is None else pct
+        span = max(1, ZOOM_MAX - ZOOM_MIN)
+        return int(round((self._snap_zoom(src) - ZOOM_MIN) * 100.0 / span))
+
     def _render_tile(self, pct):
         return max(8, int(round(TILE_ZOOM_BASE * float(pct) / 100.0)))
 
+    def _physical_zoom(self, pct):
+        """Zoom level that owns TILE.
+
+        Area view uses its own tile. The zoom bar keeps TILE at ZOOM_MIN (UI 0%);
+        zooming in is a cheap view-scale up to ZOOM_MAX (UI 100%).
+        """
+        if getattr(self, "_area_view", False):
+            return AREA_VIEW_PCT
+        return ZOOM_MIN
+
     def _apply_zoom_tile(self, pct=None):
-        """Rebuild sprites only when the on-screen tile size actually changes."""
+        """Rebuild sprites only when the physical tile size actually changes."""
         global TILE
-        tile = self._render_tile(self.zoom_pct if pct is None else pct)
+        src = self.zoom_pct if pct is None else pct
+        tile = self._render_tile(self._physical_zoom(src))
         if tile == TILE:
-            return
+            return False
         TILE = tile
         sprites.set_render_profile(
             tile_size=TILE,
@@ -3571,12 +3758,13 @@ class GameClient(ScreensMixin, CameraYaw):
             monster=2.5,
             pet=2.05,
         )
+        return True
 
     def set_zoom_pct(self, pct, apply_world=True):
-        """Set the overworld zoom. 100 is the normal view, 40 the widest, 200 the closest.
-
-        Any stored value (e.g. an old 30/110/150) snaps to the nearest 20% level.
-        """
+        """Set overworld zoom. Internal 100 = UI 0% (default), 200 = UI 100%."""
+        if getattr(self, "_area_view", False):
+            self._set_area_view(False, restore_pct=self._snap_zoom(pct))
+            return
         self._zoom_goal = self._snap_zoom(pct)
         if apply_world:
             self.zoom_pct = self._zoom_goal
@@ -3585,57 +3773,118 @@ class GameClient(ScreensMixin, CameraYaw):
             self._zoom_toast_until = time.time() + 1.2
 
     def _pump_zoom(self):
-        """Ease the world toward _zoom_goal (ease-out cubic).
-
-        Keep the current TILE size for the whole ease and only scale the finished
-        map blit — switching TILE mid-zoom (especially zooming out) used to force
-        a full wider redraw every frame and hitch hard. The goal tile size is
-        applied once on arrival. Dragging the bar moves only the knob; the world
-        eases on release. A new tick mid-animation retargets from the current
-        float value (steps are not queued).
-        """
+        """Apply zoom goal. Zoom-in above UI 0% never rebuilds TILE."""
         import emberdeep_v2_client
         if emberdeep_v2_client.fp_active(self):
+            return
+        if getattr(self, "_area_view", False):
+            if self.zoom_pct != AREA_VIEW_PCT or self._render_tile(AREA_VIEW_PCT) != TILE:
+                self.zoom_pct = AREA_VIEW_PCT
+                self._zoom_goal = AREA_VIEW_PCT
+                self._zoom_anim = self._zoom_from = float(AREA_VIEW_PCT)
+                self._apply_zoom_tile(AREA_VIEW_PCT)
             return
         goal = self._snap_zoom(getattr(self, "_zoom_goal", self.zoom_pct))
         self._zoom_goal = goal
         if getattr(self, "_zoom_drag", False):
             return
-        now = time.time()
-        if goal != self.zoom_pct:
-            self._zoom_from = float(self._zoom_anim)
-            self._zoom_t0 = now
-            self.zoom_pct = goal
-            self._zoom_toast_until = now + 1.2
-        if self._zoom_anim != float(goal):
-            span = max(1e-6, ZOOM_EASE_SECONDS)
-            u = min(1.0, (now - self._zoom_t0) / span)
-            e = 1.0 - (1.0 - u) ** 3
-            self._zoom_anim = self._zoom_from + (goal - self._zoom_from) * e
-            if u >= 1.0:
-                self._zoom_anim = float(goal)
-                self._apply_zoom_tile(goal)
+        if goal == self.zoom_pct and self._zoom_anim == float(goal):
+            phys = self._physical_zoom(goal)
+            if self._render_tile(phys) == TILE:
+                return
+        self.zoom_pct = goal
+        self._zoom_anim = float(goal)
+        self._zoom_from = float(goal)
+        self._zoom_toast_until = time.time() + 1.2
+        self._apply_zoom_tile(goal)
+
+    def _draw_area_view_loading(self, message):
+        """Full-map loading overlay while area-view TILE rebuilds."""
+        overlay = pygame.Surface((MAP_W, MAP_H), pygame.SRCALPHA)
+        overlay.fill((10, 8, 14, 210))
+        self.screen.blit(overlay, (0, 0))
+        title = self.font_big.render("Area view", True, (255, 230, 160))
+        body = self.font_small.render(message, True, (220, 216, 200))
+        cx, cy = MAP_W // 2, MAP_H // 2
+        self.screen.blit(title, (cx - title.get_width() // 2, cy - 36))
+        self.screen.blit(body, (cx - body.get_width() // 2, cy + 8))
+        bar = pygame.Rect(cx - 90, cy + 40, 180, 8)
+        pygame.draw.rect(self.screen, (40, 42, 52), bar, border_radius=4)
+        pulse = 0.5 + 0.5 * math.sin(time.time() * 8.0)
+        fill = pygame.Rect(bar.x, bar.y, max(12, int(bar.w * (0.35 + 0.45 * pulse))), bar.h)
+        pygame.draw.rect(self.screen, (90, 140, 80), fill, border_radius=4)
+
+    def _set_area_view(self, enabled, restore_pct=None):
+        """Enter/leave 50% area view with a loading screen over the rebuild."""
+        import emberdeep_v2_client
+        if emberdeep_v2_client.fp_active(self):
+            return
+        if getattr(self, "_area_view_busy", False):
+            return
+        want = bool(enabled)
+        if want == bool(getattr(self, "_area_view", False)) and restore_pct is None:
+            return
+        self._area_view_busy = True
+        try:
+            msg = "Loading wide view…" if want else "Restoring view…"
+            self._draw_area_view_loading(msg)
+            pygame.display.flip()
+            if want:
+                cur = int(getattr(self, "_zoom_goal", self.zoom_pct))
+                if cur < ZOOM_MIN or cur > ZOOM_MAX:
+                    cur = ZOOM_DEFAULT
+                self._zoom_before_area = self._snap_zoom(cur)
+                self._area_view = True
+                self.zoom_pct = AREA_VIEW_PCT
+                self._zoom_goal = AREA_VIEW_PCT
+                self._zoom_anim = self._zoom_from = float(AREA_VIEW_PCT)
+                self._apply_zoom_tile(AREA_VIEW_PCT)
+            else:
+                self._area_view = False
+                if restore_pct is None:
+                    restore = self._snap_zoom(getattr(self, "_zoom_before_area", ZOOM_DEFAULT))
+                else:
+                    restore = self._snap_zoom(restore_pct)
+                self.zoom_pct = restore
+                self._zoom_goal = restore
+                self._zoom_anim = self._zoom_from = float(restore)
+                self._apply_zoom_tile(restore)
+            self._zoom_toast_until = time.time() + 1.4
+            # First map frame at the new tile size is the slow part — keep the
+            # loading screen up until that draw finishes, then reveal.
+            self.draw()
+            pygame.display.flip()
+        finally:
+            self._area_view_busy = False
+
+    def toggle_area_view(self):
+        self._set_area_view(not bool(getattr(self, "_area_view", False)))
 
     def _zoom_view_scale(self):
-        """Extra scale for the map view while easing (1.0 when settled)."""
+        """Scale factor from physical TILE to the on-screen zoom (1.0 at settle)."""
         anim = float(getattr(self, "_zoom_anim", self.zoom_pct))
-        return (TILE_ZOOM_BASE * anim / 100.0) / float(max(1, TILE))
+        physical = float(self._physical_zoom(anim))
+        if physical <= 0:
+            return 1.0
+        return anim / physical
 
     def _blit_zoom_ease(self, cam_x, cam_y):
-        """Scale the drawn map around the player for in-between zoom frames."""
+        """Scale the map about the player when zoom-in is view-only (no TILE change).
+
+        Measured ~0.2–0.8 ms for a 900×640 nearest-neighbour scale — far cheaper
+        than rebuilding every sprite at a new tile size.
+        """
         k = self._zoom_view_scale()
         if abs(k - 1.0) < 1e-3:
+            return
+        if not self.player:
             return
         px, py = self.player_xy()
         sx, sy = self.world_to_view_offset(px, py, cam_x, cam_y)
         cx, cy = sx * TILE + TILE / 2.0, sy * TILE + TILE / 2.0
         view = self.screen.subsurface((0, 0, MAP_W, MAP_H)).copy()
         w, h = max(1, int(round(MAP_W * k))), max(1, int(round(MAP_H * k)))
-        # Nearest-neighbour scale is far cheaper than smoothscale on a 900×640
-        # buffer every frame; the ease only lasts ~120ms so the difference is
-        # barely visible and the hitch is gone.
         scaled = pygame.transform.scale(view, (w, h))
-        # Scale about the player's screen point so the player never drifts.
         dx, dy = cx - cx * k, cy - cy * k
         if k < 1.0:
             self.screen.fill((8, 6, 10), (0, 0, MAP_W, MAP_H))
@@ -3644,7 +3893,7 @@ class GameClient(ScreensMixin, CameraYaw):
         self.screen.set_clip(None)
 
     def zoom_hud_rects(self):
-        """Title, key hint, and the 40–200 track in the bottom-left of the map."""
+        """Title, key hint, and the 0–100% track in the bottom-left of the map."""
         pad = 8
         title = self.font_tiny.render("Zoom bar", True, WHITE)
         keys = self.font_tiny.render("− [ zoom out      + ] zoom in", True, WHITE)
@@ -3661,6 +3910,15 @@ class GameClient(ScreensMixin, CameraYaw):
             bar_h,
         )
         return panel, track
+
+    def area_view_button_rect(self):
+        """Button to the right of the zoom bar (not part of the 0–100% track)."""
+        panel, _track = self.zoom_hud_rects()
+        label = self.font_tiny.render("Area view", True, WHITE)
+        pad_x, pad_y = 10, 7
+        w = label.get_width() + pad_x * 2
+        h = max(30, label.get_height() + pad_y * 2)
+        return pygame.Rect(panel.right + 8, panel.bottom - h, w, h)
 
     def _zoom_pct_from_x(self, mx):
         _panel, track = self.zoom_hud_rects()
@@ -3682,20 +3940,40 @@ class GameClient(ScreensMixin, CameraYaw):
         self.screen.blit(keys, (panel.x + 8, panel.y + 6 + title.get_height() + 2))
         pygame.draw.rect(self.screen, (40, 42, 52), track, border_radius=4)
         span = max(1, ZOOM_MAX - ZOOM_MIN)
-        shown = self._zoom_goal if getattr(self, "_zoom_drag", False) else self.zoom_pct
+        # Bar uses the normal range; area view is a separate mode.
+        if getattr(self, "_area_view", False):
+            shown = self._snap_zoom(getattr(self, "_zoom_before_area", ZOOM_DEFAULT))
+        else:
+            shown = self._zoom_goal if getattr(self, "_zoom_drag", False) else self.zoom_pct
         t = (shown - ZOOM_MIN) / span
-        fill_w = max(4, int(round(track.w * t)))
-        fill = pygame.Rect(track.x, track.y, fill_w, track.h)
-        pygame.draw.rect(self.screen, (70, 110, 64), fill, border_radius=4)
+        fill_w = int(round(track.w * t))
+        if fill_w > 0:
+            fill = pygame.Rect(track.x, track.y, max(2, fill_w), track.h)
+            pygame.draw.rect(self.screen, (70, 110, 64), fill, border_radius=4)
         knob_x = track.x + int(round(track.w * t))
         knob = pygame.Rect(0, 0, 8, track.h + 6)
         knob.center = (knob_x, track.centery)
         pygame.draw.rect(self.screen, (230, 220, 170), knob, border_radius=3)
-        pct = self.font_tiny.render(f"{shown}%", True, WHITE)
+        ui_pct = self._zoom_ui_pct(shown)
+        pct = self.font_tiny.render(f"{ui_pct}%", True, WHITE)
         self.screen.blit(pct, (track.right + 8, track.centery - pct.get_height() // 2))
 
+        btn = self.area_view_button_rect()
+        active = bool(getattr(self, "_area_view", False))
+        fill_c = (58, 78, 48) if active else (22, 24, 32)
+        edge_c = (180, 200, 120) if active else (120, 110, 80)
+        pygame.draw.rect(self.screen, fill_c, btn, border_radius=6)
+        pygame.draw.rect(self.screen, edge_c, btn, 1, border_radius=6)
+        blabel = self.font_tiny.render("Area view", True, (255, 240, 180) if active else (210, 206, 190))
+        self.screen.blit(
+            blabel,
+            (btn.centerx - blabel.get_width() // 2, btn.centery - blabel.get_height() // 2),
+        )
+
     def zoom_label(self):
-        return f"Zoom {int(self.zoom_pct)}%"
+        if getattr(self, "_area_view", False):
+            return "Area view"
+        return f"Zoom {self._zoom_ui_pct()}%"
 
     def camera_origin(self):
         """Center the viewport on the player in *view* space, clamped."""
@@ -3782,7 +4060,7 @@ class GameClient(ScreensMixin, CameraYaw):
             if not monster or not monster.get("alive"):
                 return
             self.fleeing_combat = False
-            self.walk_and_act(self.approach_goals_for(monster), {
+            self.walk_and_act(self.attack_goals_with_fallback(monster), {
                 "type": "ATTACK", "target_id": monster["id"],
             })
         elif kind == "talk":
@@ -3902,11 +4180,19 @@ class GameClient(ScreensMixin, CameraYaw):
                             self.set_zoom(action)
                         return
             else:
+                area_btn = self.area_view_button_rect()
+                if area_btn.collidepoint(mx, my):
+                    self.toggle_area_view()
+                    return
                 panel, track = self.zoom_hud_rects()
                 if panel.collidepoint(mx, my):
                     if track.inflate(0, 6).collidepoint(mx, my):
-                        self._zoom_drag = True
-                        self._zoom_goal = self._zoom_pct_from_x(mx)
+                        if getattr(self, "_area_view", False):
+                            # Dragging the bar leaves area view at the chosen level.
+                            self._set_area_view(False, restore_pct=self._zoom_pct_from_x(mx))
+                        else:
+                            self._zoom_drag = True
+                            self._zoom_goal = self._zoom_pct_from_x(mx)
                     return
         # Leave dungeon button (always on top of the map HUD)
         if self.dungeon and self.dungeon_hud_hidden:
@@ -4045,10 +4331,8 @@ class GameClient(ScreensMixin, CameraYaw):
             if hud_plates.handle_click(self, mx, my, event.button):
                 return
         if self.minimap_rect and self.minimap_rect.collidepoint(mx, my) and not (USE_HUD_MOCKUP_PLATES and USE_NEW_HUD and not USE_HUD_DRAWN_PANELS):
-            # Left-click hides the corner map. Right-click still opens the big map.
-            if event.button == 3 and not self.minimap_collapsed:
-                self.toggle_world_map()
-            else:
+            # Left-click collapses/expands the Crownfall clock. World map is the nav Map button.
+            if event.button != 3:
                 self.minimap_collapsed = not self.minimap_collapsed
             return
         if USE_NEW_HUD and (USE_HUD_DRAWN_PANELS or not USE_HUD_MOCKUP_PLATES):
@@ -4069,6 +4353,9 @@ class GameClient(ScreensMixin, CameraYaw):
             return
         if not self.player:
             return
+        # Clicking the world leaves chat focus so the pad can move again.
+        if self.chat_typing:
+            self._end_chat_typing()
         ember_map = getattr(self, "_ember_map_rect", None)
         if ember_map is not None and ember_map.collidepoint(mx, my):
             return
@@ -4125,9 +4412,14 @@ class GameClient(ScreensMixin, CameraYaw):
                     self.walk_and_act(goals, {"type": "WISH", "x": lx, "y": ly})
                     return
                 if kind in ("cave_entrance", "volcano_entrance"):
-                    goals = self.adjacent_goals(lx, ly)
-                    if self.tile_walkable(lx, ly):
-                        goals = set(goals) | {(lx, ly)}
+                    goals = set()
+                    for mx2, my2 in entrance_mouth_tiles(lx, ly, kind):
+                        if self.tile_walkable(mx2, my2):
+                            goals.add((mx2, my2))
+                    if not goals:
+                        goals = self.adjacent_goals(lx, ly)
+                        if self.tile_walkable(lx, ly):
+                            goals = set(goals) | {(lx, ly)}
                     act = {"type": "ENTER_DUNGEON"}
                     if spot.get("dungeon_id"):
                         act["dungeon_id"] = spot["dungeon_id"]
@@ -4168,7 +4460,9 @@ class GameClient(ScreensMixin, CameraYaw):
                     if kind in ("door", "dungeon_entrance"):
                         if spot.get("dungeon_id"):
                             goals = set()
-                            for mx2, my2 in entrance_mouth_tiles(spot["x"], spot["y"]):
+                            for mx2, my2 in entrance_mouth_tiles(
+                                spot["x"], spot["y"], kind,
+                            ):
                                 if self.tile_walkable(mx2, my2):
                                     goals.add((mx2, my2))
                             if not goals:
@@ -4248,7 +4542,7 @@ class GameClient(ScreensMixin, CameraYaw):
                 ))
                 return
             self.fleeing_combat = False
-            self.walk_and_act(self.approach_goals_for(best_m), {
+            self.walk_and_act(self.attack_goals_with_fallback(best_m), {
                 "type": "ATTACK", "target_id": best_m["id"],
             })
             return
@@ -4563,10 +4857,35 @@ class GameClient(ScreensMixin, CameraYaw):
         """Start combat. A bow trains Archery. Anything else keeps the chosen melee skill."""
         self.fleeing_combat = False
         self.combat_style_prompt = None
+        self._attack_intent_id = target_id
         if self.player_using_bow():
             self.combat_style = "archery"
             self.net.send("SET_COMBAT_STYLE", style="archery")
+        # Still out of reach (prediction lag / server denial): run in, don't spam ATTACK.
+        if self.player:
+            px, py = self.player_xy()
+            act = {"type": "ATTACK", "target_id": target_id}
+            if not self.can_do_action(act, px, py):
+                m = self.monsters.get(target_id) or self._monster_by_id(target_id)
+                if m and m.get("alive"):
+                    self.walk_and_act(self.attack_goals_with_fallback(m), act)
+                    return
         self.net.send("ATTACK", target_id=target_id)
+
+    def _approach_attack_intent(self):
+        """After a 'too far' denial, path to the foe and attack when in range."""
+        tid = self._attack_intent_id or self.combat_target_id
+        if tid is None:
+            return False
+        m = self.monsters.get(tid) or self._monster_by_id(tid)
+        if not m or not m.get("alive"):
+            return False
+        self.fleeing_combat = False
+        self.walk_and_act(self.attack_goals_with_fallback(m), {
+            "type": "ATTACK", "target_id": m["id"],
+        })
+        return True
+
 
     def confirm_combat_style(self, style):
         """Pick XP skill from the first-attack popup, then attack."""
@@ -4579,7 +4898,7 @@ class GameClient(ScreensMixin, CameraYaw):
         self.combat_style_prompt = None
         self.set_combat_style(style)
         if tid is not None:
-            self.net.send("ATTACK", target_id=tid)
+            self.begin_attack(tid)
 
     def inventory_slot_rects(self):
         """Visible inventory cells. Keys are the real inventory slot indexes."""
@@ -5653,6 +5972,7 @@ class GameClient(ScreensMixin, CameraYaw):
         elif USE_NEW_HUD and not USE_HUD_MOCKUP_PLATES:
             import hud_v2
             hud_v2.draw_world_chrome(self)
+        fairy_glade_client.draw_banner(self)
         self.draw_magic_fx()
         self.draw_magic_fight_bar()
         self.draw_sidebar()
@@ -5764,6 +6084,9 @@ class GameClient(ScreensMixin, CameraYaw):
         t = time.time()
         now_pos = {}
         vw, vh = self.view_size()
+        self._nameplate_queue = []
+        self._badge_queue = []
+        self._defer_nameplates = True
 
         for sy in range(vis_h + 1):
             for sx in range(vis_w + 1):
@@ -5777,6 +6100,10 @@ class GameClient(ScreensMixin, CameraYaw):
                             pygame.draw.rect(self.screen, (28, 18, 16), rect)
                         else:
                             self.draw_terrain_tile(rect, tile_id, wx, wy, t)
+                            if (not self.dungeon and tile_id in _SHORE_LAND_TILES
+                                    and wm.get_zone(wx, wy) not in ("volcano", "fairy_village")
+                                    and not self._is_pier_tile(wx, wy)):
+                                village_ground.draw_shore_land(self.screen, rect, wx, wy, t, client=self)
                     else:
                         pygame.draw.rect(self.screen, (8, 6, 10), rect)
                 else:
@@ -5797,6 +6124,7 @@ class GameClient(ScreensMixin, CameraYaw):
         # Tall volcano / lava-chamber cliff faces
         self._queue_volcano_cliffs(draw_list, cam_x, cam_y, vis_w, vis_h, t)
         wolf_pass_client.queue(self, draw_list, cam_x, cam_y, TILE, t)
+        fairy_glade_client.queue(self, draw_list, cam_x, cam_y, TILE, t)
 
         # Exit mouth inside private dungeons
         if self.dungeon:
@@ -5951,22 +6279,36 @@ class GameClient(ScreensMixin, CameraYaw):
                     label = RESOURCE_LABELS.get(rtype)
                     near = px is not None and max(abs(x - px), abs(y - py)) <= 3
                     color = ORE_LABEL_COLORS.get(rtype, WHITE)
-                    # Ghost canopy when the player walks under / behind the tree
+                    # Ghost canopy when the player walks under / behind the tree.
+                    # Fairy Glade / fairy village trees stay solid (no fade).
                     tree_alpha = 255
                     if rtype in ("tree", "oak_tree", "willow_tree", "maple_tree", "yew_tree", "magic_tree") and px is not None:
-                        dist = max(abs(x - px), abs(y - py))
-                        if dist == 0:
-                            tree_alpha = 95
-                        elif dist == 1:
-                            tree_alpha = 130
-                        elif dist == 2 and y <= py:
-                            tree_alpha = 170
+                        in_fairy = False
+                        try:
+                            if wm.get_zone(x, y) == "fairy_village":
+                                in_fairy = True
+                            else:
+                                import fairy_glade as _fg
+                                gx0, gy0, gx1, gy1 = _fg.ZONE
+                                if gx0 - 3 <= x <= gx1 + 4 and gy0 - 5 <= y <= gy1 + 10:
+                                    in_fairy = True
+                        except Exception:
+                            in_fairy = False
+                        if not in_fairy:
+                            dist = max(abs(x - px), abs(y - py))
+                            if dist == 0:
+                                tree_alpha = 95
+                            elif dist == 1:
+                                tree_alpha = 130
+                            elif dist == 2 and y <= py:
+                                tree_alpha = 170
 
-                    def _draw_res(cx=cx, cy=cy, rtype=rtype, label=label, near=near, color=color, tree_alpha=tree_alpha):
-                        self.draw_resource_sprite(rtype, cx, cy, t, alpha=tree_alpha)
+                    def _draw_res(cx=cx, cy=cy, rtype=rtype, label=label, near=near, color=color, tree_alpha=tree_alpha, x=x, y=y):
+                        self.draw_resource_sprite(rtype, cx, cy, t, alpha=tree_alpha, wx=x, wy=y)
                         if label and near:
                             self.blit_nameplate(label, cx, cy - TILE // 2 - 2, color)
                     draw_list.append((cy + TILE // 3, 1, _draw_res))
+            self._queue_stumps(draw_list, cam_x, cam_y, vis_w, vis_h)
 
         # Interactables
         if not self.dungeon:
@@ -5981,8 +6323,19 @@ class GameClient(ScreensMixin, CameraYaw):
                 if kind not in outdoor_kinds and self.entity_hidden_by_roof(spot["x"], spot["y"]):
                     continue
                 sx, sy = self.world_to_view_offset(spot["x"], spot["y"], cam_x, cam_y)
-                if 0 <= sx <= vis_w and 0 <= sy <= vis_h:
-                    cx, cy = sx * TILE + TILE // 2, sy * TILE + TILE // 2
+                cx, cy = sx * TILE + TILE // 2, sy * TILE + TILE // 2
+                # Tall pack entrances (4x volcano) stay drawn when the mouth tile
+                # scrolls off-camera but the mountain body still intersects the view.
+                on_screen = 0 <= sx <= vis_w and 0 <= sy <= vis_h
+                if not on_screen and kind == "volcano_entrance" and spot.get("pack"):
+                    prect = dungeon_entrances.sprite_rect(
+                        spot["pack"], cx, cy, TILE, yaw=self.camera_yaw,
+                    )
+                    if prect is not None and prect.colliderect(
+                        pygame.Rect(-TILE * 2, -TILE * 2, MAP_W + TILE * 4, MAP_H + TILE * 4)
+                    ):
+                        on_screen = True
+                if on_screen:
 
                     def _draw_spot(cx=cx, cy=cy, spot=spot, kind=kind):
                         if kind == "furnace":
@@ -6068,15 +6421,24 @@ class GameClient(ScreensMixin, CameraYaw):
                             sprites.draw_warning_sign(self.screen, cx, cy, TILE, t)
                             self.blit_nameplate(spot.get("name", "⚠ DANGER"), cx, cy - TILE // 2 - 8, (255, 140, 90))
                         elif kind == "signpost":
-                            sprites.draw_signpost(
-                                self.screen, cx, cy, TILE, t, facing=spot.get("facing", "e"),
-                            )
-                            lines = spot.get("lines") or [spot.get("name", "Path")]
-                            top = cy - TILE // 2 - 10
-                            for i, line in enumerate(lines):
+                            is_notice = bool(spot.get("notice_board")) or str(
+                                spot.get("id", "")
+                            ).startswith("notice_board")
+                            if is_notice:
+                                top = self.draw_notice_board(cx, cy, TILE)
                                 self.blit_nameplate(
-                                    line, cx, top - (len(lines) - 1 - i) * 16, (255, 228, 170),
+                                    "Notice Board", cx, top - 6, (255, 236, 190),
                                 )
+                            else:
+                                sprites.draw_signpost(
+                                    self.screen, cx, cy, TILE, t, facing=spot.get("facing", "e"),
+                                )
+                                lines = spot.get("lines") or [spot.get("name", "Path")]
+                                top = cy - TILE // 2 - 10
+                                for i, line in enumerate(lines):
+                                    self.blit_nameplate(
+                                        line, cx, top - (len(lines) - 1 - i) * 16, (255, 228, 170),
+                                    )
                         elif kind == "cave_entrance":
                             entrance_top = None
                             pack = spot.get("pack")
@@ -6091,13 +6453,21 @@ class GameClient(ScreensMixin, CameraYaw):
                         elif kind == "volcano_entrance":
                             entrance_top = None
                             pack = spot.get("pack")
+                            # Ash apron + basalt props first so the volcano sits in a crater clearing.
+                            self.draw_emberdeep_scenery(cx, cy, TILE, t, layer="back")
                             if USE_NEW_ENTRANCES and pack:
                                 entrance_top = dungeon_entrances.draw_pack(
                                     self.screen, pack, cx, cy, TILE, yaw=self.camera_yaw,
                                 )
-                            if entrance_top is None:
+                            # Never swap in the legacy procedural volcano when the
+                            # pack exists — that was the "old image" pop-in on rotate.
+                            if entrance_top is None and not (USE_NEW_ENTRANCES and pack):
                                 sprites.draw_volcano_entrance(self.screen, cx, cy, TILE, t, yaw=self.camera_yaw)
                                 entrance_top = cy - TILE - 4
+                            if entrance_top is None:
+                                entrance_top = cy - TILE - 4
+                            self.draw_emberdeep_smoke(cx, cy, TILE, t, pack=pack)
+                            self.draw_emberdeep_scenery(cx, cy, TILE, t, layer="front")
                             self.blit_nameplate("⚠ EMBERDEEP", cx, entrance_top - 18, (255, 140, 80))
                             self.blit_nameplate("LAVA DUNGEON", cx, entrance_top - 4, (255, 200, 100))
                         elif kind in ("range", "fireplace"):
@@ -6107,16 +6477,17 @@ class GameClient(ScreensMixin, CameraYaw):
                                 sprites.draw_fireplace(self.screen, cx, cy, TILE, t)
                             self.blit_nameplate(spot.get("name", "Hearth"), cx, cy - TILE // 2 - 2)
                         elif kind == "wishing_well":
-                            if not (USE_NEW_PROPS and prop_sprites.draw_prop(
-                                self.screen, "wishing_well", cx, cy, TILE, yaw=self.camera_yaw,
-                            )):
-                                sprites.draw_wishing_well(self.screen, cx, cy, TILE, t)
-                            self.blit_nameplate(spot.get("name", "Wishing Well"), cx, cy - TILE // 2 - 10, (180, 220, 255))
+                            top = self.draw_wishing_well_art(cx, cy, TILE, t)
+                            self.blit_nameplate("click me", cx, top - 4, (180, 220, 255))
                         else:
                             self.draw_furniture(kind, cx, cy, t, spot)
-                    # Rugs / fountains sit under feet; other furniture Y-sorts normally
+                    # Rugs / fountains sit under feet; other furniture Y-sorts normally.
+                    # Volcano sorts behind the player at the door so the mouth never
+                    # swallows them (cone tiles are WALL; door is south of the mass).
                     if kind in ("rug", "fountain"):
                         draw_list.append((cy - TILE // 2, 0, _draw_spot))
+                    elif kind == "volcano_entrance":
+                        draw_list.append((cy - TILE // 2, 1, _draw_spot))
                     else:
                         draw_list.append((cy + TILE // 4, 2, _draw_spot))
 
@@ -6214,30 +6585,34 @@ class GameClient(ScreensMixin, CameraYaw):
                   import fairy_village_client
                   if n["id"] in fairy_village_client.FAIRY_NPCS:
                       fairy_village_client.draw_npc(self, n, cx, cy, int(round(TILE * 1.1)), t, face, mov)
+                      ny = getattr(fairy_village_client, "last_nameplate_y", None)
+                      if ny is None:
+                          ny, _ = self.entity_anchor(cx, cy, "character")
                       hint = self._hover_hint
                       if hint and hint[0] == "npc" and hint[1] == n["id"]:
-                          ny, _ = self.entity_anchor(cx, cy, "character")
-                          self.blit_action_hint(hint[2], cx, ny - 48, hint[3])
+                          self.blit_action_hint(hint[2], cx, ny - 28, hint[3])
                       return
                   import npc_hd_client
                   if npc_hd_client.draw_npc(self, n, cx, cy, int(round(TILE * 1.1)), t, face, mov):
-                      ny, _ = self.entity_anchor(cx, cy, "character")
-                      self._blit_npc_role_badges(n, cx, ny - 18)
+                      ny = getattr(npc_hd_client, "last_nameplate_y", None)
+                      if ny is None:
+                          ny, _ = self.entity_anchor(cx, cy, "character")
+                      self._blit_npc_role_badges(n, cx, ny - 16)
                       hint = self._hover_hint
                       if hint and hint[0] == "npc" and hint[1] == n["id"]:
-                          self.blit_action_hint(hint[2], cx, ny - 48, hint[3])
+                          self.blit_action_hint(hint[2], cx, ny - 28, hint[3])
                       return
                   # Fallback: draw procedural humanoid for any NPCs not in fairy/HD sets
                   sprites.draw_humanoid_detailed(
                       self.screen, cx, cy, TILE, body, skin, hair,
                       robe=n["id"] in ROBED_NPC_IDS, t=t, facing=face, moving=mov,
                   )
-                  ny, _ = self.entity_anchor(cx, cy, "character")
+                  ny, _ = self.entity_anchor(cx, cy, "npc")
                   self.blit_nameplate(n["name"], cx, ny, (255, 230, 160))
-                  self._blit_npc_role_badges(n, cx, ny - 18)
+                  self._blit_npc_role_badges(n, cx, ny - 16)
                   hint = self._hover_hint
                   if hint and hint[0] == "npc" and hint[1] == n["id"]:
-                      self.blit_action_hint(hint[2], cx, ny - 48, hint[3])
+                      self.blit_action_hint(hint[2], cx, ny - 28, hint[3])
               draw_list.append((cy + TILE // 2, 3, _draw_npc))
 
         # Monsters
@@ -6621,19 +6996,20 @@ class GameClient(ScreensMixin, CameraYaw):
                         )
                     if action and gather:
                         self.draw_gather_fx(cx, cy, action, gather, t, face)
-                    ny, hy = self.entity_anchor(cx, cy, "character")
+                    head_y = None
                     if drawn:
-                        lift = int(round(TILE * 0.31))
-                        ny -= lift
-                        hy -= lift
-                    pk_on = bool(p.get("player_killer")) or (
-                        is_self and bool((self.player or {}).get("player_killer"))
+                        import player_hd_client
+                        foot_y = cy + TILE // 2
+                        off = player_hd_client.last_draw.get("head_top")
+                        if isinstance(off, (list, tuple)) and len(off) >= 2:
+                            head_y = foot_y + float(off[1])
+                        else:
+                            head_y = foot_y + player_hd_client.head_top_dy(
+                                gender, int(round(TILE * 1.1)),
+                            )
+                    ny, hy = self.entity_anchor(
+                        cx, cy, "character", head_y=head_y, show_hp_value=is_self,
                     )
-                    if pk_on:
-                        kills = p.get("pk_kills")
-                        if is_self:
-                            kills = (self.player or {}).get("pk_kills", kills)
-                        self.draw_pk_mark(cx, ny - 20, int(kills or 0))
                     cmb = p.get("combat_level")
                     if is_self:
                         cmb = self.player_combat_level()
@@ -6658,8 +7034,9 @@ class GameClient(ScreensMixin, CameraYaw):
                     royal = p.get("royal_title") or ((self.player or {}).get("royal_title") if is_self else None)
                     if royal:
                         plate = (255, 205, 60)
-                    self.blit_nameplate(label, cx, ny, plate)
+                    # HP closest to the head; name above it. PK is examine-only.
                     self.draw_hp_bar(cx, hy, p["hp"], p["max_hp"], show_value=is_self)
+                    self.blit_nameplate(label, cx, ny, plate)
                     said = (self.speech or {}).get(p["id"])
                     if said and time.time() < said.get("until", 0):
                         self.draw_speech_bubble(cx, ny, said.get("text") or "")
@@ -6773,6 +7150,13 @@ class GameClient(ScreensMixin, CameraYaw):
             self.well_fx = None
 
         self._blit_zoom_ease(cam_x, cam_y)
+        self.flush_nameplates(cam_x, cam_y)
+        self._defer_nameplates = False
+        try:
+            import weather_fx
+            weather_fx.draw(self, MAP_W, MAP_H)
+        except Exception:
+            pass
         self.draw_map_vignette()
         hud = getattr(self, "throne_hud", None)
         if hud and time.time() < hud[1]:
@@ -6818,10 +7202,13 @@ class GameClient(ScreensMixin, CameraYaw):
         if not self.player:
             return False
         px, py = self.player_xy()
-        if (
-            b["floor_x0"] <= px <= b["floor_x1"]
-            and b["floor_y0"] <= py <= b["floor_y1"]
-        ):
+        # Housing shells (and any sparse building dict) may omit floor_*;
+        # fall back to an inset of the outer footprint.
+        fx0 = int(b.get("floor_x0", int(b.get("x0", 0)) + 1))
+        fy0 = int(b.get("floor_y0", int(b.get("y0", 0)) + 1))
+        fx1 = int(b.get("floor_x1", int(b.get("x1", 0)) - 1))
+        fy1 = int(b.get("floor_y1", int(b.get("y1", 0)) - 1))
+        if fx0 <= px <= fx1 and fy0 <= py <= fy1:
             return True
         # Castle: only true interior hides walls — standing in the gate keeps the shell up
         if b.get("kind") == "castle":
@@ -6908,13 +7295,8 @@ class GameClient(ScreensMixin, CameraYaw):
                 if USE_NEW_CASTLE and (x, y) in castle_v2.bailey_tiles():
                     return True
                 continue
-            if USE_NEW_BUILDINGS and buildings_v2.enabled(b.get("id")):
-                if (
-                    b["floor_x0"] <= x <= b["floor_x1"]
-                    and b["floor_y0"] <= y <= b["floor_y1"]
-                ):
-                    return True
-                continue
+            # Full footprint (walls + floor) — v2 used to hide only the floor,
+            # which left south-wall tiles drawing dungeon cliff cones.
             if b["x0"] <= x <= b["x1"] and b["y0"] <= y <= b["y1"]:
                 return True
         return False
@@ -6944,10 +7326,11 @@ class GameClient(ScreensMixin, CameraYaw):
         for b in self.buildings:
             if self.player_inside_building(b):
                 continue
-            if (
-                b["floor_x0"] <= wx <= b["floor_x1"]
-                and b["floor_y0"] <= wy <= b["floor_y1"]
-            ):
+            fx0 = int(b.get("floor_x0", int(b.get("x0", 0)) + 1))
+            fy0 = int(b.get("floor_y0", int(b.get("y0", 0)) + 1))
+            fx1 = int(b.get("floor_x1", int(b.get("x1", 0)) - 1))
+            fy1 = int(b.get("floor_y1", int(b.get("y1", 0)) - 1))
+            if fx0 <= wx <= fx1 and fy0 <= wy <= fy1:
                 return b
         return None
 
@@ -6963,6 +7346,32 @@ class GameClient(ScreensMixin, CameraYaw):
                 and int(b.get("y0", 0)) <= wy <= int(b.get("y1", 0))
             ):
                 return b
+        # Player-housing lots stamp walls but are not in content.BUILDINGS.
+        if USE_PLAYER_HOUSING:
+            try:
+                import housing
+                for house in list(housing.houses()) + [housing.office()]:
+                    if not house:
+                        continue
+                    fp = house.get("footprint") or {}
+                    if (
+                        int(fp.get("x0", 0)) <= wx <= int(fp.get("x1", 0))
+                        and int(fp.get("y0", 0)) <= wy <= int(fp.get("y1", 0))
+                    ):
+                        fl = house.get("floor") or {}
+                        return {
+                            "id": house.get("key"),
+                            "x0": fp["x0"], "y0": fp["y0"],
+                            "x1": fp["x1"], "y1": fp["y1"],
+                            "floor_x0": fl.get("floor_x0", int(fp["x0"]) + 1),
+                            "floor_y0": fl.get("floor_y0", int(fp["y0"]) + 1),
+                            "floor_x1": fl.get("floor_x1", int(fp["x1"]) - 1),
+                            "floor_y1": fl.get("floor_y1", int(fp["y1"]) - 1),
+                            "material": "wood",
+                            "kind": "house",
+                        }
+            except Exception:
+                pass
         return None
 
     def building_material_at(self, wx, wy):
@@ -7155,6 +7564,12 @@ class GameClient(ScreensMixin, CameraYaw):
                     continue
                 if self.tiles[wy][wx] != wm.WALL:
                     continue
+                # Building / castle footprints own their walls — never stack
+                # dungeon or volcano cliff "cones" on cottage or keep shells.
+                if not in_dungeon and self.building_at_tile(wx, wy) is not None:
+                    continue
+                if not in_dungeon and USE_NEW_CASTLE and castle_v2.counts_as_city(wx, wy):
+                    continue
                 zone = "volcano" if in_ember else (wm.get_zone(wx, wy) if self.world_w else "")
                 if in_dungeon and not in_ember:
                     zone = "dungeon"
@@ -7207,7 +7622,7 @@ class GameClient(ScreensMixin, CameraYaw):
             return False
         if hit.get("dungeon_id"):
             goals = set()
-            for tx, ty in entrance_mouth_tiles(hit["x"], hit["y"]):
+            for tx, ty in entrance_mouth_tiles(hit["x"], hit["y"], hit.get("kind")):
                 if self.tile_walkable(tx, ty):
                     goals.add((tx, ty))
             if not goals:
@@ -7251,16 +7666,84 @@ class GameClient(ScreensMixin, CameraYaw):
     def _paint_meadow(self, rect, wx, wy, zone):
         if not village_ground.paints_grass(zone):
             return False
+        if zone == "fairy_village":
+            # The glade keeps its own tiles; only the old per-tile meadow here.
+            image = village_ground._scaled("meadow", village_ground.variant(wx, wy), rect.w)
+            if image is None:
+                return False
+            self.screen.blit(image, rect.topleft)
+            return True
         return village_ground.draw_grass(self.screen, rect, wx, wy, client=self)
 
     def _paint_lane(self, rect, wx, wy, zone):
         if not village_ground.paints_path(zone):
             return False
+        if zone != "fairy_village" and not self.dungeon and village_ground.draw_world_path(
+            self.screen, rect, wx, wy, client=self,
+        ):
+            return True
         # The painter blends meadow into lane across the seam itself, so the
         # old per-tile grass overlay would double up. world paint only.
         return village_ground.draw_path(self.screen, rect, wx, wy, client=self)
 
     def draw_terrain_tile(self, rect, tile_id, wx, wy, t):
+        """Draw one tile; never leave an overworld tile bare black.
+
+        Some WALL tiles (map edges, mismatched server layouts, seams beside
+        mountain / mine art) have no ground art of their own and used to come
+        out as flat near-black squares. The first time such a tile is drawn we
+        check the pixels; if it is flat and dark it is remembered and from then
+        on painted as the ground its neighbours use."""
+        bare = getattr(self, "_bare_tiles", None)
+        if bare is None or bare.get("_grid") is not self.tiles:
+            bare = self._bare_tiles = {"_grid": self.tiles}
+        key = (wx, wy)
+        if not self.dungeon and key in bare:
+            sub = bare[key]
+            if sub is not None:
+                return self._draw_terrain_tile_inner(rect, sub, wx, wy, t)
+        self._draw_terrain_tile_inner(rect, tile_id, wx, wy, t)
+        if self.dungeon or key in bare:
+            return
+        bare[key] = None
+        try:
+            r = pygame.Rect(rect).clip(self.screen.get_rect())
+            if r.w < 4 or r.h < 4:
+                del bare[key]
+                return
+            # Mountain / mine / crypt art is meant to be dark; leave it alone.
+            if self.world_w and wm.get_zone(wx, wy) in ("mountains", "mine", "shadow_crypt", "dungeon"):
+                return
+            px = pygame.surfarray.array3d(self.screen.subsurface(r))
+            if float(px.mean()) < 56 and float(px.std()) < 14:
+                sub = self._neighbour_ground(wx, wy)
+                if sub is not None:
+                    bare[key] = sub
+                    self._draw_terrain_tile_inner(rect, sub, wx, wy, t)
+        except Exception:
+            pass
+
+    def _neighbour_ground(self, wx, wy):
+        from collections import Counter
+        for rad in (1, 2, 3, 4):
+            c = Counter()
+            for dy in range(-rad, rad + 1):
+                for dx in range(-rad, rad + 1):
+                    x, y = wx + dx, wy + dy
+                    if 0 <= y < len(self.tiles) and 0 <= x < self.world_w:
+                        tid = self.tiles[y][x]
+                        if tid in (wm.GRASS, wm.PATH, wm.FLOOR, wm.STONE, wm.WATER):
+                            c[tid] += 1
+            # Prefer dry ground over water: a rock tile shown as water reads
+            # as a lake you cannot swim into.
+            dry = Counter({k: v for k, v in c.items() if k != wm.WATER})
+            if dry:
+                return dry.most_common(1)[0][0]
+        return wm.GRASS
+
+    def _draw_terrain_tile_inner(self, rect, tile_id, wx, wy, t):
+        if tile_id == wm.WALL and not self.dungeon and fairy_glade_client.draw_ground(self, rect, wx, wy):
+            return
         if tile_id == wm.WALL and wolf_pass_client.draw_ground(self, rect, wx, wy):
             return
         if self.dungeon and self.dungeon.get("id") == "castle_realm":
@@ -7297,7 +7780,9 @@ class GameClient(ScreensMixin, CameraYaw):
         elif tile_id == wm.GRASS:
             if zone == "fairy_village":
                 import fairy_village_client
-                if fairy_village_client.draw_terrain(self.screen, rect, tile_id, wx, wy):
+                if fairy_village_client.draw_terrain(
+                    self.screen, rect, tile_id, wx, wy, client=self,
+                ):
                     return
             if zone == "shadow_crypt":
                 sprites.draw_void_ground(self.screen, rect, wx, wy)
@@ -7311,14 +7796,18 @@ class GameClient(ScreensMixin, CameraYaw):
             else:
                 if zone == "fairy_village":
                     import fairy_village_client
-                    if fairy_village_client.draw_terrain(self.screen, rect, tile_id, wx, wy):
+                    if fairy_village_client.draw_terrain(
+                        self.screen, rect, tile_id, wx, wy, client=self,
+                    ):
                         return
                 if not self._paint_lane(rect, wx, wy, zone):
                     sprites.draw_path(self.screen, rect, wx, wy, zone=zone)
         elif tile_id == wm.STONE:
             if zone == "fairy_village":
                 import fairy_village_client
-                if fairy_village_client.draw_terrain(self.screen, rect, tile_id, wx, wy):
+                if fairy_village_client.draw_terrain(
+                    self.screen, rect, tile_id, wx, wy, client=self,
+                ):
                     return
             sprites.draw_stone_floor(self.screen, rect, wx, wy)
         elif tile_id == wm.FLOOR:
@@ -7332,7 +7821,9 @@ class GameClient(ScreensMixin, CameraYaw):
             else:
                 sprites.draw_floor(self.screen, rect, wx, wy, zone=zone, interior=True)
         elif tile_id == wm.WALL:
-            # Never draw old 2D building walls. Under shells: stone in city/castle, else grass.
+            # Never draw old 2D building walls as mountain cones. Under a shell
+            # (or housing lot) paint the underfoot; elsewhere in the village /
+            # city keep grass or stone so stray walls do not become purple peaks.
             shell = self.building_at_tile(wx, wy)
             if shell is not None:
                 if self._shell_underfoot(shell) == "stone":
@@ -7340,19 +7831,26 @@ class GameClient(ScreensMixin, CameraYaw):
                 else:
                     if not self._paint_meadow(rect, wx, wy, zone):
                         sprites.draw_grass(self.screen, rect, wx, wy)
-            elif zone in ("village", "fishing_village", "city"):
-                if wm.is_graveyard_wall(wx, wy):
-                    sprites.draw_dungeon_wall(self.screen, rect, wx, wy)
-                else:
-                    sprites.draw_mountain_rock(self.screen, rect, wx, wy)
+            elif wm.is_graveyard_wall(wx, wy):
+                sprites.draw_dungeon_wall(self.screen, rect, wx, wy)
+            elif zone in ("village", "fishing_village"):
+                if not self._paint_meadow(rect, wx, wy, zone):
+                    sprites.draw_grass(self.screen, rect, wx, wy)
+            elif zone == "city":
+                sprites.draw_stone_floor(self.screen, rect, wx, wy)
+            elif zone == "mountains":
+                sprites.draw_mountain_rock(self.screen, rect, wx, wy)
             else:
                 sprites.draw_wall(self.screen, rect, zone, wx, wy, material=None)
         elif tile_id == wm.WATER:
             if zone == "volcano" or (self.dungeon and self.dungeon.get("id") == "emberdeep"):
                 sprites.draw_lava(self.screen, rect, t, wx, wy)
             else:
-                shores = self._water_shores(wx, wy)
-                sprites.draw_water_detailed(self.screen, rect, t, wx, wy, shores=shores)
+                if self.dungeon or zone == "fairy_village" or not village_ground.draw_world_water(
+                    self.screen, rect, wx, wy, t, client=self,
+                ):
+                    shores = self._water_shores(wx, wy)
+                    sprites.draw_water_detailed(self.screen, rect, t, wx, wy, shores=shores)
         else:
             if not self._paint_meadow(rect, wx, wy, zone):
                 sprites.draw_grass(self.screen, rect, wx, wy)
@@ -7413,7 +7911,7 @@ class GameClient(ScreensMixin, CameraYaw):
             # Building footprints are owned by cottage volumes — no 2D wall AO
             if self.building_at_tile(x, y) is not None:
                 return False
-            if fairy_ground.hides_wall(x, y):
+            if fairy_ground.hides_wall(x, y) or fairy_glade_client.hides_wall(x, y):
                 return False
             return True
         return {
@@ -7500,7 +7998,38 @@ class GameClient(ScreensMixin, CameraYaw):
                     pygame.draw.circle(layer, (235, 248, 255, alpha), (px, py), max(1, TILE // 24))
             self.screen.blit(layer, (cx - mid, cy - mid))
 
-    def draw_resource_sprite(self, rtype, cx, cy, t, alpha=255):
+    def _queue_stumps(self, draw_list, cam_x, cam_y, vis_w, vis_h):
+        """A chopped tree leaves a stump on its tile until the server regrows it."""
+        if not hd_trees.ready() or not self.tiles:
+            return
+        tree_tiles = wm.TREE_TILES
+        if not self.player:
+            return
+        # Yaw-safe: scan a square around the player in world tiles.
+        px, py = self.player_xy()
+        r = int(max(vis_w, vis_h)) + 3
+        for y in range(max(0, py - r), min(len(self.tiles), py + r + 1)):
+            row = self.tiles[y]
+            for x in range(max(0, px - r), min(len(row), px + r + 1)):
+                if row[x] not in tree_tiles or f"{x},{y}" in self.resources:
+                    continue
+                if self._tree_blocks_building(x, y):
+                    continue
+                sx, sy = self.world_to_view_offset(x, y, cam_x, cam_y)
+                if not (0 <= sx <= vis_w and 0 <= sy <= vis_h):
+                    continue
+                cx, cy = sx * TILE + TILE // 2, sy * TILE + TILE // 2
+
+                def _stump(cx=cx, cy=cy, x=x, y=y):
+                    hd_trees.draw(self.screen, "stump", cx, cy, TILE, x, y)
+                draw_list.append((cy + TILE // 3, 1, _stump))
+
+    def draw_resource_sprite(self, rtype, cx, cy, t, alpha=255, wx=None, wy=None):
+        if rtype in hd_trees.TREE_TYPES and hd_trees.draw(
+            self.screen, rtype, cx, cy, TILE,
+            cx if wx is None else wx, cy if wy is None else wy, alpha=alpha,
+        ):
+            return
         tree_variants = {
             "tree": 0, "oak_tree": 1, "willow_tree": 2,
             "maple_tree": 3, "yew_tree": 4, "magic_tree": 5,
@@ -7845,16 +8374,30 @@ class GameClient(ScreensMixin, CameraYaw):
         surf = font.render(label, True, ink)
         self.screen.blit(surf, (cx - surf.get_width() // 2, cy - surf.get_height() // 2))
 
-    def entity_anchor(self, cx, cy, kind="character"):
-        """Return (nameplate_y, hp_y) with the HP bar just above the head."""
-        try:
-            import rs_style as _rs
-            lift = _rs.label_lift(TILE, kind)
-        except Exception:
-            lift = int(TILE * 1.55)
-        hp_y = cy - lift
-        # Nameplate sits above the HP bar
-        name_y = hp_y - 16
+    def entity_anchor(self, cx, cy, kind="character", head_y=None, show_hp_value=False):
+        """Return (nameplate_y, hp_y): HP just above the head, name above that.
+
+        Pass head_y (screen Y of the sprite's head top) for HD art.
+        blit_nameplate hangs below the y we pass, so name_y is the clearance
+        line under the plate — not the plate's top edge.
+        """
+        if head_y is None:
+            try:
+                import rs_style as _rs
+                lift = _rs.label_lift(TILE, kind)
+            except Exception:
+                lift = int(TILE * 1.55)
+            head_y = cy - lift + 8
+        # Clear of the face / scalp, then HP numbers (self), then the name.
+        # Player character keeps the original high clearance; NPCs sit tighter.
+        if kind == "npc":
+            hp_y = int(head_y) - 10
+            name_y = hp_y - 2
+            return name_y, hp_y
+        hp_y = int(head_y) - 28
+        value_pad = 14 if show_hp_value else 0
+        # Name sits clearly above the head / HP chrome (blit_nameplate hangs below name_y).
+        name_y = hp_y - value_pad - 22
         return name_y, hp_y
 
     def draw_magic_fight_bar(self):
@@ -7999,12 +8542,31 @@ class GameClient(ScreensMixin, CameraYaw):
         self.blit_nameplate(text, cx, top_y)
 
     def draw_pk_mark(self, cx, top_y, kills):
-        """Red skull and player-kill count above a flagged player."""
-        pygame.draw.circle(self.screen, (170, 28, 28), (cx, top_y), 9)
-        pygame.draw.circle(self.screen, (255, 220, 200), (cx - 3, top_y - 2), 2)
-        pygame.draw.circle(self.screen, (255, 220, 200), (cx + 3, top_y - 2), 2)
-        pygame.draw.rect(self.screen, (40, 16, 16), (cx - 3, top_y + 3, 6, 3))
-        self.blit_nameplate(f"PK {kills}", cx, top_y - 16, (255, 80, 70))
+        """Single-line badge: skull + PK kill count above the nameplate."""
+        label = f"PK {int(kills)}"
+        surf = self.font_label.render(label, True, (255, 90, 80))
+        skull_r, gap, pad_x, pad_y = 7, 5, 7, 3
+        inner_h = max(surf.get_height(), skull_r * 2)
+        content_w = skull_r * 2 + gap + surf.get_width()
+        box = pygame.Rect(
+            cx - content_w // 2 - pad_x,
+            top_y - inner_h // 2 - pad_y,
+            content_w + pad_x * 2,
+            inner_h + pad_y * 2,
+        )
+        pygame.draw.rect(self.screen, (12, 12, 16), box, border_radius=5)
+        pygame.draw.rect(self.screen, (120, 40, 36), box, 1, border_radius=5)
+        sx = box.x + pad_x + skull_r
+        sy = box.centery
+        pygame.draw.circle(self.screen, (170, 28, 28), (sx, sy), skull_r)
+        pygame.draw.circle(self.screen, (255, 220, 200), (sx - 3, sy - 2), 2)
+        pygame.draw.circle(self.screen, (255, 220, 200), (sx + 3, sy - 2), 2)
+        pygame.draw.rect(self.screen, (40, 16, 16), (sx - 3, sy + 2, 6, 3))
+        self.screen.blit(
+            surf,
+            (sx + skull_r + gap, box.centery - surf.get_height() // 2),
+        )
+        return box
 
     def examine_player(self, player_id):
         """Show another player's combat level and skills.
@@ -8037,9 +8599,8 @@ class GameClient(ScreensMixin, CameraYaw):
         name = p.get("name") or "Player"
         their_levels = p.get("levels") or {}
 
-        # 5 rows start at +80 and step 20, so the last sits at +160; leave
-        # room for the footer or it prints over the Archery value.
-        box = pygame.Rect(0, 0, 250, 206)
+        # Skills + PK block + footer.
+        box = pygame.Rect(0, 0, 250, 248)
         box.topright = (MAP_W - 16, 16)
         panel = pygame.Surface(box.size, pygame.SRCALPHA)
         panel.fill((14, 18, 28, 235))
@@ -8078,6 +8639,22 @@ class GameClient(ScreensMixin, CameraYaw):
                                         WHITE if val else (110, 118, 132))
             self.screen.blit(col, (box.right - 14 - col.get_width(), y))
             y += 20
+        pygame.draw.line(self.screen, (70, 76, 92), (box.x + 10, y + 2),
+                         (box.right - 10, y + 2), 1)
+        y += 10
+        pk_on = bool(p.get("player_killer"))
+        kills = int(p.get("pk_kills") or 0)
+        pk_lab = self.font_tiny.render("Player killer", True, (170, 182, 200))
+        self.screen.blit(pk_lab, (box.x + 12, y))
+        pk_val = self.font_tiny.render(
+            "ON" if pk_on else "Off", True, (255, 100, 90) if pk_on else (110, 118, 132),
+        )
+        self.screen.blit(pk_val, (box.right - 14 - pk_val.get_width(), y))
+        y += 20
+        kill_lab = self.font_tiny.render("PK kills", True, (170, 182, 200))
+        self.screen.blit(kill_lab, (box.x + 12, y))
+        kill_val = self.font_tiny.render(str(kills), True, WHITE if kills else (110, 118, 132))
+        self.screen.blit(kill_val, (box.right - 14 - kill_val.get_width(), y))
         pygame.draw.line(self.screen, (70, 76, 92), (box.x + 10, box.bottom - 26),
                          (box.right - 10, box.bottom - 26), 1)
         hint = self.font_tiny.render("Click elsewhere to close", True, (120, 128, 144))
@@ -8137,20 +8714,243 @@ class GameClient(ScreensMixin, CameraYaw):
         pygame.draw.rect(self.screen, color, box, 1, border_radius=4)
         self.screen.blit(surf, (box.x + pad_x, box.y + pad_y))
 
+    def draw_notice_board(self, cx, cy, tile):
+        """Large painted village notice board. Returns screen Y of the board top."""
+        if not hasattr(self, "_notice_board_img"):
+            path = os.path.join(
+                os.path.dirname(__file__), "assets", "props", "notice_board.png",
+            )
+            try:
+                self._notice_board_img = pygame.image.load(path).convert_alpha()
+            except Exception:
+                self._notice_board_img = None
+        img = self._notice_board_img
+        if img is None:
+            sprites.draw_signpost(self.screen, cx, cy, tile, 0.0, facing="s")
+            return cy - tile
+        # ~2.4 tiles tall so it reads clearly next to the well / spawn
+        target_h = max(64, int(round(tile * 2.45)))
+        key = (id(img), target_h)
+        cache = getattr(self, "_notice_board_scaled", None)
+        if not isinstance(cache, dict):
+            cache = {}
+            self._notice_board_scaled = cache
+        scaled = cache.get(key)
+        if scaled is None:
+            tw = max(24, int(round(img.get_width() * target_h / float(img.get_height()))))
+            scaled = pygame.transform.smoothscale(img, (tw, target_h))
+            cache[key] = scaled
+        # Feet of the posts sit on the tile
+        left = int(cx - scaled.get_width() // 2)
+        top = int(cy + tile // 2 - scaled.get_height() + 4)
+        self.screen.blit(scaled, (left, top))
+        return top
+
+    def draw_wishing_well_art(self, cx, cy, tile, t=0.0):
+        """Painted village wishing well (same approach as the notice board)."""
+        if not hasattr(self, "_wishing_well_img"):
+            path = os.path.join(
+                os.path.dirname(__file__), "assets", "props", "wishing_well.png",
+            )
+            try:
+                self._wishing_well_img = pygame.image.load(path).convert_alpha()
+            except Exception:
+                self._wishing_well_img = None
+        img = self._wishing_well_img
+        if img is None:
+            if not (USE_NEW_PROPS and prop_sprites.draw_prop(
+                self.screen, "wishing_well", cx, cy, tile, yaw=self.camera_yaw,
+            )):
+                sprites.draw_wishing_well(self.screen, cx, cy, tile, t)
+            return cy - tile
+        # Slightly shorter than the notice board so the plaza stays readable.
+        target_h = max(64, int(round(tile * 2.15)))
+        key = (id(img), target_h)
+        cache = getattr(self, "_wishing_well_scaled", None)
+        if not isinstance(cache, dict):
+            cache = {}
+            self._wishing_well_scaled = cache
+        scaled = cache.get(key)
+        if scaled is None:
+            tw = max(24, int(round(img.get_width() * target_h / float(img.get_height()))))
+            scaled = pygame.transform.smoothscale(img, (tw, target_h))
+            cache[key] = scaled
+        left = int(cx - scaled.get_width() // 2)
+        top = int(cy + tile // 2 - scaled.get_height() + 6)
+        self.screen.blit(scaled, (left, top))
+        return top
+
+    def _emberdeep_prop(self, name):
+        cache = getattr(self, "_emberdeep_props", None)
+        if cache is None:
+            cache = self._emberdeep_props = {}
+        if name in cache:
+            return cache[name]
+        path = os.path.join(
+            os.path.dirname(__file__), "assets", "props", "emberdeep", f"{name}.png",
+        )
+        try:
+            cache[name] = pygame.image.load(path).convert_alpha()
+        except Exception:
+            cache[name] = None
+        return cache[name]
+
+    def draw_emberdeep_smoke(self, cx, cy, tile, t=0.0, pack="dragon_lair"):
+        """Soft smoke plume drifting from the Emberdeep crater rim."""
+        import math
+        rect = None
+        if pack and USE_NEW_ENTRANCES:
+            rect = dungeon_entrances.sprite_rect(pack, cx, cy, tile, yaw=self.camera_yaw)
+        if rect is not None:
+            crater_x = rect.centerx + int(tile * 0.05)
+            crater_y = rect.top + max(8, int(rect.h * 0.16))
+            base_r = max(10, int(rect.w * 0.08))
+        else:
+            crater_x, crater_y = cx, cy - int(tile * 7.5)
+            base_r = max(8, tile // 3)
+
+        for i in range(10):
+            phase = t * (0.55 + (i % 4) * 0.12) + i * 0.85
+            life = (phase % 1.0)
+            drift = math.sin(phase * 1.7 + i) * tile * 0.35
+            rise = life * tile * (2.2 + 0.4 * (i % 3))
+            rad = max(4, int(base_r * (0.7 + 1.1 * life)))
+            alpha = int(110 * (1.0 - life) * (0.55 + 0.45 * abs(math.sin(phase * 2.1))))
+            if alpha < 8:
+                continue
+            puff = pygame.Surface((rad * 4, rad * 4), pygame.SRCALPHA)
+            grey = 70 + (i % 3) * 18
+            pygame.draw.circle(
+                puff, (grey, grey, grey + 8, alpha),
+                (rad * 2, rad * 2), rad * 2,
+            )
+            pygame.draw.circle(
+                puff, (min(255, grey + 40), min(255, grey + 40), min(255, grey + 50), alpha // 2),
+                (rad * 2 - rad // 4, rad * 2 - rad // 5), max(3, rad),
+            )
+            self.screen.blit(
+                puff,
+                (crater_x + int(drift) - rad * 2, crater_y - int(rise) - rad * 2),
+            )
+
+    def draw_emberdeep_scenery(self, cx, cy, tile, t=0.0, layer="back"):
+        """Ash apron and basalt props around the oversized Emberdeep volcano."""
+        scale_cache = getattr(self, "_emberdeep_prop_scaled", None)
+        if not isinstance(scale_cache, dict):
+            scale_cache = self._emberdeep_prop_scaled = {}
+
+        def _blit(name, px, py, target_h, flip=False):
+            img = self._emberdeep_prop(name)
+            if img is None:
+                return
+            key = (name, target_h, flip)
+            scaled = scale_cache.get(key)
+            if scaled is None:
+                tw = max(16, int(round(img.get_width() * target_h / float(img.get_height()))))
+                scaled = pygame.transform.smoothscale(img, (tw, target_h))
+                if flip:
+                    scaled = pygame.transform.flip(scaled, True, False)
+                scale_cache[key] = scaled
+            self.screen.blit(
+                scaled,
+                (int(px - scaled.get_width() // 2), int(py - scaled.get_height() + tile // 3)),
+            )
+
+        if layer == "back":
+            apron = self._emberdeep_prop("ash_apron")
+            if apron is not None:
+                # Wide crater clearing under the 4x volcano.
+                target_h = max(120, int(round(tile * 7.5)))
+                key = ("ash_apron", target_h, False)
+                scaled = scale_cache.get(key)
+                if scaled is None:
+                    tw = max(80, int(round(apron.get_width() * target_h / float(apron.get_height()))))
+                    scaled = pygame.transform.smoothscale(apron, (tw, target_h))
+                    scale_cache[key] = scaled
+                self.screen.blit(
+                    scaled,
+                    (int(cx - scaled.get_width() // 2), int(cy + tile * 0.35 - scaled.get_height() * 0.55)),
+                )
+            # Rocks behind / beside the cone.
+            for dx, dy, h, flip in (
+                (-3.6, -0.4, 2.4, False),
+                (3.4, -0.2, 2.2, True),
+                (-2.2, 1.6, 1.9, True),
+                (2.8, 1.8, 2.0, False),
+            ):
+                _blit("lava_rocks", cx + dx * tile, cy + dy * tile, max(40, int(tile * h)), flip)
+        else:
+            # Foreground basalt closer to the camera.
+            for dx, dy, h, flip in (
+                (-4.2, 2.6, 2.6, False),
+                (4.0, 2.4, 2.5, True),
+                (0.2, 3.2, 2.1, False),
+            ):
+                _blit("lava_rocks", cx + dx * tile, cy + dy * tile, max(40, int(tile * h)), flip)
+
     def blit_nameplate(self, text, cx, top_y, color=WHITE):
-        """Readable name tag with soft backdrop."""
-        surf = self.font_label.render(str(text), True, color)
-        pad_x, pad_y = 6, 3
+        """Fantasy name tag. Queued during map draw so labels stay sharp and above cover."""
+        cx_i, ty_i = int(round(cx)), int(round(top_y))
+        if getattr(self, "_defer_nameplates", False):
+            self._nameplate_queue.append((str(text), cx_i, ty_i, color))
+            surf = self.font_label.render(str(text), True, color)
+            pad_x, pad_y = 8, 3
+            return pygame.Rect(
+                cx_i - surf.get_width() // 2 - pad_x,
+                ty_i - 10 - pad_y,
+                surf.get_width() + pad_x * 2,
+                surf.get_height() + pad_y * 2,
+            )
+        return self._draw_nameplate_now(str(text), cx_i, ty_i, color)
+
+    def _draw_nameplate_now(self, text, cx, top_y, color=WHITE):
+        """Ink panel + crisp label (integer positions, no zoom scaling)."""
+        surf = self.font_label.render(text, True, color)
+        pad_x, pad_y = 8, 3
         box = pygame.Rect(
             cx - surf.get_width() // 2 - pad_x,
             top_y - 10 - pad_y,
             surf.get_width() + pad_x * 2,
             surf.get_height() + pad_y * 2,
         )
-        pygame.draw.rect(self.screen, (12, 12, 16), box, border_radius=5)
-        pygame.draw.rect(self.screen, (70, 65, 55), box, 1, border_radius=5)
-        self.screen.blit(surf, (box.x + pad_x, box.y + pad_y))
+        shadow = box.move(1, 2)
+        sh = pygame.Surface((shadow.w + 2, shadow.h + 2), pygame.SRCALPHA)
+        pygame.draw.rect(sh, (0, 0, 0, 140), sh.get_rect(), border_radius=6)
+        self.screen.blit(sh, (shadow.x - 1, shadow.y - 1))
+        panel = pygame.Surface(box.size, pygame.SRCALPHA)
+        pygame.draw.rect(panel, (12, 12, 18, 242), panel.get_rect(), border_radius=5)
+        self.screen.blit(panel, box.topleft)
+        pygame.draw.rect(self.screen, SB_GOLD, box, 1, border_radius=5)
+        tx, ty = box.x + pad_x, box.y + pad_y
+        # Single dark outline — multi-pass soft outlines looked muddy when scaled
+        outline = self.font_label.render(text, True, (0, 0, 0))
+        for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+            self.screen.blit(outline, (tx + ox, ty + oy))
+        self.screen.blit(surf, (tx, ty))
         return box
+
+    def flush_nameplates(self, cam_x, cam_y):
+        """Draw queued nameplates after zoom so text stays pixel-crisp and on top."""
+        queue = getattr(self, "_nameplate_queue", None) or []
+        if not queue:
+            return
+        k = self._zoom_view_scale()
+        dx = dy = 0.0
+        if abs(k - 1.0) >= 1e-3 and self.player:
+            px, py = self.player_xy()
+            sx, sy = self.world_to_view_offset(px, py, cam_x, cam_y)
+            ax, ay = sx * TILE + TILE / 2.0, sy * TILE + TILE / 2.0
+            dx, dy = ax - ax * k, ay - ay * k
+        for text, cx, top_y, color in queue:
+            x = int(round(cx * k + dx))
+            y = int(round(top_y * k + dy))
+            self._draw_nameplate_now(text, x, y, color)
+        self._nameplate_queue = []
+        for tags, cx, top_y in getattr(self, "_badge_queue", None) or []:
+            x = int(round(cx * k + dx))
+            y = int(round(top_y * k + dy))
+            self._draw_role_badges_now(tags, x, y)
+        self._badge_queue = []
 
     def _blit_npc_role_badges(self, npc, cx, top_y):
         """Compact role pills above an NPC nameplate (shop / bank / quest / forge)."""
@@ -8186,6 +8986,12 @@ class GameClient(ScreensMixin, CameraYaw):
             tags.append(("Find me", (120, 220, 200), (20, 40, 36)))
         if not tags:
             return
+        if getattr(self, "_defer_nameplates", False):
+            self._badge_queue.append((tags, int(round(cx)), int(round(top_y))))
+            return
+        self._draw_role_badges_now(tags, int(round(cx)), int(round(top_y)))
+
+    def _draw_role_badges_now(self, tags, cx, top_y):
         gap = 4
         widths = []
         for label, _fg, _bg in tags:
@@ -8308,6 +9114,7 @@ class GameClient(ScreensMixin, CameraYaw):
                 surf.fill(color, (px0, py0, px1 - px0, py1 - py0))
         if not self.dungeon:
             wolf_pass_client.minimap(self, surf, mm_w, mm_h, vw, vh)
+            fairy_glade_client.minimap(self, surf, mm_w, mm_h, vw, vh)
         self._minimap_base = surf
         self._minimap_size = (mm_w, mm_h)
         self._minimap_yaw = int(self.camera_yaw) % 4
@@ -8376,109 +9183,81 @@ class GameClient(ScreensMixin, CameraYaw):
         self.screen.blit(label, (lx, ly))
 
     def draw_minimap(self, plate_rect=None):
+        """Top-right Crownfall clock (replaces the live corner minimap)."""
         if USE_HUD_MOCKUP_PLATES and USE_NEW_HUD and not USE_HUD_DRAWN_PANELS and plate_rect is None:
             self.minimap_rect = None
             return
-        if not self.player or self.world_w <= 0:
-            self.minimap_rect = None
-            return
+        self.draw_clock_hud(plate_rect=plate_rect)
+
+    def _env_labels(self):
+        env = self.env or {}
+        lab = env.get("label") or {}
+        phase = lab.get("phase") or (env.get("phase") or "day").title()
+        season = lab.get("season") or (env.get("season") or "summer").title()
+        weather = lab.get("weather") or (env.get("weather") or "clear").replace("_", " ").title()
+        date = lab.get("date") or "Crownfall"
+        weekday = env.get("weekday") or ""
+        return phase, season, weather, date, weekday
+
+    def _phase_glyph_color(self, phase_key):
+        return {
+            "dawn": (255, 196, 140),
+            "day": (255, 230, 120),
+            "dusk": (255, 150, 90),
+            "night": (160, 190, 255),
+        }.get(phase_key or "day", (220, 230, 245))
+
+    def draw_clock_hud(self, plate_rect=None):
+        phase, season, weather, date, weekday = self._env_labels()
+        phase_key = (self.env or {}).get("phase") or "day"
+        accent = self._phase_glyph_color(phase_key)
+
         if plate_rect is not None:
             self.minimap_rect = plate_rect
-            self._blit_round_minimap(plate_rect)
-            rect = plate_rect
-        elif self.minimap_collapsed:
-            label = self.font_tiny.render("Map", True, (220, 230, 245))
+            pygame.draw.rect(self.screen, (12, 14, 20), plate_rect, border_radius=plate_rect.w // 2)
+            line = self.font_tiny.render(f"{phase}", True, accent)
+            self.screen.blit(line, (plate_rect.centerx - line.get_width() // 2,
+                                    plate_rect.centery - line.get_height() - 2))
+            line2 = self.font_tiny.render(season, True, (220, 230, 245))
+            self.screen.blit(line2, (plate_rect.centerx - line2.get_width() // 2,
+                                     plate_rect.centery + 2))
+            return
+
+        if self.minimap_collapsed:
+            label = self.font_tiny.render(season, True, accent)
             chip = pygame.Rect(MAP_W - label.get_width() - 28, 10, label.get_width() + 18, 22)
             self.minimap_rect = chip
             pygame.draw.rect(self.screen, (12, 14, 20), chip, border_radius=6)
-            pygame.draw.rect(self.screen, (90, 120, 160), chip, 2, border_radius=6)
+            pygame.draw.rect(self.screen, accent, chip, 2, border_radius=6)
             self.screen.blit(label, (chip.x + 9, chip.y + 4))
             return
+
+        panel_w = 196
+        panel_h = 78
+        pad = 10
+        rect = pygame.Rect(MAP_W - panel_w - pad, pad, panel_w, panel_h)
+        self.minimap_rect = rect
+        frame = rect.inflate(6, 6)
+        pygame.draw.rect(self.screen, (12, 14, 20), frame, border_radius=8)
+        pygame.draw.rect(self.screen, accent, frame, 2, border_radius=8)
+        # Phase disc
+        disc = (rect.x + 16, rect.y + 18)
+        pygame.draw.circle(self.screen, accent, disc, 8)
+        pygame.draw.circle(self.screen, (12, 14, 20), disc, 8, 1)
+        title = self.font_small.render(phase, True, accent)
+        self.screen.blit(title, (rect.x + 30, rect.y + 8))
+        mid = self.font_tiny.render(f"{season}  ·  {weather}", True, (220, 230, 245))
+        self.screen.blit(mid, (rect.x + 30, rect.y + 28))
+        date_line = date if not weekday else f"{weekday} · {date}"
+        # Fit long date on one or two lines
+        if self.font_tiny.size(date_line)[0] > panel_w - 16:
+            d1 = self.font_tiny.render(weekday or season, True, (180, 190, 210))
+            d2 = self.font_tiny.render(date, True, (180, 190, 210))
+            self.screen.blit(d1, (rect.x + 10, rect.y + 46))
+            self.screen.blit(d2, (rect.x + 10, rect.y + 60))
         else:
-            mm_w, mm_h = self.minimap_dims()
-            yaw = int(self.camera_yaw) % 4
-            if (
-                self._minimap_base is None
-                or self._minimap_size != (mm_w, mm_h)
-                or getattr(self, "_minimap_yaw", None) != yaw
-            ):
-                self.rebuild_minimap_base()
-            pad = 10
-            rect = pygame.Rect(MAP_W - mm_w - pad, pad, mm_w, mm_h)
-            self.minimap_rect = rect
-            frame = rect.inflate(6, 6)
-            pygame.draw.rect(self.screen, (12, 14, 20), frame, border_radius=6)
-            pygame.draw.rect(self.screen, (90, 120, 160), frame, 2, border_radius=6)
-            self.screen.blit(self._minimap_base, rect.topleft)
-
-        # Destination markers (shared with the mockup-plate minimap). The
-        # corner map only shows the screen, so a place you'd walk to is usually
-        # off it: pin it to the rim with a direction arrow instead of dropping it.
-        for dest in TRAVEL_DESTINATIONS:
-            dx, dy = self.world_to_minimap(dest["x"], dest["y"], rect)
-            if dest.get("id") == "castle_realm":
-                self._draw_castle_realm_pin(dx, dy, short=True)
-                continue
-            if dest["kind"] == "monster":
-                col = self.monster_threat_color(
-                    (MONSTERS.get(dest.get("monster") or "", {})).get("level", 1))
-            elif dest.get("id") == "emberdeep":
-                col = (255, 140, 70)
-            elif dest.get("action"):
-                col = (255, 220, 120)
-            else:
-                col = (200, 210, 230)
-            if not rect.collidepoint(dx, dy):
-                rx, ry, ang = self._minimap_rim_point(dest["x"], dest["y"], rect)
-                self._draw_minimap_rim_pin(rx, ry, ang, col)
-            elif dest["kind"] == "monster":
-                pygame.draw.circle(self.screen, col, (dx, dy), 3)
-            else:
-                pygame.draw.rect(self.screen, col, (dx - 2, dy - 2, 4, 4))
-
-        # Other players
-        for p in self.players.values():
-            if self.player and p["id"] == self.player["id"]:
-                continue
-            ox, oy = self.world_to_minimap(p["x"], p["y"], rect)
-            pygame.draw.circle(self.screen, (180, 200, 255), (ox, oy), 2)
-
-        # Camera view rectangle (already in view space — matches rotated minimap)
-        cam_x, cam_y = self.camera_origin()
-        vis_w, vis_h = MAP_W // TILE, MAP_H // TILE
-        vw, vh = self.view_size()
-        if vw > 0 and vh > 0:
-            vx0 = rect.x + int(cam_x * rect.w / vw)
-            vy0 = rect.y + int(cam_y * rect.h / vh)
-            vx1 = rect.x + int((cam_x + vis_w) * rect.w / vw)
-            vy1 = rect.y + int((cam_y + vis_h) * rect.h / vh)
-            view = pygame.Rect(vx0, vy0, max(2, vx1 - vx0), max(2, vy1 - vy0))
-            pygame.draw.rect(self.screen, (255, 255, 255), view, 1)
-
-        new_player_guide.draw_minimap_marker(self, rect)
-        new_player_guide.draw_waypoint_minimap(self, rect)
-
-        # You are here — pulsing white ring plus a "You" tag, so your dot can't
-        # be confused with a destination or another player.
-        px, py = self.player_xy()
-        mx, my = self.world_to_minimap(px, py, rect)
-        pulse = 0.5 + 0.5 * math.sin(time.time() * 3)
-        pygame.draw.circle(self.screen, (255, 255, 255), (mx, my), 5 + int(pulse * 1.5), 1)
-        pygame.draw.circle(self.screen, (40, 40, 40), (mx, my), 4)
-        pygame.draw.circle(self.screen, (255, 80, 70), (mx, my), 3)
-        tag = self.font_tiny.render("You", True, (255, 255, 255))
-        tx = max(rect.x + 2, min(rect.right - tag.get_width() - 2, mx - tag.get_width() // 2))
-        ty = my - tag.get_height() - 6
-        if ty < rect.y:
-            ty = my + 6
-        bg = pygame.Surface((tag.get_width() + 4, tag.get_height() + 2), pygame.SRCALPHA)
-        bg.fill((10, 12, 18, 190))
-        self.screen.blit(bg, (tx - 2, ty - 1))
-        self.screen.blit(tag, (tx, ty))
-
-        if plate_rect is None:
-            hint = self.font_tiny.render("Left: walk here · Right: world map · M: travel", True, (200, 210, 230))
-            self.screen.blit(hint, (rect.x + 4, rect.bottom - 14))
+            d = self.font_tiny.render(date_line, True, (180, 190, 210))
+            self.screen.blit(d, (rect.x + 10, rect.y + 52))
 
     def _blit_round_minimap(self, rect):
         """Scale the live minimap into a circular hole."""
@@ -8658,6 +9437,8 @@ class GameClient(ScreensMixin, CameraYaw):
     def toggle_teleport_modal(self):
         self.show_teleport = not self.show_teleport
         if self.show_teleport:
+            self.teleport_scroll = 0
+            self.teleport_drag = None
             self.show_travel = False
             self.show_world_map = False
             self.show_forge = False
@@ -8673,9 +9454,32 @@ class GameClient(ScreensMixin, CameraYaw):
         now = time.time()
         self.teleport_fx = {"start": now, "until": now + 0.95, "label": label or ""}
 
+    def _teleport_marks(self):
+        marks = (self.player or {}).get("teleport_marks") or []
+        return set(str(m) for m in marks)
+
+    def _unlocked_teleport_destinations(self):
+        """Explored marks only (plus owned home). Order matches content list."""
+        marks = self._teleport_marks()
+        unlocked = [d for d in TELEPORT_DESTINATIONS if d["id"] in marks]
+        home = self._home_destination()
+        if home:
+            unlocked = [{
+                "id": "home",
+                "label": home["label"],
+                "blurb": home["blurb"],
+                "where": "overworld",
+                "x": home["x"],
+                "y": home["y"],
+            }] + [d for d in unlocked if d.get("id") != "home"]
+        return unlocked
+
     def cast_teleport(self, dest_id):
         fx = self.teleport_fx
         if fx and time.time() < fx["until"] - 0.15:
+            return
+        if dest_id != "home" and dest_id not in self._teleport_marks():
+            self.chat_log.append("[!] Walk there first to mark it on your teleport spell.")
             return
         label = "Teleport"
         if dest_id == "home":
@@ -8701,11 +9505,46 @@ class GameClient(ScreensMixin, CameraYaw):
                 self.show_teleport = False
                 self.walk_and_act({WIZARD_TILE})
             elif kind == "dest":
+                clip = (self.teleport_scroll_meta or {}).get("clip")
+                if clip is not None and not clip.collidepoint(mx, my):
+                    return
                 self.cast_teleport(payload)
             return
         box = getattr(self, "teleport_box", None)
         if box and not box.collidepoint(mx, my):
             self.show_teleport = False
+
+    def _teleport_scrollbar_mousedown(self, pos):
+        meta = self.teleport_scroll_meta
+        if not meta or meta.get("max_scroll", 0) <= 0:
+            return False
+        track = meta.get("track")
+        thumb = meta.get("thumb")
+        if thumb is not None and thumb.collidepoint(pos):
+            self.teleport_drag = {"y0": pos[1], "scroll0": self.teleport_scroll}
+            return True
+        if track is not None and track.collidepoint(pos):
+            view_h = meta["view_h"]
+            max_scroll = meta["max_scroll"]
+            thumb_h = thumb.h if thumb is not None else 28
+            rel = (pos[1] - meta["list_top"] - thumb_h / 2) / max(1, view_h - thumb_h)
+            self.teleport_scroll = max(0, min(max_scroll, rel * max_scroll))
+            self.teleport_drag = {"y0": pos[1], "scroll0": self.teleport_scroll}
+            return True
+        return False
+
+    def _teleport_scrollbar_drag(self, pos):
+        meta = self.teleport_scroll_meta
+        drag = self.teleport_drag
+        if not meta or not drag or meta.get("max_scroll", 0) <= 0:
+            return
+        view_h = meta["view_h"]
+        max_scroll = meta["max_scroll"]
+        thumb = meta.get("thumb")
+        thumb_h = thumb.h if thumb is not None else 28
+        span = max(1, view_h - thumb_h)
+        dy = pos[1] - drag["y0"]
+        self.teleport_scroll = max(0, min(max_scroll, drag["scroll0"] + dy * max_scroll / span))
 
     def _click_stair_prompt(self, mx, my):
         for rect, direction in self.stair_choice_rects:
@@ -8751,9 +9590,10 @@ class GameClient(ScreensMixin, CameraYaw):
         self.screen.blit(label, (rect.centerx - label.get_width() // 2, rect.y + 6))
 
     def draw_teleport_modal(self):
-        box = pygame.Rect(250, 50, 420, 660)
+        box = pygame.Rect(250, 50, 420, 560)
         self.teleport_box = box
         self.teleport_row_rects = []
+        self.teleport_scroll_meta = None
         pygame.draw.rect(self.screen, (22, 14, 36), box, border_radius=8)
         pygame.draw.rect(self.screen, (212, 175, 80), box, 2, border_radius=8)
         title = self.font_big.render("Teleport", True, (240, 220, 160))
@@ -8770,8 +9610,8 @@ class GameClient(ScreensMixin, CameraYaw):
                 "Wizard Elowen can teach you this spell.",
                 "She stands on the grass just northwest",
                 "of the village crossroads.",
-                "Talk to her, then press T or this button",
-                "and choose a castle or a town.",
+                "Talk to her for Village and Castle Realm,",
+                "then walk the map to unlock more places.",
             ]
             y = box.y + 64
             for line in lines:
@@ -8784,35 +9624,81 @@ class GameClient(ScreensMixin, CameraYaw):
             self.screen.blit(walk_lbl, (walk.centerx - walk_lbl.get_width() // 2, walk.y + 5))
             self.teleport_row_rects.append(("walk", walk, None))
             return
-        hint = self.font_tiny.render("The Kingdom and the Castle Realm are separate maps.", True, (190, 170, 210))
-        self.screen.blit(hint, (box.x + 18, box.y + 48))
-        y = box.y + 72
-        kingdom = [d for d in TELEPORT_DESTINATIONS if d.get("where") == "overworld"]
-        home = self._home_destination()
-        if home:
-            kingdom = [{
-                "id": "home",
-                "label": home["label"],
-                "blurb": home["blurb"],
-                "where": "overworld",
-                "x": home["x"],
-                "y": home["y"],
-            }] + [d for d in kingdom if d.get("id") != "home"]
-        groups = (
-            ("The Kingdom", kingdom),
-            ("Castle Realm", [d for d in TELEPORT_DESTINATIONS if d.get("where") == "castle"]),
+        hint = self.font_tiny.render(
+            "Only places you have walked to. Scroll for more.",
+            True, (190, 170, 210),
         )
+        self.screen.blit(hint, (box.x + 18, box.y + 48))
+
+        unlocked = self._unlocked_teleport_destinations()
+        kingdom = [d for d in unlocked if d.get("where") == "overworld"]
+        realm = [d for d in unlocked if d.get("where") == "castle"]
+        groups = (("The Kingdom", kingdom), ("Castle Realm", realm))
+
+        list_top = box.y + 72
+        list_bottom = box.bottom - 52
+        view_h = max(40, list_bottom - list_top)
+        clip = pygame.Rect(box.x + 12, list_top, box.w - 36, view_h)
+        row_h = 36
+        header_h = 22
+        content_h = 0
+        for _title, dests in groups:
+            if not dests:
+                continue
+            content_h += header_h + row_h * len(dests)
+        max_scroll = max(0, content_h - view_h)
+        self.teleport_scroll = max(0, min(max_scroll, int(self.teleport_scroll or 0)))
+
+        # Scrollbar
+        track = thumb = None
+        if max_scroll > 0:
+            track = pygame.Rect(box.right - 18, list_top, 8, view_h)
+            thumb_h = max(28, int(view_h * view_h / max(1, content_h)))
+            thumb_y = list_top + int((view_h - thumb_h) * (self.teleport_scroll / max_scroll))
+            thumb = pygame.Rect(track.x, thumb_y, track.w, thumb_h)
+            pygame.draw.rect(self.screen, (40, 28, 56), track, border_radius=4)
+            pygame.draw.rect(self.screen, (160, 120, 200), thumb, border_radius=4)
+
+        self.teleport_scroll_meta = {
+            "clip": clip,
+            "track": track,
+            "thumb": thumb,
+            "list_top": list_top,
+            "view_h": view_h,
+            "max_scroll": max_scroll,
+        }
+
+        prev_clip = self.screen.get_clip()
+        self.screen.set_clip(clip)
+        y = list_top - self.teleport_scroll
+        if not unlocked:
+            empty = self.font_small.render("Walk the map to mark new places.", True, WHITE)
+            self.screen.blit(empty, (box.x + 18, list_top + 8))
         for title_text, dests in groups:
-            self.screen.blit(self.font_small.render(title_text, True, (212, 175, 80)), (box.x + 18, y))
-            y += 22
+            if not dests:
+                continue
+            if y + header_h >= list_top and y <= list_bottom:
+                self.screen.blit(
+                    self.font_small.render(title_text, True, (212, 175, 80)),
+                    (box.x + 18, y),
+                )
+            y += header_h
             for dest in dests:
-                row = pygame.Rect(box.x + 16, y, box.w - 32, 32)
-                pygame.draw.rect(self.screen, (40, 24, 64), row, border_radius=6)
-                pygame.draw.rect(self.screen, (140, 100, 180), row, 1, border_radius=6)
-                self.screen.blit(self.font_small.render(dest["label"], True, (240, 220, 160)), (row.x + 12, row.y + 1))
-                self.screen.blit(self.font_tiny.render(dest["blurb"], True, (180, 170, 200)), (row.x + 12, row.y + 16))
-                self.teleport_row_rects.append(("dest", row, dest["id"]))
-                y += 36
+                row = pygame.Rect(box.x + 16, y, box.w - 40, 32)
+                if row.bottom >= list_top and row.top <= list_bottom:
+                    pygame.draw.rect(self.screen, (40, 24, 64), row, border_radius=6)
+                    pygame.draw.rect(self.screen, (140, 100, 180), row, 1, border_radius=6)
+                    self.screen.blit(
+                        self.font_small.render(dest["label"], True, (240, 220, 160)),
+                        (row.x + 12, row.y + 1),
+                    )
+                    self.screen.blit(
+                        self.font_tiny.render(dest["blurb"], True, (180, 170, 200)),
+                        (row.x + 12, row.y + 16),
+                    )
+                    self.teleport_row_rects.append(("dest", row, dest["id"]))
+                y += row_h
+        self.screen.set_clip(prev_clip)
 
     def draw_teleport_fx(self):
         fx = self.teleport_fx
@@ -9659,22 +10545,74 @@ class GameClient(ScreensMixin, CameraYaw):
         """Green above half, orange from half down to a quarter, red below that."""
         pct = max(0.0, min(1.0, max(0, hp) / max(1, max_hp)))
         if pct > 0.5:
-            return (46, 196, 92), pct
+            return (52, 200, 98), pct
         if pct > 0.25:
-            return (230, 150, 42), pct
-        return (210, 55, 48), pct
+            return (235, 165, 55), pct
+        return (220, 70, 58), pct
+
+    def _hp_gradient(self, hp, max_hp):
+        """(highlight, shadow, pct) for the framed world HP bar."""
+        col, pct = self.hp_tone(hp, max_hp)
+        if pct > 0.5:
+            return col, (28, 120, 58), pct
+        if pct > 0.25:
+            return col, (160, 90, 28), pct
+        return col, (130, 28, 24), pct
 
     def draw_hp_bar(self, cx, y, hp, max_hp, show_value=False):
-        col, pct = self.hp_tone(hp, max_hp)
-        w, h = (44, 6) if show_value else (28, 4)
+        """Framed HP strip with gradient fill and a light rim highlight."""
+        hi, lo, pct = self._hp_gradient(hp, max_hp)
+        w, h = (58, 10) if show_value else (38, 7)
         x0 = cx - w // 2
-        pygame.draw.rect(self.screen, (0, 0, 0), (x0 - 1, y - 1, w + 2, h + 2))
-        pygame.draw.rect(self.screen, (48, 16, 16), (x0, y, w, h))
+        # Outer shadow
+        sh = pygame.Surface((w + 6, h + 6), pygame.SRCALPHA)
+        pygame.draw.rect(sh, (0, 0, 0, 100), sh.get_rect(), border_radius=4)
+        self.screen.blit(sh, (x0 - 3, y - 3))
+        # Metal frame
+        frame = pygame.Rect(x0 - 2, y - 2, w + 4, h + 4)
+        pygame.draw.rect(self.screen, (22, 18, 16), frame, border_radius=4)
+        pygame.draw.rect(self.screen, SB_GOLD_DIM, frame, 1, border_radius=4)
+        # Empty trough
+        trough = pygame.Rect(x0, y, w, h)
+        pygame.draw.rect(self.screen, (36, 14, 16), trough, border_radius=3)
         if pct > 0:
-            pygame.draw.rect(self.screen, col, (x0, y, max(1, int(w * pct)), h))
+            fw = max(2, int(round(w * pct)))
+            fill = pygame.Surface((fw, h), pygame.SRCALPHA)
+            for row in range(h):
+                t = row / max(1, h - 1)
+                # Top half lighter, bottom richer
+                if t < 0.45:
+                    u = t / 0.45
+                    r = int(hi[0] + (lo[0] - hi[0]) * u * 0.35)
+                    g = int(hi[1] + (lo[1] - hi[1]) * u * 0.35)
+                    b = int(hi[2] + (lo[2] - hi[2]) * u * 0.35)
+                else:
+                    u = (t - 0.45) / 0.55
+                    r = int(hi[0] * (1 - u) + lo[0] * u)
+                    g = int(hi[1] * (1 - u) + lo[1] * u)
+                    b = int(hi[2] * (1 - u) + lo[2] * u)
+                pygame.draw.line(fill, (r, g, b), (0, row), (fw - 1, row))
+            # Specular strip along the top
+            for row in range(max(1, h // 3)):
+                a = int(90 * (1 - row / max(1, h // 3)))
+                pygame.draw.line(fill, (255, 255, 255, a), (1, row), (fw - 2, row))
+            self.screen.blit(fill, (x0, y))
+            # Round the visible fill edges by clipping a soft mask via border
+            pygame.draw.rect(self.screen, (20, 12, 14), trough, 1, border_radius=3)
+        # Bright top lip on the frame
+        pygame.draw.line(
+            self.screen, SB_GOLD_HI,
+            (frame.left + 3, frame.top + 1), (frame.right - 4, frame.top + 1), 1,
+        )
         if show_value:
-            text = self.font_tiny.render(f"{int(hp)}/{int(max_hp)}", True, col)
-            self.screen.blit(text, (cx - text.get_width() // 2, y - text.get_height() - 1))
+            label = f"{int(hp)}/{int(max_hp)}"
+            outline = self.font_small.render(label, True, (10, 8, 8))
+            text = self.font_small.render(label, True, hi)
+            tx = cx - text.get_width() // 2
+            ty = y - text.get_height() - 3
+            for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                self.screen.blit(outline, (tx + ox, ty + oy))
+            self.screen.blit(text, (tx, ty))
 
     def draw_map_vignette(self):
         """Soft edge darkening so the map reads as a framed playfield."""

@@ -127,13 +127,13 @@ ITEMS = {
         "desc": "Full black helm with a gold-barred face grill. Outclasses the Mythos Dragon Helm. Future monster drop — not obtainable yet.",
     },
 
-    "bronze_axe":       {"name": "Bronze Axe",         "type": "tool",    "stackable": False, "value": 15,  "equip_slot": "weapon", "str_bonus": 3, "att_bonus": 2, "tool_for": "woodcutting"},
-    "bronze_pickaxe":   {"name": "Bronze Pickaxe",     "type": "tool",    "stackable": False, "value": 15,  "equip_slot": "weapon", "str_bonus": 3, "att_bonus": 2, "tool_for": "mining"},
-    "small_fishing_net":{"name": "Small Fishing Net",  "type": "tool",    "stackable": False, "value": 10,  "equip_slot": None, "tool_for": "fishing"},
-    "fishing_rod":      {"name": "Fishing Rod",        "type": "tool",    "stackable": False, "value": 45,  "equip_slot": None, "tool_for": "fishing"},
-    "fly_fishing_rod":  {"name": "Fly Fishing Rod",    "type": "tool",    "stackable": False, "value": 90,  "equip_slot": None, "tool_for": "fishing"},
-    "lobster_pot":      {"name": "Lobster Pot",        "type": "tool",    "stackable": False, "value": 120, "equip_slot": None, "tool_for": "fishing"},
-    "harpoon":          {"name": "Harpoon",            "type": "tool",    "stackable": False, "value": 160, "equip_slot": None, "tool_for": "fishing"},
+    "bronze_axe":       {"name": "Bronze Axe",         "type": "tool",    "stackable": False, "value": 15,  "equip_slot": "tool", "tool_for": "woodcutting"},
+    "bronze_pickaxe":   {"name": "Bronze Pickaxe",     "type": "tool",    "stackable": False, "value": 15,  "equip_slot": "tool", "tool_for": "mining"},
+    "small_fishing_net":{"name": "Small Fishing Net",  "type": "tool",    "stackable": False, "value": 10,  "equip_slot": "tool", "tool_for": "fishing"},
+    "fishing_rod":      {"name": "Fishing Rod",        "type": "tool",    "stackable": False, "value": 45,  "equip_slot": "tool", "tool_for": "fishing"},
+    "fly_fishing_rod":  {"name": "Fly Fishing Rod",    "type": "tool",    "stackable": False, "value": 90,  "equip_slot": "tool", "tool_for": "fishing"},
+    "lobster_pot":      {"name": "Lobster Pot",        "type": "tool",    "stackable": False, "value": 120, "equip_slot": "tool", "tool_for": "fishing"},
+    "harpoon":          {"name": "Harpoon",            "type": "tool",    "stackable": False, "value": 160, "equip_slot": "tool", "tool_for": "fishing"},
 
     "wooden_shield":    {"name": "Wooden Shield",      "type": "armor", "stackable": False, "value": 12, "equip_slot": "shield", "def_bonus": 4},
     "bronze_sq_shield": {"name": "Bronze Square Shield", "type": "armor", "stackable": False, "value": 22, "equip_slot": "shield", "def_bonus": 6},
@@ -1367,6 +1367,20 @@ def drops_for_kill(monster_type):
     return out
 
 
+def _mountain_wolves():
+    """Wolf Pass (USE_WOLF_PASS): 6 wolves in the 12x6 zone at the choke, leashed 10 tiles. Else the old 8."""
+    try:
+        import feature_flags
+        import wolf_pass
+        if getattr(feature_flags, "USE_WOLF_PASS", False) and wolf_pass.geo():
+            MONSTERS["wolf"]["leash_area"] = wolf_pass.leash_area()
+            return wolf_pass.wolf_spawns()
+    except ImportError:
+        pass
+    return [("wolf", 143, 16), ("wolf", 147, 13), ("wolf", 149, 16), ("wolf", 153, 16),
+            ("wolf", 155, 18), ("wolf", 151, 15), ("wolf", 145, 17), ("wolf", 157, 16)]
+
+
 # Fixed monster spawn points: (monster_type, x, y)
 MONSTER_SPAWNS = [
     ("giant_rat", 62, 103), ("giant_rat", 67, 104), ("giant_rat", 72, 103),
@@ -1399,15 +1413,14 @@ MONSTER_SPAWNS = [
     # Adamantite lair — dragon
     ("dragon", 70, 112),
     # Mountain pass — wolves (patrol clearings along the pass)
-    ("wolf", 143, 16), ("wolf", 147, 13), ("wolf", 149, 16),
-    ("wolf", 153, 16), ("wolf", 155, 18), ("wolf", 151, 15),
-    ("wolf", 145, 17), ("wolf", 157, 16),
-    # East of the wishing well — combat practice. Only a player killer can attack him.
-    ("adamant_duelist", 39, 27),
+    *_mountain_wolves(),
+    # South of the wishing well — combat practice. Only a player killer can attack him.
+    ("adamant_duelist", 35, 28),
     # Stonehaven City — guards on the streets, knights by the castle
     ("guard", 110, 72), ("guard", 116, 76), ("guard", 122, 72),
     ("guard", 106, 66), ("guard", 114, 80), ("guard", 132, 78),
     ("guard", 120, 84), ("guard", 108, 78),
+    # Old-keep literals; _apply_castle_v2 moves these onto the keep by Wolf Pass.
     ("knight", 128, 66), ("knight", 132, 64), ("knight", 126, 62),
     ("knight", 130, 68), ("knight", 134, 66),
     ("mythos_champion", 130, 64),  # Castle elite — full Mythos set
@@ -1493,6 +1506,10 @@ WIZARD_ID = "wizard_elowen"
 WIZARD_TILE = (23, 20)
 
 # Instant travel. where=overworld leaves any dungeon; where=castle enters the realm.
+# Marks unlock by walking near the landing (see TELEPORT_DISCOVER_RADIUS). After
+# Elowen teaches the spell, village + Castle Realm start unlocked.
+TELEPORT_STARTER_MARKS = ("village", "realm")
+TELEPORT_DISCOVER_RADIUS = 12  # Chebyshev tiles
 TELEPORT_DESTINATIONS = [
     {"id": "village", "label": "Village", "blurb": "The crossroads", "where": "overworld", "x": 28, "y": 24},
     {"id": "bank", "label": "Village Bank", "blurb": "Store coins and items", "where": "overworld", "x": 66, "y": 48},
@@ -1501,7 +1518,8 @@ TELEPORT_DESTINATIONS = [
     {"id": "stonehaven", "label": "Stonehaven", "blurb": "The city square", "where": "overworld", "x": 118, "y": 74},
     {"id": "keep", "label": "Stonehaven Castle", "blurb": "The overworld keep", "where": "overworld", "x": 128, "y": 66},
     {"id": "harbour", "label": "Harbourreach", "blurb": "The docks", "where": "overworld", "x": 176, "y": 18},
-    {"id": "estate", "label": "Estate Agent", "blurb": "Outside the King's Row office", "where": "overworld", "x": 6, "y": 99},
+    {"id": "estate", "label": "Estate Agent", "blurb": "Village estate office (north fringe)", "where": "overworld", "x": 85, "y": 11},
+    {"id": "kings_row_south", "label": "King's Row Homes", "blurb": "South-road cottages & Ash Manor", "where": "overworld", "x": 97, "y": 144},
     {"id": "realm", "label": "Castle Realm", "blurb": "The plaza", "where": "castle", "x": 150, "y": 183},
     {"id": "gothic", "label": "Gothic Castle", "blurb": "Outside the gate", "where": "castle", "x": 52, "y": 78},
     {"id": "king", "label": "King's Castle", "blurb": "Outside the gate", "where": "castle", "x": 152, "y": 78},
@@ -1513,9 +1531,10 @@ NPCS = [
     # Village
     {"id": WIZARD_ID, "name": "Wizard Elowen", "x": WIZARD_TILE[0], "y": WIZARD_TILE[1],
      "lines": [
-         "I am Elowen. The violet ring will carry you anywhere I have marked.",
-         "Press T, or the Teleport button on the left, and choose a place.",
-         "The village, the city, the harbour, the estate agent, the Void Sanctum, and every castle are one spell away.",
+         "I am Elowen. The violet ring carries you to places you have walked.",
+         "I mark the village and the Castle Realm for you to start.",
+         "Explore the kingdom — each landing you reach is added to your teleport list.",
+         "Press T, or the Teleport button, and scroll the places you know.",
      ],
      "teleport_teacher": True},
 
@@ -1611,21 +1630,21 @@ NPCS = [
      "lines": ["Every reign is written here. Ask, and I'll read you the longest."]},
 
     # Crownfall phase 7: the paths to the throne
-    {"id": "royal_herald", "name": "Royal Herald", "x": 156, "y": 78,
+    {"id": "royal_herald", "name": "Royal Herald", "x": 156, "y": 57,
      "lines": ["By the old law, a strong guild may challenge for the Crown.",
                "Combat 100, a castle of your own, every quest done, and a guild fit for the Royal Challenge."]},
-    {"id": "mistress_celia", "name": "Mistress of the Robes Celia", "x": 156, "y": 81,
+    {"id": "mistress_celia", "name": "Mistress of the Robes Celia", "x": 158, "y": 50,
      "lines": ["The court has its own ways to the throne, for a lady with the manners for it."]},
     {"id": "chaplain_mirelle", "name": "Chaplain Mirelle", "x": 9, "y": 9,
      "lines": ["I wed those who come to me together. The ceremony is 10,000 gold, shared between you."]},
 
     # Crownfall phase 6: noble patents
-    {"id": "chamberlain_aric", "name": "Lord Chamberlain Aric", "x": 154, "y": 82,
+    {"id": "chamberlain_aric", "name": "Lord Chamberlain Aric", "x": 149, "y": 48,
      "lines": ["The Crown grants patents of rank to those of good standing, manners and means.",
                "Squire, Knight, Baron, Count, Duke. One step at a time."]},
 
     # Crownfall phase 5: guild tutorial
-    {"id": "guildmaster_ysolde", "name": "Guildmaster Ysolde", "x": 154, "y": 79,
+    {"id": "guildmaster_ysolde", "name": "Guildmaster Ysolde", "x": 118, "y": 76,
      "quest_id": "guild_basics",
      "lines": [
          "A guild charter costs 10,000 coins from your bank (/guild create <name>).",
@@ -1729,7 +1748,7 @@ NPCS = [
      ],
      "quest_id": "silk_harvest"},
 
-    {"id": "dungeon_hermit", "name": "Hermit Cole", "x": 40, "y": 84,
+    {"id": "dungeon_hermit", "name": "Hermit Cole", "x": 42, "y": 86,
      "lines": [
          "Skeletons hunt by sight — only two will pile on you at once.",
          "Clear a dozen of those rattling fools and I'll tip you for it.",
@@ -1739,15 +1758,15 @@ NPCS = [
      ],
      "quest_ids": ["bone_and_blade", "giants_tithe", "adamant_proof"]},
 
-    {"id": "elowen_moonwhisper", "name": "Lady Elowen Moonwhisper", "x": 24, "y": 67,
+    {"id": "elowen_moonwhisper", "name": "Lady Elowen Moonwhisper", "x": 18, "y": 68,
      "lines": ["The Moonwater remembers.", "Speak with me, and I will tell you the oath."],
      "quest_id": "fairy_oath"},
-    {"id": "warden_thorne", "name": "Warden Thorne Briarwing", "x": 25, "y": 57,
+    {"id": "warden_thorne", "name": "Warden Thorne Briarwing", "x": 24, "y": 60,
      "lines": ["The crypt to the south-east sleeps badly."]},
-    {"id": "tumbleroot", "name": "Tumbleroot the Gnome", "x": 39, "y": 66,
+    {"id": "tumbleroot", "name": "Tumbleroot the Gnome", "x": 38, "y": 72,
      "lines": ["Potions! Tonics! Moonwater draughts, nearly legal!"],
      "shop_id": "fairy_apothecary"},
-    {"id": "pip_dewdrop", "name": "Pip Dewdrop", "x": 31, "y": 78,
+    {"id": "pip_dewdrop", "name": "Pip Dewdrop", "x": 32, "y": 82,
      "lines": ["Shh! The lilies are sleeping."]},
 
     {"id": "mad_scientist", "name": "Mad Scientist", "x": 98, "y": 22,
@@ -2697,14 +2716,18 @@ TRAVEL_DESTINATIONS = [
     {"id": "harbour_tackle", "kind": "place", "label": "Tackle Shop",
      "x": 177, "y": 10, "blurb": "Rods, pots, harpoons"},
     {"id": "tidehollow", "kind": "place", "label": "Tidehollow Cave",
-     "x": 189, "y": 54, "blurb": "Private 10-floor instance",
+     "x": 189, "y": 54, "blurb": "Private chambers · dragons at the end · medal",
      "action": {"type": "ENTER_DUNGEON", "dungeon_id": "tidehollow"}},
     {"id": "harbour_pier", "kind": "place", "label": "Harbour Pier",
      "x": 183, "y": 18, "blurb": "Shore fishing — trout → swordfish"},
     {"id": "stonehaven", "kind": "place", "label": "Stonehaven City",
      "x": 118, "y": 74, "blurb": "Stone plazas & castle"},
-    {"id": "emberdeep", "kind": "place", "label": "Emberdeep Volcano",
-     "x": 67, "y": 80, "blurb": "⚠ Lava dungeon — 8 floors · south of the castle",
+    {"id": "estate_agent", "kind": "place", "label": "Estate Agent Mira",
+     "x": 85, "y": 11, "blurb": "Village estate office — buy homes & plots"},
+    {"id": "kings_row_homes", "kind": "place", "label": "King's Row Homes",
+     "x": 97, "y": 144, "blurb": "South-road player houses (Ash Manor & cottages)"},
+    {"id": "emberdeep", "kind": "place", "label": "Emberdeep",
+     "x": 175, "y": 78, "blurb": "⚠ Lava dungeon — 8 floors · east volcano massif",
      "action": {"type": "ENTER_DUNGEON", "dungeon_id": "emberdeep"}},
     {"id": "mira_market", "kind": "place", "label": "Mira's Market",
      "x": 116, "y": 74, "blurb": "Food, potions & steel scraps"},
@@ -2720,7 +2743,7 @@ TRAVEL_DESTINATIONS = [
     {"id": "quest_scout_bren", "kind": "place", "label": "Scout Bren",
      "x": 145, "y": 16, "blurb": "Quest: Wolves on the Pass"},
     {"id": "quest_hermit_cole", "kind": "place", "label": "Hermit Cole",
-     "x": 40, "y": 84, "blurb": "Dungeon quests — bones & dragon"},
+     "x": 38, "y": 82, "blurb": "Dungeon quests — bones & dragon"},
     {"id": "quest_cook_nell", "kind": "place", "label": "Cook Nell",
      "x": 174, "y": 23, "blurb": "Quest: Harbour Feast"},
     {"id": "quest_herald_rowan", "kind": "place", "label": "Herald Rowan",
@@ -2766,10 +2789,22 @@ TRAVEL_DESTINATIONS = [
 
 
 
-def entrance_mouth_tiles(x, y):
-    """Tiles that count as standing in a dungeon mouth (the door and one step in)."""
-    tiles = set()
+def entrance_mouth_tiles(x, y, kind=None):
+    """Tiles that count as standing in a dungeon mouth.
+
+    Volcano mouths are a 3-wide door plus the apron immediately in front
+    (south) so players enter when they reach the cave opening, not only after
+    stepping onto the threshold under the mountain.
+    """
     ax, ay = int(x), int(y)
+    if kind == "volcano_entrance":
+        # 3-wide door + one step south (standing in front of the cave).
+        tiles = set()
+        for dx in (-1, 0, 1):
+            for dy in (0, 1):
+                tiles.add((ax + dx, ay + dy))
+        return tiles
+    tiles = set()
     for dx in (-1, 0, 1):
         for dy in (0, -1):
             tiles.add((ax + dx, ay + dy))
@@ -2793,9 +2828,6 @@ INTERACTABLES = [
      "enter_x": 66, "enter_y": 45, "exit_x": 66, "exit_y": 48, "building": "bank"},
     {"id": "outfitters_door", "kind": "door", "name": "Mythos Outfitters Door", "x": 52, "y": 64,
      "enter_x": 52, "enter_y": 62, "exit_x": 52, "exit_y": 65, "building": "mythos_outfitters"},
-    {"id": "sign_outfitters", "kind": "signpost", "name": "Mythos Outfitters",
-     "x": 48, "y": 65, "facing": "n",
-     "lines": ["Mythos Outfitters: hair, clothes, outfits"]},
     {"id": "pet_door", "kind": "door", "name": "Pet Emporium Door", "x": 85, "y": 48,
      "enter_x": 85, "enter_y": 46, "exit_x": 85, "exit_y": 49, "building": "pet_emporium"},
     {"id": "bank_booth", "kind": "bank", "name": "Bank Booth", "x": 66, "y": 41},
@@ -2805,24 +2837,25 @@ INTERACTABLES = [
      "x": 64, "y": 11, "enter_x": 64, "enter_y": 11, "exit_x": 64, "exit_y": 12,
      "dungeon_id": "depths", "pack": "skeleton_crypt"},
     {"id": "queens_tree_hall_door", "kind": "flavour", "name": "Queen's Tree-Hall",
-     "x": 8, "y": 85, "stand": [8, 86],
+     "x": 11, "y": 83, "stand": [11, 84],
      "lines": ["The Queen's Tree-Hall hums with old magic."]},
     {"id": "moonpetal_inn_door", "kind": "flavour", "name": "Moonpetal Inn",
-     "x": 20, "y": 84, "stand": [20, 85],
+     "x": 20, "y": 82, "stand": [20, 83],
      "lines": ["The Moonpetal Inn smells of honey bread."]},
     {"id": "mushroom_apothecary_door", "kind": "flavour", "name": "Mushroom Apothecary",
-     "x": 37, "y": 64, "stand": [37, 65], "shop_id": "fairy_apothecary",
+     "x": 36, "y": 67, "stand": [36, 68], "shop_id": "fairy_apothecary",
      "lines": ["Tumbleroot's door creaks open on a cloud of herbs."]},
     {"id": "moonstone_fountain", "kind": "moonwater", "name": "Moonstone Fountain",
      "x": 28, "y": 65, "stand": [28, 66]},
     {"id": "lily_fountain", "kind": "moonwater", "name": "Lily Fountain",
-     "x": 33, "y": 79, "stand": [33, 80]},
+     "x": 35, "y": 78, "stand": [35, 79]},
     {"id": "tidehollow_cave", "kind": "cave_entrance", "name": "Tidehollow Cave",
-     "x": 189, "y": 52, "blurb": "10 floors · clear each level · medal on completion",
+     "x": 189, "y": 52, "blurb": "9 chambers · 3 beasts each · dragons + medal at the end",
      "dungeon_id": "tidehollow", "pack": "goblin_cave"},
-    {"id": "emberdeep_mouth", "kind": "volcano_entrance", "name": "Emberdeep Crater",
-     "x": 67, "y": 78, "blurb": "8 lava floors · new beasts · Emberdeep Medal",
-     "dungeon_id": "emberdeep", "pack": "dragon_lair"},
+    {"id": "emberdeep_mouth", "kind": "volcano_entrance", "name": "Emberdeep Mouth",
+     "x": 175, "y": 78, "blurb": "Cave in a small volcano · 8 lava floors · Emberdeep Medal",
+     "dungeon_id": "emberdeep", "pack": "dragon_lair",
+     "stand": [175, 81]},
 
     # --- Elder's Hall (cottage_nw) floor 5–14, 5–14 ---
     {"id": "elder_fireplace", "kind": "range", "name": "Hearth", "x": 6, "y": 5},
@@ -2921,9 +2954,6 @@ INTERACTABLES = [
 
     # Village wishing well (east of crossroads, south of the road)
     {"id": "wishing_well", "kind": "wishing_well", "name": "Wishing Well", "x": 32, "y": 22},
-    {"id": "sign_duelist", "kind": "signpost", "name": "Duelist",
-     "x": 36, "y": 27, "facing": "e",
-     "lines": ["Fight me on PK mode", "if you dare."]},
 
     # Stonehaven City doors
     {"id": "city_house_nw_door", "kind": "door", "name": "Door", "x": 106, "y": 68,
@@ -3004,58 +3034,6 @@ INTERACTABLES = [
     {"id": "void_candle_b", "kind": "candle", "name": "Void Candle", "x": 174, "y": 104},
     {"id": "void_altar", "kind": "bookshelf", "name": "Forbidden Tomes", "x": 167, "y": 103},
 
-    # Wayfinder posts. They sit on the road and do not block walking.
-    # Crownfall phase 4: King's Row plot sites (server/property.py SITES)
-    {"id": "sign_plot_1", "kind": "signpost", "name": "Plot 1", "x": 15, "y": 99, "facing": "s",
-     "lines": ["King's Row plot. Ask the Estate Agent to buy."]},
-    {"id": "sign_plot_2", "kind": "signpost", "name": "Plot 2", "x": 20, "y": 99, "facing": "s",
-     "lines": ["King's Row plot. Ask the Estate Agent to buy."]},
-    {"id": "sign_plot_3", "kind": "signpost", "name": "Plot 3", "x": 15, "y": 104, "facing": "s",
-     "lines": ["King's Row plot. Ask the Estate Agent to buy."]},
-    {"id": "sign_plot_4", "kind": "signpost", "name": "Plot 4", "x": 20, "y": 104, "facing": "s",
-     "lines": ["King's Row plot. Ask the Estate Agent to buy."]},
-    {"id": "sign_crossroads", "kind": "signpost", "name": "Crossroads",
-     "x": 31, "y": 23, "facing": "e",
-     "lines": ["→ Forest · Harbour", "↓ Mine · Dungeon", "↑ Village shops"]},
-    {"id": "sign_elders", "kind": "signpost", "name": "Elder's Hall",
-     "x": 12, "y": 18, "facing": "n", "lines": ["↑ Elder's Hall"]},
-    {"id": "sign_store", "kind": "signpost", "name": "General Store",
-     "x": 45, "y": 18, "facing": "n", "lines": ["↑ General Store"]},
-    {"id": "sign_bank", "kind": "signpost", "name": "Bank",
-     "x": 64, "y": 33, "facing": "n", "lines": ["↑ Bank"]},
-    {"id": "sign_smithy", "kind": "signpost", "name": "Smithy",
-     "x": 86, "y": 22, "facing": "n", "lines": ["↑ Smithy"]},
-    {"id": "sign_inn", "kind": "signpost", "name": "Inn",
-     "x": 10, "y": 51, "facing": "n", "lines": ["↑ Inn"]},
-    {"id": "sign_farm", "kind": "signpost", "name": "Farm",
-     "x": 45, "y": 51, "facing": "n", "lines": ["↑ Farm"]},
-    {"id": "sign_pets", "kind": "signpost", "name": "Pet Shop",
-     "x": 85, "y": 51, "facing": "n", "lines": ["↑ Pet Shop"]},
-    {"id": "sign_lake", "kind": "signpost", "name": "Fishing Lake",
-     "x": 106, "y": 26, "facing": "n", "lines": ["↑ Fishing Lake"]},
-    {"id": "sign_pass", "kind": "signpost", "name": "Mountain Pass",
-     "x": 126, "y": 25, "facing": "e",
-     "lines": ["→ Mountain Pass · Harbour"]},
-    {"id": "sign_city_road", "kind": "signpost", "name": "Stonehaven",
-     "x": 108, "y": 30, "facing": "s", "lines": ["↓ Stonehaven"]},
-    {"id": "sign_harbour", "kind": "signpost", "name": "Harbourreach",
-     "x": 166, "y": 16, "facing": "e", "lines": ["→ Harbourreach"]},
-    {"id": "sign_tidehollow", "kind": "signpost", "name": "Tidehollow",
-     "x": 192, "y": 54, "facing": "n", "lines": ["↑ Tidehollow"]},
-    {"id": "sign_mine", "kind": "signpost", "name": "Mine",
-     "x": 30, "y": 50, "facing": "s", "lines": ["↓ Fairy Village"]},
-    {"id": "sign_quarry", "kind": "signpost", "name": "Quarry",
-     "x": 71, "y": 98, "facing": "s", "lines": ["↓ Mine"]},
-    {"id": "sign_dungeon", "kind": "signpost", "name": "Crypt",
-     "x": 67, "y": 20, "facing": "n", "lines": ["↑ Crypt"]},
-    {"id": "sign_city", "kind": "signpost", "name": "Stonehaven",
-     "x": 96, "y": 70, "facing": "e", "lines": ["→ Stonehaven"]},
-    {"id": "sign_castle", "kind": "signpost", "name": "Castle",
-     "x": 124, "y": 74, "facing": "n", "lines": ["↑ Castle"]},
-    {"id": "sign_ember", "kind": "signpost", "name": "Emberdeep",
-     "x": 70, "y": 80, "facing": "n", "lines": ["↑ Emberdeep"]},
-    {"id": "sign_sanctum", "kind": "signpost", "name": "Void Sanctum",
-     "x": 168, "y": 99, "facing": "s", "lines": ["↓ Void Sanctum"]},
 ]
 
 # Enterable buildings — roofs hide when the local player stands on the floor.
@@ -3160,12 +3138,6 @@ BUILDINGS = [
         "material": "dark_stone",
         "x0": 166, "y0": 102, "x1": 176, "y1": 108,
         "floor_x0": 167, "floor_y0": 103, "floor_x1": 175, "floor_y1": 107,
-    },
-    {
-        "id": "emberdeep_volcano", "name": "Emberdeep", "kind": "volcano", "style": 0,
-        "material": "basalt",
-        "x0": 178, "y0": 60, "x1": 196, "y1": 72,
-        "floor_x0": 184, "floor_y0": 66, "floor_x1": 190, "floor_y1": 70,
     },
 ]
 
@@ -3704,9 +3676,158 @@ def _apply_castle_v2():
         pid = place.get("id")
         if pid in places:
             put(place, *places[pid])
+    # Teleport menu "Stonehaven Castle" lands in the bailey wherever the keep stands.
+    for dest in TELEPORT_DESTINATIONS:
+        if dest.get("id") == "keep":
+            put(dest, 110, 50)
 
 
 _apply_castle_v2()
+
+
+def _apply_village_compact_layout():
+    """Slide the starter village into a spacious ring around spawn / well.
+
+    Hub stays at spawn (28,24) and well (32,22). Buildings sit outside a clear
+    plaza (~x20–48, y14–30) so roofs cannot cover the well or outdoor NPCs.
+    Capture boxes are the authored (pre-slide) footprints.
+    """
+    # (x0, y0, x1, y1, dx, dy) — authored shell → spacious ring
+    moves = (
+        (4, 4, 15, 16, 5, -2),       # Elder Hall
+        (40, 4, 51, 16, -3, -2),     # General Store
+        (4, 36, 15, 48, 5, -5),      # Inn
+        (36, 36, 51, 48, 15, 17),    # Farmhouse → door (56, 64)
+        (61, 40, 71, 48, -22, -14),  # Bank → door (44, 33) east of plaza
+        (59, 18, 70, 28, -22, -14),  # Stale bank vault props
+        (78, 36, 93, 51, -15, 4),    # Pet Emporium → door (70, 52)
+        (78, 4, 94, 19, 2, 34),      # Smithy → door (88, 52)
+        (45, 54, 58, 65, 5, 20),     # Outfitters → (50, 74)-(63, 84)
+    )
+    skip_ids = {
+        "dungeon_entrance", "wishing_well",
+        WIZARD_ID, "warden_tamsin", "village_kid_timmy",
+    }
+
+    def _shift_ent(ent, dx, dy):
+        if "x" in ent and "y" in ent:
+            ent["x"] = int(ent["x"]) + dx
+            ent["y"] = int(ent["y"]) + dy
+        for a, b in (("enter_x", "enter_y"), ("exit_x", "exit_y")):
+            if a in ent and b in ent:
+                ent[a] = int(ent[a]) + dx
+                ent[b] = int(ent[b]) + dy
+        if isinstance(ent.get("stand"), (list, tuple)) and len(ent["stand"]) >= 2:
+            ent["stand"] = [int(ent["stand"][0]) + dx, int(ent["stand"][1]) + dy]
+
+    def _in_box(x, y, x0, y0, x1, y1):
+        return x0 <= x <= x1 and y0 <= y <= y1
+
+    bags = (NPCS, INTERACTABLES, TRAVEL_DESTINATIONS, TELEPORT_DESTINATIONS, BUILDINGS)
+    for x0, y0, x1, y1, dx, dy in moves:
+        for bag in bags:
+            for ent in bag:
+                if ent.get("plane") or ent.get("id") in skip_ids:
+                    continue
+                if "x0" in ent and "y0" in ent:
+                    cx = (int(ent["x0"]) + int(ent["x1"])) // 2
+                    cy = (int(ent["y0"]) + int(ent["y1"])) // 2
+                    if _in_box(cx, cy, x0, y0, x1, y1):
+                        for k in ("x0", "x1", "floor_x0", "floor_x1"):
+                            if k in ent:
+                                ent[k] = int(ent[k]) + dx
+                        for k in ("y0", "y1", "floor_y0", "floor_y1"):
+                            if k in ent:
+                                ent[k] = int(ent[k]) + dy
+                    continue
+                if "x" not in ent or "y" not in ent:
+                    continue
+                if _in_box(int(ent["x"]), int(ent["y"]), x0, y0, x1, y1):
+                    _shift_ent(ent, dx, dy)
+
+    # Outdoor plaza: keep clear of every house shell / roof.
+    # Final outdoor pins land in _pin_visible_npcs() after buildings_v2.
+    npc_pins = {
+        WIZARD_ID: (20, 18),
+        "warden_tamsin": (32, 28),
+        "village_kid_timmy": (24, 30),
+        "village_idiot_bob": (16, 22),
+        "packer_nell": (28, 14),
+        "jeweler_lira": (42, 16),
+        "fletcher_elena": (54, 20),
+        "master_wren": (58, 22),
+    }
+    for ent in NPCS:
+        pin = npc_pins.get(ent.get("id"))
+        if pin:
+            ent["x"], ent["y"] = pin
+
+    bank_prop_pins = {
+        "bank_chest_a": (40, 27),
+        "bank_chest_b": (48, 27),
+        "bank_stool_a": (41, 29),
+        "bank_stool_b": (47, 29),
+        "bank_rug": (44, 29),
+    }
+    for ent in INTERACTABLES:
+        pin = bank_prop_pins.get(ent.get("id"))
+        if pin:
+            ent["x"], ent["y"] = pin
+
+    door_pins = {
+        "cottage_nw_door": (14, 13, 14, 11, 14, 14),
+        "cottage_ne_door": (42, 13, 42, 11, 42, 14),
+        "cottage_sw_door": (14, 42, 14, 40, 14, 43),
+        "cottage_se_door": (56, 64, 56, 62, 56, 65),
+        "bank_door": (44, 33, 44, 31, 44, 34),
+        "pet_door": (70, 52, 70, 50, 70, 53),
+        "smithy_door": (88, 52, 88, 50, 88, 53),
+        "outfitters_door": (56, 84, 56, 82, 56, 85),
+    }
+    for ent in INTERACTABLES:
+        pin = door_pins.get(ent.get("id"))
+        if not pin:
+            continue
+        x, y, ex, ey, ox, oy = pin
+        ent["x"], ent["y"] = x, y
+        ent["enter_x"], ent["enter_y"] = ex, ey
+        ent["exit_x"], ent["exit_y"] = ox, oy
+
+    travel_pins = {
+        "bank": (44, 34),
+        "outfitters": (56, 85),
+        "general_store": (42, 11),
+        "bag_shop": (28, 14),
+        "jewelry_shop": (42, 16),
+        "bow_shop": (54, 20),
+        "smithy": (82, 42),
+        "anvil": (89, 42),
+        "pet_shop": (70, 50),
+        "inn_hearth": (12, 36),
+    }
+    for ent in TRAVEL_DESTINATIONS:
+        if ent.get("id") in travel_pins:
+            ent["x"], ent["y"] = travel_pins[ent["id"]]
+    for ent in TELEPORT_DESTINATIONS:
+        if ent.get("id") == "bank":
+            ent["x"], ent["y"] = 44, 34
+        elif ent.get("id") == "outfitters":
+            ent["x"], ent["y"] = 56, 85
+
+    for b in BUILDINGS:
+        if b.get("id") == "smithy":
+            b.update({
+                "x0": 80, "y0": 38, "x1": 96, "y1": 52,
+                "floor_x0": 81, "floor_y0": 39, "floor_x1": 95, "floor_y1": 51,
+            })
+        elif b.get("id") == "mythos_outfitters":
+            b.update({
+                "x0": 50, "y0": 74, "x1": 63, "y1": 84,
+                "floor_x0": 51, "floor_y0": 75, "floor_x1": 62, "floor_y1": 83,
+            })
+
+
+_apply_village_compact_layout()
 
 
 def _apply_buildings_v2():
@@ -3828,6 +3949,45 @@ def _apply_buildings_v2():
 _apply_buildings_v2()
 
 
+def _pin_visible_npcs():
+    """Outdoor NPCs that must stay fully visible (not under roofs / façades).
+
+    Runs after village slides and buildings_v2 floor-suck so misplaced folk
+    (e.g. Farmer Tom pulled into Outfitters) are corrected, and plaza /
+    fairy NPCs stay spread out.
+    """
+    pins = {
+        WIZARD_ID: (20, 18),
+        "warden_tamsin": (32, 28),
+        "village_kid_timmy": (24, 30),
+        "village_idiot_bob": (16, 22),
+        "packer_nell": (28, 14),
+        "jeweler_lira": (42, 16),
+        # East of plaza, clear of the bank roof (bank shell y0=26).
+        "fletcher_elena": (54, 20),
+        "master_wren": (58, 22),
+        "monk_healer": (52, 34),
+        "farmer_tom": (58, 66),
+        "guard_marcus": (28, 4),
+        "guard_aldric": (28, 50),
+        "mine_scout": (22, 54),
+        "elowen_moonwhisper": (18, 68),
+        "warden_thorne": (24, 60),
+        "tumbleroot": (38, 72),
+        "pip_dewdrop": (32, 82),
+        "dungeon_hermit": (44, 86),
+        "merchant_wanderer": (94, 28),
+        "mad_scientist": (100, 20),
+    }
+    for ent in NPCS:
+        pin = pins.get(ent.get("id"))
+        if pin:
+            ent["x"], ent["y"] = int(pin[0]), int(pin[1])
+
+
+_pin_visible_npcs()
+
+
 def _castle_realm_portal():
     """One overworld mouth. Absent unless USE_CASTLE_REALM is on."""
     import feature_flags
@@ -3837,8 +3997,8 @@ def _castle_realm_portal():
         "id": "castle_realm_portal",
         "kind": "dungeon_entrance",
         "name": "Castle Realm",
-        "x": 64,
-        "y": 26,
+        "x": 9,
+        "y": 19,
         "dungeon_id": "castle_realm",
         "action": {"type": "ENTER_DUNGEON", "dungeon_id": "castle_realm"},
     })
@@ -3846,9 +4006,9 @@ def _castle_realm_portal():
         "id": "castle_realm",
         "kind": "place",
         "label": "Castle Realm",
-        "x": 64,
-        "y": 26,
-        "blurb": "Gold portal in the village",
+        "x": 9,
+        "y": 19,
+        "blurb": "Gold portal west of the wishing well",
         "action": {"type": "ENTER_DUNGEON", "dungeon_id": "castle_realm"},
     })
 

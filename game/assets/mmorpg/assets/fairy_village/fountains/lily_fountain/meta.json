@@ -6,10 +6,10 @@
   3
  ],
  "footprint": {
-  "x0": 32,
-  "y0": 77,
-  "x1": 34,
-  "y1": 79,
+  "x0": 34,
+  "y0": 76,
+  "x1": 36,
+  "y1": 78,
   "w": 3,
   "h": 3
  },
@@ -48,12 +48,12 @@
  },
  "collision": "json/collision/lily_fountain.json",
  "interaction_tile": [
-  33,
-  79
+  35,
+  78
  ],
  "stand_tile": [
-  33,
-  80
+  35,
+  79
  ],
  "door_tile": null,
  "frames": 10,

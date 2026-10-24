@@ -13,13 +13,13 @@ _DIR = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "..", "assets", "fairy_village",
 ))
 _BUILDINGS = (
-    ("queens_tree_hall", 4, 77, 12, 85, "The Queen's Tree-Hall"),
-    ("moonpetal_inn", 16, 77, 25, 84, "The Moonpetal Inn"),
-    ("mushroom_apothecary", 34, 58, 40, 64, "Tumbleroot's Apothecary"),
+    ("queens_tree_hall", 7, 75, 15, 83, "The Queen's Tree-Hall"),
+    ("moonpetal_inn", 16, 75, 25, 82, "The Moonpetal Inn"),
+    ("mushroom_apothecary", 33, 61, 39, 67, "Tumbleroot's Apothecary"),
 )
 _FOUNTAINS = (
     ("moonstone_fountain", 26, 61, 30, 65, (28, 65)),
-    ("lily_fountain", 32, 77, 34, 79, (33, 79)),
+    ("lily_fountain", 34, 76, 36, 78, (35, 78)),
 )
 FAIRY_NPCS = {
     "elowen_moonwhisper": (180, 140, 220),
@@ -27,6 +27,8 @@ FAIRY_NPCS = {
     "tumbleroot": (160, 110, 60),
     "pip_dewdrop": (120, 190, 220),
 }
+# Screen Y passed to blit_nameplate for the last fairy NPC.
+last_nameplate_y = None
 _IMAGES = {}
 _TILES = {}
 
@@ -46,7 +48,9 @@ def _scale_for(tile):
     """Smallest source >= the target tile, then smoothscale down only."""
     if tile <= 40:
         return "1x", 40
-    return "2x", 80
+    if tile <= 80:
+        return "2x", 80
+    return "4x", 160
 
 
 def _building(key, tile):
@@ -112,7 +116,15 @@ def _ground(kind, wx, wy, tile):
     return _IMAGES[cache]
 
 
-def draw_terrain(screen, rect, tile_id, wx, wy):
+def draw_terrain(screen, rect, tile_id, wx, wy, client=None):
+    """Paint glade ground. Pass client so petal/moonstone get grass-edge overlays."""
+    if client is not None:
+        try:
+            import fairy_ground
+            if fairy_ground.draw_tile(client, rect, tile_id, wx, wy):
+                return True
+        except Exception:
+            pass
     image = _ground(tile_id, wx, wy, rect.w)
     if image is None:
         return False
@@ -214,7 +226,10 @@ def draw_npc(client, n, cx, cy, tile, t, face="s", moving=False):
     left = cx - fx
     top = foot_y - fy
     client.screen.blit(image, (left, top))
-    client.blit_nameplate(n["name"], cx, int(top) - 2, (255, 230, 200))
+    global last_nameplate_y
+    # Canvas padding above the scalp — hang the plate just above the head.
+    last_nameplate_y = int(top + fy * 0.30)
+    client.blit_nameplate(n["name"], cx, last_nameplate_y, (255, 230, 200))
 
 
 def portrait(client, npc_id, height=96):

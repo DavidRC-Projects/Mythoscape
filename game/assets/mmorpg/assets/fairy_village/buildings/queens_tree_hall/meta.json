@@ -6,10 +6,10 @@
   9
  ],
  "footprint": {
-  "x0": 4,
-  "y0": 77,
-  "x1": 12,
-  "y1": 85,
+  "x0": 7,
+  "y0": 75,
+  "x1": 15,
+  "y1": 83,
   "w": 9,
   "h": 9
  },
@@ -48,16 +48,16 @@
  },
  "collision": "json/collision/queens_tree_hall.json",
  "interaction_tile": [
-  8,
-  85
+  11,
+  83
  ],
  "stand_tile": [
-  8,
-  86
+  11,
+  84
  ],
  "door_tile": [
-  8,
-  85
+  11,
+  83
  ],
  "files": {
   "1x": "queens_tree_hall_1x.png",

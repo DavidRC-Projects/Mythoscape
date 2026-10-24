@@ -21,9 +21,10 @@ _LEGS = {
     "magma_knight": "biped",
 }
 _PACK = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "emberdeep_v2_pack"))
-# The crater picture sits on the Emberdeep mouth. The bright core of
-# mountain_topdown.png lands on tile (67, 78).
-_APRON = (48, 67, 84, 103)  # inclusive world tiles
+# The crater picture sits on the Emberdeep mouth (east volcano massif).
+# Bright core of mountain_topdown.png lands on EMBERDEEP_MOUTH.
+_mx, _my = wm.EMBERDEEP_MOUTH
+_APRON = (_mx - 19, _my - 11, _mx + 17, _my + 25)  # inclusive world tiles
 _IMAGES = {}
 _SCALED = {}
 _TEX_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "emberdeep_hd", "textures"))

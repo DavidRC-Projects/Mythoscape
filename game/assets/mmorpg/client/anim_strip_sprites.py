@@ -132,7 +132,9 @@ def draw_anim_strip_monster(
     cache_key = (key, fi, draw_w, draw_h, flip)
     scaled = _scaled.get(cache_key)
     if scaled is None:
-        scaled = pygame.transform.smoothscale(cell, (draw_w, draw_h))
+        # Nearest-neighbour: much cheaper than smoothscale when zoom changes
+        # cold-fill dozens of frames in one hitch.
+        scaled = pygame.transform.scale(cell, (draw_w, draw_h))
         if flip:
             scaled = pygame.transform.flip(scaled, True, False)
         _scaled[cache_key] = scaled

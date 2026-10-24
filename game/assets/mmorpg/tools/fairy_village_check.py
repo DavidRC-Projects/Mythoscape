@@ -40,11 +40,11 @@ MOVED = {
     "queens_tree_hall_door", "moonpetal_inn_door", "mushroom_apothecary_door",
     "moonstone_fountain", "lily_fountain",
 }
-STANDS = [(8, 86), (20, 85), (37, 65), (28, 66), (33, 80)]
-NPCS = [(24, 67), (25, 57), (39, 66), (31, 78)]
+STANDS = [(11, 84), (20, 83), (36, 68), (30, 66), (35, 79)]
+NPCS = [(18, 68), (24, 60), (38, 72), (32, 82)]
 RATS = [(62, 103), (67, 104), (72, 103), (64, 107), (70, 107), (66, 110), (73, 110), (63, 106)]
 MOUTH = [(63, 10), (64, 10), (65, 10), (63, 11), (64, 11), (65, 11)]
-BUILDINGS = [(4, 77, 12, 85), (16, 77, 25, 84), (34, 58, 40, 64)]
+BUILDINGS = [(7, 75, 15, 83), (16, 75, 25, 82), (33, 61, 39, 67)]
 # Crypt sprite: ~11 wide, ~10.5 north of the door, apron ~5 south.
 CRYPT = (64 - 5, 11 - 11, 64 + 5, 11 + 5)
 
@@ -324,7 +324,7 @@ def _shots(base, live):
         "starting_village_south": (8, 24, 52, 62),
         "plaza": (16, 54, 42, 74),
         "treehall_inn": (1, 72, 32, 90),
-        "apothecary": (28, 52, 42, 72),
+        "apothecary": (26, 55, 40, 75),
         "dungeon_entrance": (36, 74, 60, 88),
         "quarry": (24, 86, 46, 100),
     }

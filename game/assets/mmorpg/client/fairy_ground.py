@@ -6,6 +6,7 @@ is still unwalkable; this module only paints the ground that was under it.
 import json
 import os
 
+import numpy as np
 import pygame
 
 import world_map as wm
@@ -106,7 +107,7 @@ def _scaled(path, tile, alpha):
     if raw is None:
         return None
     if raw.get_width() != tile or raw.get_height() != tile:
-        raw = pygame.transform.smoothscale(raw, (tile, tile))
+        raw = pygame.transform.scale(raw, (tile, tile))
     _IMAGES[key] = raw
     return raw
 
@@ -124,7 +125,7 @@ def _decal_image(decal_id, tile, origin):
             raw = pygame.image.load(path).convert_alpha()
             if base != tile:
                 factor = tile / float(base)
-                raw = pygame.transform.smoothscale(
+                raw = pygame.transform.scale(
                     raw, (max(1, int(round(raw.get_width() * factor))),
                           max(1, int(round(raw.get_height() * factor)))))
             _IMAGES[path] = raw
@@ -282,6 +283,44 @@ def draw_fence(client, rect, wx, wy):
     return True
 
 
+def _village_path_dirs(client, wx, wy):
+    """Cardinal dirs whose neighbour is a village dirt PATH (not fairy_village)."""
+    out = []
+    tiles = client.tiles
+    for dx, dy in ((0, -1), (1, 0), (0, 1), (-1, 0)):
+        nx, ny = wx + dx, wy + dy
+        if not (0 <= ny < len(tiles) and 0 <= nx < client.world_w):
+            continue
+        if tiles[ny][nx] != wm.PATH:
+            continue
+        if wm.get_zone(nx, ny) != "fairy_village":
+            out.append((dx, dy))
+    return out
+
+
+def _blit_dirt_merge(client, rect, wx, wy, dirs):
+    """Overlay village dirt onto petal where the approach road meets the glade."""
+    if not dirs:
+        return
+    try:
+        import village_ground
+        tile = rect.w
+        tex = village_ground._wrap_texture("dirt_world.jpg", village_ground._GRASS_PERIOD, tile)
+        if tex is None:
+            return
+        vx, vy = village_ground._view_xy(client, wx, wy)
+        ox = (int(vx) % village_ground._GRASS_PERIOD) * tile
+        oy = (int(vy) % village_ground._GRASS_PERIOD) * tile
+        patch = tex.subsurface(pygame.Rect(ox, oy, tile, tile)).convert_alpha()
+        alpha = village_ground._merge_alpha(tile, dirs)
+        px = pygame.surfarray.pixels_alpha(patch)
+        px[:, :] = (alpha.T * 200).astype(np.uint8)
+        del px
+        client.screen.blit(patch, rect.topleft)
+    except Exception:
+        return
+
+
 def draw_tile(client, rect, tile_id, wx, wy):
     """Paint one glade tile. False means the caller should draw it the old way."""
     if client.dungeon:
@@ -303,6 +342,10 @@ def draw_tile(client, rect, tile_id, wx, wy):
     if image is None:
         return False
     client.screen.blit(image, rect.topleft)
+    if name == "petal_path" and tile_id == wm.PATH:
+        dirt_dirs = _village_path_dirs(client, wx, wy)
+        if dirt_dirs:
+            _blit_dirt_merge(client, rect, wx, wy, dirt_dirs)
     edge_name = _EDGE.get(name)
     if edge_name and tile_id != wm.WALL:
         mask = _edge_mask(client, wx, wy)

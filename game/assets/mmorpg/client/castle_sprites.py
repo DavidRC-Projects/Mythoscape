@@ -31,12 +31,32 @@ def _surface(name, tile):
         _cache[key] = None
         return None
     img = pygame.image.load(path).convert_alpha()
+    if name == "castle_ground.png":
+        img = _bridge_only(img, base)
     tw = max(1, int(round(img.get_width() * tile / base)))
     th = max(1, int(round(img.get_height() * tile / base)))
     if (tw, th) != img.get_size():
         img = pygame.transform.smoothscale(img, (tw, th))
     _cache[key] = img
     return img
+
+
+def _bridge_only(img, base):
+    """Keep only the drawbridge abutment from the baked ground layer. Its square,
+    stone-lined moat channel is dropped: the terrain draws the moat (one continuous
+    body of water with rounded natural banks, see village_ground shorelines)."""
+    info = castle_v2.meta()
+    ox, oy = info["sprite_1x" if base == 40 else "sprite_2x"]["origin_px"]
+    rows = info["walkability"]["rows"]
+    bx = [i for r in rows for i, c in enumerate(r) if c == "B"]
+    by = [j for j, r in enumerate(rows) if "B" in r]
+    if not bx:
+        return img
+    keep = pygame.Rect(ox + (min(bx) - 0.75) * base, oy + (min(by) - 0.6) * base,
+                       (max(bx) - min(bx) + 2.5) * base, (max(by) - min(by) + 2.0) * base)
+    out = pygame.Surface(img.get_size(), pygame.SRCALPHA)
+    out.blit(img, keep.topleft, keep)
+    return out
 
 
 def _origin(tile_nw_x, tile_nw_y, tile):

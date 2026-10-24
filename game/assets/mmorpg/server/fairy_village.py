@@ -87,9 +87,14 @@ def stamp(grid):
             put(x, y, wm.WALL)
 
 
+FENCE_ENABLED = False   # the Fairy Glade tree ring replaced the picket fence
+
+
 def fence_cells():
-    """Picket posts around the glade. The roads stay open."""
+    """Picket posts around the glade (retired: empty while FENCE_ENABLED is off)."""
     global _FENCE
+    if not FENCE_ENABLED:
+        return frozenset()
     if _FENCE is None:
         cells = set()
         for x in range(1, 42):

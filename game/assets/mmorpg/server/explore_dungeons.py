@@ -25,7 +25,9 @@ REGIONS = {
         "name": "Void Sanctum",
         "label": "Void Sanctum",
         "x0": 154, "y0": 98, "x1": 190, "y1": 140,
-        "pad": (166, 104, 176, 112),
+        # Keep the north dirt approach + door apron so City↔Void PATH stays linked
+        # after the interior is wiped to grass (pad tiles are not cleared).
+        "pad": (168, 98, 174, 112),
         "entrance": (171, 108),
     },
 }
@@ -81,13 +83,33 @@ def capture_and_hide(grid) -> None:
             "label": spec["label"],
             "bounds": (x0, y0, x1, y1),
         }
+        # Keep village buildings that sit on the old mine footprint (farm,
+        # outfitters, etc.) so capture does not flatten their shells.
+        keep = set()
+        try:
+            import world_map as wm
+            for bx0, by0, bx1, by1 in getattr(wm, "_BUILDING_FOOTPRINTS", ()):
+                for by in range(int(by0), int(by1) + 1):
+                    for bx in range(int(bx0), int(bx1) + 1):
+                        keep.add((bx, by))
+        except Exception:
+            pass
         for y in range(max(0, y0), min(height, y1 + 1)):
             for x in range(max(0, x0), min(width, x1 + 1)):
                 if _in_rect(x, y, spec["pad"]):
                     continue
+                if (x, y) in keep:
+                    continue
                 grid[y][x] = GRASS
     import fairy_village
     fairy_village.lay_crypt_path(grid)
+    # Re-lay roads capture wiped (void approach + east village corridor).
+    try:
+        import world_map as wm
+        wm.lay_void_sanctum_approach(grid)
+        wm.lay_east_village_road(grid)
+    except Exception:
+        pass
 
 
 def _open_entrance_lane(tiles, door_x, door_y):

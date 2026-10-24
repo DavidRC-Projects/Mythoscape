@@ -61,14 +61,15 @@ LOGIN_OK          {player}
 LOGIN_FAIL        {reason}
 LEADERBOARD       {skills, boards}        -- boards[skill|total] = [{name, xp, level}, ...]
                                               -- total.level = sum of skill levels; total.xp = sum XP
-WORLD_STATE       {tiles, width, height, npcs, resources, interactables, buildings, craft_recipes}
+WORLD_STATE       {tiles, width, height, npcs, resources, interactables, buildings, craft_recipes, env?}
 STATE_UPDATE      {players, monsters, resources, fires, dungeon?}  -- sent every tick
+ENV_UPDATE        {env}  -- Crownfall calendar: season, phase, weather (sparse)
 PLAYER_UPDATE     {player}                                  -- your own full state (inventory/stats changed)
 CHAT_MSG          {from, text, style?}                      -- style "gold" = Tidehollow announcement
 DUNGEON_ENTER     {id, floor, floors, label, tiles, width, height, monsters, remaining, player_x, player_y}
 DUNGEON_FLOOR     {…same as DUNGEON_ENTER…}                 -- advanced to next Tidehollow floor
 DUNGEON_EXIT      {x, y}                                    -- returned to overworld
-DUNGEON_COMPLETE  {rewards:[{item_id, qty}]}                -- cleared all 10 floors
+DUNGEON_COMPLETE  {rewards, name?, leave_in?}               -- conquered; client shows victory, then DUNGEON_EXIT
 COMBAT_EVENT      {attacker_id, defender_id, damage, hit, defender_hp, defender_max_hp, kind, ranged?, magic_effect?}
 MAGIC_CAST        {caster_id, target_id, ability_id, name, effect, damage, freeze, manual, defender_hp, defender_max_hp}
 DEATH             {entity_id, entity_kind}

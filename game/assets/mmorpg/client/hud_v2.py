@@ -24,6 +24,7 @@ DANGER_RED = (210, 70, 70)
 
 SAFE_ZONES = {"village", "city", "fishing_village"}
 ZONE_NAMES = {
+    "fairy_village": "Fairy Glade",
     "fishing_village": "Harbourreach",
     "city": "Stonehaven",
     "shadow_crypt": "Void Sanctum",
@@ -1180,7 +1181,10 @@ def handle_sidebar_click(client, mx, my, button):
             return
     chat_input = rects.get("chat_input")
     if chat_input and chat_input.collidepoint(mx, my):
-        client.chat_typing = True
+        if hasattr(client, "_begin_chat_typing"):
+            client._begin_chat_typing()
+        else:
+            client.chat_typing = True
         return
 
 

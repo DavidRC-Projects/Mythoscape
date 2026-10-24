@@ -177,7 +177,9 @@ def draw_lowpoly_dragon(
     scaled = _scaled.get(cache_key)
     if scaled is None:
         cell = _cell(sheet, direction, frame)
-        scaled = pygame.transform.smoothscale(cell, (draw_w, draw_h))
+        # Fast scale — zoom changes used to smoothscale every new size on the
+        # main thread and hitch hard right after login.
+        scaled = pygame.transform.scale(cell, (draw_w, draw_h))
         _scaled[cache_key] = scaled
         if len(_scaled) > 512:
             _scaled.clear()

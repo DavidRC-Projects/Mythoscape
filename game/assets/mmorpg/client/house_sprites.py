@@ -103,9 +103,22 @@ def _surface(rel, tile):
     if not os.path.isfile(path):
         _cache[key] = None
         return None
-    img = pygame.image.load(path).convert_alpha()
+    # Painted HD art lives in <name>_hd.png next to the old layer; the old
+    # layer stays as the fallback if the HD file is missing or unreadable.
+    img = None
+    is_hd = False
+    hd = path[:-4] + "_hd.png"
+    if os.path.isfile(hd):
+        try:
+            img = pygame.image.load(hd).convert_alpha()
+            is_hd = True
+        except Exception:
+            img = None
+    if img is None:
+        img = pygame.image.load(path).convert_alpha()
     # The smithy art already has its yard and forge floor. Don't restamp it.
-    if (rel.endswith("ground.png") or rel.endswith("cutaway.png")) and not rel.startswith("smithy/"):
+    # Painted HD layers carry their own floor texture.
+    if not is_hd and (rel.endswith("ground.png") or rel.endswith("cutaway.png")) and not rel.startswith("smithy/"):
         img = _pattern_floor_fill(img, 2 if bucket == "2x" else 1)
     tw = max(1, int(round(img.get_width() * tile / base)))
     th = max(1, int(round(img.get_height() * tile / base)))
@@ -145,6 +158,14 @@ def _fx_file(building_id, kind, now):
     return fx["files"][idx]
 
 
+def _alias_art(rel, folder):
+    """Swap the art folder of a layer path if that folder has the file."""
+    if not rel or "/" not in rel:
+        return rel
+    alt = folder + "/" + rel.split("/", 1)[1]
+    return alt if os.path.isfile(os.path.join(_DIR, "1x", alt)) else rel
+
+
 def queue(client, draw_list, cam_x, cam_y, tile):
     if not client.buildings:
         return
@@ -167,8 +188,14 @@ def queue(client, draw_list, cam_x, cam_y, tile):
         smoke = None
         if bid == "smithy" and not inside and feature_flags.SMITHY_FX:
             now = time.time()
-            body = _fx_file(bid, "glow", now) or body
+            # The glow frames are the old flat art; painted HD body has its own glow.
+            if not os.path.isfile(os.path.join(_DIR, "1x", body[:-4] + "_hd.png")):
+                body = _fx_file(bid, "glow", now) or body
             smoke = _fx_file(bid, "smoke", now)
+        if bid == "city_bank":
+            # Stonehaven Bank shares the village bank layout (same footprint,
+            # door and collision) but has its own painted art when present.
+            ground, body = _alias_art(ground, "stonehaven_bank"), _alias_art(body, "stonehaven_bank")
         name = b.get("name") or ""
 
         def blit(rel, _ox=ox, _oy=oy, _tile=tile):

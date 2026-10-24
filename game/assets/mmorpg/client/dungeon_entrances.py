@@ -38,6 +38,9 @@ def _load(key: str):
         _cache[key] = None
         return None
     surf = pygame.image.load(png).convert_alpha()
+    # Root display_scale enlarges the prop in world space (e.g. Emberdeep 4x).
+    size = dict(size)
+    size["display_scale"] = float(meta.get("display_scale") or size.get("display_scale") or 1.0)
     _cache[key] = (surf, size)
     return _cache[key]
 
@@ -57,7 +60,8 @@ def _placed(key: str, cx, cy, tile):
     metres_per_px = float(size.get("metres_per_px") or 0)
     if metres_per_px <= 0:
         return None
-    scale = _px_per_metre(tile) * metres_per_px
+    display = float(size.get("display_scale") or 1.0)
+    scale = _px_per_metre(tile) * metres_per_px * display
     dw = max(1, int(round(sheet.get_width() * scale)))
     dh = max(1, int(round(sheet.get_height() * scale)))
     cache_key = (key, dw, dh)
@@ -74,9 +78,12 @@ def _placed(key: str, cx, cy, tile):
 
 
 def draw_pack(surf, pack_key, cx, cy, tile, yaw=0):
-    """Blit a pack sprite. Returns the sprite's top Y, or None if not drawn."""
-    if int(yaw or 0) % 4 != 0:
-        return None
+    """Blit a pack sprite. Returns the sprite's top Y, or None if not drawn.
+
+    Pack art is a fixed world-facing bake (not billboarded). Always draw it so
+    rotating the camera never falls back to a different / legacy entrance image.
+    """
+    del yaw  # world-space bake; camera yaw must not hide or swap the sprite
     placed = _placed(pack_key, cx, cy, tile)
     if not placed:
         return None
@@ -87,10 +94,10 @@ def draw_pack(surf, pack_key, cx, cy, tile, yaw=0):
 
 def sprite_rect(pack_key, cx, cy, tile, yaw=0):
     """Screen rect of a pack sprite, or None."""
-    if int(yaw or 0) % 4 != 0:
-        return None
+    del yaw
     placed = _placed(pack_key, cx, cy, tile)
     if not placed:
         return None
     scaled, left, top = placed
     return pygame.Rect(left, top, scaled.get_width(), scaled.get_height())
+

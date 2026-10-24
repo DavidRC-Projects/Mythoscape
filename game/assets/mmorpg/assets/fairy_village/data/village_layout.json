@@ -50,11 +50,91 @@
    "tile": "STONE",
    "rect": [
     31,
-    76,
-    35,
+    74,
+    39,
     80
    ],
-   "why": "Lily Court ring"
+   "why": "Lily Court moonstone paving (east of Petal Avenue)"
+  },
+  {
+   "tile": "GRASS",
+   "rect": [
+    31,
+    74,
+    32,
+    74
+   ],
+   "why": "Lily Court rounded NW corner"
+  },
+  {
+   "tile": "GRASS",
+   "rect": [
+    31,
+    75,
+    31,
+    75
+   ],
+   "why": "Lily Court rounded NW corner"
+  },
+  {
+   "tile": "GRASS",
+   "rect": [
+    38,
+    74,
+    39,
+    74
+   ],
+   "why": "Lily Court rounded NE corner"
+  },
+  {
+   "tile": "GRASS",
+   "rect": [
+    39,
+    75,
+    39,
+    75
+   ],
+   "why": "Lily Court rounded NE corner"
+  },
+  {
+   "tile": "GRASS",
+   "rect": [
+    31,
+    80,
+    32,
+    80
+   ],
+   "why": "Lily Court rounded SW corner"
+  },
+  {
+   "tile": "GRASS",
+   "rect": [
+    31,
+    79,
+    31,
+    79
+   ],
+   "why": "Lily Court rounded SW corner"
+  },
+  {
+   "tile": "GRASS",
+   "rect": [
+    38,
+    80,
+    39,
+    80
+   ],
+   "why": "Lily Court rounded SE corner"
+  },
+  {
+   "tile": "GRASS",
+   "rect": [
+    39,
+    79,
+    39,
+    79
+   ],
+   "why": "Lily Court rounded SE corner"
   },
   {
    "tile": "PATH",
@@ -69,19 +149,29 @@
   {
    "tile": "PATH",
    "rect": [
-    20,
-    85,
-    20,
+    11,
+    84,
+    11,
     85
    ],
-   "why": "inn door step"
+   "why": "tree-hall door step to South Walk"
   },
   {
    "tile": "PATH",
    "rect": [
-    37,
-    65,
-    37,
+    20,
+    83,
+    20,
+    85
+   ],
+   "why": "inn door step to South Walk"
+  },
+  {
+   "tile": "PATH",
+   "rect": [
+    36,
+    68,
+    36,
     69
    ],
    "why": "potion shop door path"

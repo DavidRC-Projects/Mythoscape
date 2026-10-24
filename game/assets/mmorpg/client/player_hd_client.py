@@ -1365,7 +1365,8 @@ def _draw_player_fx(surf, sex, appearance, cx, cy_feet, tile, t, anim, progress,
 
 
 def head_top_dy(sex, tile):
-    return -int(tile * 4.5)
+    """Pixels from feet to head-top. Matches idle anchors (~ay 110 on 248 feet)."""
+    return -int(round(float(tile) * 1.7))
 
 
 def _load_anchors():
@@ -1405,8 +1406,6 @@ def anchor_offset(sex, anim, facing, frame, name, tile, weapon=None):
 
 
 def _store_combat_anchors(sex, anim, facing, frame, tile, equipment):
-    if anim not in ("melee", "ranged"):
-        return
     weapon = None
     if equipment:
         weapon, _tint = _weapon_spec(equipment.get("weapon"), sex)
@@ -1415,6 +1414,11 @@ def _store_combat_anchors(sex, anim, facing, frame, tile, equipment):
         off = anchor_offset(sex, anim, facing, frame, name, tile, weapon)
         if off is not None:
             last_draw[name] = off
+        elif name == "head_top":
+            # Idle/walk sheets may omit the point — keep a consistent head line.
+            last_draw[name] = (0.0, float(head_top_dy(sex, tile)))
+    if anim not in ("melee", "ranged"):
+        return
     if weapon:
         tip = anchor_offset(sex, anim, facing, frame, "tip", tile, weapon)
         if tip is not None:

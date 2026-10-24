@@ -284,17 +284,17 @@
   "y1": 188
  },
  "overworld_portal": {
-  "x": 64,
-  "y": 26,
+  "x": 9,
+  "y": 19,
   "approach": [
-   64,
-   27
+   9,
+   20
   ],
   "return_arrival": [
-   64,
-   27
+   9,
+   20
   ],
-  "note": "open grass south of the graveyard, where the player was standing."
+  "note": "Gold portal west of the wishing well — must match content.INTERACTABLES castle_realm_portal."
  },
  "roads": [
   {
