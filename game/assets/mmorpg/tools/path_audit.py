@@ -24,7 +24,7 @@ LANDMARKS = {
     "void_door": (171, 108),
     "bank_apron": (44, 34),
     "city_square": (118, 74),
-    "wolf_pass": (145, 16),
+    "wolf_pass": (121, 16),  # after wolf_pass.SHIFT_X
 }
 
 

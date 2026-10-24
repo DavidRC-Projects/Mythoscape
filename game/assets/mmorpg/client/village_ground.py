@@ -25,9 +25,9 @@ _NOISE = None
 # "dungeon" is an overworld zone box (farm/outfitters), not an instance — it
 # must use the same grass sheet as the village or the seam looks like "old grass".
 _SKIP_GRASS = ("shadow_crypt", "volcano")
-# Overworld dirt lanes use dirt_world.jpg (one year-round look). Only volcano
-# keeps its own ground; city/dungeon/shadow_crypt outdoor roads use dirt too.
-_SKIP_PATH = ("volcano",)
+# Overworld dirt lanes use dirt_world.jpg (one year-round look). Stonehaven
+# keeps flagstone and the void keeps crypt floor — never dirt there.
+_SKIP_PATH = ("volcano", "city", "shadow_crypt")
 # N NE E SE S SW W NW
 _NEIGH = (
     (0, -1, 1), (1, -1, 2), (1, 0, 4), (1, 1, 8),

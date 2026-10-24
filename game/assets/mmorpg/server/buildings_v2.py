@@ -23,8 +23,8 @@ _SHIFT = {
     "harbour_tackle": (39, 0),  # (138, 14) -> (177, 14)
     "harbour_fishmonger": (39, 0),  # (138, 28) -> (177, 28)
     # Spread below the castle. Doors face south onto the new streets.
-    "city_house_nw": (19, 44),  # (86, 52) -> (105, 96)
-    "city_house_sw": (20, 56),  # (86, 66) -> (106, 122)
+    "city_house_nw": (26, 44),  # +7 x with west curtain slide → door (112, 96)
+    "city_house_sw": (27, 56),  # +7 x → door (113, 122)
     "city_barracks": (26, 28),  # (114, 68) -> (140, 96)
     # Pack authored at old NE yard (door 86,18); east of pet.
     "smithy": (2, 34),          # (86, 18) -> (88, 52)
@@ -57,8 +57,8 @@ _OLD_SHELL = {
     "pet_emporium": (64, 41, 79, 52),
     "harbour_tackle": (172, 6, 182, 14),
     "harbour_fishmonger": (172, 20, 182, 28),
-    "city_house_nw": (102, 60, 110, 68),
-    "city_house_sw": (102, 74, 110, 82),
+    "city_house_nw": (109, 60, 117, 68),
+    "city_house_sw": (109, 74, 117, 82),
     "city_barracks": (130, 74, 138, 84),
     "smithy": (80, 38, 96, 52),
 }

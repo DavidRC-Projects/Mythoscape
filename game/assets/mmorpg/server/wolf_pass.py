@@ -4,12 +4,34 @@ One painted massif (North Ridge + South Ridge) replaces the grey mountain tiles 
 Collision comes from the painted cliff bases (assets/wolf_pass/wolf_pass.json, built from the art);
 the canyon floor follows the spec: 8 at the mouths, 6-7 along the pass, 4 at the centre choke.
 Set USE_WOLF_PASS=0 to keep the old generated ridges.
+
+The JSON is authored at x 136–165. SHIFT_X slides the whole massif west with the
+castle keep so Stonehaven can grow east of the mountain.
 """
 import json
 import os
 
 PACK = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "wolf_pass"))
+# Keep in sync with castle_v2.DX (= authored 42 + SHIFT_X).
+SHIFT_X = -24
 _GEO = None
+
+
+def _shift_geo(raw):
+    """Remap authored pack columns into live world X."""
+    if not raw or not SHIFT_X:
+        return raw
+    out = dict(raw)
+    out["x0"] = int(raw["x0"]) + SHIFT_X
+    out["x1"] = int(raw["x1"]) + SHIFT_X
+    cols = {}
+    for key, col in (raw.get("cols") or {}).items():
+        cols[str(int(key) + SHIFT_X)] = col
+    out["cols"] = cols
+    zone = raw.get("wolf_zone")
+    if isinstance(zone, (list, tuple)) and len(zone) >= 4:
+        out["wolf_zone"] = [int(zone[0]) + SHIFT_X, zone[1], int(zone[2]) + SHIFT_X, zone[3]]
+    return out
 
 
 def geo():
@@ -17,7 +39,7 @@ def geo():
     if _GEO is None:
         try:
             with open(os.path.join(PACK, "wolf_pass.json")) as fh:
-                _GEO = json.load(fh)
+                _GEO = _shift_geo(json.load(fh))
         except (OSError, ValueError):
             _GEO = {}
     return _GEO
@@ -68,7 +90,9 @@ def wolf_zone():
 def wolf_spawns():
     """6 wolves on the canyon floor inside the 12x6 zone centred on the choke."""
     x0, y0, x1, y1 = wolf_zone()
-    picks = [(146, 15), (148, 17), (150, 14), (152, 16), (154, 15), (155, 17)]
+    # Authored picks at the pack X; SHIFT_X lands them on the live massif.
+    picks = [(146 + SHIFT_X, 15), (148 + SHIFT_X, 17), (150 + SHIFT_X, 14),
+             (152 + SHIFT_X, 16), (154 + SHIFT_X, 15), (155 + SHIFT_X, 17)]
     out = []
     for x, y in picks:
         fr = floor_rows(x)
@@ -98,7 +122,8 @@ def apply(grid, path_tile, grass_tile, wall_tile):
             else:
                 grid[y][x] = grass_tile
     # Approaches: forest road in from the west, harbour road out east (4 wide, same rows as the pass).
-    for x in list(range(130, x0)) + list(range(x1 + 1, x1 + 3)):
+    west0 = max(0, x0 - 6)
+    for x in list(range(west0, x0)) + list(range(x1 + 1, x1 + 3)):
         for y in range(r0, r1 + 1):
-            if grid[y][x] != wall_tile or x < x0:
+            if 0 <= x < len(grid[0]) and (grid[y][x] != wall_tile or x < x0):
                 grid[y][x] = path_tile

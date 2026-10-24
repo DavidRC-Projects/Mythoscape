@@ -38,32 +38,38 @@ import feature_flags
 WALKABLE_TILES = {GRASS, PATH, FLOOR, FISH_SPOT, STONE}
 TREE_TILES = {TREE, OAK_TREE, WILLOW_TREE, MAPLE_TREE, YEW_TREE, MAGIC_TREE}
 
-# Larger world — room for cottage shells, paths, and spaced districts.
-WIDTH = 200
+# Larger world — room east of the massif for Stonehaven walls + housing.
+WIDTH = 230
 HEIGHT = 145
 
 # Zone bounding boxes (x0, y0, x1, y1) inclusive
 ZONES = {
     "village": (1, 1, 92, 52),
     "forest":  (98, 1, 132, 42),
-    "mountains": (138, 1, 162, 42),
+    # Wolf Pass + keep sit here after SHIFT_X (-24 from the authored 136–165 pack).
+    "mountains": (110, 1, 145, 42),
     "fishing_village": (168, 1, 198, 42),
     "mine":    (50, 99, 84, 132),
     "fairy_village": (1, 56, 40, 88),
     "dungeon": (44, 54, 90, 143),
     "city":    (98, 56, 148, 96),  # flag-off shell. city_bounds() grows it.
-    "volcano": (176, 58, 198, 94),
-    "shadow_crypt": (153, 96, 198, 143),
+    "volcano": (188, 58, 220, 96),  # Emberdeep cone slid east
+    # Void slid east (VOID_DX) so it no longer eats Stonehaven's east wall.
+    "shadow_crypt": (183, 96, 228, 143),
 }
 
 SPAWN_POINT = (28, 24)  # village crossroads
 
 
 def city_bounds():
-    """Stonehaven plaza. The new houses need the ground south of the castle."""
+    """Stonehaven plaza (room east of the keep for a few castle-side homes)."""
     if feature_flags.USE_NEW_BUILDINGS:
-        return (94, 56, 152, 132)
+        # West curtain pulled in +7 → open land outside; east edge unchanged.
+        return (101, 56, 162, 132)
     return ZONES["city"]
+
+# Void Sanctum shift east of Stonehaven (authored mouth was x=175).
+VOID_DX = 30
 
 # Dungeon combat rooms — monsters spawned inside one stay inside it.
 # Shifted with dungeon zone (origin ~44,54).
@@ -77,13 +83,13 @@ DUNGEON_ROOMS = [
     (48, 102, 62, 118),  # mithril cavern
     (66, 99, 78, 103),   # spider nest
     (64, 104, 78, 128),  # adamantite lair
-    # Void Sanctum (SE mystical crypt) — in shadow_crypt zone
-    (156, 108, 164, 112),   # shades
-    (168, 108, 178, 112),   # crypt ghouls
-    (156, 114, 164, 120),   # void imps
-    (168, 114, 178, 120),   # obsidian colossi
-    (156, 122, 164, 128),   # shadow knights
-    (168, 122, 178, 128),   # void horror
+    # Void Sanctum (SE mystical crypt) — in shadow_crypt zone (+VOID_DX)
+    (156 + VOID_DX, 108, 164 + VOID_DX, 112),   # shades
+    (168 + VOID_DX, 108, 178 + VOID_DX, 112),   # crypt ghouls
+    (156 + VOID_DX, 114, 164 + VOID_DX, 120),   # void imps
+    (168 + VOID_DX, 114, 178 + VOID_DX, 120),   # obsidian colossi
+    (156 + VOID_DX, 122, 164 + VOID_DX, 128),   # shadow knights
+    (168 + VOID_DX, 122, 178 + VOID_DX, 128),   # void horror
 ]
 
 
@@ -287,9 +293,11 @@ def generate_world():
         grid[y][x] = tile
         tree_positions.append((x, y))
 
-    # --- Forest + lake (water first, then spaced trees by biome) ---
+    # --- Forest + lake (west of Wolf Pass; water first, then spaced trees) ---
     fx0, fy0, fx1, fy1 = ZONES["forest"]
-    lake = (108, 11, 120, 23)
+    # Lake sits west of the shifted massif (wolf x0=112); leave east (x=108+)
+    # and south (y=22+) as shore so the path + Mad Scientist stay on land.
+    lake = (96, 11, 107, 21)
     _rect(grid, *lake, WATER)
 
     def _try_place(tile, count, pred, gap=3):
@@ -317,13 +325,21 @@ def generate_world():
     _try_place(MAPLE_TREE, 8, lambda x, y: (x >= 118 or y <= 8) and not _near_water(grid, x, y, radius=2), gap=4)
     _try_place(YEW_TREE, 5, lambda x, y: (x >= 120 or y <= 6) and not _near_water(grid, x, y, radius=2), gap=5)
 
-    # Path south of the lake toward the mountain pass
-    for x in range(96, 138):
-        if grid[24][x] in (GRASS, *TREE_TILES):
-            grid[24][x] = PATH
-    for y in range(16, 25):
-        if grid[y][130] in (GRASS, *TREE_TILES, PATH):
-            grid[y][130] = PATH
+    # Keep the lake clear if trees landed on the shore ring; path south → pass.
+    for y in range(lake[1], lake[3] + 1):
+        for x in range(lake[0], lake[2] + 1):
+            if grid[y][x] in TREE_TILES:
+                grid[y][x] = WATER
+    # South shore road (connects west approach → east shore → Wolf Pass)
+    for y in (22, 23, 24):
+        for x in range(96, 112):
+            if grid[y][x] in (GRASS, *TREE_TILES, PATH, WATER):
+                grid[y][x] = PATH
+    # East shore path along the lake (must punch water if lake overgrew)
+    for y in range(12, 25):
+        for x in (108, 109):
+            if grid[y][x] in (GRASS, *TREE_TILES, PATH, WATER):
+                grid[y][x] = PATH
     # Link village road into forest
     for x in range(90, 98):
         if grid[road_y][x] in (GRASS, *TREE_TILES):
@@ -332,11 +348,11 @@ def generate_world():
     # Clear small plazas so key NPCs aren't buried under canopy
     for nx, ny in (
         (102, 8), (103, 8), (102, 9), (101, 8),                 # Mia
-        (98, 22), (99, 22), (97, 22), (98, 21), (98, 23),  # Mad Scientist
-        (106, 16), (105, 16), (107, 16), (106, 15), (106, 17),  # Pete (west lake shore)
+        (100, 23), (99, 23), (101, 23), (100, 24), (100, 22),  # Mad Scientist (south shore)
+        (94, 16), (95, 16), (93, 16), (94, 15), (94, 17),  # Pete (west lake shore)
         (28, 22), (29, 22), (28, 21),                       # Timmy
     ):
-        if 0 <= nx < WIDTH and 0 <= ny < HEIGHT and grid[ny][nx] in (GRASS, *TREE_TILES, PATH):
+        if 0 <= nx < WIDTH and 0 <= ny < HEIGHT and grid[ny][nx] in (GRASS, *TREE_TILES, PATH, WATER):
             grid[ny][nx] = PATH
 
     # --- Mountain pass (east of forest) — peaked ridges with a walkable corridor ---
@@ -539,16 +555,12 @@ def generate_world():
         if grid[y][x] == FLOOR:
             grid[y][x] = ADAMANTITE_ORE
 
-    # --- Stonehaven City (east of dungeon, south of forest) ---
+    # --- Stonehaven City (east of dungeon, south of forest / castle gate) ---
     cx0, cy0, cx1, cy1 = city_bounds()
-    # Outer stone plaza
+    # Outer stone plaza (full ward — housing stamps over east plots later)
     _rect(grid, cx0 + 1, cy0 + 1, cx1 - 1, cy1 - 1, STONE)
-    # City walls (brick shell with south gate + west road)
-    _border(grid, cx0, cy0, cx1, cy1, WALL, skip={
-        (118, cy1), (119, cy1), (120, cy1),  # south gate
-        (cx0, 72), (cx0, 71), (cx0, 73),   # west gate
-        (118, cy0), (119, cy0),              # north road entry
-    })
+    # Style B city walls: 2-tile-thick shell with gatehouses (south / west / north→castle).
+    _stamp_stonehaven_walls(grid, cx0, cy0, cx1, cy1)
     # Main streets
     for x in range(cx0 + 2, cx1 - 1):
         grid[72][x] = PATH
@@ -561,7 +573,7 @@ def generate_world():
         for x in range(cx0 + 2, cx1):
             grid[98][x] = PATH
             grid[99][x] = PATH
-        for x in range(100, 132):
+        for x in range(100, min(cx1 - 1, 150)):
             grid[124][x] = PATH
             grid[125][x] = PATH
     # Market square
@@ -582,15 +594,15 @@ def generate_world():
         for x in range(x0 + 1, x1):
             grid[y0][x] = STONE
 
-    # Town houses along the west plaza
-    _city_building(102, 60, 110, 68, door_x=106)
-    _city_building(102, 74, 110, 82, door_x=106)
+    # Town houses along the west plaza (cleared of the west curtain by +7)
+    _city_building(109, 60, 117, 68, door_x=113)
+    _city_building(109, 74, 117, 82, door_x=113)
     # Barracks / armory east of square
     _city_building(130, 74, 138, 84, door_x=134)
     # Same village bank, three tiles south of the barracks door line.
     _city_building(135, 105, 145, 112, door_x=140)
     # 3-wide aprons south of city doors
-    for cx, cy in ((106, 69), (106, 83), (134, 85)):
+    for cx, cy in ((113, 69), (113, 83), (134, 85)):
         for ox in (-1, 0, 1):
             dx, dy = cx + ox, cy
             if 0 <= dx < WIDTH and 0 <= dy < HEIGHT and grid[dy][dx] != WALL:
@@ -624,21 +636,28 @@ def generate_world():
                 if grid[y][x] == FLOOR:
                     grid[y][x] = STONE
 
-    # Road from forest south into the city gate
+    # Road from forest south into the city / castle approach (west of keep)
     for y in range(40, cy0 + 1):
         for x in (118, 119):
             if grid[y][x] in (GRASS, *TREE_TILES, PATH, STONE):
                 grid[y][x] = PATH
-    # Path from dungeon fringe east into city (west gate)
-    for x in range(82, cx0 + 1):
+    # Path from dungeon fringe toward the west wall (stops at the solid curtain)
+    for x in range(82, cx0):
         if grid[72][x] in (GRASS, *TREE_TILES, PATH, WALL):
-            if x < cx0 or grid[72][x] != WALL:
-                grid[72][x] = PATH
-    grid[72][cx0] = PATH  # west gate
-    # Ensure city gates are walkable paths
-    for gx, gy in ((118, cy1), (119, cy1), (120, cy1), (118, cy0), (119, cy0), (cx0, 71), (cx0, 72), (cx0, 73)):
-        if 0 <= gx < WIDTH and 0 <= gy < HEIGHT:
-            grid[gy][gx] = PATH
+            grid[72][x] = PATH
+    # Wide south gate only (no west/east side gates)
+    for gx in range(116, 123):
+        for gy in (cy1, cy1 - 1):
+            if 0 <= gx < WIDTH and 0 <= gy < HEIGHT:
+                grid[gy][gx] = PATH
+    if castle_v2.active():
+        ax0, _ = castle_v2.w(104, 55)
+        ax1, _ = castle_v2.w(119, 55)
+        for ax in range(ax0, ax1 + 1):
+            for oy in (0, 1, 2):
+                ay = cy0 + oy
+                if 0 <= ax < WIDTH and 0 <= ay < HEIGHT and grid[ay][ax] in (WALL, GRASS, *TREE_TILES, PATH, STONE):
+                    grid[ay][ax] = PATH if oy == 0 else STONE
 
     # High forest belt north of the city — maple, yew, rare magic
     for _ in range(80):
@@ -668,65 +687,71 @@ def generate_world():
         grid[y][cx1] = PATH
 
     # --- Void Sanctum (SE mystical crypt) — dark building + 6 sealed rooms ---
+    vd = VOID_DX
     sx0, sy0, sx1, sy1 = ZONES["shadow_crypt"]
     _rect(grid, sx0, sy0, sx1, sy1, WALL)
-    # Entrance building shell (matches BUILDINGS void_sanctum)
-    _building(166, 102, 176, 108, door_x=171)
+    # Entrance building shell (matches BUILDINGS void_sanctum) — south massif mouth
+    _building(169 + vd, 122, 181 + vd, 128, door_x=175 + vd)
     # Six crypt rooms (must match DUNGEON_ROOMS)
     sanctum_rooms = [
-        (156, 108, 164, 112),
-        (168, 108, 178, 112),
-        (156, 114, 164, 120),
-        (168, 114, 178, 120),
-        (156, 122, 164, 128),
-        (168, 122, 178, 128),
+        (156 + vd, 108, 164 + vd, 112),
+        (168 + vd, 108, 178 + vd, 112),
+        (156 + vd, 114, 164 + vd, 120),
+        (168 + vd, 114, 178 + vd, 120),
+        (156 + vd, 122, 164 + vd, 128),
+        (168 + vd, 122, 178 + vd, 128),
     ]
     for room in sanctum_rooms:
         _rect(grid, *room, FLOOR)
-    # Corridors between rooms + descent from the sanctum hall (wider for access)
-    _rect(grid, 164, 109, 168, 111, FLOOR)   # room1 ↔ room2
-    _rect(grid, 158, 112, 161, 114, FLOOR)   # room1 ↔ room3
-    _rect(grid, 171, 112, 174, 114, FLOOR)   # room2 ↔ room4
-    _rect(grid, 164, 116, 168, 118, FLOOR)   # room3 ↔ room4
-    _rect(grid, 158, 120, 161, 122, FLOOR)   # room3 ↔ room5
-    _rect(grid, 171, 120, 174, 122, FLOOR)   # room4 ↔ room6
-    _rect(grid, 164, 124, 168, 126, FLOOR) # room5 ↔ room6
-    # Descent: building interior floor → first corridor (3-wide)
-    grid[107][171] = FLOOR
-    _rect(grid, 169, 107, 173, 112, FLOOR)
-    # Keep the south door + apron walkable (3-wide)
-    for ax in (169, 170, 171, 172, 173):
-        grid[108][ax] = PATH
-        grid[109][ax] = PATH
-        grid[110][ax] = PATH
-    # Punch 3-wide door gap in the building south wall
-    for ax in (170, 171, 172):
-        grid[108][ax] = PATH
-    # Road from Stonehaven to the sanctum door.
-    # The expanded plaza sits beside the crypt, so that road leaves the east street.
+    # Corridors between rooms + descent toward the south mouth
+    _rect(grid, 164 + vd, 109, 168 + vd, 111, FLOOR)   # room1 ↔ room2
+    _rect(grid, 158 + vd, 112, 161 + vd, 114, FLOOR)   # room1 ↔ room3
+    _rect(grid, 171 + vd, 112, 174 + vd, 114, FLOOR)   # room2 ↔ room4
+    _rect(grid, 164 + vd, 116, 168 + vd, 118, FLOOR)   # room3 ↔ room4
+    _rect(grid, 158 + vd, 120, 161 + vd, 122, FLOOR)   # room3 ↔ room5
+    _rect(grid, 171 + vd, 120, 174 + vd, 122, FLOOR)   # room4 ↔ room6
+    _rect(grid, 164 + vd, 124, 168 + vd, 126, FLOOR)   # room5 ↔ room6
+    _rect(grid, 172 + vd, 120, 178 + vd, 128, FLOOR)   # hall into south mouth
+    # South door + apron (VOID_MOUTH) — 3-wide enter zone
+    mx_void = 175 + vd
+    for ax in (mx_void - 2, mx_void - 1, mx_void, mx_void + 1, mx_void + 2):
+        if 0 <= ax < WIDTH:
+            grid[128][ax] = PATH
+            if 129 < HEIGHT:
+                grid[129][ax] = PATH
+            if 130 < HEIGHT:
+                grid[130][ax] = PATH
+    for ax in (mx_void - 1, mx_void, mx_void + 1):
+        if 0 <= ax < WIDTH:
+            grid[128][ax] = PATH
+    # Road from Stonehaven / east city into the south void mouth.
     if cy1 > 110:
         for y in (98, 99):
             grid[y][cx1] = PATH
-        for x in range(cx1, 172):
+        for x in range(cx1, mx_void + 1):
             for yy in (98, 99):
                 if grid[yy][x] in (GRASS, PATH, STONE, WALL):
                     grid[yy][x] = PATH
-        for y in range(99, 110):
-            for x in (170, 171, 172):
-                if grid[y][x] in (GRASS, PATH, WALL) and not (166 < x < 176 and 102 < y < 108):
+        for y in range(99, 131):
+            for x in (mx_void - 1, mx_void, mx_void + 1):
+                if grid[y][x] in (GRASS, PATH, WALL, FLOOR) and not (
+                    169 + vd < x < 181 + vd and 122 < y < 128
+                ):
                     grid[y][x] = PATH
     else:
-        for x in range(118, 172):
+        for x in range(118, mx_void + 1):
             for yy in (cy1 + 1, cy1 + 2):
                 if 0 <= yy < HEIGHT and grid[yy][x] in (GRASS, PATH, STONE, WALL):
                     if yy == cy1:
                         continue
                     grid[yy][x] = PATH
-        for y in range(cy1 + 1, 110):
-            for x in (170, 171, 172):
-                if grid[y][x] in (GRASS, PATH, WALL) and not (166 < x < 176 and 102 < y < 108):
+        for y in range(cy1 + 1, 131):
+            for x in (mx_void - 1, mx_void, mx_void + 1):
+                if grid[y][x] in (GRASS, PATH, WALL, FLOOR) and not (
+                    169 + vd < x < 181 + vd and 122 < y < 128
+                ):
                     grid[y][x] = PATH
-    grid[108][171] = PATH
+    grid[128][mx_void] = PATH
 
     castle_v2.apply_stamp(grid, sys.modules[__name__])
     buildings_v2.apply_stamp(grid, sys.modules[__name__])
@@ -755,6 +780,7 @@ def generate_world():
     for ax, ay in fairy_glade.arch_posts():
         if 0 <= ay < HEIGHT and 0 <= ax < WIDTH:
             grid[ay][ax] = WALL
+    restore_city_and_void_paving(grid)
     return grid
 
 
@@ -773,9 +799,9 @@ _BUILDING_FOOTPRINTS = [
     # replaces every tile inside the new footprint, and the client hides
     # canopy sprites against the expanded building rect. Widening this rect
     # would turn margin trees into grass and open new walkable tiles.
-    (102, 60, 110, 68), (102, 74, 110, 82), (130, 74, 138, 84), (118, 58, 136, 70),
-    # void sanctum entrance building
-    (166, 102, 176, 108),
+    (109, 60, 117, 68), (109, 74, 117, 82), (130, 74, 138, 84), (118, 58, 136, 70),
+    # void sanctum entrance building (south massif mouth, +VOID_DX)
+    (169 + VOID_DX, 122, 181 + VOID_DX, 128),
     # tidehollow cave mouth, south of Harbourreach
     (186, 49, 194, 56),
     # crypt graveyard east of the plaza
@@ -805,6 +831,30 @@ def is_graveyard_wall(x, y) -> bool:
     return ix in (x0, x1) or iy in (y0, y1)
 
 
+def is_stonehaven_fort_wall(x, y) -> bool:
+    """Outer Style-B city shell (not the open castle approach) and flank spurs."""
+    ix, iy = int(x), int(y)
+    cx0, cy0, cx1, cy1 = city_bounds()
+    # North ring is open toward the keep — not a fort wall footing.
+    on_south = (cy1 - 1 <= iy <= cy1) and cx0 <= ix <= cx1
+    on_sides = (
+        (cx0 <= ix <= cx0 + 1 or cx1 - 1 <= ix <= cx1)
+        and cy0 <= iy <= cy1
+    )
+    if on_south or on_sides:
+        return True
+    if not castle_v2.active():
+        return False
+    x0, y0, x1, y1 = castle_v2.footprint_tiles()
+    west_x = x0 - castle_v2.MOAT_SIDE - 1
+    east_x = x1 + castle_v2.MOAT_SIDE + 1
+    y_lo = max(0, y0 - castle_v2.MOAT_BACK)
+    if y_lo <= iy <= cy0 and ix in (west_x, west_x - 1, east_x, east_x + 1):
+        return True
+    cap_y = max(0, y0 - castle_v2.MOAT_BACK - 1)
+    return iy == cap_y and west_x - 1 <= ix <= east_x + 1
+
+
 def is_grave(x, y) -> bool:
     return (int(x), int(y)) in GRAVEYARD_GRAVES
 
@@ -812,8 +862,8 @@ def is_grave(x, y) -> bool:
 # Crater on the open ground south of the castle. The mouth is the tile the
 # player was standing on; the walk-up is the two tiles south of it.
 # East volcano massif — 3-wide cave door faces south onto the apron.
-EMBERDEEP_MOUTH = (175, 78)
-EMBERDEEP_RETURN = (175, 81)
+EMBERDEEP_MOUTH = (196, 78)
+EMBERDEEP_RETURN = (196, 81)
 
 # Giant-rat mine (village-south pit). Door x is fixed — not the Emberdeep mouth.
 VOLCANO_MINE_DOOR_X = 67
@@ -840,8 +890,8 @@ def relayout_village_south_roads(grid):
         (56, 65, 88, 65),       # farm / smithy east link
         (56, 85, 56, 86),       # Outfitters door apron
         # South bypass under Emberdeep (city road y=73 is blocked by the cone).
-        (150, 80, 186, 80),
-        (186, 73, 186, 80),
+        (150, 80, 202, 80),
+        (202, 73, 202, 80),
     ):
         _stamp_road(grid, *seg)
 
@@ -883,13 +933,37 @@ def trim_orphan_village_paths(grid):
             q.append((nx, ny))
     lane = fairy_glade.lane_cells()
     fx0, fy0, fx1, fy1 = ZONES["fairy_village"]
+    hv0, hvy0, hv1, hvy1 = ZONES["fishing_village"]
+    # Wolf Pass floor is PATH but often only joins the village via city STONE,
+    # which this BFS does not cross — keep the massif + its west approach.
+    wolf_keep = set()
+    try:
+        import wolf_pass as _wp
+        if _wp.enabled() and _wp.bounds():
+            wx0, wy0, wx1, wy1 = _wp.bounds()
+            r0, r1 = (_wp.geo().get("road") or (14, 17))
+            for y in range(wy0, wy1 + 1):
+                for x in range(wx0, wx1 + 1):
+                    wolf_keep.add((x, y))
+            for x in range(max(0, wx0 - 8), wx0):
+                for y in range(r0, r1 + 1):
+                    wolf_keep.add((x, y))
+            for x in range(wx1 + 1, min(w, wx1 + 4)):
+                for y in range(r0, r1 + 1):
+                    wolf_keep.add((x, y))
+    except Exception:
+        pass
     for y in range(h):
         for x in range(w):
             if grid[y][x] != PATH or (x, y) in seen:
                 continue
-            if (x, y) in lane:
+            if (x, y) in lane or (x, y) in wolf_keep:
                 continue
             if fx0 <= x <= fx1 and fy0 <= y <= fy1:
+                continue
+            # Harbourreach pier / shore PATH joins spawn via STONE/Wolf Pass —
+            # never orphan-trim the decking into grass.
+            if hv0 <= x <= hv1 and hvy0 <= y <= hvy1:
                 continue
             grid[y][x] = GRASS
 
@@ -926,13 +1000,15 @@ def stamp_outfitters_shell(grid):
     for ax, ay in fairy_glade.arch_posts():
         if 0 <= ay < HEIGHT and 0 <= ax < WIDTH:
             grid[ay][ax] = WALL
+    restore_city_and_void_paving(grid)
 
 
 def stamp_emberdeep_mouth(grid):
     """Solid volcano cone (WALL) with a south-facing 3-wide cave door.
 
     Players approach from the south apron, stand on any of the three door
-    tiles, then enter. The cone itself is not walkable.
+    tiles, then enter. The cone itself is not walkable. A wide scorched
+    basalt field surrounds the cone (client paints AI volcano floor).
     """
     mx, my = EMBERDEEP_MOUTH
     # Unwalkable basalt mass north of the door (under the oversized sprite).
@@ -942,6 +1018,25 @@ def stamp_emberdeep_mouth(grid):
                 continue
             if ((x - mx) / 5.5) ** 2 + ((y - (my - 3)) / 4.2) ** 2 <= 1.0:
                 grid[y][x] = WALL
+    # Wide scorched field — walkable STONE the client dresses as volcano floor.
+    for y in range(my - 2, my + 10):
+        for x in range(mx - 10, mx + 11):
+            if not (0 <= x < WIDTH and 0 <= y < HEIGHT) or grid[y][x] == WATER:
+                continue
+            if ((x - mx) / 9.5) ** 2 + ((y - (my + 3)) / 6.5) ** 2 > 1.0:
+                continue
+            if grid[y][x] == WALL:
+                continue
+            if grid[y][x] in (GRASS, PATH, FLOOR, STONE, *TREE_TILES):
+                grid[y][x] = STONE
+    # Small lava pools (WATER in volcano zone → client lava)
+    for lx, ly in ((mx - 7, my + 5), (mx + 6, my + 4), (mx - 3, my + 7), (mx + 4, my + 8)):
+        if 0 <= lx < WIDTH and 0 <= ly < HEIGHT and grid[ly][lx] != WALL:
+            grid[ly][lx] = WATER
+            for ox, oy in ((1, 0), (0, 1), (-1, 0)):
+                nx, ny = lx + ox, ly + oy
+                if 0 <= nx < WIDTH and 0 <= ny < HEIGHT and grid[ny][nx] in (GRASS, PATH, STONE, *TREE_TILES):
+                    grid[ny][nx] = WATER
     # Scorched walkable apron at the door and south of it (enter zone).
     for y in range(my, my + 4):
         for x in range(mx - 2, mx + 3):
@@ -957,8 +1052,18 @@ def stamp_emberdeep_mouth(grid):
             if 0 <= ay < HEIGHT:
                 grid[ay][ax] = PATH
     # Keep the south city bypass clear after the cone stamp.
-    _stamp_road(grid, 150, 80, 186, 80)
-    _stamp_road(grid, 186, 73, 186, 80)
+    _stamp_road(grid, 150, 80, 202, 80)
+    _stamp_road(grid, 202, 73, 202, 80)
+    restore_city_and_void_paving(grid)
+
+
+def is_emberdeep_volcano_field(x, y) -> bool:
+    """Walkable scorched ground around the Emberdeep cone (AI floor overlay)."""
+    mx, my = EMBERDEEP_MOUTH
+    ix, iy = int(x), int(y)
+    if ((ix - mx) / 10.0) ** 2 + ((iy - (my + 3)) / 7.0) ** 2 > 1.0:
+        return False
+    return True
 
 
 def near_volcano_mine(x, y) -> bool:
@@ -1066,30 +1171,37 @@ def lay_east_village_road(grid):
         grid[54][90] = PATH
 
 
+# South massif void rift mouth (overworld pack entrance).
+VOID_MOUTH = (175 + VOID_DX, 128)
+VOID_RETURN = (175, 130)
+
+
 def lay_void_sanctum_approach(grid):
-    """Dirt corridor from the east city road to the Void Sanctum door.
+    """Dirt corridor from the east city road to the Void Sanctum mouth.
 
     Safe to call after capture_and_hide — overwrites GRASS/FLOOR/trees.
     """
+    mx, my = VOID_MOUTH
+    # Approach from Stonehaven's east gate toward the shifted sanctum mouth.
     for seg in (
-        (148, 97, 174, 97),
-        (148, 98, 174, 98),
-        (148, 99, 174, 99),
-        (170, 97, 172, 110),
+        (163, 97, mx + 1, 97),
+        (163, 98, mx + 1, 98),
+        (163, 99, mx + 1, 99),
+        (mx - 1, 97, mx + 1, my + 2),
     ):
         _stamp_road(grid, *seg, also=(FLOOR,))
     for x, y in (
-        (170, 108), (171, 108), (172, 108),
-        (170, 109), (171, 109), (172, 109),
+        (mx - 1, my), (mx, my), (mx + 1, my),
+        (mx - 1, my + 1), (mx, my + 1), (mx + 1, my + 1),
+        (mx - 1, my + 2), (mx, my + 2), (mx + 1, my + 2),
     ):
         if 0 <= x < WIDTH and 0 <= y < HEIGHT and grid[y][x] not in (WATER,):
-            # Door gap may sit on the shell — force PATH for the mouth only.
-            if grid[y][x] != WALL or (y == 108 and 170 <= x <= 172):
+            if grid[y][x] != WALL or (y == my and mx - 1 <= x <= mx + 1):
                 grid[y][x] = PATH
     # Punch the three-wide door if the south wall resealed.
-    for ax in (170, 171, 172):
+    for ax in (mx - 1, mx, mx + 1):
         if 0 <= ax < WIDTH:
-            grid[108][ax] = PATH
+            grid[my][ax] = PATH
 
 
 def _path_spur_to_network(grid, ax, ay, ignore=None, limit=48):
@@ -1237,18 +1349,21 @@ def _lay_wayfinder_roads(grid):
         # Out of village east toward forest / lake / mad scientist.
         (84, 24, 130, 24),
         (85, 11, 85, 24),       # estate office apron → east hub road
-        (98, 22, 98, 25),
-        # Forest up to the pass, across to Harbourreach, south to Tidehollow.
-        (130, 16, 130, 25),
-        (130, 16, 176, 16),
+        (100, 23, 100, 25),     # Mad Scientist south-shore plaza
+        (96, 23, 112, 23),      # south lake shore connector
+        # Forest up to the (west-shifted) pass, across to Harbourreach, Tidehollow.
+        (108, 12, 108, 40),     # east lake shore (land corridor)
+        (109, 12, 109, 25),
+        (100, 16, 107, 16),      # north of lake only (does not cross water)
+        (141, 16, 176, 16),      # east exit after the massif
         (170, 15, 178, 15),
         # Harbourreach is reached only through the pass now; the old
         # south road out of the harbour ends at the Harbour Inlet.
         (171, 16, 171, 36),
         (171, 36, 184, 36),
         (184, 36, 184, 41),
-        # Tidehollow from the castle side, south of the inlet.
-        (154, 58, 172, 58),
+        # Tidehollow — skirt east of the housing ward (x 148–166).
+        (167, 58, 172, 58),
         (172, 48, 172, 58),
         (172, 48, 188, 48),
         (188, 48, 188, 52),
@@ -1258,32 +1373,32 @@ def _lay_wayfinder_roads(grid):
         # East village → Stonehaven west gate (closes the grass cut at ~90,54).
         (80, 53, 108, 53),
         (80, 54, 108, 54),
-        # Emberdeep south apron bypass (cone blocks the old y=73 cut).
-        (150, 80, 186, 80),
-        (186, 73, 186, 80),
-        # West of the old castle site, into Stonehaven's west gate.
+        # Emberdeep south apron bypass — east of housing, then to the cone.
+        (167, 80, 202, 80),
+        (202, 73, 202, 80),
+        # West of the keep, into Stonehaven's west gate.
         (108, 25, 108, 54),
         (92, 54, 108, 54),
         (92, 54, 92, 72),
-        # City streets, Emberdeep, and the sanctum approach.
-        (94, 72, 150, 72),
+        # City streets, Emberdeep, and the sanctum approach (east of city wall).
+        (94, 72, 162, 72),
+        (162, 72, 205, 72),
         (118, 73, 118, 130),
         (128, 73, 128, 125),
-        (150, 73, 184, 73),
-        (186, 73, 186, 86),
-        (100, 98, 180, 98),
-        (180, 98, 180, 101),
-        (168, 100, 180, 100),
+        (162, 73, 202, 73),
+        (202, 73, 202, 86),
+        (100, 98, 162, 98),
+        (162, 98, 205, 98),
+        (205, 98, 205, 128),
+        (196, 98, 196, 101),
     )
     for seg in roads:
         _stamp_road(grid, *seg)
     lay_void_sanctum_approach(grid)
-    # Designed mouths. These few cells are the gates, not building walls.
+    # Designed mouths (void only — Stonehaven west/east curtains stay sealed).
     for x, y in (
-        (94, 71), (94, 72), (94, 73),
-        (152, 72), (152, 73), (152, 74),
-        (170, 108), (171, 108), (172, 108),
-        (170, 109), (171, 109), (172, 109),
+        (VOID_MOUTH[0] - 1, 128), (VOID_MOUTH[0], 128), (VOID_MOUTH[0] + 1, 128),
+        (VOID_MOUTH[0] - 1, 129), (VOID_MOUTH[0], 129), (VOID_MOUTH[0] + 1, 129),
     ):
         if 0 <= x < WIDTH and 0 <= y < HEIGHT and grid[y][x] not in (WATER, WALL):
             grid[y][x] = PATH
@@ -1304,15 +1419,16 @@ def _lay_wayfinder_roads(grid):
 
 def _paint_void_grounds(grid):
     """Walkable void floor around the sanctum. Room walls and the gatehouse stay."""
+    vd = VOID_DX
     x0, y0, x1, y1 = ZONES["shadow_crypt"]
-    building = (166, 102, 176, 108)
+    building = (169 + vd, 122, 181 + vd, 128)
     rooms = [
-        (156, 108, 164, 112),
-        (168, 108, 178, 112),
-        (156, 114, 164, 120),
-        (168, 114, 178, 120),
-        (156, 122, 164, 128),
-        (168, 122, 178, 128),
+        (156 + vd, 108, 164 + vd, 112),
+        (168 + vd, 108, 178 + vd, 112),
+        (156 + vd, 114, 164 + vd, 120),
+        (168 + vd, 114, 178 + vd, 120),
+        (156 + vd, 122, 164 + vd, 128),
+        (168 + vd, 122, 178 + vd, 128),
     ]
 
     def _ring(x, y, rect):
@@ -1332,9 +1448,10 @@ def _paint_void_grounds(grid):
                 or any(_ring(x, y, room) for room in rooms)
             ):
                 continue
-            # Keep the north approach / door apron as PATH so city dirt reaches
+            # Keep the south approach / door apron as PATH so city dirt reaches
             # the sanctum mouth (wayfinder reclaims FLOOR afterward too).
-            if 168 <= x <= 174 and 96 <= y <= 110 and tile == PATH:
+            mx, my = VOID_MOUTH
+            if mx - 3 <= x <= mx + 3 and my - 10 <= y <= my + 3 and tile == PATH:
                 if not (building[0] < x < building[2] and building[1] < y < building[3]):
                     continue
             if tile in (WALL, GRASS, PATH, *TREE_TILES):
@@ -1353,6 +1470,130 @@ def get_zone(x, y):
         if x0 <= x <= x1 and y0 <= y <= y1:
             return name
     return "wilderness"
+
+
+def _stamp_stonehaven_walls(grid, cx0, cy0, cx1, cy1):
+    """Style B outer shell: 2-tile-thick walls, gatehouses, castle-side spurs.
+
+    South / west / east enclose the plaza + housing ward. North opens onto the
+    castle bridge; 2-tile spurs run up both flanks of the keep (outside the moat)
+    so the wall reads as one fortification around castle + Stonehaven.
+    """
+    # South only — wide open arch. West/east are solid curtain (no side gates).
+    gate_s = set()
+    for gx in range(116, 123):
+        gate_s.add((gx, cy1))
+        gate_s.add((gx, cy1 - 1))
+    # Full castle south apron open — no city door/wall in front of the keep.
+    gate_n = set()
+    if castle_v2.active():
+        ax0, _ = castle_v2.w(104, 55)
+        ax1, _ = castle_v2.w(119, 55)
+        for gx in range(ax0, ax1 + 1):
+            gate_n.add((gx, cy0))
+            gate_n.add((gx, cy0 + 1))
+    else:
+        gate_n = {(118, cy0), (119, cy0), (118, cy0 + 1), (119, cy0 + 1)}
+    skips = gate_s | gate_n
+
+    def _wall_cell(x, y):
+        if (x, y) in skips:
+            return
+        if 0 <= x < WIDTH and 0 <= y < HEIGHT:
+            grid[y][x] = WALL
+
+    # Double ring on the plaza rectangle
+    for x in range(cx0, cx1 + 1):
+        for y in (cy0, cy0 + 1, cy1 - 1, cy1):
+            _wall_cell(x, y)
+    for y in range(cy0, cy1 + 1):
+        for x in (cx0, cx0 + 1, cx1 - 1, cx1):
+            _wall_cell(x, y)
+
+    # South gatehouse cheeks (pillars beside the wide opening)
+    for gx, gy in ((115, cy1), (123, cy1), (115, cy1 - 1), (123, cy1 - 1)):
+        _wall_cell(gx, gy)
+
+    # Spurs up the castle flanks (outside the 4-tile moat) to the mountain foot.
+    if castle_v2.active():
+        x0, y0, x1, y1 = castle_v2.footprint_tiles()
+        west_x = x0 - castle_v2.MOAT_SIDE - 1
+        east_x = x1 + castle_v2.MOAT_SIDE + 1
+        for y in range(max(0, y0 - castle_v2.MOAT_BACK), cy0 + 1):
+            for x in (west_x, west_x - 1, east_x, east_x + 1):
+                if 0 <= x < WIDTH and 0 <= y < HEIGHT and grid[y][x] != WATER:
+                    grid[y][x] = WALL
+        # North cap between the spurs, just under the ridge (skip moat water)
+        cap_y = max(0, y0 - castle_v2.MOAT_BACK - 1)
+        for x in range(west_x - 1, east_x + 2):
+            if 0 <= x < WIDTH and grid[cap_y][x] != WATER:
+                grid[cap_y][x] = WALL
+
+
+def extend_castle_gate_paving(grid):
+    """Stonehaven cobble continues through the castle bridge into the plaza."""
+    if not castle_v2.active():
+        return
+    ax0, ay = castle_v2.w(104, 55)
+    ax1, _ = castle_v2.w(119, 55)
+    for y in range(ay, min(HEIGHT, ay + 4)):
+        for x in range(ax0, ax1 + 1):
+            if 0 <= x < WIDTH and grid[y][x] in (GRASS, *TREE_TILES, PATH, STONE):
+                grid[y][x] = STONE
+    for px in (111, 112):
+        bx, by = castle_v2.w(px, 55)
+        for y in range(by, min(HEIGHT, by + 5)):
+            if 0 <= bx < WIDTH and grid[y][bx] in (GRASS, *TREE_TILES, PATH, STONE, WALL):
+                grid[y][bx] = PATH
+
+
+def restore_city_and_void_paving(grid):
+    """Put Stonehaven / Void back on their native floors (no dirt / grass).
+
+    Wayfinder roads stamp PATH through these zones; restore STONE plazas in
+    Stonehaven (and clear any grass/trees there) and crypt FLOOR in the void
+    massif so village dirt never shows in either zone.
+    """
+    soft_city = {PATH, GRASS, *TREE_TILES}
+    for y in range(HEIGHT):
+        for x in range(WIDTH):
+            tile = grid[y][x]
+            zone = get_zone(x, y)
+            if zone == "city" and tile in soft_city:
+                grid[y][x] = STONE
+            elif zone == "shadow_crypt" and tile == PATH:
+                grid[y][x] = FLOOR
+    # Mouth apron must stay walkable crypt floor (orphan trim can wipe PATH
+    # before this restore if the approach was briefly disconnected).
+    mx, my = VOID_MOUTH
+    for dx in (-2, -1, 0, 1, 2):
+        for dy in (0, 1, 2):
+            ax, ay = mx + dx, my + dy
+            if 0 <= ax < WIDTH and 0 <= ay < HEIGHT and grid[ay][ax] in (GRASS, PATH, FLOOR, STONE):
+                grid[ay][ax] = FLOOR
+    extend_castle_gate_paving(grid)
+    # Re-open gate PATH after the city soft→STONE restore.
+    if castle_v2.active():
+        for px in (111, 112):
+            bx, by = castle_v2.w(px, 55)
+            for y in range(by, min(HEIGHT, by + 5)):
+                if 0 <= bx < WIDTH:
+                    grid[y][bx] = PATH
+    cx0, cy0, cx1, cy1 = city_bounds()
+    # Roads / void stamps punch the shell — lay Style B walls last, then reopen south + north.
+    _stamp_stonehaven_walls(grid, cx0, cy0, cx1, cy1)
+    for gx in range(116, 123):
+        for gy in (cy1, cy1 - 1):
+            if 0 <= gx < WIDTH and 0 <= gy < HEIGHT:
+                grid[gy][gx] = PATH
+    if castle_v2.active():
+        ax0, _ = castle_v2.w(104, 55)
+        ax1, _ = castle_v2.w(119, 55)
+        for ax in range(ax0, ax1 + 1):
+            for oy in (0, 1):
+                ay = cy0 + oy
+                if 0 <= ax < WIDTH and 0 <= ay < HEIGHT:
+                    grid[ay][ax] = PATH
 
 
 def is_walkable(grid, x, y):

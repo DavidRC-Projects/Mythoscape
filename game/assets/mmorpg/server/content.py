@@ -556,6 +556,7 @@ ITEMS = {
     },
     "lost_locket": {
         "name": "Lost Locket", "type": "quest", "stackable": False, "value": 0, "equip_slot": None,
+        "tradeable": False, "sellable": False,
         "desc": "A silver locket with a cracked sapphire. Lira the Jeweler is looking for this.",
     },
 
@@ -1424,13 +1425,13 @@ MONSTER_SPAWNS = [
     ("knight", 128, 66), ("knight", 132, 64), ("knight", 126, 62),
     ("knight", 130, 68), ("knight", 134, 66),
     ("mythos_champion", 130, 64),  # Castle elite — full Mythos set
-    # Void Sanctum — SE mystical dungeon (6 rooms, high level)
-    ("shade", 158, 109), ("shade", 161, 111), ("shade", 163, 108),
-    ("crypt_ghoul", 170, 109), ("crypt_ghoul", 174, 111), ("crypt_ghoul", 176, 108),
-    ("void_imp", 158, 116), ("void_imp", 161, 118), ("void_imp", 163, 115), ("void_imp", 160, 119),
-    ("obsidian_colossus", 170, 116), ("obsidian_colossus", 174, 118), ("obsidian_colossus", 176, 115),
-    ("shadow_knight", 158, 124), ("shadow_knight", 161, 126), ("shadow_knight", 163, 123),
-    ("void_horror", 172, 124), ("void_horror", 175, 126),
+    # Void Sanctum — SE mystical dungeon (6 rooms, high level; +VOID_DX=30)
+    ("shade", 188, 109), ("shade", 191, 111), ("shade", 193, 108),
+    ("crypt_ghoul", 200, 109), ("crypt_ghoul", 204, 111), ("crypt_ghoul", 206, 108),
+    ("void_imp", 188, 116), ("void_imp", 191, 118), ("void_imp", 193, 115), ("void_imp", 190, 119),
+    ("obsidian_colossus", 200, 116), ("obsidian_colossus", 204, 118), ("obsidian_colossus", 206, 115),
+    ("shadow_knight", 188, 124), ("shadow_knight", 191, 126), ("shadow_knight", 193, 123),
+    ("void_horror", 202, 124), ("void_horror", 205, 126),
 ]
 
 # ---------------------------------------------------------------------------
@@ -1514,7 +1515,7 @@ TELEPORT_DESTINATIONS = [
     {"id": "village", "label": "Village", "blurb": "The crossroads", "where": "overworld", "x": 28, "y": 24},
     {"id": "bank", "label": "Village Bank", "blurb": "Store coins and items", "where": "overworld", "x": 66, "y": 48},
     {"id": "outfitters", "label": "Mythos Outfitters", "blurb": "Hair, clothes & outfits", "where": "overworld", "x": 52, "y": 65},
-    {"id": "void", "label": "Void Sanctum", "blurb": "Outside the sanctum gate", "where": "overworld", "x": 171, "y": 110},
+    {"id": "void", "label": "Void Sanctum", "blurb": "Outside the sanctum gate", "where": "overworld", "x": 205, "y": 130},
     {"id": "stonehaven", "label": "Stonehaven", "blurb": "The city square", "where": "overworld", "x": 118, "y": 74},
     {"id": "keep", "label": "Stonehaven Castle", "blurb": "The overworld keep", "where": "overworld", "x": 128, "y": 66},
     {"id": "harbour", "label": "Harbourreach", "blurb": "The docks", "where": "overworld", "x": 176, "y": 18},
@@ -1710,7 +1711,7 @@ NPCS = [
          "A kingdom is its people. Someone should remind the castle."]},
 
     # Forest / lake
-    {"id": "old_fisherman_pete", "name": "Old Fisherman Pete", "x": 106, "y": 16,
+    {"id": "old_fisherman_pete", "name": "Old Fisherman Pete", "x": 94, "y": 16,
      "lines": ["Bring me some fresh shrimp and I'll teach you a thing or two about fishing.",
          "They tax the lake now. Per fish. I've started throwing the small ones back out of spite."],
      "quest_id": "fishermans_request"},
@@ -1769,7 +1770,7 @@ NPCS = [
     {"id": "pip_dewdrop", "name": "Pip Dewdrop", "x": 32, "y": 82,
      "lines": ["Shh! The lilies are sleeping."]},
 
-    {"id": "mad_scientist", "name": "Mad Scientist", "x": 98, "y": 22,
+    {"id": "mad_scientist", "name": "Mad Scientist", "x": 100, "y": 23,
      "lines": [
          "Behold! Potions of pure combat potential!",
          "Regular doses raise Attack, Strength or Defence by 10 for one minute.",
@@ -1781,7 +1782,7 @@ NPCS = [
      "quest_ids": ["void_samples", "void_crypt", "void_imps", "sanctum_apex"]},
 
     # Mountain pass / fishing village
-    {"id": "pass_scout", "name": "Scout Bren", "x": 145, "y": 16,
+    {"id": "pass_scout", "name": "Scout Bren", "x": 121, "y": 16,
      "lines": [
          "The mountain pass leads east to Harbourreach.",
          "Wolves hunt those rocks — combat around forty. Pack food.",
@@ -2708,7 +2709,7 @@ TRAVEL_DESTINATIONS = [
     {"id": "lake", "kind": "place", "label": "Fishing Lake",
      "x": 106, "y": 17, "blurb": "Shore fishing"},
     {"id": "mad_scientist", "kind": "place", "label": "Mad Scientist",
-     "x": 98, "y": 22, "blurb": "Combat potions (+10 / +20)"},
+     "x": 100, "y": 23, "blurb": "Combat potions (+10 / +20)"},
     {"id": "mountain_pass", "kind": "place", "label": "Mountain Pass",
      "x": 145, "y": 16, "blurb": f"Wolves (lvl {MONSTERS['wolf']['level']}) — path east"},
     {"id": "harbourreach", "kind": "place", "label": "Harbourreach",
@@ -2727,7 +2728,7 @@ TRAVEL_DESTINATIONS = [
     {"id": "kings_row_homes", "kind": "place", "label": "King's Row Homes",
      "x": 97, "y": 144, "blurb": "South-road player houses (Ash Manor & cottages)"},
     {"id": "emberdeep", "kind": "place", "label": "Emberdeep",
-     "x": 175, "y": 78, "blurb": "⚠ Lava dungeon — 8 floors · east volcano massif",
+     "x": 196, "y": 78, "blurb": "⚠ Lava dungeon — 8 floors · east volcano massif",
      "action": {"type": "ENTER_DUNGEON", "dungeon_id": "emberdeep"}},
     {"id": "mira_market", "kind": "place", "label": "Mira's Market",
      "x": 116, "y": 74, "blurb": "Food, potions & steel scraps"},
@@ -2738,10 +2739,10 @@ TRAVEL_DESTINATIONS = [
     {"id": "dungeon_bank", "kind": "place", "label": "Dungeon Bank",
      "x": 38, "y": 84, "blurb": "Chest near the gate", "action": {"type": "BANK"}},
     {"id": "void_sanctum", "kind": "place", "label": "Void Sanctum",
-     "x": 171, "y": 107, "blurb": "⚠ High-level mystical dungeon (SE)"},
+     "x": 205, "y": 128, "blurb": "⚠ High-level mystical dungeon (SE)"},
     # Quest givers
     {"id": "quest_scout_bren", "kind": "place", "label": "Scout Bren",
-     "x": 145, "y": 16, "blurb": "Quest: Wolves on the Pass"},
+     "x": 121, "y": 16, "blurb": "Quest: Wolves on the Pass"},
     {"id": "quest_hermit_cole", "kind": "place", "label": "Hermit Cole",
      "x": 38, "y": 82, "blurb": "Dungeon quests — bones & dragon"},
     {"id": "quest_cook_nell", "kind": "place", "label": "Cook Nell",
@@ -2789,16 +2790,19 @@ TRAVEL_DESTINATIONS = [
 
 
 
+# Overworld Void Sanctum pack mouth (south-facing rift).
+VOID_SANCTUM_MOUTH = (205, 128)
+
+
 def entrance_mouth_tiles(x, y, kind=None):
     """Tiles that count as standing in a dungeon mouth.
 
-    Volcano mouths are a 3-wide door plus the apron immediately in front
-    (south) so players enter when they reach the cave opening, not only after
-    stepping onto the threshold under the mountain.
+    Volcano / void pack mouths are a 3-wide door plus the apron immediately in
+    front (south) so players enter at the opening, not past it.
     """
     ax, ay = int(x), int(y)
-    if kind == "volcano_entrance":
-        # 3-wide door + one step south (standing in front of the cave).
+    south_apron = kind == "volcano_entrance" or (ax, ay) == VOID_SANCTUM_MOUTH
+    if south_apron:
         tiles = set()
         for dx in (-1, 0, 1):
             for dy in (0, 1):
@@ -2853,9 +2857,9 @@ INTERACTABLES = [
      "x": 189, "y": 52, "blurb": "9 chambers · 3 beasts each · dragons + medal at the end",
      "dungeon_id": "tidehollow", "pack": "goblin_cave"},
     {"id": "emberdeep_mouth", "kind": "volcano_entrance", "name": "Emberdeep Mouth",
-     "x": 175, "y": 78, "blurb": "Cave in a small volcano · 8 lava floors · Emberdeep Medal",
+     "x": 196, "y": 78, "blurb": "Cave in a small volcano · 8 lava floors · Emberdeep Medal",
      "dungeon_id": "emberdeep", "pack": "dragon_lair",
-     "stand": [175, 81]},
+     "stand": [196, 81]},
 
     # --- Elder's Hall (cottage_nw) floor 5–14, 5–14 ---
     {"id": "elder_fireplace", "kind": "range", "name": "Hearth", "x": 6, "y": 5},
@@ -2955,11 +2959,11 @@ INTERACTABLES = [
     # Village wishing well (east of crossroads, south of the road)
     {"id": "wishing_well", "kind": "wishing_well", "name": "Wishing Well", "x": 32, "y": 22},
 
-    # Stonehaven City doors
-    {"id": "city_house_nw_door", "kind": "door", "name": "Door", "x": 106, "y": 68,
-     "enter_x": 106, "enter_y": 66, "exit_x": 106, "exit_y": 69, "building": "city_house_nw"},
-    {"id": "city_house_sw_door", "kind": "door", "name": "Door", "x": 106, "y": 82,
-     "enter_x": 106, "enter_y": 80, "exit_x": 106, "exit_y": 83, "building": "city_house_sw"},
+    # Stonehaven City doors (+7 x with west curtain slide)
+    {"id": "city_house_nw_door", "kind": "door", "name": "Door", "x": 113, "y": 68,
+     "enter_x": 113, "enter_y": 66, "exit_x": 113, "exit_y": 69, "building": "city_house_nw"},
+    {"id": "city_house_sw_door", "kind": "door", "name": "Door", "x": 113, "y": 82,
+     "enter_x": 113, "enter_y": 80, "exit_x": 113, "exit_y": 83, "building": "city_house_sw"},
     {"id": "city_barracks_door", "kind": "door", "name": "Barracks Door", "x": 134, "y": 84,
      "enter_x": 134, "enter_y": 82, "exit_x": 134, "exit_y": 85, "building": "city_barracks"},
     {"id": "castle_gate", "kind": "door", "name": "Castle Gate", "x": 128, "y": 70,
@@ -2995,18 +2999,18 @@ INTERACTABLES = [
     {"id": "city_crate_a", "kind": "crate", "name": "Crate", "x": 121, "y": 76},
     {"id": "city_barrel_a", "kind": "barrel", "name": "Barrel", "x": 116, "y": 76},
 
-    # --- City house NW furniture ---
-    {"id": "city_nw_bed", "kind": "bed", "name": "Bed", "x": 104, "y": 62},
-    {"id": "city_nw_table", "kind": "table", "name": "Table", "x": 107, "y": 64},
-    {"id": "city_nw_chair", "kind": "chair", "name": "Chair", "x": 106, "y": 64, "facing": 1},
-    {"id": "city_nw_rug", "kind": "rug", "name": "Rug", "x": 106, "y": 65, "color": [80, 70, 100]},
-    {"id": "city_nw_chest", "kind": "chest", "name": "Chest", "x": 108, "y": 62},
+    # --- City house NW furniture (+7 x) ---
+    {"id": "city_nw_bed", "kind": "bed", "name": "Bed", "x": 111, "y": 62},
+    {"id": "city_nw_table", "kind": "table", "name": "Table", "x": 114, "y": 64},
+    {"id": "city_nw_chair", "kind": "chair", "name": "Chair", "x": 113, "y": 64, "facing": 1},
+    {"id": "city_nw_rug", "kind": "rug", "name": "Rug", "x": 113, "y": 65, "color": [80, 70, 100]},
+    {"id": "city_nw_chest", "kind": "chest", "name": "Chest", "x": 115, "y": 62},
 
-    # --- City house SW furniture ---
-    {"id": "city_sw_bed", "kind": "bed", "name": "Bed", "x": 104, "y": 76},
-    {"id": "city_sw_table", "kind": "table", "name": "Table", "x": 107, "y": 78},
-    {"id": "city_sw_barrel", "kind": "barrel", "name": "Barrel", "x": 108, "y": 80},
-    {"id": "city_sw_rug", "kind": "rug", "name": "Rug", "x": 106, "y": 79, "color": [100, 70, 50]},
+    # --- City house SW furniture (+7 x) ---
+    {"id": "city_sw_bed", "kind": "bed", "name": "Bed", "x": 111, "y": 76},
+    {"id": "city_sw_table", "kind": "table", "name": "Table", "x": 114, "y": 78},
+    {"id": "city_sw_barrel", "kind": "barrel", "name": "Barrel", "x": 115, "y": 80},
+    {"id": "city_sw_rug", "kind": "rug", "name": "Rug", "x": 113, "y": 79, "color": [100, 70, 50]},
 
     # --- Barracks furniture ---
     {"id": "barracks_rack_a", "kind": "weapon_rack", "name": "Weapon Rack", "x": 132, "y": 76},
@@ -3017,22 +3021,23 @@ INTERACTABLES = [
     {"id": "barracks_chest", "kind": "chest", "name": "Footlocker", "x": 136, "y": 82},
     {"id": "barracks_barrel", "kind": "barrel", "name": "Barrel", "x": 132, "y": 82},
 
-    # Void Sanctum — dark mystical entrance (SE of Stonehaven)
+    # Void Sanctum — dark mystical entrance (SE massif mouth, +VOID_DX)
     {"id": "void_sanctum_door", "kind": "door", "name": "Void Sanctum Gate",
-     "x": 171, "y": 108,
-     "enter_x": 171, "enter_y": 106, "exit_x": 171, "exit_y": 109, "building": "void_sanctum",
+     "x": 205, "y": 128,
+     "enter_x": 205, "enter_y": 126, "exit_x": 205, "exit_y": 129, "building": "void_sanctum",
      "dungeon_id": "sanctum"},
     {"id": "void_sanctum_portal", "kind": "dungeon_entrance", "name": "Descent into the Void",
-     "x": 171, "y": 108,
-     "enter_x": 171, "enter_y": 112, "exit_x": 171, "exit_y": 105, "warning": True,
-     "dungeon_id": "sanctum", "pack": "void_rift"},
+     "x": 205, "y": 128,
+     "enter_x": 205, "enter_y": 126, "exit_x": 205, "exit_y": 130, "warning": True,
+     "dungeon_id": "sanctum", "pack": "void_rift",
+     "stand": [205, 130]},
     {"id": "void_warning", "kind": "warning_sign", "name": "⚠ DANGER — High Level Monsters",
-     "x": 169, "y": 109},
+     "x": 202, "y": 130},
     {"id": "void_warning_e", "kind": "warning_sign", "name": "⚠ DANGER — High Level Monsters",
-     "x": 173, "y": 109},
-    {"id": "void_candle_a", "kind": "candle", "name": "Void Candle", "x": 168, "y": 104},
-    {"id": "void_candle_b", "kind": "candle", "name": "Void Candle", "x": 174, "y": 104},
-    {"id": "void_altar", "kind": "bookshelf", "name": "Forbidden Tomes", "x": 167, "y": 103},
+     "x": 208, "y": 130},
+    {"id": "void_candle_a", "kind": "candle", "name": "Void Candle", "x": 201, "y": 127},
+    {"id": "void_candle_b", "kind": "candle", "name": "Void Candle", "x": 209, "y": 127},
+    {"id": "void_altar", "kind": "bookshelf", "name": "Forbidden Tomes", "x": 200, "y": 125},
 
 ]
 
@@ -3112,14 +3117,14 @@ BUILDINGS = [
     {
         "id": "city_house_nw", "name": "Stonehaven Cottage", "kind": "house", "style": 1,
         "material": "stone",
-        "x0": 102, "y0": 60, "x1": 110, "y1": 68,
-        "floor_x0": 103, "floor_y0": 61, "floor_x1": 109, "floor_y1": 67,
+        "x0": 109, "y0": 60, "x1": 117, "y1": 68,
+        "floor_x0": 110, "floor_y0": 61, "floor_x1": 116, "floor_y1": 67,
     },
     {
         "id": "city_house_sw", "name": "Stonehaven House", "kind": "house", "style": 1,
         "material": "stone",
-        "x0": 102, "y0": 74, "x1": 110, "y1": 82,
-        "floor_x0": 103, "floor_y0": 75, "floor_x1": 109, "floor_y1": 81,
+        "x0": 109, "y0": 74, "x1": 117, "y1": 82,
+        "floor_x0": 110, "floor_y0": 75, "floor_x1": 116, "floor_y1": 81,
     },
     {
         "id": "city_barracks", "name": "City Barracks", "kind": "house", "style": 1,
@@ -3136,8 +3141,8 @@ BUILDINGS = [
     {
         "id": "void_sanctum", "name": "Void Sanctum", "kind": "crypt", "style": 1,
         "material": "dark_stone",
-        "x0": 166, "y0": 102, "x1": 176, "y1": 108,
-        "floor_x0": 167, "floor_y0": 103, "floor_x1": 175, "floor_y1": 107,
+        "x0": 199, "y0": 122, "x1": 211, "y1": 128,
+        "floor_x0": 200, "floor_y0": 123, "floor_x1": 210, "floor_y1": 127,
     },
 ]
 
@@ -3853,8 +3858,8 @@ def _apply_buildings_v2():
 
     # Stonehaven houses move south of the castle. Other doors stay put.
     city_doors = {
-        "city_house_nw": (105, 96, 105, 94, 105, 97),
-        "city_house_sw": (106, 122, 106, 120, 106, 123),
+        "city_house_nw": (112, 96, 112, 94, 112, 97),
+        "city_house_sw": (113, 122, 113, 120, 113, 123),
         "city_barracks": (140, 96, 140, 94, 140, 97),
     }
     homes = []
@@ -3977,7 +3982,7 @@ def _pin_visible_npcs():
         "pip_dewdrop": (32, 82),
         "dungeon_hermit": (44, 86),
         "merchant_wanderer": (94, 28),
-        "mad_scientist": (100, 20),
+        "mad_scientist": (100, 23),  # south shore of fishing lake (not in water)
     }
     for ent in NPCS:
         pin = pins.get(ent.get("id"))

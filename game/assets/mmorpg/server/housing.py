@@ -9,10 +9,8 @@ import feature_flags
 import reputation
 import royal_treasury
 
-# Houses are re-laid on open grass. The estate office door sits at the
-# village north fringe (player stand). King's Folly's pack spot crossed the
-# dungeon, and the row is too wide for the west meadow, so the smaller homes
-# continue on the grass south of the city.
+# West / south-meadow homes stay put. Only the old south-of-city row
+# (ash, oak, reed, willow) moves up and spreads around the castle grounds.
 _LAYOUT = {
     "estate_office": (81, 6),       # NW corner → door (85, 10)
     "kings_folly": (2, 109),
@@ -21,10 +19,11 @@ _LAYOUT = {
     "riverview_estate": (2, 130),
     "meadow_house": (16, 131),
     "stonehaven_row": (26, 131),
-    "ash_manor": (92, 136),
-    "oak_villa": (108, 137),
-    "reed_cottage": (123, 138),
-    "willow_cottage": (136, 138),
+    # Around the keep (west / east / south-east of the bailey), not a packed row.
+    "ash_manor": (103, 60),  # was 96; west curtain slid +7
+    "oak_villa": (148, 58),
+    "reed_cottage": (154, 78),
+    "willow_cottage": (150, 100),
 }
 WEEK = 7 * 24 * 3600
 LEASE_GOLD = 50_000
@@ -184,7 +183,8 @@ def stamp(grid, wm):
     if not enabled():
         return
     load()
-    soft = {wm.GRASS, wm.TREE}
+    # Meadow homes sit on grass; castle-side plots may already be city STONE.
+    soft = {wm.GRASS, wm.TREE, wm.STONE}
 
     def paint_soft(x, y, tile):
         if not (0 <= y < len(grid) and 0 <= x < len(grid[0])):
@@ -198,11 +198,11 @@ def stamp(grid, wm):
         # Old overworld dungeon field (explore_dungeons hide rect) — leave alone.
         if 44 <= x <= 90 and 54 <= y <= 143:
             return
-        if grid[y][x] not in (wm.GRASS, wm.TREE, wm.PATH, wm.WALL, wm.FLOOR):
+        if grid[y][x] not in (wm.GRASS, wm.TREE, wm.PATH, wm.WALL, wm.FLOOR, wm.STONE):
             return
         grid[y][x] = tile
 
-    # Lanes on grass first. Shells below replace whatever they cover.
+    # Lanes on grass first (west meadow). Shells below replace whatever they cover.
     for y in range(99, 140):
         paint_soft(12, y, wm.PATH)
         paint_soft(24, y, wm.PATH)

@@ -25,8 +25,12 @@ EMBERDEEP_FLOORS = [
 
 DUNGEON_W, DUNGEON_H = 20, 16
 DUNGEON_SPAWN = (10, 13)
-# South of the volcano mouth (overworld)
-CAVE_RETURN = (175, 81)
+# South of the volcano mouth (overworld) — keep in sync with world_map.EMBERDEEP_RETURN
+try:
+    import world_map as _wm
+    CAVE_RETURN = tuple(_wm.EMBERDEEP_RETURN)
+except Exception:
+    CAVE_RETURN = (196, 81)
 
 _FLOOR_VISUAL = {
     1: "magma_slug", 2: "magma_slug",

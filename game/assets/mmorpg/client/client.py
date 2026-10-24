@@ -45,6 +45,8 @@ from content import (
 )  # noqa: E402
 import world_map as wm  # noqa: E402
 import wolf_pass_client  # noqa: E402
+import stonehaven_walls_client  # noqa: E402
+import emberdeep_volcano_client  # noqa: E402
 import fairy_ground  # noqa: E402
 import fairy_glade_client  # noqa: E402
 _SHORE_LAND_TILES = (wm.GRASS, wm.PATH, wm.STONE)
@@ -6124,6 +6126,8 @@ class GameClient(ScreensMixin, CameraYaw):
         # Tall volcano / lava-chamber cliff faces
         self._queue_volcano_cliffs(draw_list, cam_x, cam_y, vis_w, vis_h, t)
         wolf_pass_client.queue(self, draw_list, cam_x, cam_y, TILE, t)
+        stonehaven_walls_client.queue(self, draw_list, cam_x, cam_y, TILE)
+        emberdeep_volcano_client.queue(self, draw_list, cam_x, cam_y, TILE)
         fairy_glade_client.queue(self, draw_list, cam_x, cam_y, TILE, t)
 
         # Exit mouth inside private dungeons
@@ -6324,10 +6328,11 @@ class GameClient(ScreensMixin, CameraYaw):
                     continue
                 sx, sy = self.world_to_view_offset(spot["x"], spot["y"], cam_x, cam_y)
                 cx, cy = sx * TILE + TILE // 2, sy * TILE + TILE // 2
-                # Tall pack entrances (4x volcano) stay drawn when the mouth tile
-                # scrolls off-camera but the mountain body still intersects the view.
+                # Tall pack entrances stay drawn when the mouth tile scrolls
+                # off-camera but the sprite body still intersects the view.
                 on_screen = 0 <= sx <= vis_w and 0 <= sy <= vis_h
-                if not on_screen and kind == "volcano_entrance" and spot.get("pack"):
+                tall_pack = spot.get("pack") in ("dragon_lair", "void_rift")
+                if not on_screen and tall_pack:
                     prect = dungeon_entrances.sprite_rect(
                         spot["pack"], cx, cy, TILE, yaw=self.camera_yaw,
                     )
@@ -6391,17 +6396,24 @@ class GameClient(ScreensMixin, CameraYaw):
                         elif kind == "dungeon_entrance":
                             entrance_top = None
                             pack = spot.get("pack")
+                            is_void = pack == "void_rift" or spot.get("dungeon_id") == "sanctum"
+                            if is_void:
+                                self.draw_void_sanctum_scenery(cx, cy, TILE, t, layer="back")
                             if USE_NEW_ENTRANCES and pack:
                                 entrance_top = dungeon_entrances.draw_pack(
                                     self.screen, pack, cx, cy, TILE, yaw=self.camera_yaw,
                                 )
-                            if entrance_top is None:
+                            if entrance_top is None and not (USE_NEW_ENTRANCES and pack):
                                 # Crypt/house shells already own the recessed mouth —
                                 # never paste a separate 3D entrance box on top.
                                 has_shell = bool(self._building_covering_spot(spot))
                                 if not has_shell:
                                     sprites.draw_dungeon_entrance(self.screen, cx, cy, TILE, t, yaw=self.camera_yaw)
                                 entrance_top = cy - TILE - 4
+                            if entrance_top is None:
+                                entrance_top = cy - TILE - 4
+                            if is_void:
+                                self.draw_void_sanctum_scenery(cx, cy, TILE, t, layer="front")
                             if spot.get("warning") or "Void" in (spot.get("name") or ""):
                                 self.blit_nameplate("⚠ HIGH LEVEL", cx, entrance_top - 18, (255, 120, 100))
                                 self.blit_nameplate("VOID SANCTUM", cx, entrance_top - 4, (200, 140, 255))
@@ -6486,7 +6498,9 @@ class GameClient(ScreensMixin, CameraYaw):
                     # swallows them (cone tiles are WALL; door is south of the mass).
                     if kind in ("rug", "fountain"):
                         draw_list.append((cy - TILE // 2, 0, _draw_spot))
-                    elif kind == "volcano_entrance":
+                    elif kind == "volcano_entrance" or (
+                        kind == "dungeon_entrance" and spot.get("pack") == "void_rift"
+                    ):
                         draw_list.append((cy - TILE // 2, 1, _draw_spot))
                     else:
                         draw_list.append((cy + TILE // 4, 2, _draw_spot))
@@ -7538,10 +7552,13 @@ class GameClient(ScreensMixin, CameraYaw):
 
     def _queue_volcano_cliffs(self, draw_list, cam_x, cam_y, vis_w, vis_h, t):
         """Queue tall cliff sprites for volcano rock faces and dungeon corridor walls."""
-        if self.dungeon and self.dungeon.get("id") == "castle_realm" and self.dungeon.get("plane") not in (None, "", "realm"):
-            import castle_interiors_v2
-            castle_interiors_v2.queue_walls(self, draw_list, cam_x, cam_y, TILE)
-            castle_interiors_v2.queue_props(self, draw_list, cam_x, cam_y, TILE)
+        if self.dungeon and self.dungeon.get("id") == "castle_realm":
+            # Interiors get carved walls; the realm plane uses castle_realm_renderer
+            # only — never dungeon/volcano cliff cones.
+            if self.dungeon.get("plane") not in (None, "", "realm"):
+                import castle_interiors_v2
+                castle_interiors_v2.queue_walls(self, draw_list, cam_x, cam_y, TILE)
+                castle_interiors_v2.queue_props(self, draw_list, cam_x, cam_y, TILE)
             return
         if self.dungeon and self.dungeon.get("v2") == "depths":
             import depths_v2_client
@@ -7791,6 +7808,8 @@ class GameClient(ScreensMixin, CameraYaw):
                     sprites.draw_grass(self.screen, rect, wx, wy)
                 self._draw_headstone(rect, wx, wy)
         elif tile_id == wm.PATH:
+            if emberdeep_volcano_client.draw_ground(self, rect, wx, wy):
+                return
             if self._is_pier_tile(wx, wy):
                 sprites.draw_pier(self.screen, rect, wx, wy)
             else:
@@ -7800,9 +7819,18 @@ class GameClient(ScreensMixin, CameraYaw):
                         self.screen, rect, tile_id, wx, wy, client=self,
                     ):
                         return
+                # Stonehaven / void never use dirt lanes — native floors only.
+                if zone == "city":
+                    sprites.draw_stone_floor(self.screen, rect, wx, wy)
+                    return
+                if zone == "shadow_crypt":
+                    sprites.draw_void_ground(self.screen, rect, wx, wy)
+                    return
                 if not self._paint_lane(rect, wx, wy, zone):
                     sprites.draw_path(self.screen, rect, wx, wy, zone=zone)
         elif tile_id == wm.STONE:
+            if emberdeep_volcano_client.draw_ground(self, rect, wx, wy):
+                return
             if zone == "fairy_village":
                 import fairy_village_client
                 if fairy_village_client.draw_terrain(
@@ -7811,6 +7839,9 @@ class GameClient(ScreensMixin, CameraYaw):
                     return
             sprites.draw_stone_floor(self.screen, rect, wx, wy)
         elif tile_id == wm.FLOOR:
+            if zone == "shadow_crypt" and not self.dungeon:
+                sprites.draw_void_ground(self.screen, rect, wx, wy)
+                return
             shell = self.building_at_tile(wx, wy)
             if shell is not None and not self.player_inside_building(shell):
                 if self._shell_underfoot(shell) == "stone":
@@ -7831,13 +7862,22 @@ class GameClient(ScreensMixin, CameraYaw):
                 else:
                     if not self._paint_meadow(rect, wx, wy, zone):
                         sprites.draw_grass(self.screen, rect, wx, wy)
+            elif wm.is_stonehaven_fort_wall(wx, wy):
+                # Style B fort sprites (queued) sit on a dark stone footing.
+                if not stonehaven_walls_client.draw_ground(self, rect, wx, wy):
+                    sprites.draw_dungeon_wall(self.screen, rect, wx, wy)
             elif wm.is_graveyard_wall(wx, wy):
                 sprites.draw_dungeon_wall(self.screen, rect, wx, wy)
             elif zone in ("village", "fishing_village"):
                 if not self._paint_meadow(rect, wx, wy, zone):
                     sprites.draw_grass(self.screen, rect, wx, wy)
             elif zone == "city":
-                sprites.draw_stone_floor(self.screen, rect, wx, wy)
+                if wm.is_stonehaven_fort_wall(wx, wy) and stonehaven_walls_client.draw_ground(
+                    self, rect, wx, wy,
+                ):
+                    pass
+                else:
+                    sprites.draw_dungeon_wall(self.screen, rect, wx, wy)
             elif zone == "mountains":
                 sprites.draw_mountain_rock(self.screen, rect, wx, wy)
             else:
@@ -8887,6 +8927,79 @@ class GameClient(ScreensMixin, CameraYaw):
                 (0.2, 3.2, 2.1, False),
             ):
                 _blit("lava_rocks", cx + dx * tile, cy + dy * tile, max(40, int(tile * h)), flip)
+
+    def _void_sanctum_prop(self, name):
+        cache = getattr(self, "_void_sanctum_props", None)
+        if not isinstance(cache, dict):
+            cache = self._void_sanctum_props = {}
+        if name in cache:
+            return cache[name]
+        path = os.path.join(
+            os.path.dirname(__file__), "assets", "props", "void_sanctum", f"{name}.png",
+        )
+        try:
+            cache[name] = pygame.image.load(path).convert_alpha()
+        except Exception:
+            cache[name] = None
+        return cache[name]
+
+    def draw_void_sanctum_scenery(self, cx, cy, tile, t=0.0, layer="back"):
+        """Void apron, obelisks, and crystal clusters around the 3x rift."""
+        scale_cache = getattr(self, "_void_prop_scaled", None)
+        if not isinstance(scale_cache, dict):
+            scale_cache = self._void_prop_scaled = {}
+
+        def _blit(name, px, py, target_h, flip=False):
+            img = self._void_sanctum_prop(name)
+            if img is None:
+                return
+            key = (name, target_h, flip)
+            scaled = scale_cache.get(key)
+            if scaled is None:
+                tw = max(16, int(round(img.get_width() * target_h / float(img.get_height()))))
+                scaled = pygame.transform.smoothscale(img, (tw, target_h))
+                if flip:
+                    scaled = pygame.transform.flip(scaled, True, False)
+                scale_cache[key] = scaled
+            self.screen.blit(
+                scaled,
+                (int(px - scaled.get_width() // 2), int(py - scaled.get_height() + tile // 3)),
+            )
+
+        if layer == "back":
+            apron = self._void_sanctum_prop("void_apron")
+            if apron is not None:
+                target_h = max(100, int(round(tile * 6.2)))
+                key = ("void_apron", target_h, False)
+                scaled = scale_cache.get(key)
+                if scaled is None:
+                    tw = max(80, int(round(apron.get_width() * target_h / float(apron.get_height()))))
+                    scaled = pygame.transform.smoothscale(apron, (tw, target_h))
+                    scale_cache[key] = scaled
+                self.screen.blit(
+                    scaled,
+                    (int(cx - scaled.get_width() // 2), int(cy + tile * 0.3 - scaled.get_height() * 0.55)),
+                )
+            for dx, dy, h, flip in (
+                (-3.8, -0.6, 3.4, False),
+                (3.6, -0.4, 3.2, True),
+                (-2.4, 1.2, 2.4, True),
+                (2.6, 1.4, 2.5, False),
+            ):
+                _blit("void_obelisk", cx + dx * tile, cy + dy * tile, max(48, int(tile * h)), flip)
+            for dx, dy, h, flip in (
+                (-4.6, 0.8, 2.2, False),
+                (4.4, 1.0, 2.1, True),
+            ):
+                _blit("void_crystals", cx + dx * tile, cy + dy * tile, max(40, int(tile * h)), flip)
+        else:
+            pulse = 0.5 + 0.5 * math.sin(t * 2.2)
+            for dx, dy, h, flip in (
+                (-3.2, 2.4, 2.6 + 0.15 * pulse, False),
+                (3.0, 2.2, 2.5 + 0.12 * pulse, True),
+                (0.4, 3.0, 2.0, False),
+            ):
+                _blit("void_crystals", cx + dx * tile, cy + dy * tile, max(40, int(tile * h)), flip)
 
     def blit_nameplate(self, text, cx, top_y, color=WHITE):
         """Fantasy name tag. Queued during map draw so labels stay sharp and above cover."""

@@ -1,19 +1,21 @@
 """Stonehaven castle v2 layout.
 
 The pack was authored for an older map (footprint x 100–123, y 31–54).
-The keep now stands against the south face of Wolf Pass, gate facing south
-onto Stonehaven's north-east corner: every pack coordinate is shifted by
-(DX, DY) = (+42, +2), landing on x 142–165, y 33–56. (It used to sit on the
-city plaza at +18, +16, x 118–141, y 47–70.)
+The keep stands against the south face of Wolf Pass, gate facing south onto
+Stonehaven: every pack coordinate is shifted by (DX, DY).
+
+With wolf_pass.SHIFT_X = -24 the keep lands on x 118–141, y 33–56 (was
+142–165 when DX was +42). City housing grows in the freed land east of the massif.
 """
 import json
 import os
 
 import feature_flags
+import wolf_pass
 
-# pack (100, 31) -> world (142, 33)
-DX, DY = 42, 2
-OLD_DX, OLD_DY = 18, 16   # where the keep stood before the Wolf Pass move
+# pack (100, 31) -> world; authored +42 tracked the massif at x 136–165.
+DX, DY = 42 + wolf_pass.SHIFT_X, 2
+OLD_DX, OLD_DY = 42, 2   # prior Wolf Pass seat (pre massif-west slide)
 
 _JSON = os.path.join(
     os.path.dirname(__file__),

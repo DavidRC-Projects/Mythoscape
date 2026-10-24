@@ -24,11 +24,12 @@ REGIONS = {
     "sanctum": {
         "name": "Void Sanctum",
         "label": "Void Sanctum",
-        "x0": 154, "y0": 98, "x1": 190, "y1": 140,
-        # Keep the north dirt approach + door apron so City↔Void PATH stays linked
-        # after the interior is wiped to grass (pad tiles are not cleared).
-        "pad": (168, 98, 174, 112),
-        "entrance": (171, 108),
+        # Authored rect + world_map.VOID_DX (sanctum slid east of Stonehaven).
+        "x0": 184, "y0": 98, "x1": 220, "y1": 140,
+        # Keep the south mouth + north approach so City↔Void stays linked after
+        # the interior is wiped to grass (pad tiles are not cleared).
+        "pad": (202, 96, 208, 132),
+        "entrance": (205, 128),
     },
 }
 

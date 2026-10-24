@@ -149,28 +149,24 @@ BOARDS = ({"id": "notice_board_village", "x": 27, "y": 19},)
 
 
 def _follow_castle():
-    """Protesters, the castle crier and the castle notice board stand in the
-    keep's bailey. They follow the keep (castle_v2.DX/DY), now by Wolf Pass."""
+    """Protesters and the castle crier stand in the keep's bailey (pack space)."""
     global PROTESTER_SPOTS
     try:
         import castle_v2
         if not castle_v2.active():
             return
-        dx, dy = castle_v2.DX - castle_v2.OLD_DX, castle_v2.DY - castle_v2.OLD_DY
     except Exception:
         return
-    PROTESTER_SPOTS = tuple((x + dx, y + dy) for x, y in PROTESTER_SPOTS)
+    PROTESTER_SPOTS = tuple(castle_v2.w(px, py) for px, py in ((111, 48), (112, 49), (110, 50)))
     for item in CRIERS + BOARDS:
-        if item["id"] in ("crier_square", "notice_board_square"):
-            item["x"] += dx
-            item["y"] += dy
+        if item["id"] == "crier_square":
+            item["x"], item["y"] = castle_v2.w(115, 50)
 
 
 _follow_castle()
 
-# Spread around Stonehaven (not piled at the old plaza — that court block
-# was never shifted when the keep moved to Wolf Pass).
-ENVOYS = ({"id": "envoy_valcrest", "house": "valcrest", "name": "Lady Ismay, Valcrest Envoy", "x": 155, "y": 58},
+# Spread around Stonehaven (east ward after the massif slid west).
+ENVOYS = ({"id": "envoy_valcrest", "house": "valcrest", "name": "Lady Ismay, Valcrest Envoy", "x": 152, "y": 64},
           {"id": "envoy_thornmere", "house": "thornmere", "name": "Master Corvin, Thornmere Envoy", "x": 116, "y": 76},
           {"id": "envoy_ironhold", "house": "ironhold", "name": "Captain Brand, Ironhold Envoy", "x": 140, "y": 98},
           {"id": "envoy_commons", "house": "commons", "name": "Goodwife Tansy, Commons Envoy", "x": 122, "y": 74})

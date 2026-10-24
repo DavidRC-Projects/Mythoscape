@@ -1676,6 +1676,30 @@ def quest_status_for(session, quest_id):
     return info
 
 
+# World-spawned quest props that must vanish for a player after their quest is done.
+QUEST_GROUND_ITEMS = {
+    "lost_locket": "liras_lost_locket",
+}
+
+
+def quest_ground_item_hidden(session, item_id):
+    """True when this player should no longer see/pick up a quest ground spawn."""
+    qid = QUEST_GROUND_ITEMS.get(item_id)
+    if not qid:
+        return False
+    return (session.quests.get(qid) or {}).get("status") == "complete"
+
+
+def ground_items_public(session):
+    """Per-player ground view — hide completed quest props (shared world spawn stays for others)."""
+    out = {}
+    for (x, y), items in WORLD.ground_items.items():
+        filtered = [it for it in items if not quest_ground_item_hidden(session, it["item_id"])]
+        if filtered:
+            out[f"{x},{y}"] = filtered
+    return out
+
+
 def npc_quest_ids(npc):
     """Ordered quest list for an NPC (`quest_ids` preferred, else legacy `quest_id`)."""
     ids = list(npc.get("quest_ids") or [])
@@ -3556,6 +3580,9 @@ async def vacuum_ground_loot(session, quiet=False):
             if ITEMS.get(item_id, {}).get("karma_xp"):
                 await bury_bone_stack(session, item_id, qty, quiet=True)
                 bones_buried += qty
+                continue
+            if quest_ground_item_hidden(session, item_id):
+                remaining.append(entry)
                 continue
             if pickup_ignored(session, item_id):
                 remaining.append(entry)
@@ -7394,6 +7421,8 @@ async def handle_pickup(session, msg):
             cid = cand["item_id"]
             if want and cid != want:
                 continue
+            if quest_ground_item_hidden(session, cid):
+                continue
             if pickup_ignored(session, cid) and not (force and cid == want):
                 continue
             idx = i
@@ -8099,7 +8128,6 @@ async def game_loop():
             "players": world_players,
             "monsters": [m.public_state() for m in WORLD.monsters.values()],
             "pets": [s.pet_public() for s in WORLD.sessions.values() if s.pet_id and not s.dungeon],
-            "ground_items": {f"{x},{y}": items for (x, y), items in WORLD.ground_items.items()},
             "resources": {
                 f"{x},{y}": n["type"]
                 for (x, y), n in WORLD.resource_nodes.items()
@@ -8140,7 +8168,10 @@ async def game_loop():
                     },
                 })
             else:
-                await send(session.ws, "STATE_UPDATE", **world_state)
+                await send(session.ws, "STATE_UPDATE", **{
+                    **world_state,
+                    "ground_items": ground_items_public(session),
+                })
         for ev in events:
             data = ev["data"]
             if data.get("_dungeon_player"):
