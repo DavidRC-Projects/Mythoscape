@@ -15,7 +15,7 @@ import time
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, InvalidHashError
 
-from content import STARTER_INVENTORY, XP_SKILLS, INVENTORY_SIZE
+from content import STARTER_INVENTORY, XP_SKILLS, INVENTORY_SIZE, ITEMS
 from world_map import SPAWN_POINT
 import combat
 
@@ -62,7 +62,8 @@ CREATE TABLE IF NOT EXISTS players (
     equip_ring TEXT,
     equip_ammo TEXT,
     equip_tool TEXT,
-    auto_pickup_items INTEGER NOT NULL DEFAULT 1,
+    equip_tools TEXT NOT NULL DEFAULT '{}',
+    auto_pickup_items INTEGER NOT NULL DEFAULT 0,
     stats_allocated INTEGER NOT NULL DEFAULT 0,
     bank_coins INTEGER NOT NULL DEFAULT 0,
     active_pet TEXT,
@@ -182,7 +183,7 @@ class Database:
             self.conn.execute("ALTER TABLE players ADD COLUMN equip_ring TEXT")
         if "auto_pickup_items" not in cols:
             self.conn.execute(
-                "ALTER TABLE players ADD COLUMN auto_pickup_items INTEGER NOT NULL DEFAULT 1"
+                "ALTER TABLE players ADD COLUMN auto_pickup_items INTEGER NOT NULL DEFAULT 0"
             )
         if "stats_allocated" not in cols:
             # Existing characters already started — treat them as allocated.
@@ -233,6 +234,10 @@ class Database:
             self.conn.execute("ALTER TABLE players ADD COLUMN equip_ammo TEXT")
         if "equip_tool" not in cols:
             self.conn.execute("ALTER TABLE players ADD COLUMN equip_tool TEXT")
+        if "equip_tools" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN equip_tools TEXT NOT NULL DEFAULT '{}'"
+            )
         if "quiver_contents" not in cols:
             self.conn.execute(
                 "ALTER TABLE players ADD COLUMN quiver_contents TEXT NOT NULL DEFAULT '{}'"
@@ -326,8 +331,12 @@ class Database:
         ruling.ensure_schema(self.conn)
         import politics
         politics.ensure_schema(self.conn)
+        import player_houses
+        player_houses.ensure_schema(self.conn)
         import property as _property
         _property.ensure_schema(self.conn)
+        import mercenaries
+        mercenaries.ensure_schema(self.conn)
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS bank ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -384,14 +393,29 @@ class Database:
             "INSERT INTO players (username, password_hash, salt, char_name, x, y, "
             "attack_xp, strength_xp, defence_xp, "
             "created_at, last_login, stats_allocated, auto_pickup_items, gender) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)",
             (username, pw_hash, salt, char_name, x, y,
              start_combat_xp, start_combat_xp, start_combat_xp, now, now, gender),
         )
         self.conn.commit()
         player_id = cur.lastrowid
-        for slot, (item_id, qty) in enumerate(STARTER_INVENTORY):
-            self.add_item_to_slot(player_id, slot, item_id, qty)
+        # Starter gather tools go straight into per-skill tool slots (axe / pick / net),
+        # so new players never have to equip them before chopping, mining or fishing.
+        starter_tools = {
+            "woodcutting": "bronze_axe",
+            "mining": "bronze_pickaxe",
+            "fishing": "small_fishing_net",
+        }
+        bag_i = 0
+        for item_id, qty in STARTER_INVENTORY:
+            skill = next((s for s, t in starter_tools.items() if t == item_id), None)
+            if skill:
+                continue
+            self.add_item_to_slot(player_id, bag_i, item_id, qty)
+            bag_i += 1
+        self.set_equip_tools(player_id, starter_tools)
+        # Legacy single column mirrors the pickaxe (common gather tool) for older readers.
+        self.set_equipment(player_id, "tool", starter_tools["mining"])
         return self.get_player_by_id(player_id)
 
     def _rehash_password(self, player_id, password):
@@ -466,6 +490,51 @@ class Database:
         self.conn.execute(f"UPDATE players SET {col} = ? WHERE id = ?", (item_id, player_id))
         self.conn.commit()
 
+    def get_equip_tools(self, player_id):
+        """Per-skill gather tools: woodcutting / mining / fishing → item_id."""
+        import json
+        row = self.get_player_by_id(player_id)
+        if row is None:
+            return {}
+        raw = row["equip_tools"] if "equip_tools" in row.keys() else "{}"
+        try:
+            data = json.loads(raw or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            data = {}
+        if not isinstance(data, dict):
+            data = {}
+        # Migrate legacy single equip_tool into the matching skill once.
+        legacy = row["equip_tool"] if "equip_tool" in row.keys() else None
+        if legacy and not data:
+            skill = (ITEMS.get(legacy) or {}).get("tool_for")
+            if skill in ("woodcutting", "mining", "fishing"):
+                data[skill] = legacy
+                self.set_equip_tools(player_id, data)
+        return {k: v for k, v in data.items() if k in ("woodcutting", "mining", "fishing") and v}
+
+    def set_equip_tools(self, player_id, tools):
+        import json
+        clean = {k: v for k, v in (tools or {}).items()
+                 if k in ("woodcutting", "mining", "fishing") and v}
+        self.conn.execute(
+            "UPDATE players SET equip_tools = ? WHERE id = ?",
+            (json.dumps(clean), player_id),
+        )
+        # Keep equip_tool in sync (prefer mining, then woodcutting, then fishing).
+        mirror = clean.get("mining") or clean.get("woodcutting") or clean.get("fishing")
+        self.conn.execute(
+            "UPDATE players SET equip_tool = ? WHERE id = ?", (mirror, player_id),
+        )
+        self.conn.commit()
+
+    def set_equip_tool_skill(self, player_id, skill, item_id):
+        tools = self.get_equip_tools(player_id)
+        if item_id:
+            tools[skill] = item_id
+        else:
+            tools.pop(skill, None)
+        self.set_equip_tools(player_id, tools)
+
     # --- bank -------------------------------------------------------------
     def get_bank(self, player_id):
         cur = self.conn.execute(
@@ -498,9 +567,30 @@ class Database:
         )
         self.conn.commit()
 
+    def _player_guild_names(self):
+        """player id -> guild name, if the clans tables exist."""
+        tables = {r[0] for r in self.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )}
+        if "clan_members" not in tables or "clans" not in tables:
+            return {}
+        rows = self.conn.execute(
+            "SELECT m.player_id, c.name FROM clan_members m "
+            "JOIN clans c ON c.clan_id = m.clan_id"
+        ).fetchall()
+        return {int(r[0]): r[1] for r in rows}
+
     def get_leaderboards(self, limit=50):
-        """Top players per skill by XP, plus overall total level."""
+        """Top players per skill by XP, overall total, and guild ranks."""
         cols = {row[1] for row in self.conn.execute("PRAGMA table_info(players)")}
+        guild_of = self._player_guild_names()
+        # char_name -> guild (for annotating rows)
+        name_guild = {}
+        if guild_of:
+            for row in self.conn.execute("SELECT id, char_name FROM players").fetchall():
+                g = guild_of.get(int(row["id"]))
+                if g:
+                    name_guild[row["char_name"]] = g
         boards = {}
         for skill in XP_SKILLS:
             col = f"{skill}_xp"
@@ -517,14 +607,16 @@ class Database:
                     "name": row["char_name"],
                     "xp": int(row["xp"] or 0),
                     "level": combat.level_from_xp(int(row["xp"] or 0)),
+                    "guild": name_guild.get(row["char_name"]) or "",
                 }
                 for row in rows
             ]
 
         # Overall total level = sum of all skill levels; XP = sum of skill XP
         xp_cols = [f"{s}_xp" for s in XP_SKILLS if f"{s}_xp" in cols]
+        player_totals = {}  # id -> (total_level, total_xp, char_name)
         if xp_cols:
-            select_cols = ", ".join(["char_name"] + xp_cols)
+            select_cols = ", ".join(["id", "char_name"] + xp_cols)
             rows = self.conn.execute(f"SELECT {select_cols} FROM players").fetchall()
             totals = []
             for row in rows:
@@ -534,13 +626,55 @@ class Database:
                     xp = int(row[col] or 0)
                     total_xp += xp
                     total_level += combat.level_from_xp(xp)
+                player_totals[int(row["id"])] = (total_level, total_xp, row["char_name"])
                 totals.append({
                     "name": row["char_name"],
                     "xp": total_xp,
                     "level": total_level,
+                    "guild": name_guild.get(row["char_name"]) or "",
                 })
             totals.sort(key=lambda e: (-e["level"], -e["xp"], e["name"]))
             boards["total"] = totals[:limit]
         else:
             boards["total"] = []
+
+        # Guild hiscores: sum of member total levels / XP
+        boards["guild"] = self._guild_leaderboard(limit, player_totals, guild_of)
         return boards
+
+    def _guild_leaderboard(self, limit, player_totals, guild_of):
+        """Rank guilds by combined member total level, then total XP."""
+        tables = {r[0] for r in self.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )}
+        if "clans" not in tables or "clan_members" not in tables:
+            return []
+        clans = self.conn.execute("SELECT clan_id, name FROM clans").fetchall()
+        members = self.conn.execute(
+            "SELECT clan_id, player_id FROM clan_members"
+        ).fetchall()
+        by_clan = {}
+        for row in members:
+            by_clan.setdefault(int(row[0]), []).append(int(row[1]))
+        board = []
+        for clan in clans:
+            cid = int(clan[0] if not hasattr(clan, "keys") else clan["clan_id"])
+            cname = clan[1] if not hasattr(clan, "keys") else clan["name"]
+            ids = by_clan.get(cid, [])
+            total_level = 0
+            total_xp = 0
+            for pid in ids:
+                stats = player_totals.get(pid)
+                if not stats:
+                    continue
+                total_level += stats[0]
+                total_xp += stats[1]
+            board.append({
+                "name": cname,
+                "level": total_level,
+                "xp": total_xp,
+                "members": len(ids),
+                "guild": cname,
+            })
+        board.sort(key=lambda e: (-e["level"], -e["xp"], e["name"]))
+        return board[:limit]

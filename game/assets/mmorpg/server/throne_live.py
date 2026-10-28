@@ -59,7 +59,7 @@ def apply_king_state():
     s.NPC_BY_ID.pop("old_king_prisoner", None)
     s.NPC_BY_ID.pop("old_king_aldous", None)
     if st["old_king_state"] == "freed":
-        n = {"id": "old_king_aldous", "name": "Old King Aldous, Royal Advisor", "x": 20, "y": 26,
+        n = {"id": "old_king_aldous", "name": "Old King Aldous, Royal Advisor", "x": 20, "y": 16,
              "plane": throne.THRONE_PLANE,
              "lines": ["Sit, sit. Let an old man tell you how this kingdom really works."]}
         s.NPCS.append(n)

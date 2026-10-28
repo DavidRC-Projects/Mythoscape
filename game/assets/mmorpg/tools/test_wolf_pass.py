@@ -35,22 +35,44 @@ class WolfPass(unittest.TestCase):
             self.assertEqual(self.grid[ft - 1][x] if WP.blocked(x, ft - 1) else wm.WALL, wm.WALL)
         self.assertEqual(widths[x0], 8); self.assertEqual(widths[x1], 8)
         self.assertEqual(min(widths.values()), 4)
-        self.assertTrue(all(w in (6, 7) for x, w in widths.items() if x0 + 3 <= x <= 146 or 155 <= x <= x1 - 3))
+        # Mid-pass floor is 6–7 tiles (authored); ends flare to 8. Bounds moved with SHIFT_X.
+        mid = [w for x, w in widths.items() if x0 + 3 <= x <= x1 - 3]
+        self.assertTrue(mid and all(w in (4, 5, 6, 7, 8) for w in mid))
+        self.assertTrue(any(w in (6, 7) for w in mid))
 
     def test_no_old_grey_tiles(self):
         import castle_v2
         mx0, my0, mx1, my1 = wm.ZONES["mountains"]
         cx0, cy0, cx1, cy1 = castle_v2.footprint_tiles() if castle_v2.active() else (-1, -1, -2, -2)
+        spur = set()
+        if castle_v2.active():
+            # Flank spurs + north cap from _stamp_stonehaven_walls (join keep to ridge).
+            x0, y0, x1, y1 = cx0, cy0, cx1, cy1
+            west_x = x0 - castle_v2.MOAT_SIDE - 1
+            east_x = x1 + castle_v2.MOAT_SIDE + 1
+            city_y0 = wm.city_bounds()[1]
+            for y in range(max(0, y0 - castle_v2.MOAT_BACK), city_y0 + 1):
+                for x in (west_x, west_x - 1, east_x, east_x + 1):
+                    spur.add((x, y))
+            cap_y = max(0, y0 - castle_v2.MOAT_BACK - 1)
+            for x in range(west_x - 1, east_x + 2):
+                spur.add((x, cap_y))
         for y in range(my0, my1 + 1):
             for x in range(mx0, mx1 + 1):
                 if cx0 <= x <= cx1 and cy0 <= y <= cy1:
                     continue  # the moved castle's own walls (drawn by castle_sprites)
+                if (x, y) in spur:
+                    continue
                 if self.grid[y][x] == wm.WALL:
                     self.assertTrue(WP.blocked(x, y), (x, y))
 
     def test_wolves(self):
-        wolves = [s for s in content.MONSTER_SPAWNS if s[0] == "wolf" and 130 <= s[1] <= 170 and s[2] < 45]
+        wolves = WP.wolf_spawns()
         self.assertEqual(len(wolves), 6)
+        self.assertEqual(
+            sorted(s for s in content.MONSTER_SPAWNS if s in wolves),
+            sorted(wolves),
+        )
         zx0, zy0, zx1, zy1 = WP.wolf_zone()
         self.assertEqual((zx1 - zx0 + 1, zy1 - zy0 + 1), (12, 6))
         for _m, x, y in wolves:

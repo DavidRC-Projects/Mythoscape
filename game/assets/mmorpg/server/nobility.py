@@ -282,5 +282,14 @@ def perks_lines():
 CHAMBERLAIN_OPTIONS = [
     {"id": "noble_petition", "label": "Petition for rank"},
     {"id": "noble_perks", "label": "What do ranks grant?"},
+    {"id": "social_explain", "label": "Charisma & Etiquette?"},
+    {"id": "tribute_menu", "label": "Offer tribute to the Crown"},
     {"id": "noble_leave", "label": "Leave"},
+]
+
+SOCIAL_EXPLAIN_LINES = [
+    "Charisma grows when you talk to folk (once a day each) and finish quests. Persuade options and noble ranks need it.",
+    "Etiquette grows when you pay land fees, make taxed trades, work as an apprentice — or offer tribute to the Crown.",
+    "Standing (Reputation) is separate: honest work and quests raise it; shops treat you better and ranks require a tier.",
+    "Tribute: costly gold or gems for a little Court Favour plus Charisma and Etiquette XP — never a cheap shortcut. Ask me to Offer tribute when you can afford it.",
 ]

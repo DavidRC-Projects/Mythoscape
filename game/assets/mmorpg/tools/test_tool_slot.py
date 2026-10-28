@@ -1,7 +1,7 @@
-"""Tool equipment slot (David, 23 Oct 2026). Run: python3 tools/test_tool_slot.py
+"""Per-skill gather tools (David, 25 Oct 2026). Run: python3 tools/test_tool_slot.py
 
-Hatchet, pickaxe and fishing tools equip into their own "tool" slot: out of the bag, shown on the
-Equipment screen, and gathering uses the equipped one (a tool sitting in the bag is not enough).
+Axe, pickaxe and fishing net each have their own equip slot. New accounts start with all three
+worn. The weapon stays equipped while gathering — the tool for that skill drives the animation.
 """
 import asyncio, json, os, sys
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
@@ -29,16 +29,20 @@ def run(c):
     return asyncio.run(c)
 
 
-def make():
+def make(clear_tools=True):
     _N[0] += 1
     user = f"ts{_N[0]}"
     W.db.create_account(user, "pw", f"Tool{_N[0]}")
     row = W.db.get_player_by_username(user)
     W.db.save_player_stats(row["id"], stats_allocated=1)
     s = server.PlayerSession(WS(), W.db.get_player_by_username(user))
-    for slot in list(s.equipment):
-        s.equipment[slot] = None
-    s.inventory.clear()
+    s.inventory = W.db.get_inventory(row["id"])
+    if clear_tools:
+        for skill in ("woodcutting", "mining", "fishing"):
+            s.equipment[f"tool_{skill}"] = None
+        s.equipment["tool"] = None
+        W.db.set_equip_tools(s.player_id, {})
+        s.inventory.clear()
     return s
 
 
@@ -80,40 +84,59 @@ def test_tools_live_in_tool_slot():
         assert not ITEMS[t].get("att_bonus") and not ITEMS[t].get("str_bonus"), t
 
 
-def test_equip_moves_tool_out_of_bag():
+def test_new_account_starts_with_all_gather_tools_equipped():
+    s = make(clear_tools=False)
+    assert s.equipment["tool_woodcutting"] == "bronze_axe"
+    assert s.equipment["tool_mining"] == "bronze_pickaxe"
+    assert s.equipment["tool_fishing"] == "small_fishing_net"
+    assert "bronze_axe" not in bag(s) and "bronze_pickaxe" not in bag(s)
+    assert "small_fishing_net" not in bag(s)
+    # Weapon slot is free for the Recruit sword — tools don't occupy it.
+    assert s.equipment.get("weapon") in (None, "recruit_bronze_sword", "bronze_sword")
+
+
+def test_equip_per_skill_keeps_other_tools_and_weapon():
     s = make()
     s.equipment["weapon"] = "bronze_sword"
     equip(s, "bronze_pickaxe")
-    assert s.equipment["tool"] == "bronze_pickaxe" and "bronze_pickaxe" not in bag(s)
-    assert s.equipment["weapon"] == "bronze_sword"                 # the sword stays in hand
-    assert W.db.get_player_by_id(s.player_id)["equip_tool"] == "bronze_pickaxe"
-    assert s.full_state()["equipment"]["tool"] == "bronze_pickaxe"
-    equip(s, "bronze_axe")                                         # swap: the old tool goes back to the bag
-    assert s.equipment["tool"] == "bronze_axe" and bag(s) == ["bronze_pickaxe"]
-    run(server.handle_unequip(s, {"equip_slot": "tool"}))
-    assert s.equipment["tool"] is None and sorted(bag(s)) == ["bronze_axe", "bronze_pickaxe"]
+    equip(s, "bronze_axe")
+    equip(s, "small_fishing_net")
+    assert s.equipment["tool_mining"] == "bronze_pickaxe"
+    assert s.equipment["tool_woodcutting"] == "bronze_axe"
+    assert s.equipment["tool_fishing"] == "small_fishing_net"
+    assert s.equipment["weapon"] == "bronze_sword"
+    assert bag(s) == []
+    tools = W.db.get_equip_tools(s.player_id)
+    assert tools["mining"] == "bronze_pickaxe" and tools["woodcutting"] == "bronze_axe"
+    run(server.handle_unequip(s, {"equip_slot": "tool_mining"}))
+    assert s.equipment["tool_mining"] is None and "bronze_pickaxe" in bag(s)
+    assert s.equipment["tool_woodcutting"] == "bronze_axe"
 
 
-def test_gathering_uses_equipped_tool():
+def test_gathering_uses_per_skill_tool_without_swapping():
     s = make()
-    W.add_item_to_inventory(s, "bronze_axe", 1)                    # in the bag only: not enough
+    for t in ("bronze_axe", "bronze_pickaxe", "small_fishing_net"):
+        equip(s, t)
+    s.equipment["weapon"] = "bronze_sword"
+    gather(s, "woodcutting")
+    assert s.gathering_node is not None and W.gather_tool_id(s, "woodcutting") == "bronze_axe"
+    s.gathering_node = None
+    gather(s, "mining")
+    assert s.gathering_node is not None and W.gather_tool_id(s, "mining") == "bronze_pickaxe"
+    assert s.equipment["weapon"] == "bronze_sword"
+
+
+def test_bag_only_tool_is_not_enough():
+    s = make()
+    W.add_item_to_inventory(s, "bronze_axe", 1)
     gather(s, "woodcutting")
     assert s.gathering_node is None and "Equip an axe" in errors(s)[-1], errors(s)
-    equip(s, "bronze_axe")
-    gather(s, "woodcutting")
-    assert s.gathering_node is not None, errors(s)
-    assert W.gather_tool_id(s, "woodcutting") == "bronze_axe"
-    s.ws.out.clear()
-    gather(s, "mining")                                            # wrong tool equipped
-    assert s.gathering_node is None and "Equip a pickaxe" in errors(s)[-1], errors(s)
-    equip(s, "bronze_pickaxe")
-    gather(s, "mining")
-    assert s.gathering_node is not None, errors(s)
 
 
 def test_tool_slot_carries_no_combat():
     s = make()
-    s.equipment["tool"] = "bronze_axe"
+    s.equipment["tool_woodcutting"] = "bronze_axe"
+    s._sync_legacy_tool_slot()
     assert s.weapon_bonuses()["att_bonus"] == 0 and s.weapon_bonuses()["str_bonus"] == 0
 
 
@@ -121,26 +144,36 @@ def test_legacy_weapon_slot_tool_migrates():
     s = make()
     W.db.set_equipment(s.player_id, "weapon", "bronze_pickaxe")
     t = server.PlayerSession(WS(), W.db.get_player_by_id(s.player_id))
-    assert t.equipment["tool"] == "bronze_pickaxe" and t.equipment["weapon"] is None
-    row = W.db.get_player_by_id(s.player_id)
-    assert row["equip_tool"] == "bronze_pickaxe" and row["equip_weapon"] is None
+    assert t.equipment["tool_mining"] == "bronze_pickaxe" and t.equipment["weapon"] is None
+    tools = W.db.get_equip_tools(s.player_id)
+    assert tools.get("mining") == "bronze_pickaxe"
 
 
 def test_tutorial_teaches_tools():
     flat = " ".join(" ".join(p) for p in welcome_kit.TOUR)
     assert welcome_kit.TOOLS_STEP in welcome_kit.TOUR
-    for word in ("tool slot", "Equipment", "hatchet", "pickaxe"):
+    for word in ("equipped", "Equipment", "axe", "pickaxe", "Crypt"):
         assert word in flat, word
 
 
-def test_equipment_screen_has_tool_slot():
+def test_equipment_screen_has_tool_slots():
     sys.path.insert(0, os.path.join(ROOT, "client"))
     import pygame
     pygame.init()
     import equipment_ui_v2 as ui
-    assert "tool" in ui.DOLL and "tool" in ui.ANCHOR
+    for key in ("tool_woodcutting", "tool_mining", "tool_fishing"):
+        assert key in ui.DOLL and key in ui.ANCHOR
     surf = pygame.Surface((46, 46))
-    ui._silhouette(surf, "tool", surf.get_rect())
+    ui._silhouette(surf, "tool_mining", surf.get_rect())
+
+
+def test_crypt_is_early_quest():
+    from content import QUESTS, NPCS
+    q = QUESTS["crypt_first_delve"]
+    assert q["requires"] == "rat_problem" and q["target"] == "skeleton"
+    miriam = next(n for n in NPCS if n["id"] == "elder_miriam")
+    assert "crypt_first_delve" in miriam["quest_ids"]
+    assert "Crypt" in q["description"] and "Tidehollow" in q["description"]
 
 
 if __name__ == "__main__":

@@ -216,6 +216,67 @@ def test_restart_resumes():
     assert b["end"] == T0 + 12 * 3600 + 600 + th.CROWN_WINDOW and th.scheduled(c)[0]["status"] == "active"
 
 
+def test_tribute_pays_gold_for_favour_and_xp():
+    c = _db()
+    cost, fav, ch, et, standing_exp = th.TRIBUTE_COIN_OFFERS[0]
+    # Purse + bank both count (need full cost across both).
+    purse, bank = cost // 4, cost - cost // 4
+    c.execute("UPDATE players SET coins = ?, bank_coins = ? WHERE id = 1", (purse, bank))
+    ap.bank_set(c, 1, bank)
+    s = _sess(pid=1)
+    s.coins, s.bank_coins = purse, bank
+    ok, lines, xp, standing = th.pay_tribute_coin(s, c, cost, now=T0)
+    assert ok and xp == {"charisma": ch, "etiquette": et} and standing == standing_exp
+    assert s.coins == 0 and s.bank_coins == 0
+    assert th.favour_row(c, 1)["favour"] == fav
+    assert rt.balance(c) == cost
+    # Broke: no charge, no favour.
+    s.coins, s.bank_coins = 0, 0
+    ap.bank_set(c, 1, 0)
+    c.execute("UPDATE players SET coins = 0 WHERE id = 1")
+    ok2, lines2, xp2, _ = th.pay_tribute_coin(s, c, cost, now=T0)
+    assert not ok2 and xp2 is None and th.favour_row(c, 1)["favour"] == fav
+    # Daily tribute count cap.
+    ap.bank_set(c, 1, 10**7)
+    s.bank_coins = 10**7
+    s.coins = 0
+    for _ in range(th.TRIBUTES_PER_DAY - 1):  # one already spent above
+        assert th.pay_tribute_coin(s, c, cost, now=T0)[0]
+    assert not th.pay_tribute_coin(s, c, cost, now=T0)[0]
+
+
+def test_tribute_gem_trade_in():
+    c = _db()
+    gem, qty, fav, ch, et, standing_exp = th.TRIBUTE_GEM_OFFERS[0]
+    bag = {gem: qty}
+
+    def take(g, q):
+        if bag.get(g, 0) < q:
+            return False
+        bag[g] -= q
+        return True
+
+    s = _sess(pid=1)
+    ok, lines, xp, standing = th.pay_tribute_gem(s, c, gem, take_items=take, now=T0)
+    assert ok and xp == {"charisma": ch, "etiquette": et} and standing == standing_exp
+    assert bag[gem] == 0 and th.favour_row(c, 1)["favour"] == fav
+    # Missing gems: no favour change.
+    ok2, _, xp2, _ = th.pay_tribute_gem(s, c, gem, take_items=take, now=T0)
+    assert not ok2 and xp2 is None and th.favour_row(c, 1)["favour"] == fav
+    # Option ids cover coin + gem paths.
+    ids = {o["id"] for o in th.tribute_options()}
+    assert f"tribute_coin_{th.TRIBUTE_COIN_OFFERS[0][0]}" in ids
+    assert f"tribute_gem_{gem}" in ids
+
+
+def test_social_explain_and_welcome_mention_skills():
+    import welcome_kit
+    flat = " ".join(" ".join(p) for p in welcome_kit.TOUR)
+    assert "Charisma" in flat and "Etiquette" in flat and "tribute" in flat.lower()
+    assert any("Charisma" in line for line in nb.SOCIAL_EXPLAIN_LINES)
+    assert "Etiquette" in " ".join(ap.info_lines("farm"))
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

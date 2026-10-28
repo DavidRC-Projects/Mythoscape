@@ -89,7 +89,7 @@ def test_catalogue_v2():
     for it in cat["items"]:
         if it["slot"] in ("top", "bottom", "shoes", "accessory") or (it["slot"] == "outfit" and not it.get("set")):
             assert it.get("legacy"), it["id"]
-    assert len(outfits.hair_swatches()) == 10
+    assert len(outfits.hair_swatches()) == 14
     coll = cat["collection"]
     els = {"fire", "frost", "storm", "shadow", "nature", "water", "light"}
     assert {c["id"] for c in coll} == {f"set_{e}_{x}" for e in els for x in "fm"}

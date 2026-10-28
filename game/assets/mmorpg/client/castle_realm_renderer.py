@@ -162,6 +162,88 @@ def _inside_keep(blob, px, py):
     return px is not None and x0 <= px <= x1 and y0 <= py <= y1
 
 
+def _arena_hash(wx, wy, n=0):
+    return (wx * 374761 + wy * 668265 + n * 127411) & 0xFFFF
+
+
+def _draw_arena_sand(surf, rect, wx, wy):
+    """Warm packed sand — grit, scuffs, and soft tone shifts under the pit overlay."""
+    h = _arena_hash(wx, wy)
+    tone = 10 + (h & 31)
+    warm = (h >> 5) & 15
+    base = [176 + tone, 142 + tone // 2 + warm // 3, 72 + tone // 3]
+    # Packed lanes and darker tramp patches so the floor isn't flat ochre.
+    if ((wx * 3 + wy * 5) % 11) in (0, 4):
+        base[0] -= 16
+        base[1] -= 12
+        base[2] -= 6
+    elif ((wx + wy * 2) % 9) == 2:
+        base[0] = min(255, base[0] + 14)
+        base[1] = min(255, base[1] + 10)
+        base[2] = min(255, base[2] + 6)
+    pygame.draw.rect(surf, tuple(base), rect)
+    # Fine grit
+    speck = (
+        min(255, base[0] + 22),
+        min(255, base[1] + 16),
+        min(255, base[2] + 8),
+    )
+    dark = (max(0, base[0] - 28), max(0, base[1] - 22), max(0, base[2] - 12))
+    r = max(1, rect.w // 12)
+    if h & 1:
+        pygame.draw.circle(surf, speck, (rect.centerx - 3, rect.centery + 2), r)
+    if (h >> 2) & 3 == 0:
+        pygame.draw.circle(surf, dark, (rect.centerx + 4, rect.centery - 2), max(1, r - 1))
+    if (h >> 4) & 7 == 1:
+        pygame.draw.line(
+            surf, dark,
+            (rect.left + 2, rect.centery + (h % 3) - 1),
+            (rect.right - 2, rect.centery + ((h >> 3) % 3) - 1),
+            1,
+        )
+    # Soft pebble
+    if (h >> 8) & 15 == 3:
+        pygame.draw.circle(
+            surf, (150, 135, 110),
+            (rect.left + 4 + (h % 5), rect.top + 3 + ((h >> 1) % 4)),
+            max(1, rect.w // 16),
+        )
+
+
+def _draw_arena_ring(surf, rect, wx, wy):
+    """Stone seating / ring — terraces, mortar, occasional crimson banner."""
+    h = _arena_hash(wx, wy, 3)
+    shade = 8 + (h & 19)
+    # Alternate slightly cooler / warmer stone blocks.
+    cool = (h >> 4) & 1
+    base = (
+        128 + shade - cool * 6,
+        118 + shade // 2 - cool * 2,
+        104 + shade // 3 + cool * 4,
+    )
+    pygame.draw.rect(surf, base, rect)
+    # Mortar / seat risers
+    mortar = (92, 84, 74)
+    lip = (158, 148, 132)
+    pygame.draw.line(surf, mortar, rect.topleft, rect.topright, 1)
+    pygame.draw.line(surf, lip, (rect.left, rect.top + 1), (rect.right, rect.top + 1), 1)
+    if (wy & 1) == 0:
+        pygame.draw.line(surf, mortar, (rect.left, rect.centery), (rect.right, rect.centery), 1)
+        pygame.draw.line(
+            surf, (base[0] + 18, base[1] + 14, base[2] + 10),
+            (rect.left, rect.centery + 1), (rect.right, rect.centery + 1), 1,
+        )
+    if (wx & 1) == 0:
+        pygame.draw.line(surf, mortar, (rect.centerx, rect.top), (rect.centerx, rect.bottom), 1)
+    # Crimson banner accents — match the campus art's red standards.
+    if ((wx + wy * 3) % 13) == 0 and rect.w >= 8:
+        bx = rect.centerx
+        pygame.draw.line(surf, (70, 55, 40), (bx, rect.top + 2), (bx, rect.bottom - 2), 1)
+        ban = pygame.Rect(bx - max(2, rect.w // 5), rect.top + 3, max(4, rect.w // 2), max(4, rect.h // 2))
+        pygame.draw.rect(surf, (150, 38, 36), ban)
+        pygame.draw.rect(surf, (190, 150, 50), ban, 1)
+
+
 def draw_terrain_tile(client, rect, tile_id, wx, wy, t):
     if not (_realm(client) or _interior(client)):
         return False
@@ -172,6 +254,10 @@ def draw_terrain_tile(client, rect, tile_id, wx, wy, t):
             client.draw_resource_sprite("tree", rect.centerx, rect.centery, t)
         elif char == "~":
             sprites.draw_water_detailed(client.screen, rect, t, wx, wy)
+        elif char == "s":
+            _draw_arena_sand(client.screen, rect, wx, wy)
+        elif char == "A":
+            _draw_arena_ring(client.screen, rect, wx, wy)
         elif char in "=PSol":
             sprites.draw_path(client.screen, rect, wx, wy, zone="realm")
         else:
@@ -210,13 +296,148 @@ def return_portal_xy():
 
 
 def queue(client, draw_list, cam_x, cam_y, tile):
-    if not _realm(client) or not ready():
+    if not _realm(client):
+        return
+    _queue_arena(client, draw_list, cam_x, cam_y, tile)
+    if not ready():
         return
     px, py = client.player_xy() if client.player else (None, None)
     for castle_id, blob in CASTLE_DATA.items():
         if not _castle_ready(blob):
             continue
         _queue_castle(client, draw_list, cam_x, cam_y, tile, castle_id, blob, px, py)
+
+
+def _arena_blob():
+    return REALM.get("arena") or {}
+
+
+def _pit_floor_surface(tile, pit_w, pit_h):
+    """Stretched combat-floor art for the sand pit (oval, mid-line, gate stains)."""
+    use_2x = tile > 40
+    rel = f"sprites/{'2x' if use_2x else '1x'}/arena_pit_floor.png"
+    path = _ROOT / "arena" / rel
+    if not path.is_file():
+        path = _ROOT / "arena" / "sprites/1x/arena_pit_floor.png"
+    if not path.is_file():
+        return None
+    key = ("arena_pit", str(path), int(tile), int(pit_w), int(pit_h))
+    image = _CACHE.get(key)
+    if image is None:
+        raw = pygame.image.load(str(path)).convert_alpha()
+        image = pygame.transform.smoothscale(raw, (max(1, pit_w), max(1, pit_h)))
+        _CACHE[key] = image
+    return image
+
+
+def _queue_arena(client, draw_list, cam_x, cam_y, tile):
+    """Draw Crownfall Arena: pit floor, campus art, and floating label."""
+    arena = _arena_blob()
+    if not arena:
+        return
+    fp = arena.get("footprint") or [0, 0, 0, 0]
+    x0, y0, x1, y1 = (int(fp[0]), int(fp[1]), int(fp[2]), int(fp[3]))
+    if x1 <= x0 or y1 <= y0:
+        return
+    root = _ROOT / "arena"
+
+    # Combat pit floor — sits under the campus art so fights read on marked sand.
+    pit = arena.get("pit") or []
+    if len(pit) >= 4:
+        px0, py0, px1, py1 = (int(pit[0]), int(pit[1]), int(pit[2]), int(pit[3]))
+        if px1 > px0 and py1 > py0:
+            pit_w = (px1 - px0 + 1) * tile
+            pit_h = (py1 - py0 + 1) * tile
+            pit_img = _pit_floor_surface(tile, pit_w, pit_h)
+            if pit_img is not None:
+                psx, psy = client.world_to_view_offset(px0, py0, cam_x, cam_y)
+                pleft, ptop = psx * tile, psy * tile
+
+                def _blit_pit(img=pit_img, left=pleft, top=ptop):
+                    fighting_now = bool(
+                        getattr(client, "arena_match", None)
+                        and client.arena_match.get("active")
+                    )
+                    # Full floor during a match; still readable when idle on campus.
+                    img.set_alpha(235 if fighting_now else 175)
+                    client.screen.blit(img, (left, top))
+
+                draw_list.append((-10**9 + 40, 0, _blit_pit))
+
+    use_2x = tile > 40
+    sprite = arena.get("sprite_2x" if use_2x else "sprite_1x") or arena.get("sprite_1x") or {}
+    rel = sprite.get("file")
+    if rel:
+        path = root / rel
+        if path.is_file():
+            target_w = max(1, (x1 - x0 + 1) * tile)
+            target_h = max(1, (y1 - y0 + 1) * tile)
+            key = ("arena", str(path), int(tile), x1 - x0, y1 - y0)
+            image = _CACHE.get(key)
+            if image is None:
+                raw = pygame.image.load(str(path)).convert_alpha()
+                # Stretch to cover the full stamped footprint so it dominates the map.
+                image = pygame.transform.smoothscale(raw, (target_w, target_h))
+                _CACHE[key] = image
+            # Fight cutout: keep stadium seating/walls, clear the sand so the pit floor reads.
+            fight_key = ("arena_fight", str(path), int(tile), x1 - x0, y1 - y0,
+                         tuple(int(v) for v in (pit[:4] if len(pit) >= 4 else ())))
+            fight_image = _CACHE.get(fight_key)
+            if fight_image is None and len(pit) >= 4:
+                fight_image = image.copy()
+                px0, py0, px1, py1 = (int(pit[0]), int(pit[1]), int(pit[2]), int(pit[3]))
+                # Soft elliptical hole over the combat pit (local to campus footprint).
+                hole = pygame.Surface((target_w, target_h), pygame.SRCALPHA)
+                local = pygame.Rect(
+                    (px0 - x0) * tile,
+                    (py0 - y0) * tile,
+                    (px1 - px0 + 1) * tile,
+                    (py1 - py0 + 1) * tile,
+                )
+                # Inset slightly so the inner wall lip still frames the sand.
+                local.inflate_ip(-tile // 2, -tile // 2)
+                pygame.draw.ellipse(hole, (0, 0, 0, 255), local)
+                fight_image.blit(hole, (0, 0), special_flags=pygame.BLEND_RGBA_SUB)
+                _CACHE[fight_key] = fight_image
+            sx, sy = client.world_to_view_offset(x0, y0, cam_x, cam_y)
+            left, top = sx * tile, sy * tile
+
+            def _blit(img=image, fight_img=fight_image, left=left, top=top):
+                fighting_now = bool(
+                    getattr(client, "arena_match", None)
+                    and client.arena_match.get("active")
+                )
+                if fighting_now and fight_img is not None:
+                    fight_img.set_alpha(200)
+                    client.screen.blit(fight_img, (left, top))
+                else:
+                    img.set_alpha(215)
+                    client.screen.blit(img, (left, top))
+
+            # Ground landmark under actors; label floats above.
+            draw_list.append((-10**9 + 50, 0, _blit))
+
+    south_row = client.world_to_view_offset(x0, y1, cam_x, cam_y)[1] * tile
+    label = arena.get("label") or arena.get("name") or "ARENA"
+    cx = (x0 + x1) / 2.0
+    cy = y0 + 2
+    lsx, lsy = client.world_to_view_offset(cx, cy, cam_x, cam_y)
+
+    def _label(text=label, px=lsx * tile + tile // 2, py=lsy * tile):
+        # Hide the big floating label while the camera is locked on a fight.
+        if getattr(client, "arena_match", None) and client.arena_match.get("active"):
+            return
+        font = getattr(client, "font", None) or pygame.font.Font(None, max(18, tile // 2))
+        big = getattr(client, "font_large", None) or pygame.font.Font(None, max(28, int(tile * 0.85)))
+        shadow = big.render(text, True, (20, 12, 4))
+        glow = big.render(text, True, (255, 220, 90))
+        rect = glow.get_rect(center=(int(px), int(py)))
+        client.screen.blit(shadow, rect.move(2, 2))
+        client.screen.blit(glow, rect)
+        sub = font.render("Crownfall Arena", True, (255, 240, 180))
+        client.screen.blit(sub, sub.get_rect(midtop=(rect.centerx, rect.bottom + 2)))
+
+    draw_list.append((south_row + tile * 2, 5, _label))
 
 
 def _queue_castle(client, draw_list, cam_x, cam_y, tile, castle_id, blob, px, py):
@@ -306,7 +527,41 @@ def _queue_castle(client, draw_list, cam_x, cam_y, tile, castle_id, blob, px, py
         draw_list.append((fall_sy * tile + tile // 2, 36, lambda g=rel, x=wx, y=wy: _blit(g, x, y)))
 
 
+def near_arena(client, reach: int = 8) -> bool:
+    """True when the player stands on or beside the Crownfall Arena campus."""
+    if not _realm(client) or not client.player:
+        return False
+    arena = _arena_blob()
+    fp = arena.get("footprint") or []
+    if len(fp) < 4:
+        return False
+    x0, y0, x1, y1 = map(int, fp[:4])
+    px, py = client.player_xy()
+    return (x0 - reach) <= px <= (x1 + reach) and (y0 - reach) <= py <= (y1 + reach)
+
+
+def draw_arena_prompt(client):
+    """Bottom-centre chip while standing on the arena sand."""
+    if not near_arena(client) or getattr(client, "show_barracks", False):
+        client.arena_barracks_rect = None
+        return
+    font = client.font_small
+    label = font.render("Crownfall Arena  ·  R Barracks / Practice", True, (255, 235, 160))
+    pad_x, pad_y = 16, 8
+    w, h = label.get_width() + pad_x * 2, label.get_height() + pad_y * 2
+    rect = pygame.Rect(0, 0, w, h)
+    rect.centerx = client.screen.get_width() // 2
+    rect.bottom = client.screen.get_height() - 28
+    pygame.draw.rect(client.screen, (28, 22, 12), rect, border_radius=8)
+    pygame.draw.rect(client.screen, (220, 180, 70), rect, 2, border_radius=8)
+    client.screen.blit(label, (rect.x + pad_x, rect.y + pad_y))
+    client.arena_barracks_rect = rect
+
+
 def draw_overlay(client):
+    if _realm(client):
+        draw_arena_prompt(client)
+        return
     if not _interior(client):
         return
     mx, my = pygame.mouse.get_pos()

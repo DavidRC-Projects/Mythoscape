@@ -20,24 +20,31 @@ MUTED = (170, 160, 140)
 ORANGE = (255, 152, 31)          # OSRS-ish yellow/orange headings
 
 # Paper-doll positions (relative to the stage rect): OSRS-like cross layout
+# Gather tools: axe / pick / net all wear at once (weapon stays on for combat).
 DOLL = {
     "helmet": (0.5, 0.075),
     "amulet": (0.14, 0.25), "ammo": (0.86, 0.25),
     "weapon": (0.14, 0.44), "shield": (0.86, 0.44),
     "body": (0.14, 0.63), "legs": (0.86, 0.63),
-    "ring": (0.5, 0.925), "tool": (0.86, 0.82),
+    "tool_woodcutting": (0.14, 0.82), "tool_mining": (0.5, 0.82), "tool_fishing": (0.86, 0.82),
+    "ring": (0.5, 0.965),
 }
 DOLL_SCALE = 1.75  # 2x paper doll scaled to fill the oval; feet stay on the plinth
 # where each slot's guide line lands on the doll (fraction of stage)
 ANCHOR = {"helmet": (0.5, 0.25), "amulet": (0.5, 0.33), "ammo": (0.58, 0.36), "weapon": (0.36, 0.52),
-          "shield": (0.64, 0.52), "body": (0.46, 0.45), "legs": (0.54, 0.65), "ring": (0.62, 0.64),
-          "tool": (0.64, 0.56)}
+          "shield": (0.64, 0.52), "body": (0.46, 0.45), "legs": (0.54, 0.65), "ring": (0.62, 0.70),
+          "tool_woodcutting": (0.36, 0.58), "tool_mining": (0.5, 0.58), "tool_fishing": (0.64, 0.58)}
+_TOOL_LABELS = {
+    "tool_woodcutting": "Axe", "tool_mining": "Pickaxe", "tool_fishing": "Net",
+}
 
 
 def _slot_hint(slot):
     """Detail-line hint. Body and legs are worn as a pair (David, 23 Oct 2026)."""
     if slot in ("body", "legs"):
         return "Body + legs are a pair  ·  Click to take both off"
+    if slot in _TOOL_LABELS:
+        return f"{_TOOL_LABELS[slot]}  ·  Keep worn while you fight  ·  Click to unequip"
     return f"{slot.title()} slot  ·  Click slot to unequip"
 
 
@@ -92,10 +99,17 @@ def _silhouette(surf, slot, r, col=(78, 70, 58)):
         pygame.draw.polygon(surf, col, [P(-4, -5.6), P(4, -5.6), P(4.6, 5.6), P(1.2, 5.6), P(0, -1), P(-1.2, 5.6), P(-4.6, 5.6)])
     elif slot == "ring":
         pygame.draw.circle(surf, col, P(0, 1), int(4.2 * u), max(2, int(u * 1.3)))
-    elif slot == "tool":   # pickaxe: handle + curved head
+    elif slot in ("tool", "tool_mining"):   # pickaxe: handle + curved head
         pygame.draw.line(surf, col, P(-4.6, 5.2), P(2.2, -1.6), max(2, int(u * 1.5)))
         pygame.draw.polygon(surf, col, [P(-1.8, -5.2), P(2.6, -3.6), P(5.6, 0.2), P(4.4, 0.8), P(1.8, -2.2), P(-2.2, -3.8)])
         pygame.draw.circle(surf, col, P(0, -3.6), int(1.8 * u))
+    elif slot == "tool_woodcutting":  # hatchet
+        pygame.draw.line(surf, col, P(-3.5, 5.2), P(3.5, -4.5), max(2, int(u * 1.4)))
+        pygame.draw.polygon(surf, col, [P(0.5, -5.2), P(5.2, -3.2), P(5.6, -0.2), P(2.2, -1.8), P(-0.4, -3.6)])
+    elif slot == "tool_fishing":  # net diamond
+        pygame.draw.polygon(surf, col, [P(0, -5), P(5, 0), P(0, 5), P(-5, 0)], max(2, int(u)))
+        pygame.draw.line(surf, col, P(-2.5, -2.5), P(2.5, 2.5), max(1, int(u)))
+        pygame.draw.line(surf, col, P(2.5, -2.5), P(-2.5, 2.5), max(1, int(u)))
 
 
 def _icon(surf, rect, item_id):
@@ -206,6 +220,9 @@ def draw(self, ITEMS, karma_slot_bonus, sprites, weapon_style):
                 scr.blit(q, (r.x + 3, r.y + 1))
         else:
             _silhouette(scr, slot, inner)
+        if slot in _TOOL_LABELS:
+            tag = self.font_tiny.render(_TOOL_LABELS[slot], True, MUTED if not item_id else GOLD)
+            scr.blit(tag, (r.centerx - tag.get_width() // 2, r.bottom + 1))
         if hov:
             pygame.draw.rect(scr, GOLD, r, 2)
         self.equip_slot_rects[slot] = r

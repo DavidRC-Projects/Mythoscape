@@ -29,6 +29,8 @@ ZONES = [
     ("mausoleum", "Collapsed Mausoleum",  "Lv 55–62", (12, 68, 52, 78), "mausoleum"),
     ("wyrm",      "Wyrm Ossuary",         "Optional · Lv 78", (1, 68, 11, 78), "wyrm"),
     ("stair",     "Sexton's Stair",       "Shortcut", (46, 8, 66, 74), "mausoleum"),
+    # After stair so zone lookup prefers the nest over the stair band.
+    ("silk",      "Webbed Crypt",         "Lv 20–28", (44, 12, 58, 18), "catacomb"),
     ("bridge",    "The Bone Bridge",      "Grasping hands", (12, 79, 54, 91), "bridge"),
     ("arena",     "Throne of Bones",      "Boss · Lv 70", (13, 92, 53, 105), "arena"),
 ]
@@ -71,6 +73,13 @@ def build_grid():
         _put(g, x, y, "i")                       # bone piles
     _rect(g, 32, 27, 34, 33)
     _put(g, 7, 20, "c"); _put(g, 25, 31, "l"); _put(g, 57, 31, "$")
+    # Webbed Crypt — silk nest north of the east hall (own room, not mixed with skeletons)
+    _rect(g, 44, 12, 58, 17)
+    _rect(g, 49, 18, 53, 18)                     # spur down into the east ossuary
+    for x, y in ((46, 13), (50, 14), (54, 13), (57, 16), (47, 16), (52, 16)):
+        _put(g, x, y, "i")                       # web / cocoon clumps
+    _put(g, 56, 14, "$")
+    _put(g, 45, 15, "l")
     _rect(g, 32, 34, 34, 35, "#"); _put(g, 33, 34, "A"); _put(g, 33, 35, ".")
     # ---- 3 Flooded Catacombs ----
     _rect(g, 8, 36, 56, 50)
@@ -139,12 +148,15 @@ SPAWNS = [
     ("big_skeleton", 43, 25), ("big_skeleton", 48, 20), ("big_skeleton", 53, 24), ("big_skeleton", 57, 27),
     ("skeleton", 11, 30), ("skeleton", 20, 19), ("skeleton", 36, 22), ("big_skeleton", 47, 31), ("big_skeleton", 33, 27),
     ("ossuary_keeper", 51, 29),
-    # Flooded Catacombs: rats in the water, drowned dead, a spider brood by the east niches
+    # Webbed Crypt (north of east ossuary) — Silk Harvest nest, away from skeletons
+    ("spider", 46, 14), ("spider", 49, 13), ("spider", 53, 14),
+    ("spider", 56, 15), ("spider", 48, 16), ("spider", 52, 15),
+    ("spider", 55, 13), ("spider", 51, 17),
+    # Flooded Catacombs: drowned dead (spiders live in the Webbed Crypt above)
     ("drowned_dead", 12, 46), ("drowned_dead", 27, 40), ("drowned_dead", 40, 46),
     ("drowned_dead", 16, 38), ("drowned_dead", 26, 38), ("drowned_dead", 38, 47),
     ("drowned_dead", 46, 48), ("drowned_dead", 21, 48),
     ("drowned_dead", 10, 47), ("drowned_dead", 48, 40),
-    ("spider", 52, 38), ("spider", 53, 48), ("spider", 55, 45),
     # Tomb of the Knights: barrow knights, and Sir Aldric on the dais
     ("barrow_knight", 14, 59), ("barrow_knight", 26, 58), ("barrow_knight", 40, 60),
     ("barrow_knight", 50, 58), ("barrow_knight", 30, 63),
@@ -207,6 +219,7 @@ LORE = {
     (42, 14): ("Chapel Notice", "The Brothers of Saint Vell keep the dead below. Pray, pass quietly, and touch nothing."),
     (15, 11): ("Sexton's Diary", "The Abbot pays in silver to have the old king's bones moved deeper. I dig at night now."),
     (25, 31): ("Bone Wall Inscription", "Ten thousand faithful gave their bones to wall the halls. The Keeper counts them still."),
+    (45, 15): ("Webbed Scrap", "Silk for the funeral veils. The Brothers sealed the nest north of the east hall — do not harvest alone."),
     (10, 48): ("Waterlogged Page", "The river broke in during the spring flood. The Brothers sealed the tide key behind the skulls."),
     (2, 40):  ("Brother's Confession", "I turned the third skull and hid the key. Let the river keep what the King wants."),
     (56, 54): ("Knight's Epitaph", "Sir Aldric swore to guard King Morvath past death. He keeps the Knights' Seal on his breast."),

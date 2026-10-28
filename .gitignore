@@ -12,6 +12,10 @@ build/
 develop-eggs/
 dist/
 downloads/
+# Keep the beta site download folder structure; ignore built client zips only
+!website/downloads/
+website/downloads/*
+!website/downloads/.gitkeep
 eggs/
 .eggs/
 lib/
@@ -241,3 +245,6 @@ __marimo__/
 game/assets/mmorpg/tools/screens/
 game/assets/characters/_qa_review/
 game/assets/player_hd/assets/_backup_*/
+
+# Local product / roadmap notes (work privately later)
+CROWNFALL_PRODUCT_NOTES.local.md

@@ -1,0 +1,9 @@
+{
+  "id": "crownfall_arena",
+  "name": "Crownfall Arena",
+  "art": "sprites/1x/arena_campus.jpg",
+  "pit_floor": "sprites/1x/arena_pit_floor.png",
+  "note": "Campus landmark plus a dedicated pit-floor overlay (worn sand oval, mid-line, team gate stains) so live fights read on marked sand instead of flat ochre tiles. Campus stretches to the stamped footprint (~61×53 tiles) east of the King's road.",
+  "footprint_tiles": [166, 102, 226, 154],
+  "center": [196, 128]
+}

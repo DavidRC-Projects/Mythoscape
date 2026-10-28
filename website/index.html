@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Crownfall — Friends Beta</title>
+  <meta name="description" content="Crownfall friends beta. Download the client and play." />
+  <meta property="og:title" content="Crownfall — Friends Beta" />
+  <meta property="og:description" content="A closed beta for friends. Download, open, play." />
+  <meta property="og:image" content="assets/hero.jpg" />
+  <link rel="icon" href="assets/seal.jpg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/site.css" />
+</head>
+<body>
+  <header class="hero">
+    <div class="hero__art" aria-hidden="true"></div>
+    <div class="hero__veil" aria-hidden="true"></div>
+    <div class="hero__inner">
+      <p class="hero__kicker">Friends beta</p>
+      <img class="hero__brand" src="assets/logo-crownfall.png" width="520" height="140" alt="Crownfall" />
+      <p class="hero__lead">
+        A shared fantasy world for a small circle of friends.
+        Download the client, open it, and play.
+      </p>
+
+      <div id="gate" class="gate is-open">
+        <label for="invite">Invite code</label>
+        <div class="gate__row">
+          <input id="invite" name="invite" type="password" autocomplete="off" spellcheck="false" placeholder="Enter your code" />
+          <button type="button" class="btn" id="unlock">Enter</button>
+        </div>
+        <p class="gate__err" id="gate-err" role="status" aria-live="polite"></p>
+      </div>
+
+      <div id="download-panel" class="download-panel">
+        <div class="cta-row">
+          <a class="btn" id="download-mac" href="downloads/Crownfall-Mac-Slim.zip">Download for Mac</a>
+          <a class="btn btn--ghost" href="#how">How it works</a>
+        </div>
+        <p class="hero__hint">Slim build · unzip → right-click Crownfall → Open · starts its own server</p>
+      </div>
+    </div>
+  </header>
+
+  <main id="how" class="band">
+    <div class="band__head">
+      <img class="band__seal" src="assets/seal.jpg" width="88" height="88" alt="" />
+      <div>
+        <h2>How to play</h2>
+        <p class="band__sub">No Terminal. Opening Crownfall starts the game server for you.</p>
+      </div>
+    </div>
+    <ol class="steps">
+      <li>
+        <strong>Download</strong>
+        <span>Unlock with your invite code, then download the slim Mac build. Wait until the zip finishes before opening it.</span>
+      </li>
+      <li>
+        <strong>Open Crownfall</strong>
+        <span>Unzip, then <em>right-click</em> Crownfall → Open (required once on macOS for unsigned apps). Or double-click <em>Play Crownfall</em> in the same folder.</span>
+      </li>
+      <li>
+        <strong>Play</strong>
+        <span>The app starts a local server, then the login screen. Create an account and walk into the world. Quitting Crownfall stops the server.</span>
+      </li>
+    </ol>
+    <p class="note">
+      This slim build uses lighter art so the download stays small. A full HD pack is optional for later.
+      Private friends beta — expect rough edges and wipe-friendly progress.
+    </p>
+  </main>
+
+  <footer class="site-foot">Crownfall · closed friends beta</footer>
+  <script src="js/site.js" defer></script>
+</body>
+</html>

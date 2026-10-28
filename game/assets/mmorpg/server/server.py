@@ -19,6 +19,7 @@ from content import (
     CRAFT_RECIPES, INTERACTABLES, BUILDINGS, PETS, entrance_mouth_tiles,
     MAX_PURSE_COINS, MAX_BANK_COINS, MAX_ORES, ORE_ITEM_IDS, BANK_SLOTS,
     karma_total_bonus, FIRE_LOGS, cook_burn_chance, is_bow, bow_attack_range,
+    MELEE_STAND_GAP, melee_reach,
     weapon_stats, SWING_SECONDS_PER_SPEED,
     MAGIC_ABILITIES, MAGIC_ABILITY_ORDER, MANUAL_MAGIC_CD_FACTOR,
     QUIVER_CAPACITY, TIP_BOX_CAPACITY, FOOD_BAG_CAPACITY, RAW_BAG_CAPACITY,
@@ -194,6 +195,7 @@ class PlayerSession:
             "karma": row["karma_xp"] if "karma_xp" in row.keys() else 0,
             "charisma": row["charisma_xp"] if "charisma_xp" in row.keys() else 0,
             "etiquette": row["etiquette_xp"] if "etiquette_xp" in row.keys() else 0,
+            "command": row["command_xp"] if "command_xp" in row.keys() else 0,
         }
         # A full life under the old hitpoints skill fills the new pool.
         # A wounded life stays wounded, and never sits above the new max.
@@ -209,9 +211,16 @@ class PlayerSession:
         self.noble_rank = int(row["noble_rank"] or 0) if "noble_rank" in row.keys() else 0
         self.royal_title = row["royal_title"] if "royal_title" in row.keys() else None
         try:
+            import player_houses as _ph
+            _ph.ensure_schema(royal_treasury._SETTINGS_CONN)
+            _ph.ensure_creator_house(
+                royal_treasury._SETTINGS_CONN, self.player_id, self.username,
+            )
             self.house_suffix = politics.title_suffix(royal_treasury._SETTINGS_CONN, self.player_id)
+            self.personal_house = _ph.public(royal_treasury._SETTINGS_CONN, self.player_id)
         except Exception:
             self.house_suffix = ""
+            self.personal_house = None
         self.bank = {}  # slot -> {item_id, qty}
         self.equipment = {
             "weapon": row["equip_weapon"], "shield": row["equip_shield"],
@@ -221,16 +230,30 @@ class PlayerSession:
             "ring": row["equip_ring"] if "equip_ring" in row.keys() else None,
             "ammo": row["equip_ammo"] if "equip_ammo" in row.keys() else None,
             "tool": row["equip_tool"] if "equip_tool" in row.keys() else None,
+            "tool_woodcutting": None,
+            "tool_mining": None,
+            "tool_fishing": None,
         }
-        # Hatchets and pickaxes used to sit in the weapon slot; they live in the tool slot now.
+        # Per-skill gather tools (axe / pick / net) — can all be worn at once.
+        try:
+            for skill, item_id in (WORLD.db.get_equip_tools(self.player_id) or {}).items():
+                self.equipment[f"tool_{skill}"] = item_id
+        except Exception:
+            pass
+        # Hatchets and pickaxes used to sit in the weapon slot; they live in tool slots now.
         _w = self.equipment.get("weapon")
-        if _w and (ITEMS.get(_w) or {}).get("equip_slot") == "tool" and not self.equipment.get("tool"):
-            self.equipment["tool"], self.equipment["weapon"] = _w, None
-            try:
-                WORLD.db.set_equipment(self.player_id, "tool", _w)
-                WORLD.db.set_equipment(self.player_id, "weapon", None)
-            except Exception:
-                pass
+        if _w and (ITEMS.get(_w) or {}).get("equip_slot") == "tool":
+            skill = (ITEMS.get(_w) or {}).get("tool_for")
+            slot_key = f"tool_{skill}" if skill in ("woodcutting", "mining", "fishing") else None
+            if slot_key and not self.equipment.get(slot_key):
+                self.equipment[slot_key] = _w
+                self.equipment["weapon"] = None
+                try:
+                    WORLD.db.set_equip_tool_skill(self.player_id, skill, _w)
+                    WORLD.db.set_equipment(self.player_id, "weapon", None)
+                except Exception:
+                    pass
+        self._sync_legacy_tool_slot()
         self.inventory = {}  # slot -> {"item_id":, "qty":}
         self.quests = {}     # quest_id -> {"status":, "progress":}
         self.quest_log_dirty = False  # push QUEST_LOG on next tick flush
@@ -338,6 +361,9 @@ class PlayerSession:
         self.fletch_pouch = self._load_bag_dict(row, "fletch_pouch_contents", is_fletch_pouch_item, fletch_pouch_capacity)
         self.potion_pouch = self._load_bag_dict(row, "potion_pouch_contents", is_potion_item, RESOURCE_BAG_CAPACITY)
         self.gem_bag = self._load_bag_dict(row, "gem_bag_contents", is_gem_item, RESOURCE_BAG_CAPACITY)
+        # Mercenary field squad — follow in Castle Realm only (see mercenaries.deploy_soldiers).
+        self.deployed_soldiers = []
+        self.arena_match = None
 
     @staticmethod
     def _load_bag_dict(row, column, predicate, capacity):
@@ -405,6 +431,15 @@ class PlayerSession:
         self.last_wish_date = today
         WORLD.db.save_player_stats(self.player_id, last_wish_date=today)
 
+    def _sync_legacy_tool_slot(self):
+        """Mirror per-skill tools into equipment['tool'] for older UI / anim paths."""
+        for skill in ("mining", "woodcutting", "fishing"):
+            item_id = self.equipment.get(f"tool_{skill}")
+            if item_id:
+                self.equipment["tool"] = item_id
+                return
+        self.equipment["tool"] = None
+
     def max_hp(self):
         """Hitpoints is the sum of the three highest combat skills, not its own XP."""
         arch = self.level("archery") if "archery" in self.xp else 1
@@ -441,7 +476,7 @@ class PlayerSession:
     def attack_reach(self):
         if self.using_bow():
             return bow_attack_range(self.equipment.get("weapon"))
-        return 1
+        return melee_reach()
 
     def weapon_bonuses(self):
         total = {
@@ -1042,10 +1077,11 @@ class PlayerSession:
                                                  getattr(self, "royal_title", None)),
             "royal_title": getattr(self, "royal_title", None),
             "house_suffix": getattr(self, "house_suffix", ""),
+            "personal_house": getattr(self, "personal_house", None),
             "player_killer": bool(self.player_killer),
             "pk_kills": int(self.pk_kills or 0),
             "appearance": self.appearance_state(),
-            "hd_player": bool(self._row_val("hd_player", 1)),
+            "hd_player": True,
         }
 
     def total_level(self):
@@ -1080,6 +1116,7 @@ class PlayerSession:
             "noble_rank_name": nobility.rank_name(getattr(self, "noble_rank", 0), self.gender),
             "royal_title": getattr(self, "royal_title", None),
             "house_suffix": getattr(self, "house_suffix", ""),
+            "personal_house": getattr(self, "personal_house", None),
             "kingdom": politics.hud_line(WORLD.db.conn),
             "levels": levels,
             "xp": {s: self.xp[s] for s in XP_SKILLS if s in self.xp},
@@ -1098,7 +1135,11 @@ class PlayerSession:
             "jewelry_specials": self.jewelry_specials_public(),
             "karma_bonuses": karma_total_bonus(karma_lvl, self.equipment),
             "pet_id": self.pet_id,
-            "pet": self.pet_public() if self.pet_id else None,
+            # Omit world companion while field soldiers are deployed (still keep pet_id for UI).
+            "pet": (
+                None if __import__("mercenaries").deployed_list(self)
+                else (self.pet_public() if self.pet_id else None)
+            ),
             "owned_pets": self.owned_pets_public(),
             "stat_boosts": self.active_boosts_public(),
             "gathering": self.gathering_public(),
@@ -1109,7 +1150,7 @@ class PlayerSession:
             "saved_outfits": outfits.saved_slots(self._json_list("saved_outfits")),
             "outfit_unlocks": outfits.unlocks(self, WORLD.db.conn),
             "outfit_pricing": _outfit_pricing(self),
-            "hd_player": bool(self._row_val("hd_player", 1)),
+            "hd_player": True,
             "wish_available": self.can_wish(),
             "unlimited_wishes": self.has_unlimited_wishes(),
             "quest_points": self.quest_points(),
@@ -1161,7 +1202,17 @@ class PlayerSession:
                 _housing.home_info(WORLD.db.conn, self.player_id)
                 if feature_flags.USE_PLAYER_HOUSING and WORLD is not None else None
             ),
+            # Mirrored into client.clan_info on LOGIN_OK / PLAYER_UPDATE so Guild
+            # panel (treasury, roster, board) stays current after create/deposit.
+            "guild": self._guild_public(),
         }
+
+    def _guild_public(self):
+        try:
+            import clans
+            return clans._info_for(self)
+        except Exception:
+            return {"name": "", "members": [], "board": []}
 
     def quest_points(self):
         total = 0
@@ -1317,10 +1368,13 @@ class MonsterInstance:
             if not getattr(self, "_cone_strike", False):
                 return False
             return (int(px), int(py)) in {(int(p[0]), int(p[1])) for p in cones}
-        reach = max(1, int(mdef.get("attack_range") or 1))
-        if mdef.get("side_by_side"):
+        reach = melee_reach(mdef.get("attack_range"))
+        # Prefer east/west sword posts; still allow any tile within reach.
+        if self.y == py:
             gap = abs(self.x - px)
-            return self.y == py and 1 <= gap <= reach
+            prefer = max(MELEE_STAND_GAP, min(int(mdef.get("side_gap") or MELEE_STAND_GAP), reach))
+            if prefer <= gap <= reach:
+                return True
         return chebyshev(self.x, self.y, px, py) <= reach
 
     def def_stats(self):
@@ -1438,14 +1492,30 @@ class World:
     def add_item_to_inventory(self, session, item_id, qty):
         """Returns True if it fit, False if inventory is full.
 
-        Stackables merge into any existing stack. New stacks prefer the
-        skill tab that matches the item. The Bags tab is reserved for
-        storage containers only.
+        Stackables merge into any existing stack (respecting max_stack).
+        New stacks prefer the skill tab that matches the item. The Bags tab
+        is reserved for storage containers only.
         """
         item_def = ITEMS[item_id]
+        qty = int(qty)
+        if qty <= 0:
+            return True
+        max_stack = int(item_def.get("max_stack") or 0) or None
         if item_def.get("stackable"):
             for slot, entry in session.inventory.items():
-                if entry["item_id"] == item_id:
+                if entry["item_id"] != item_id:
+                    continue
+                if max_stack:
+                    room = max_stack - int(entry["qty"] or 0)
+                    if room <= 0:
+                        continue
+                    take = min(qty, room)
+                    entry["qty"] = int(entry["qty"] or 0) + take
+                    self.db.add_item_to_slot(session.player_id, slot, item_id, entry["qty"])
+                    qty -= take
+                    if qty <= 0:
+                        return True
+                else:
                     entry["qty"] += qty
                     self.db.add_item_to_slot(session.player_id, slot, item_id, entry["qty"])
                     return True
@@ -1458,15 +1528,24 @@ class World:
             tab_order = [prefer] + [
                 t for t in range(len(INVENTORY_TABS)) if t != prefer and t != bags_tab
             ]
-        for tab in tab_order:
-            base = tab * INVENTORY_TAB_SIZE
-            for local in range(INVENTORY_TAB_SIZE):
-                slot = base + local
-                if slot not in session.inventory:
-                    session.inventory[slot] = {"item_id": item_id, "qty": qty}
-                    self.db.add_item_to_slot(session.player_id, slot, item_id, qty)
-                    return True
-        return False
+        while qty > 0:
+            placed = False
+            chunk = min(qty, max_stack) if max_stack else qty
+            for tab in tab_order:
+                base = tab * INVENTORY_TAB_SIZE
+                for local in range(INVENTORY_TAB_SIZE):
+                    slot = base + local
+                    if slot not in session.inventory:
+                        session.inventory[slot] = {"item_id": item_id, "qty": chunk}
+                        self.db.add_item_to_slot(session.player_id, slot, item_id, chunk)
+                        qty -= chunk
+                        placed = True
+                        break
+                if placed:
+                    break
+            if not placed:
+                return False
+        return True
 
     def rearrange_bags_tab(self, session):
         """Move storage bags into the Bags tab; kick non-bags out of it."""
@@ -1541,7 +1620,7 @@ class World:
         return sum(e["qty"] for e in session.inventory.values() if e["item_id"] == item_id)
 
     def gather_tool_id(self, session, skill, allowed_tools=None):
-        """The tool item in use: the one in the tool slot, if it fits this skill / spot."""
+        """The gather tool for this skill (per-skill slot). Weapon stays equipped separately."""
         def ok(item_id):
             if not item_id:
                 return False
@@ -1549,23 +1628,16 @@ class World:
                 return item_id in allowed_tools
             return ITEMS.get(item_id, {}).get("tool_for") == skill
 
-        tool = session.equipment.get("tool")
-        return tool if ok(tool) else None
+        tool = session.equipment.get(f"tool_{skill}")
+        if ok(tool):
+            return tool
+        # Legacy single tool slot (older clients / mid-migrate rows).
+        legacy = session.equipment.get("tool")
+        return legacy if ok(legacy) else None
 
     def has_gather_tool(self, session, skill, allowed_tools=None):
-        """True if the equipped tool (tool slot) is a valid gather tool.
-
-        If allowed_tools is a list of item ids, one of those must be present.
-        Otherwise any item with tool_for == skill counts.
-        """
-        def ok(item_id):
-            if not item_id:
-                return False
-            if allowed_tools:
-                return item_id in allowed_tools
-            return ITEMS.get(item_id, {}).get("tool_for") == skill
-
-        return ok(session.equipment.get("tool"))
+        """True if the matching per-skill tool is equipped (axe / pick / net)."""
+        return self.gather_tool_id(session, skill, allowed_tools=allowed_tools) is not None
 
     def count_item_bank(self, session, item_id):
         return sum(e["qty"] for e in session.bank.values() if e["item_id"] == item_id)
@@ -1717,18 +1789,71 @@ def quest_status_for(session, quest_id):
     return info
 
 
-# World-spawned quest props that must vanish for a player after their quest is done.
+# World-spawned quest props: one claim per character while the quest is active.
 QUEST_GROUND_ITEMS = {
     "lost_locket": "liras_lost_locket",
 }
 
 
 def quest_ground_item_hidden(session, item_id):
-    """True when this player should no longer see/pick up a quest ground spawn."""
+    """True when this player should no longer see/pick up a quest ground spawn.
+
+    Hidden after the quest is done, before it is accepted, or once they already
+    hold a copy — so server restarts cannot hand out duplicates.
+    """
     qid = QUEST_GROUND_ITEMS.get(item_id)
     if not qid:
         return False
-    return (session.quests.get(qid) or {}).get("status") == "complete"
+    status = (session.quests.get(qid) or {}).get("status")
+    if status == "complete":
+        return True
+    if status not in ("active", "ready"):
+        return True
+    if WORLD.count_item(session, item_id) > 0 or WORLD.count_item_bank(session, item_id) > 0:
+        return True
+    return False
+
+
+def _remove_bank_item_qty(session, item_id, qty):
+    """Strip qty of item_id from the bank. Returns True if fully removed."""
+    remaining = int(qty)
+    if remaining <= 0:
+        return True
+    for slot in list(session.bank.keys()):
+        entry = session.bank[slot]
+        if entry.get("item_id") != item_id:
+            continue
+        take = min(int(entry.get("qty") or 0), remaining)
+        entry["qty"] = int(entry.get("qty") or 0) - take
+        remaining -= take
+        if entry["qty"] <= 0:
+            del session.bank[slot]
+            WORLD.db.clear_bank_slot(session.player_id, slot)
+        else:
+            WORLD.db.set_bank_slot(session.player_id, slot, item_id, entry["qty"])
+        if remaining <= 0:
+            break
+    return remaining <= 0
+
+
+def prune_quest_ground_items(session):
+    """Keep at most one copy while the quest needs it; wipe extras / leftovers."""
+    removed = 0
+    for item_id, qid in QUEST_GROUND_ITEMS.items():
+        status = (session.quests.get(qid) or {}).get("status")
+        keep = 1 if status in ("active", "ready") else 0
+        while True:
+            inv = WORLD.count_item(session, item_id)
+            bank = WORLD.count_item_bank(session, item_id)
+            total = inv + bank
+            if total <= keep:
+                break
+            if inv > 0:
+                WORLD.remove_item_qty(session, item_id, 1)
+            else:
+                _remove_bank_item_qty(session, item_id, 1)
+            removed += 1
+    return removed
 
 
 def ground_items_public(session):
@@ -1896,6 +2021,8 @@ def check_quest_progress_on_kill(session, monster_type):
         prog = session.quests.get(qid)
         if prog and prog["status"] == "active":
             prog["progress"] += 1
+            if prog["progress"] == 1 and qid == "rat_problem":
+                session._ftue_first_kill = True
             if prog["progress"] >= qdef["count"]:
                 prog["status"] = "ready"
             WORLD.db.set_quest_progress(session.player_id, qid, prog["status"], prog["progress"])
@@ -1925,6 +2052,13 @@ async def flush_quest_logs():
     for session in list(WORLD.sessions.values()):
         if refresh_collect_quest_status(session):
             session.quest_log_dirty = True
+        if getattr(session, "_ftue_first_kill", False):
+            session._ftue_first_kill = False
+            if welcome_kit.mark_coach_seen(WORLD.db.conn, session.player_id, welcome_kit.COACH_FIRST_KILL):
+                await send(session.ws, "CHAT_MSG", **{
+                    "from": "Guide",
+                    "text": "First kill! Keep going. Hurt? Press R to eat.",
+                })
         if not getattr(session, "quest_log_dirty", False):
             continue
         session.quest_log_dirty = False
@@ -2020,7 +2154,9 @@ async def handle_login(ws, msg, is_register, peer_ip="unknown"):
     session.quests = WORLD.db.get_quest_progress(row["id"])
     WORLD.sessions[session.player_id] = session
     migrate_removed_daggers(session)
+    ensure_starter_gather_tools(session)
     enforce_bound_items(session)
+    pruned = prune_quest_ground_items(session)
     import void_v2
     # Keys stay in the bag when the visit itself is still going.
     if not resume:
@@ -2036,8 +2172,17 @@ async def handle_login(ws, msg, is_register, peer_ip="unknown"):
         log.info("%s received a starter tinderbox", session.char_name)
 
     trade_in = _outfits_migrate_v2(session)
+    # Old 2D player sprites are gone — always persist HD villager rendering.
+    if not bool(session._row_val("hd_player", 1)):
+        WORLD.db.save_player_stats(session.player_id, hd_player=1)
+        session.row = WORLD.db.get_player_by_id(session.player_id)
     needs_alloc = not session.stats_allocated
     await send(ws, "LOGIN_OK", player=session.full_state(), needs_stat_alloc=needs_alloc)
+    if pruned:
+        await send(ws, "CHAT_MSG", **{
+            "from": "World",
+            "text": "Extra quest items were removed from your bags.",
+        })
     if trade_in:
         await send(ws, "CHAT_MSG", **{"from": "Mae", "text": trade_in})
     if needs_alloc:
@@ -2231,10 +2376,11 @@ def item_is_bankable(item_id):
     return item.get("tradeable", True)
 
 
-def pickup_ignored(session, item_id):
-    if item_id == "coins" or (ITEMS.get(item_id) or {}).get("karma_xp"):
-        return False
-    return item_id in session.pickup_ignore
+def is_auto_loot_item(item_id):
+    """Coins and bones only — everything else waits for a manual pick."""
+    if item_id == "coins":
+        return True
+    return bool((ITEMS.get(item_id) or {}).get("karma_xp"))
 
 
 def session_has_item(session, item_id):
@@ -2254,10 +2400,41 @@ def migrate_removed_daggers(session):
         e = session.bank[slot]
         WORLD.db.set_bank_slot(session.player_id, slot, e["item_id"], e["qty"])
     for slot in eq:
-        WORLD.db.set_equipment(session.player_id, slot, session.equipment[slot])
+        if str(slot).startswith("tool_"):
+            skill = str(slot).replace("tool_", "", 1)
+            WORLD.db.set_equip_tool_skill(session.player_id, skill, session.equipment[slot])
+        else:
+            WORLD.db.set_equipment(session.player_id, slot, session.equipment[slot])
     if inv or bank or eq:
         log.info("Replaced daggers with swords for %s (inv %d, bank %d, equipped %d)",
                  session.username, len(inv), len(bank), len(eq))
+
+
+def ensure_starter_gather_tools(session):
+    """Auto-wear bronze axe / pick / net from the bag when those skill slots are empty.
+
+    New accounts already start with them equipped; older bags get a one-time lift so
+    chopping, mining and fishing work without a tool-swap tutorial.
+    """
+    defaults = (
+        ("woodcutting", "bronze_axe"),
+        ("mining", "bronze_pickaxe"),
+        ("fishing", "small_fishing_net"),
+    )
+    changed = False
+    for skill, item_id in defaults:
+        slot_key = f"tool_{skill}"
+        if session.equipment.get(slot_key):
+            continue
+        if WORLD.count_item(session, item_id) <= 0:
+            continue
+        WORLD.remove_item_qty(session, item_id, 1)
+        session.equipment[slot_key] = item_id
+        WORLD.db.set_equip_tool_skill(session.player_id, skill, item_id)
+        changed = True
+    if changed:
+        session._sync_legacy_tool_slot()
+        log.info("Equipped starter gather tools for %s", session.username)
 
 
 def enforce_bound_items(session):
@@ -2295,8 +2472,8 @@ def enforce_bound_items(session):
 async def handle_leaderboard(ws, msg):
     limit = max(1, min(50, int(msg.get("limit", 50))))
     boards = WORLD.db.get_leaderboards(limit=limit)
-    # Total overall first, then individual skills
-    skills = ["total"] + [s for s in XP_SKILLS if s in boards]
+    # Total + Guild ranks first, then individual skills
+    skills = ["total", "guild"] + [s for s in XP_SKILLS if s in boards]
     await send(ws, "LEADERBOARD", skills=skills, boards=boards)
 
 
@@ -2328,6 +2505,7 @@ async def handle_stair(session, msg):
         return
     castle_realm.move_to_plane(session, stair["to_plane"], stair["arrive"])
     _bring_pet(session)
+    _save_dungeon_resume(session)
     await send(session.ws, "REALM_PLANE", **castle_realm.payload(session))
     import castle_owners
     await castle_owners.send_state(session)
@@ -2369,6 +2547,39 @@ def _fight_holds_you(session, monster=None):
     return bool((monster.def_stats() or {}).get("requires_pk"))
 
 
+def _is_training_duelist(monster):
+    if monster is None:
+        return False
+    mdef = monster.def_stats() or {}
+    return bool(mdef.get("training_dummy") or mdef.get("requires_pk"))
+
+
+def _reset_training_duelist(monster):
+    """PK duelists return to full health when the bout ends; Attack again to fight."""
+    if not _is_training_duelist(monster) or not getattr(monster, "alive", False):
+        return
+    monster.hp = monster.max_hp
+    monster.target_player_id = None
+
+
+def _end_duelist_bout(session, monster=None):
+    """Leave a PK duel: clear the lock and heal the duelist if they still stand."""
+    if monster is None and session.in_combat_with and session.in_combat_with[0] == "monster":
+        mid = session.in_combat_with[1]
+        if session.dungeon:
+            monster = session.dungeon["monsters"].get(mid)
+        else:
+            monster = WORLD.monsters.get(mid)
+    if _is_training_duelist(monster):
+        _reset_training_duelist(monster)
+        session.in_combat_with = None
+        session.combat_rounds = 0
+        session.combat_lock_id = None
+        session.pet_target_id = None
+        return True
+    return False
+
+
 def _combat_locked(session):
     """True after a player or duelist fight has started, until five rounds pass."""
     if not _fight_holds_you(session):
@@ -2395,9 +2606,7 @@ async def _handle_move_body(session, msg):
             message=f"You cannot run yet. {left} round{'s' if left != 1 else ''} of fighting left.",
         )
         return
-    # One step per world tick — blocks MOVE flood speed hacks.
-    if session.last_move_tick >= WORLD.tick_count:
-        return
+    # No per-step flood gate — pre-deploy feel. Client paces itself (~0.16s).
     dx = _security.safe_int(msg.get("dx", 0), default=None)
     dy = _security.safe_int(msg.get("dy", 0), default=None)
     if dx is None or dy is None:
@@ -2431,6 +2640,7 @@ async def _handle_move_body(session, msg):
             await castle_owners.send_state(session)
         else:
             _pet_keep_up(session, dx, dy)
+        _save_dungeon_resume(session)
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
         await _notify_teleport_marks(session, _discover_teleport_marks(session))
         return
@@ -3184,8 +3394,17 @@ def _read_dungeon_resume(row):
 
 def _resume_payload(session):
     d = session.dungeon
-    if not d or d.get("id") == "castle_realm":
+    if not d:
         return None
+    if d.get("id") == "castle_realm":
+        return {
+            "id": "castle_realm",
+            "plane": d.get("plane") or "realm",
+            "x": int(session.x),
+            "y": int(session.y),
+            "return_x": d.get("return_x"),
+            "return_y": d.get("return_y"),
+        }
     return {
         "id": d.get("id") or "tidehollow",
         "x": int(session.x),
@@ -3280,8 +3499,53 @@ async def _relock_dungeon_doors(session):
     })
 
 
+async def _resume_castle_realm(session, resume):
+    """Put the player back into Castle Realm at the saved plane and tile."""
+    if not feature_flags.USE_CASTLE_REALM:
+        _clear_dungeon_resume(session)
+        return
+    import castle_realm
+    import castle_owners
+    if session.dungeon:
+        if session.dungeon.get("id") == "castle_realm":
+            return
+        await handle_leave_dungeon(session, silent=True)
+    castle_realm.enter(session)
+    rx, ry = resume.get("return_x"), resume.get("return_y")
+    if rx is not None and ry is not None:
+        session.dungeon["return_x"] = int(rx)
+        session.dungeon["return_y"] = int(ry)
+        session._dungeon_return = (int(rx), int(ry))
+    plane = resume.get("plane") or "realm"
+    x = int(resume.get("x") or session.x)
+    y = int(resume.get("y") or session.y)
+    if plane != "realm":
+        try:
+            castle_realm.move_to_plane(session, plane, (x, y))
+        except Exception:
+            # Unknown / removed interior — stay on the outdoor spawn.
+            plane = "realm"
+    if plane == "realm":
+        if castle_realm.walkable("realm", x, y):
+            session.x, session.y = x, y
+        if getattr(session, "pet_id", None):
+            session.pet_x, session.pet_y = session.x, session.y
+    _bring_pet(session)
+    _save_dungeon_resume(session)
+    await send(session.ws, "DUNGEON_ENTER", **castle_realm.payload(session))
+    await castle_owners.send_state(session)
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    await send(session.ws, "CHAT_MSG", **{
+        "from": "Castle Realm",
+        "text": "You return to the Castle Realm where you left off.",
+    })
+
+
 async def _resume_dungeon(session, resume):
     dungeon_id = resume.get("id")
+    if dungeon_id == "castle_realm":
+        await _resume_castle_realm(session, resume)
+        return
     if not explore_dungeons.is_explore(dungeon_id) and dungeon_id not in DUNGEON_MODS:
         _clear_dungeon_resume(session)
         return
@@ -3322,6 +3586,10 @@ async def handle_enter_dungeon(session, msg):
             return
         import castle_realm
         castle_realm.enter(session)
+        rx = int(session.dungeon.get("return_x") or session.x)
+        ry = int(session.dungeon.get("return_y") or session.y)
+        WORLD.db.save_player_position(session.player_id, rx, ry)
+        _save_dungeon_resume(session)
         _bring_pet(session)
         await send(session.ws, "DUNGEON_ENTER", **castle_realm.payload(session))
         import castle_owners
@@ -3420,6 +3688,7 @@ async def handle_leave_dungeon(session, msg=None, silent=False):
         import castle_realm
         castle_realm.leave(session)
         WORLD.db.save_player_position(session.player_id, session.x, session.y)
+        _clear_dungeon_resume(session)
         _bring_pet(session)
         await send(session.ws, "DUNGEON_EXIT", x=session.x, y=session.y)
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
@@ -3619,29 +3888,34 @@ async def bury_bone_stack(session, item_id, qty, quiet=False):
 
 
 async def vacuum_ground_loot(session, quiet=False):
-    """Scoop coins underfoot and adjacent; scoop items on your tile if auto-pickup is on.
-    Bones are always auto-buried one at a time (never kept in inventory from the ground).
+    """When auto-pickup is ON: scoop coins (nearby) and bones (into bag). Nothing else.
     """
     expire_ground_items()
     if session.dungeon and session.dungeon.get("v2"):
         import void_v2
         await void_v2.vacuum(session, quiet)
         return
+    if not session.auto_pickup_items:
+        return
     expire_ground_items()
     tiles = [(session.x, session.y)]
     for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)):
         tiles.append((session.x + dx, session.y + dy))
     collected_coins = 0
-    collected_names = []
-    bones_buried = 0
+    collected_bones = []
     for key in tiles:
         items_here = WORLD.ground_items.get(key)
         if not items_here:
             continue
         remaining = []
-        on_me = key == (session.x, session.y)
         for entry in items_here:
             item_id, qty = entry["item_id"], entry["qty"]
+            if not is_auto_loot_item(item_id):
+                remaining.append(entry)
+                continue
+            if quest_ground_item_hidden(session, item_id):
+                remaining.append(entry)
+                continue
             if item_id == "coins":
                 gained, left = WORLD.add_coins(session, qty)
                 collected_coins += gained
@@ -3651,42 +3925,23 @@ async def vacuum_ground_loot(session, quiet=False):
                         leftover["expires_at"] = entry["expires_at"]
                     remaining.append(leftover)
                 continue
-            # Always bury bones from vacuum range (never keep them from the ground)
-            if ITEMS.get(item_id, {}).get("karma_xp"):
-                await bury_bone_stack(session, item_id, qty, quiet=True)
-                bones_buried += qty
-                continue
-            if quest_ground_item_hidden(session, item_id):
-                remaining.append(entry)
-                continue
-            if pickup_ignored(session, item_id):
-                remaining.append(entry)
-                continue
-            if not (on_me and session.auto_pickup_items):
-                remaining.append(entry)
-                continue
+            # Bones: stack in inventory (not auto-buried).
             if WORLD.add_item_to_inventory(session, item_id, qty):
-                collected_names.append(ITEMS.get(item_id, {}).get("name", item_id))
+                collected_bones.append(ITEMS.get(item_id, {}).get("name", item_id))
             else:
                 remaining.append(entry)
         if remaining:
             WORLD.ground_items[key] = remaining
         elif key in WORLD.ground_items:
             del WORLD.ground_items[key]
-    if collected_coins:
-        if not quiet:
-            msg = f"You collect {collected_coins} coins."
-            if session.coins >= MAX_PURSE_COINS:
-                msg += " (purse full — bank the rest)"
-            await send(session.ws, "CHAT_MSG", **{"from": "World", "text": msg})
-    if bones_buried and not quiet:
-        await send(session.ws, "CHAT_MSG", **{
-            "from": "World",
-            "text": f"You bury {bones_buried} bone{'s' if bones_buried != 1 else ''}.",
-        })
-    if collected_names and not quiet:
-        shown = ", ".join(collected_names[:3])
-        extra = f" (+{len(collected_names) - 3} more)" if len(collected_names) > 3 else ""
+    if collected_coins and not quiet:
+        msg = f"You collect {collected_coins} coins."
+        if session.coins >= MAX_PURSE_COINS:
+            msg += " (purse full — bank the rest)"
+        await send(session.ws, "CHAT_MSG", **{"from": "World", "text": msg})
+    if collected_bones and not quiet:
+        shown = ", ".join(collected_bones[:3])
+        extra = f" (+{len(collected_bones) - 3} more)" if len(collected_bones) > 3 else ""
         await send(session.ws, "CHAT_MSG", **{
             "from": "World", "text": f"You pick up {shown}{extra}.",
         })
@@ -3699,39 +3954,79 @@ async def handle_set_option(session, msg):
         WORLD.db.save_player_stats(session.player_id, auto_pickup_items=1 if session.auto_pickup_items else 0)
         state = "ON" if session.auto_pickup_items else "OFF"
         await send(session.ws, "CHAT_MSG", **{
-            "from": "Options", "text": f"Auto-pickup items: {state} (coins always collect).",
-        })
-        changed = True
-    add_id = msg.get("pickup_ignore_add")
-    remove_id = msg.get("pickup_ignore_remove")
-    if add_id and add_id in ITEMS and add_id != "coins":
-        session.pickup_ignore.add(add_id)
-        WORLD.db.save_player_stats(
-            session.player_id, pickup_ignore=json.dumps(sorted(session.pickup_ignore)),
-        )
-        name = ITEMS[add_id]["name"]
-        await send(session.ws, "CHAT_MSG", **{
-            "from": "Options", "text": f"You will never pick up {name} again.",
-        })
-        changed = True
-    if remove_id and remove_id in session.pickup_ignore:
-        session.pickup_ignore.discard(remove_id)
-        WORLD.db.save_player_stats(
-            session.player_id, pickup_ignore=json.dumps(sorted(session.pickup_ignore)),
-        )
-        name = ITEMS.get(remove_id, {}).get("name", remove_id)
-        await send(session.ws, "CHAT_MSG", **{
-            "from": "Options", "text": f"You will pick up {name} again.",
+            "from": "Options",
+            "text": f"Auto-pickup coins & bones: {state}. Other loot stays on the ground.",
         })
         changed = True
     if changed:
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
 
 
+async def _send_guild_chat(session, text):
+    """Guild channel only — no world speech bubble."""
+    import clans
+    clan_id = clans.clan_of(session.player_id)
+    if not clan_id:
+        await send(session.ws, "CHAT_MSG", **{
+            "from": "Guild", "text": "You are not in a guild.", "channel": "guild",
+        })
+        return
+    who = nobility.display_name(session)
+    payload = {
+        "from": who, "text": text, "player_id": session.player_id,
+        "channel": "guild", "speech": False,
+    }
+    for other in list(WORLD.sessions.values()):
+        try:
+            if clans.clan_of(other.player_id) == clan_id:
+                await send(other.ws, "CHAT_MSG", **payload)
+        except Exception:
+            pass
+
+
+async def _send_whisper(session, target_name, text):
+    """Private whisper — only sender + target, never a speech bubble."""
+    needle = (target_name or "").strip().lower()
+    if not needle or not text:
+        await send(session.ws, "CHAT_MSG", **{
+            "from": "Whisper", "text": "Usage: /w Name message", "channel": "whisper",
+        })
+        return
+    target = None
+    for other in WORLD.sessions.values():
+        if (getattr(other, "char_name", None) or "").lower() == needle:
+            target = other
+            break
+    if not target:
+        await send(session.ws, "CHAT_MSG", **{
+            "from": "Whisper", "text": f"{target_name} is not online.", "channel": "whisper",
+        })
+        return
+    if target.player_id == session.player_id:
+        await send(session.ws, "CHAT_MSG", **{
+            "from": "Whisper", "text": "You can't whisper yourself.", "channel": "whisper",
+        })
+        return
+    who = nobility.display_name(session)
+    to_name = nobility.display_name(target)
+    # Recipient sees "From → you"; sender sees "You → Name".
+    await send(target.ws, "CHAT_MSG", **{
+        "from": f"{who} → you", "text": text, "player_id": session.player_id,
+        "channel": "whisper", "speech": False,
+    })
+    await send(session.ws, "CHAT_MSG", **{
+        "from": f"You → {to_name}", "text": text, "player_id": session.player_id,
+        "channel": "whisper", "speech": False,
+    })
+
+
 async def handle_chat(session, msg):
     text = (msg.get("text") or "").strip()[:200]
     if not text:
         return
+    channel = (msg.get("channel") or "world").strip().lower()
+    if channel == "all":
+        channel = "world"
     if text.startswith("::"):
         if _security.is_dev_user(session.username):
             await handle_dev_command(session, text)
@@ -3803,13 +4098,60 @@ async def handle_chat(session, msg):
         for line in throne.summary_lines(WORLD.db.conn, throne_live._name):
             await send(session.ws, "CHAT_MSG", **{"from": "Royal Herald", "text": line})
         return
+    # Explicit whisper: /w Name message  or  /whisper Name message
+    low = text.lower()
+    if low.startswith(("/w ", "/whisper ")):
+        parts = text.split(None, 2)
+        if len(parts) < 3:
+            await send(session.ws, "CHAT_MSG", **{
+                "from": "Whisper", "text": "Usage: /w Name message", "channel": "whisper",
+            })
+            return
+        await _send_whisper(session, parts[1], parts[2])
+        return
+    # Explicit guild say: /g message  (leave /guild … for commands)
+    if low.startswith("/g ") or low == "/g":
+        body = text.split(None, 1)[1].strip() if " " in text else ""
+        if not body:
+            await send(session.ws, "CHAT_MSG", **{
+                "from": "Guild", "text": "Usage: /g message  (or select the Guild chat tab)",
+                "channel": "guild",
+            })
+            return
+        await _send_guild_chat(session, body)
+        return
     if text.lower().startswith(("/clan", "/guild")):
         import clans
         await clans.handle_command(session, text)
         return
+    # Channel tab from the client (World / Guild / Party / Whisper).
+    if channel == "guild":
+        await _send_guild_chat(session, text)
+        return
+    if channel == "whisper":
+        await send(session.ws, "CHAT_MSG", **{
+            "from": "Whisper",
+            "text": "Private chat: type /w Name message",
+            "channel": "whisper",
+        })
+        return
+    if channel == "party":
+        await send(session.ws, "CHAT_MSG", **{
+            "from": "Party",
+            "text": "Party chat is not available yet.",
+            "channel": "party",
+        })
+        return
+    # World: everyone hears it, speech bubble above the head.
     await broadcast(
         "CHAT_MSG",
-        **{"from": nobility.display_name(session), "text": text, "player_id": session.player_id, "speech": True},
+        **{
+            "from": nobility.display_name(session),
+            "text": text,
+            "player_id": session.player_id,
+            "channel": "world",
+            "speech": True,
+        },
     )
 
 
@@ -4015,6 +4357,7 @@ def _release_monster_fight_on_step(session):
 
     Further steps keep the leave window open so the next tick cannot
     pull them back into swinging while they are still walking away.
+    Duelists heal to full when you leave after the lock ends.
     """
     if _combat_locked(session):
         return
@@ -4023,10 +4366,11 @@ def _release_monster_fight_on_step(session):
     if not fighting and not fleeing:
         return
     if fighting:
-        session.in_combat_with = None
-        session.combat_rounds = 0
-        session.combat_lock_id = None
-        session.pet_target_id = None
+        if not _end_duelist_bout(session):
+            session.in_combat_with = None
+            session.combat_rounds = 0
+            session.combat_lock_id = None
+            session.pet_target_id = None
     session.combat_flee_until = time.time() + 1.0
 
 
@@ -4105,6 +4449,19 @@ async def handle_attack(session, msg):
     if not already:
         session.combat_rounds = 0
         session.combat_lock_id = monster.id
+        # One-shot first-fight tip — teach in the moment, not in a lecture.
+        if welcome_kit.mark_coach_seen(WORLD.db.conn, session.player_id, welcome_kit.COACH_FIRST_FIGHT):
+            await send(session.ws, "CHAT_MSG", **{
+                "from": "Guide",
+                "text": "Fighting: click a foe or Space. Green nameplates are safer. Hurt? Press R.",
+            })
+            if welcome_kit.COACH_EAT not in welcome_kit.coaches_seen(WORLD.db.conn, session.player_id):
+                await send_ui_coach(
+                    session, welcome_kit.COACH_EAT, "eat",
+                    "Eat / R restores HP mid-fight.",
+                    dismiss_key="r",
+                )
+                await send_welcome_state(session)
     session.pet_target_id = None if mdef.get("requires_pk") else monster.id
     if not mdef.get("passive") or mdef.get("strikes_in_place"):
         monster.target_player_id = session.player_id
@@ -4169,9 +4526,9 @@ async def handle_set_pk(session, msg):
     session.pk_locked_until = now + PK_LOCK_SECONDS
     if not session.player_killer and session.in_combat_with and session.in_combat_with[0] == "monster":
         mid = session.in_combat_with[1]
-        foe = WORLD.monsters.get(mid)
+        foe = WORLD.monsters.get(mid) if not session.dungeon else session.dungeon["monsters"].get(mid)
         if foe and (foe.def_stats() or {}).get("requires_pk"):
-            session.in_combat_with = None
+            _end_duelist_bout(session, foe)
     _save_pk(session)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     if session.player_killer:
@@ -4190,10 +4547,11 @@ async def handle_stop_attack(session, msg):
             message=f"You cannot run yet. {left} round{'s' if left != 1 else ''} of fighting left.",
         )
         return
-    session.in_combat_with = None
-    session.combat_rounds = 0
-    session.combat_lock_id = None
-    session.pet_target_id = None
+    if not _end_duelist_bout(session):
+        session.in_combat_with = None
+        session.combat_rounds = 0
+        session.combat_lock_id = None
+        session.pet_target_id = None
     # Brief window so force_retaliate mobs don't instantly re-lock
     session.combat_flee_until = time.time() + 1.0
 
@@ -4438,8 +4796,8 @@ async def handle_gather(session, msg):
                 await send(session.ws, "ERROR", message=f"Equip a {need} to fish this spot.")
             else:
                 tool_name = {"woodcutting": "an axe", "mining": "a pickaxe", "fishing": "a fishing tool"}.get(skill)
-                await send(session.ws, "ERROR", message=f"Equip {tool_name} to do that (click it in your bag).")
-            return
+                await send(session.ws, "ERROR", message=f"Equip {tool_name} first (Equipment → gather tools, or click it in your bag).")
+                return
     session.gathering_node = (x, y)
     label = yield_def.get("cast") or {
         "woodcutting": "You swing your axe at the tree...",
@@ -4498,6 +4856,14 @@ async def handle_craft(session, msg):
         await send(
             session.ws, "ERROR",
             message=f"You need {skill} level {recipe['level_req']} for that.",
+        )
+        return
+    cmd_req = int(recipe.get("command_req") or 0)
+    if cmd_req and session.level("command") < cmd_req:
+        await send(
+            session.ws, "ERROR",
+            message=recipe.get("gate_message")
+            or f"You need Command {cmd_req} for that.",
         )
         return
 
@@ -4729,10 +5095,12 @@ def _drop_instance(session):
     if data.get("id") == "castle_realm":
         import castle_realm
         castle_realm.leave(session)
+        _clear_dungeon_resume(session)
         return True
     if data.get("v2"):
         import void_v2
         void_v2.strip_keys(session)
+    _clear_dungeon_resume(session)
     session.dungeon = None
     session.in_combat_with = None
     session.pet_target_id = None
@@ -4800,6 +5168,9 @@ async def handle_teleport(session, msg):
             _drop_instance(session)
         if fresh:
             castle_realm.enter(session)
+            rx = int(session.dungeon.get("return_x") or session.x)
+            ry = int(session.dungeon.get("return_y") or session.y)
+            WORLD.db.save_player_position(session.player_id, rx, ry)
         plane_changed = session.dungeon.get("plane") != "realm"
         if plane_changed:
             castle_realm.move_to_plane(session, "realm", (tx, ty))
@@ -4810,6 +5181,7 @@ async def handle_teleport(session, msg):
         session.gathering_node = None
         session.house_level = 0
         _bring_pet(session)
+        _save_dungeon_resume(session)
         if fresh:
             await send(session.ws, "DUNGEON_ENTER", **castle_realm.payload(session))
             import castle_owners
@@ -4904,6 +5276,7 @@ async def handle_talk(session, msg):
 
     quest_id, qdef, prog = pick_npc_quest(session, npc)
     quest_info = None
+    gift_just_granted = False
     if quest_id and qdef:
 
         def _quest_payload(state):
@@ -4912,9 +5285,11 @@ async def handle_talk(session, msg):
                 "name": qdef["name"],
                 "description": qdef["description"],
                 "state": state,
+                "type": qdef.get("type"),
                 "objective": quest_objective_line(session, qdef, prog),
                 "quest_points": int(qdef.get("quest_points") or 0),
                 "rewards": qdef.get("rewards") or {},
+                "reward_blurb": qdef.get("reward_blurb"),
             }
 
         if qdef.get("type") == "gift":
@@ -4928,8 +5303,7 @@ async def handle_talk(session, msg):
                         **{
                             "from": npc["name"],
                             "text": (
-                                f"Your pack is too full for my starter kit "
-                                f"(need {need_slots} free slots). Bank some items and talk again!"
+                                f"Bag full — free {need_slots} slots, then talk again for the kit."
                             ),
                         },
                     )
@@ -4964,17 +5338,21 @@ async def handle_talk(session, msg):
                     await send(session.ws, "QUEST_LOG", quests={qid: quest_status_for(session, qid) for qid in QUESTS})
                     session.quest_log_dirty = False
                     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
-                    await send(
-                        session.ws, "CHAT_MSG",
-                        **{
+                    if quest_id == "elena_archery_lesson":
+                        await send(session.ws, "CHAT_MSG", **{
                             "from": npc["name"],
-                            "text": (
-                                "Here's a starter kit — knife, logs, feathers, shafts, tips, "
-                                "bowstring, a shortbow, bronze arrows, an Arrow Quiver, and an "
-                                "Arrowtip Box. Equip the quiver and bow, then press N with the knife to fletch more!"
-                            ),
-                        },
-                    )
+                            "text": "Equip bow + quiver, then fight. Press N with a knife to fletch more arrows.",
+                        })
+                        await send_ui_coach(
+                            session, welcome_kit.COACH_SKILLS, "skills",
+                            "Tab / Skills — Fletching and Archery rise as you craft and shoot.",
+                            dismiss_key="tab",
+                        )
+                    else:
+                        await send(session.ws, "CHAT_MSG", **{
+                            "from": npc["name"],
+                            "text": "Here's your reward — check your bag.",
+                        })
                     if qp_gain:
                         await send(session.ws, "CHAT_MSG", **{
                             "from": "Magic",
@@ -4982,6 +5360,7 @@ async def handle_talk(session, msg):
                         })
                     prog = session.quests[quest_id]
                     quest_info = _quest_payload("complete")
+                    gift_just_granted = True
             else:
                 quest_info = _quest_payload("complete")
         elif prog is None:
@@ -4999,6 +5378,38 @@ async def handle_talk(session, msg):
         hello = f"{hello} {title_hello}".strip() if hello else title_hello
     persuade = npc.get("persuade")
     npc_lines = [outfits.mae_line(session)] if npc_id == "outfitter_mae" else list(npc["lines"])
+    # Every quest: short offer / active / ready beats (quest_ux). Lore stays off the talk box.
+    import quest_ux
+    if quest_info and quest_id and qdef:
+        state = quest_info.get("state")
+        if state == "offerable":
+            npc_lines = quest_ux.offer_lines(qdef, quest_id)
+        elif state == "active":
+            npc_lines = quest_ux.active_lines(qdef, quest_info.get("objective"))
+        elif state == "ready":
+            npc_lines = quest_ux.ready_lines(qdef)
+    if gift_just_granted and quest_info and quest_info.get("quest_id") == "elena_archery_lesson":
+        npc_lines = [
+            "Bow kit is in your bag.",
+            "Equip the bow and quiver. Knife + N to fletch more.",
+        ]
+    elif (quest_info and quest_info.get("quest_id") == "elena_archery_lesson"
+          and quest_info.get("state") == "complete" and not gift_just_granted):
+        npc_lines = ["Already gave you the bow kit — equip it and press B to shop."]
+    if npc_id == "innkeeper_sarah" and welcome_kit.COACH_EAT not in welcome_kit.coaches_seen(
+        WORLD.db.conn, session.player_id
+    ):
+        npc_lines = [
+            "Hits drain your health. At zero you die.",
+            "Press R or tap Eat — food or potions restore HP.",
+        ]
+    if npc_id == "priest_cedric" and welcome_kit.COACH_AUTO_PICKUP not in welcome_kit.coaches_seen(
+        WORLD.db.conn, session.player_id
+    ):
+        npc_lines = [
+            "Coins and bones drop when you fight — they stay on the ground unless you pick them up.",
+            "Turn on Coins+bones above ATK/STR (or press P). Then coins and bones scoop themselves.",
+        ]
     await send(
         session.ws, "DIALOGUE", npc_id=npc_id, npc_name=npc["name"],
         lines=([hello] if hello else []) + npc_lines,
@@ -5007,6 +5418,40 @@ async def handle_talk(session, msg):
         persuade={"req": int(persuade["req"])} if persuade else None,
         options=_options_for(session, npc),
     )
+    # Gift quests grant on talk — no Accept. Skip Accept coach for them.
+    qtype = (QUESTS.get((quest_info or {}).get("quest_id") or "") or {}).get("type")
+    if quest_info and quest_info.get("state") == "offerable" and qtype != "gift":
+        await send_ui_coach(
+            session, f"{welcome_kit.COACH_QUEST_ACCEPT}:{quest_info.get('quest_id')}",
+            "dialogue_accept",
+            "Click Accept (or press A).",
+            dismiss_key="a",
+        )
+    elif quest_info and quest_info.get("state") == "ready":
+        await send_ui_coach(
+            session, f"quest_turnin:{quest_info.get('quest_id')}",
+            "dialogue_turnin",
+            "Click Turn in (or press T).",
+            dismiss_key="t",
+        )
+    if npc_id == "innkeeper_sarah":
+        await send_ui_coach(
+            session, welcome_kit.COACH_EAT, "eat",
+            "Eat / R restores HP with food or potions.",
+            dismiss_key="r",
+        )
+        # Flip trail Sarah → Miriam once the eat lesson is marked seen.
+        await send_welcome_state(session)
+    # Cedric teaches Coins+bones after Accept/Turn-in so those pointers aren't overwritten.
+    if npc_id == "priest_cedric" and not (
+        quest_info and quest_info.get("state") in ("offerable", "ready")
+        and (QUESTS.get(quest_info.get("quest_id") or "") or {}).get("type") != "gift"
+    ):
+        await send_ui_coach(
+            session, welcome_kit.COACH_AUTO_PICKUP, "auto_pickup",
+            "Coins+bones above ATK/STR (or press P). Off by default — turn it on to auto-grab coins & bones.",
+            dismiss_key="p",
+        )
     if session.quest_log_dirty:
         session.quest_log_dirty = False
         await send(
@@ -5464,7 +5909,49 @@ def _welcome_status(session):
 
 async def send_welcome_state(session, st=None):
     st = st or _welcome_status(session)
-    await send(session.ws, "WELCOME_STATE", **welcome_kit.public_state(st, NPC_BY_ID.get(welcome_kit.GUIDE_ID)))
+    coaches = welcome_kit.coaches_seen(WORLD.db.conn, session.player_id)
+    await send(
+        session.ws, "WELCOME_STATE",
+        **welcome_kit.public_state(st, NPC_BY_ID.get(welcome_kit.GUIDE_ID), coaches=coaches),
+    )
+
+
+async def send_ui_coach(session, coach_id, target=None, text=None, dismiss_key=None, steps=None):
+    """One-shot HUD pointer (or multi-step sequence). Skipped if already seen."""
+    if not welcome_kit.mark_coach_seen(WORLD.db.conn, session.player_id, coach_id):
+        return
+    payload = {"id": coach_id}
+    if steps:
+        payload["steps"] = steps
+    else:
+        payload["target"] = target
+        payload["text"] = text
+        if dismiss_key:
+            payload["dismiss_key"] = dismiss_key
+    await send(session.ws, "UI_COACH", **payload)
+
+
+def _gear_coach_steps(worn):
+    """Sidebar Equipment → practice take-off / put-on with the Recruit's sword."""
+    open_step = {
+        "target": "equipment",
+        "text": "This gold button opens your gear. Click Equipment (or press E).",
+        "dismiss_key": "e",
+        "wait": "open_equipment",
+    }
+    unequip_step = {
+        "target": "equip_weapon",
+        "text": "This is your sword slot. Click it once to take the sword off into Inventory.",
+        "wait": "unequip_weapon",
+    }
+    equip_step = {
+        "target": "inv_sword",
+        "text": "Your sword is in Inventory (sidebar). Click it once to wear it again.",
+        "wait": "equip_weapon",
+    }
+    if worn:
+        return [open_step, unequip_step, equip_step]
+    return [open_step, equip_step, unequip_step, equip_step]
 
 
 async def welcome_on_join(session):
@@ -5556,11 +6043,16 @@ async def welcome_option(session, npc, opt):
                  placed["bag"], placed["bank"], owed)
         # Stage 2 of the arrival guide: point them at Elder Miriam's starter quest.
         session.arrival_guide = True
-        note = _welcome_note(placed, owed, "Here's your Recruit's Bronze kit: helmet, chest plate, leg armour "
-                                           "and a sword. It's bound to you, so look after it.")
+        note = _welcome_note(placed, owed, "Recruit's Bronze kit is yours — bound to you.")
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        worn_now = False
         if opt == welcome_kit.OPT_WEAR and await welcome_equip(session):
-            note.append("There, all buckled up. You're ready for the dungeon gate now.")
+            worn_now = True
+            note.append("Kit on. Close, then follow the gold Equipment tip (or E) — practice sword off/on.")
+        elif opt == welcome_kit.OPT_TAKE:
+            note.append("Close, then follow the gold Equipment tip (or E) — practice sword on/off.")
+        note.append("Close, then follow the gold trail: Innkeeper Sarah (food/HP), then Elder Miriam.")
+        session._gear_coach_worn = worn_now or bool(session.equipment.get("weapon"))
     elif opt == welcome_kit.OPT_COLLECT:
         with welcome_kit.one_transaction(WORLD.db, session):
             placed, owed = _welcome_deliver(session, welcome_kit.record(conn, pid)["owed"])
@@ -5599,6 +6091,16 @@ async def welcome_option(session, npc, opt):
     else:
         await send_welcome_state(session)
     await welcome_talk(session, npc, note=note)
+    if opt in (welcome_kit.OPT_WEAR, welcome_kit.OPT_TAKE, welcome_kit.OPT_EQUIP):
+        worn = bool(getattr(session, "_gear_coach_worn", None))
+        if opt == welcome_kit.OPT_EQUIP:
+            worn = bool(session.equipment.get("weapon"))
+        elif opt == welcome_kit.OPT_TAKE:
+            worn = bool(session.equipment.get("weapon"))
+        await send_ui_coach(
+            session, welcome_kit.COACH_EQUIP,
+            steps=_gear_coach_steps(worn),
+        )
 
 
 async def welcome_skip(session):
@@ -5614,6 +6116,326 @@ def _options_for(session, npc):
     return npc.get("options")
 
 
+async def send_barracks_state(session, tab="roster", flash=None, practice_result=None):
+    import mercenaries as merc
+    payload = merc.barracks_payload(WORLD.db.conn, session)
+    payload["tab"] = tab
+    if flash:
+        payload["flash"] = flash
+    if practice_result:
+        payload["practice_result"] = practice_result
+    await send(session.ws, "BARRACKS_STATE", **payload)
+
+
+async def handle_barracks(session, msg):
+    """Barracks / practice board actions from Marshal Branna's campus."""
+    import mercenaries as merc
+    action = msg.get("action") or "open"
+    conn = WORLD.db.conn
+    if action == "open":
+        await send_barracks_state(session, tab=msg.get("tab") or "roster")
+        return
+    if action == "customize_banner":
+        import player_houses as _ph
+        ok, text, house = _ph.reroll_banner(conn, session.player_id)
+        if ok:
+            session.personal_house = house
+            session.house_suffix = politics.title_suffix(conn, session.player_id)
+            await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        await send_barracks_state(session, tab=msg.get("tab") or "roster", flash=text)
+        if not ok:
+            await send(session.ws, "ERROR", message=text)
+        return
+    if action == "recruit":
+        ok, text, _soldier = merc.recruit(conn, session, msg.get("template_id"))
+        WORLD.db.save_player_stats(
+            session.player_id, coins=session.coins, bank_coins=session.bank_coins,
+        )
+        if ok:
+            await send(session.ws, "PLAYER_UPDATE", player=session.public_state())
+        await send_barracks_state(session, tab="recruit", flash=text)
+        if not ok:
+            await send(session.ws, "ERROR", message=text)
+        return
+    if action == "upgrade":
+        try:
+            sid = int(msg.get("soldier_id"))
+        except (TypeError, ValueError):
+            await send(session.ws, "ERROR", message="Pick a soldier to promote.")
+            return
+        ok, text, _soldier = merc.upgrade(conn, session, sid)
+        WORLD.db.save_player_stats(
+            session.player_id, coins=session.coins, bank_coins=session.bank_coins,
+        )
+        if ok:
+            await send(session.ws, "PLAYER_UPDATE", player=session.public_state())
+        # Stay on the tab the player was using (recruit promote vs roster detail).
+        tab = msg.get("tab") or "roster"
+        if tab not in ("roster", "recruit"):
+            tab = "roster"
+        await send_barracks_state(session, tab=tab, flash=text)
+        if not ok:
+            await send(session.ws, "ERROR", message=text)
+        return
+    if action in ("deploy", "deploy_all"):
+        sid = None
+        if action == "deploy":
+            try:
+                sid = int(msg.get("soldier_id"))
+            except (TypeError, ValueError):
+                await send(session.ws, "ERROR", message="Pick a soldier to deploy.")
+                return
+        ok, text = merc.deploy_soldiers(conn, session, sid)
+        await send_barracks_state(session, tab="roster", flash=text)
+        if not ok:
+            await send(session.ws, "ERROR", message=text)
+        elif ok:
+            session.pet_target_id = None
+            await send(session.ws, "CHAT_MSG", **{"from": "Marshal", "text": text})
+        return
+    if action in ("recall", "recall_all"):
+        sid = None
+        if action == "recall":
+            try:
+                sid = int(msg.get("soldier_id"))
+            except (TypeError, ValueError):
+                await send(session.ws, "ERROR", message="Pick a soldier to recall.")
+                return
+        ok, text = merc.recall_soldiers(session, sid)
+        await send_barracks_state(session, tab="roster", flash=text)
+        if not ok:
+            await send(session.ws, "ERROR", message=text)
+        elif ok:
+            # Pet returns beside you once the last soldier is recalled.
+            if not merc.deployed_list(session) and getattr(session, "pet_id", None):
+                _bring_pet(session)
+            await send(session.ws, "CHAT_MSG", **{"from": "Marshal", "text": text})
+        return
+    if action == "dismiss":
+        try:
+            sid = int(msg.get("soldier_id"))
+        except (TypeError, ValueError):
+            await send(session.ws, "ERROR", message="Pick a soldier to dismiss.")
+            return
+        ok, text = merc.dismiss(conn, session, sid)
+        await send_barracks_state(session, tab="roster", flash=text)
+        if not ok:
+            await send(session.ws, "ERROR", message=text)
+        return
+    if action == "kit":
+        try:
+            sid = int(msg.get("soldier_id"))
+        except (TypeError, ValueError):
+            await send(session.ws, "ERROR", message="Pick a soldier to outfit.")
+            return
+        ok, text = merc.outfit(conn, session, sid, msg.get("tier"))
+        WORLD.db.save_player_stats(
+            session.player_id, coins=session.coins, bank_coins=session.bank_coins,
+        )
+        if ok:
+            await send(session.ws, "PLAYER_UPDATE", player=session.public_state())
+        await send_barracks_state(session, tab="roster", flash=text)
+        if not ok:
+            await send(session.ws, "ERROR", message=text)
+        return
+    if action == "kit_all":
+        ok, text = merc.outfit_all(conn, session, msg.get("tier"))
+        WORLD.db.save_player_stats(
+            session.player_id, coins=session.coins, bank_coins=session.bank_coins,
+        )
+        if ok:
+            await send(session.ws, "PLAYER_UPDATE", player=session.public_state())
+        await send_barracks_state(session, tab="roster", flash=text)
+        if not ok:
+            await send(session.ws, "ERROR", message=text)
+        return
+    if action == "train":
+        try:
+            sid = int(msg.get("soldier_id"))
+        except (TypeError, ValueError):
+            await send(session.ws, "ERROR", message="Pick a soldier to train.")
+            return
+        ok, text, _soldier = merc.train(conn, session, sid, msg.get("skill"))
+        WORLD.db.save_player_stats(
+            session.player_id, coins=session.coins, bank_coins=session.bank_coins,
+        )
+        if ok:
+            await send(session.ws, "PLAYER_UPDATE", player=session.public_state())
+        await send_barracks_state(session, tab="roster", flash=text)
+        if not ok:
+            await send(session.ws, "ERROR", message=text)
+        return
+    if action == "train_all":
+        ok, text = merc.train_all(conn, session, msg.get("skill"))
+        WORLD.db.save_player_stats(
+            session.player_id, coins=session.coins, bank_coins=session.bank_coins,
+        )
+        if ok:
+            await send(session.ws, "PLAYER_UPDATE", player=session.public_state())
+        await send_barracks_state(session, tab="roster", flash=text)
+        if not ok:
+            await send(session.ws, "ERROR", message=text)
+        return
+    if action == "practice":
+        await start_arena_practice(session, msg.get("foe_id"))
+        return
+    if action == "arena_begin":
+        await begin_arena_fight(session)
+        return
+    await send(session.ws, "ERROR", message="Unknown barracks action.")
+
+
+async def start_arena_practice(session, foe_id):
+    """Close the board, seat the commander, stage armies, wait for Start Battle."""
+    import mercenaries as merc
+    import castle_realm
+    conn = WORLD.db.conn
+    if not session.dungeon or session.dungeon.get("id") != "castle_realm":
+        await send(session.ws, "ERROR", message="Enter the Castle Realm and stand at the Crownfall Arena.")
+        return
+    # Field squad can't share the sand with a practice line-up.
+    if merc.deployed_list(session):
+        merc.clear_deployed(session)
+        if getattr(session, "pet_id", None):
+            _bring_pet(session)
+    ok, text, match = merc.start_live_practice(conn, session, foe_id)
+    if not ok:
+        await send(session.ws, "ERROR", message=text)
+        await send_barracks_state(session, tab="practice", flash=text)
+        return
+    # Ensure realm plane and spectator seat overlooking the pit.
+    if session.dungeon.get("plane") != "realm":
+        castle_realm.move_to_plane(session, "realm", merc.arena_coords()["spectator"])
+        await send(session.ws, "REALM_PLANE", **castle_realm.payload(session))
+    spec = match["spectator"]
+    session.x, session.y = int(spec[0]), int(spec[1])
+    WORLD.db.save_player_position(session.player_id, session.x, session.y)
+    await send(session.ws, "PLAYER_UPDATE", player=session.public_state())
+    await send(
+        session.ws, "ARENA_MATCH_START",
+        foe_name=match["foe_name"],
+        foe_id=match["foe_id"],
+        spectator=spec,
+        pit=match["pit"],
+        center=match.get("center") or merc.arena_coords()["center"],
+        units=[merc.unit_public(u) for u in match["units"]],
+        hud=merc.match_hud(match),
+        daily=match.get("daily"),
+        phase=match.get("phase") or "preview",
+    )
+    await send(session.ws, "CHAT_MSG", **{"from": "Marshal", "text": text})
+
+
+async def begin_arena_fight(session):
+    """Player pressed Start Battle after lining up the armies."""
+    import mercenaries as merc
+    ok, text = merc.begin_live_fight(session)
+    if not ok:
+        await send(session.ws, "ERROR", message=text)
+        return
+    match = session.arena_match
+    await send(
+        session.ws, "ARENA_MATCH_UPDATE",
+        units=[merc.unit_public(u) for u in match["units"]],
+        hud=merc.match_hud(match),
+        phase="fight",
+    )
+    await send(session.ws, "CHAT_MSG", **{"from": "Marshal", "text": text})
+
+
+async def settle_arena_match(session):
+    import mercenaries as merc
+    match = getattr(session, "arena_match", None)
+    if not match or match.get("phase") != "done":
+        return
+    conn = WORLD.db.conn
+    text, summary = merc.settle_live_practice(conn, session, match)
+    session.arena_match = None
+    xp = int(summary.get("command_xp") or 0)
+    before, after = WORLD.grant_xp(session, "command", xp)
+    leveled = after > before
+    WORLD.db.save_player_stats(session.player_id, coins=session.coins)
+    ore = int(summary.get("mythos_ore") or 0)
+    if ore:
+        if not WORLD.add_item_to_inventory(session, "mythos_ore", ore):
+            text += " (inventory full — ore lost)"
+            summary["mythos_ore"] = 0
+    await send(session.ws, "PLAYER_UPDATE", player=session.public_state())
+    await send(
+        session.ws, "SKILL_XP",
+        player_id=session.player_id, skill="command", gained=xp,
+        xp=session.xp["command"], level=after, leveled_up=leveled,
+    )
+    await send(session.ws, "CHAT_MSG", **{"from": "Marshal", "text": text})
+    # Result card is player-driven (Continue / Rematch); do not auto-open barracks.
+    await send(
+        session.ws, "ARENA_MATCH_END",
+        summary=summary, flash=text,
+    )
+
+
+async def process_arena_matches(events):
+    """Tick live practice fights and emit combat splat events to the commander."""
+    import mercenaries as merc
+    for session in list(WORLD.sessions.values()):
+        match = getattr(session, "arena_match", None)
+        if not match or match.get("phase") != "fight":
+            continue
+        for ev in merc.tick_live_match(match):
+            ev_type = ev.pop("type", "COMBAT_EVENT")
+            await send(session.ws, ev_type, **ev)
+        if match.get("phase") == "done":
+            await settle_arena_match(session)
+        else:
+            # Skip redundant full snapshots — hits already sync HP; client decays swings.
+            fp = merc.match_sync_fingerprint(match)
+            hud = merc.match_hud(match)
+            if fp != match.get("_sync_fp") or (match.get("tick") or 0) % 3 == 0:
+                match["_sync_fp"] = fp
+                await send(
+                    session.ws, "ARENA_MATCH_UPDATE",
+                    units=[merc.unit_public(u) for u in match["units"]],
+                    hud=hud,
+                )
+
+
+def process_field_soldiers(events):
+    """Castle Realm deployables: follow the commander and pile onto their fight."""
+    import mercenaries as merc
+    import castle_realm
+
+    def _resolve(session, mid):
+        if not session.dungeon or session.dungeon.get("id") != "castle_realm":
+            return None
+        for m in castle_realm.monsters_on_plane(session):
+            if m.id == mid:
+                return m
+        return (session.dungeon.get("monsters") or {}).get(mid)
+
+    for session in list(WORLD.sessions.values()):
+        if not merc.deployed_list(session):
+            continue
+        if not merc.in_castle_realm(session):
+            merc.clear_deployed(session)
+            continue
+        # Don't run field AI during a live arena match.
+        match = getattr(session, "arena_match", None)
+        if match and match.get("phase") in ("preview", "fight"):
+            continue
+
+        def _on_kill(monster, _s=session):
+            _mark_monster_dead(monster)
+            _note_pk_kill(_s, monster)
+
+        merc.tick_field_soldiers(
+            session,
+            events,
+            resolve_monster=lambda mid, _s=session: _resolve(_s, mid),
+            tick=int(WORLD.tick_count or 0),
+            on_kill=_on_kill,
+        )
+
+
 async def handle_npc_option(session, msg):
     """Dialogue menu options for apprentice masters and the estate office (phase 4)."""
     npc = NPC_BY_ID.get(msg.get("npc_id"))
@@ -5624,8 +6446,13 @@ async def handle_npc_option(session, msg):
     allowed = {o["id"] for o in (_options_for(session, npc) if npc else None) or []}
     if npc and npc.get("id") == "chamberlain_aric":
         allowed.add("noble_pay")
+        allowed.update(throne.TRIBUTE_OPTION_IDS)
+    if npc and npc.get("id") == "mistress_celia":
+        allowed.update(throne.TRIBUTE_OPTION_IDS)
     if npc and npc.get("id") == "old_king_prisoner":
         allowed.add("king_free")
+    if npc and npc.get("barracks"):
+        allowed.update({"barracks_open", "practice_board", "command_info", "kit_prices"})
     if allowed and isinstance(opt, str) and opt.startswith(throne.DYNAMIC_PREFIXES):
         allowed.add(opt)
     if not npc or not allowed or opt not in allowed:
@@ -5637,6 +6464,33 @@ async def handle_npc_option(session, msg):
     pid = session.player_id
     wp = npc.get("apprentice")
     lines = []
+    if npc.get("barracks") and opt in ("barracks_open", "practice_board"):
+        await send_barracks_state(session, tab="practice" if opt == "practice_board" else "roster")
+        return
+    if npc.get("barracks") and opt == "command_info":
+        import mercenaries as _merc
+        cmd = _merc.command_level(session)
+        nxt = _merc.next_unlock(cmd)
+        lines = [
+            f"Your Command is level {cmd}.",
+            "Fight practice houses (and later the arena) to raise it.",
+            "Mythos ore smelts at Smithing 60 + Command 60; Mythos Guards and kits at Command 80.",
+        ]
+        if nxt:
+            lines.append(f"Next unlock at {nxt['level']}: {nxt['text']}")
+        await send(session.ws, "DIALOGUE", npc_id=npc["id"], npc_name=npc["name"], lines=lines,
+                   options=_options_for(session, npc))
+        return
+    if npc.get("barracks") and opt == "kit_prices":
+        import mercenaries as _merc
+        cmd = _merc.command_level(session)
+        lines = ["Kit prices (Command gated):"]
+        for kit in _merc.kit_catalogue(cmd):
+            lock = "" if not kit["locked"] else f" — need Command {kit['command_req']}"
+            lines.append(f"{kit['label']}: {kit['cost']:,} coins{lock}")
+        await send(session.ws, "DIALOGUE", npc_id=npc["id"], npc_name=npc["name"], lines=lines,
+                   options=_options_for(session, npc))
+        return
     if npc.get("house"):
         lines = await handle_house_option(session, npc, opt)
     elif opt == "app_sign":
@@ -5722,7 +6576,53 @@ async def handle_npc_option(session, msg):
         conn.commit()
         lines = [f"Court Favour {f['favour']}/{throne.FAVOUR_MAX}. Three small services a day (+20 each); "
                  "the Court Ball, Saturdays 20:00 in the throne room, is +100 once a week.",
-                 "Standing at Neutral or worse costs 50 favour a day."]
+                 "Standing at Neutral or worse costs 50 favour a day. "
+                 "You may also Offer tribute — costly gold or gems for a little Favour and manners XP."]
+    elif opt == "social_explain":
+        lines = list(nobility.SOCIAL_EXPLAIN_LINES)
+    elif opt == "tribute_menu":
+        lines = throne.tribute_menu_lines()
+        await send(session.ws, "DIALOGUE", npc_id=npc["id"], npc_name=npc["name"], lines=lines,
+                   options=throne.tribute_options() + list(_options_for(session, npc) or npc.get("options") or []))
+        return
+    elif isinstance(opt, str) and opt.startswith("tribute_coin_"):
+        try:
+            cost = int(opt[len("tribute_coin_"):])
+        except (TypeError, ValueError):
+            lines = ["That is not a tribute the Crown accepts."]
+        else:
+            ok, lines, xp, rep = throne.pay_tribute_coin(session, conn, cost)
+            if ok and xp:
+                await social_event(
+                    session, "tribute",
+                    rep=rep or 0,
+                    xp=xp,
+                    xp_cap_key="tribute_xp",
+                    xp_cap=throne.TRIBUTE_XP_DAILY_CAP,
+                )
+                await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    elif isinstance(opt, str) and opt.startswith("tribute_gem_"):
+        gem_id = opt[len("tribute_gem_"):]
+
+        def _take_gem_tribute(g, q):
+            if WORLD.count_item(session, g) < q:
+                return False
+            return WORLD.remove_item_qty(session, g, q)
+
+        ok, lines, xp, rep = throne.pay_tribute_gem(
+            session, conn, gem_id, take_items=_take_gem_tribute,
+        )
+        if ok and xp:
+            await social_event(
+                session, "tribute",
+                rep=rep or 0,
+                xp=xp,
+                xp_cap_key="tribute_xp",
+                xp_cap=throne.TRIBUTE_XP_DAILY_CAP,
+            )
+            await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    elif isinstance(opt, str) and opt.startswith("tribute_") and opt != "tribute_menu":
+        lines = ["That is not a tribute the Crown accepts."]
     elif opt in throne.COURT_TASKS:
         ok, missing = throne.courtier_eligible(session, conn)
         label, items = throne.COURT_TASKS[opt]
@@ -6090,13 +6990,14 @@ async def handle_set_pet(session, msg):
 
 
 async def handle_toggle_hd_player(session, msg):
-    """Toggle HD player rendering (2D/3D)."""
-    enabled = bool(msg.get("enabled", True))
-    WORLD.db.save_player_stats(session.player_id, hd_player=int(enabled))
+    """Legacy no-op: players always use HD villager art (old 2D player sprites removed)."""
+    WORLD.db.save_player_stats(session.player_id, hd_player=1)
     session.row = WORLD.db.get_player_by_id(session.player_id)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
-    mode = "3D" if enabled else "2D"
-    await send(session.ws, "CHAT_MSG", **{"from": "Settings", "text": f"Player rendering: {mode}"})
+    await send(session.ws, "CHAT_MSG", **{
+        "from": "Settings",
+        "text": "Player look is always the HD villager art.",
+    })
 
 
 def _cosmetic_catalogue():
@@ -6209,11 +7110,32 @@ async def handle_buy_collection_set(session, msg):
 
 
 async def handle_set_gender(session, msg):
+    """Switch sex and replace the worn look with that sex's free villager starter.
+
+    Keeps skin tone / hair colour when possible so creators don't lose palette picks,
+    but never leaves the opposite sex's garment ids on the character (that fell back
+    to the old 2D player art).
+    """
+    import json
     gender = "female" if str(msg.get("gender") or "").lower() == "female" else "male"
     session.gender = gender
-    WORLD.db.save_player_stats(session.player_id, gender=gender)
+    prev = {}
+    try:
+        raw = session._row_val("appearance", None)
+        if isinstance(raw, str) and raw:
+            prev = json.loads(raw) or {}
+        elif isinstance(raw, dict):
+            prev = dict(raw)
+    except (TypeError, ValueError):
+        prev = {}
+    keep = {k: prev[k] for k in ("skin_tone", "hair_colour", "palette") if prev.get(k)}
+    look = outfits.starter_look(gender, keep or None)
+    WORLD.db.save_player_stats(
+        session.player_id, gender=gender, appearance=json.dumps(look), hd_player=1,
+    )
     session.row = WORLD.db.get_player_by_id(session.player_id)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    await broadcast_player_state(session)
 
 
 async def handle_update_appearance(session, msg):
@@ -6624,6 +7546,26 @@ async def handle_equip(session, msg):
             return
         await send(session.ws, "ERROR", message="You can only equip arrows or an Arrow Quiver as ammo.")
         return
+    # Gather tools: one slot per skill (axe / pick / net). Weapon stays on; gathering plays the tool anim.
+    if eq_slot == "tool":
+        skill = item.get("tool_for")
+        if skill not in ("woodcutting", "mining", "fishing"):
+            await send(session.ws, "ERROR", message="You can't equip that as a gather tool.")
+            return
+        slot_key = f"tool_{skill}"
+        old = session.equipment.get(slot_key)
+        session.equipment[slot_key] = entry["item_id"]
+        WORLD.db.set_equip_tool_skill(session.player_id, skill, entry["item_id"])
+        WORLD.remove_item_qty(session, entry["item_id"], 1)
+        if old:
+            WORLD.add_item_to_inventory(session, old, 1)
+        session._sync_legacy_tool_slot()
+        await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        await send(
+            session.ws, "CHAT_MSG",
+            **{"from": "You", "text": f"You equip the {item['name']} for {skill}."},
+        )
+        return
     # David, 23 Oct 2026: equipping armour no longer takes the outfit off. Partial armour keeps the outfit's
     # painted figure (stats apply, the gear isn't drawn); a full matching tier set shows its painted armour.
     # David, 23 Oct 2026: body and legs go on together and both are needed (gear_rules pair rule).
@@ -6729,6 +7671,29 @@ async def _outfit_gear_check(session, appearance):
 
 async def handle_unequip(session, msg):
     slot_name = msg.get("equip_slot")
+    # Per-skill tool slots (and legacy "tool") return the item to the bag.
+    if slot_name == "tool" or (isinstance(slot_name, str) and slot_name.startswith("tool_")):
+        if slot_name == "tool":
+            # Unequip whichever skill the legacy mirror points at.
+            mirrored = session.equipment.get("tool")
+            skill = (ITEMS.get(mirrored) or {}).get("tool_for") if mirrored else None
+            slot_name = f"tool_{skill}" if skill in ("woodcutting", "mining", "fishing") else None
+            if not slot_name:
+                return
+        skill = slot_name.replace("tool_", "", 1)
+        item_id = session.equipment.get(slot_name)
+        if not item_id:
+            return
+        if not WORLD.add_item_to_inventory(session, item_id, 1):
+            await send(session.ws, "ERROR", message="Your inventory is full.")
+            return
+        name = ITEMS.get(item_id, {}).get("name", "item")
+        session.equipment[slot_name] = None
+        WORLD.db.set_equip_tool_skill(session.player_id, skill, None)
+        session._sync_legacy_tool_slot()
+        await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        await send(session.ws, "CHAT_MSG", **{"from": "You", "text": f"You unequip the {name}."})
+        return
     item_id = session.equipment.get(slot_name)
     if not item_id:
         return
@@ -6989,9 +7954,11 @@ async def handle_use_item(session, msg):
         return
 
     if item.get("karma_xp"):
-        # Right-click / use: bury exactly one bone from this stack
-        WORLD.remove_item_qty(session, item_id, 1)
-        await bury_bone_stack(session, item_id, 1, quiet=False)
+        have = int(entry.get("qty") or 1)
+        qty = have if action == "bury_all" else 1
+        qty = max(1, min(qty, have))
+        WORLD.remove_item_qty(session, item_id, qty)
+        await bury_bone_stack(session, item_id, qty, quiet=False)
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
         return
     if item_id in FIRE_LOGS:
@@ -7503,10 +8470,25 @@ async def handle_inv_move(session, msg):
         WORLD.db.clear_slot(session.player_id, from_slot)
         WORLD.db.add_item_to_slot(session.player_id, to_slot, src["item_id"], src["qty"])
     elif dst["item_id"] == src["item_id"] and ITEMS.get(src["item_id"], {}).get("stackable"):
-        dst["qty"] += src["qty"]
-        del session.inventory[from_slot]
-        WORLD.db.clear_slot(session.player_id, from_slot)
-        WORLD.db.add_item_to_slot(session.player_id, to_slot, dst["item_id"], dst["qty"])
+        max_stack = int((ITEMS.get(src["item_id"]) or {}).get("max_stack") or 0) or None
+        if max_stack:
+            room = max(0, max_stack - int(dst["qty"] or 0))
+            take = min(room, int(src["qty"] or 0))
+            if take <= 0:
+                return
+            dst["qty"] = int(dst["qty"] or 0) + take
+            src["qty"] = int(src["qty"] or 0) - take
+            WORLD.db.add_item_to_slot(session.player_id, to_slot, dst["item_id"], dst["qty"])
+            if src["qty"] <= 0:
+                del session.inventory[from_slot]
+                WORLD.db.clear_slot(session.player_id, from_slot)
+            else:
+                WORLD.db.add_item_to_slot(session.player_id, from_slot, src["item_id"], src["qty"])
+        else:
+            dst["qty"] += src["qty"]
+            del session.inventory[from_slot]
+            WORLD.db.clear_slot(session.player_id, from_slot)
+            WORLD.db.add_item_to_slot(session.player_id, to_slot, dst["item_id"], dst["qty"])
     else:
         session.inventory[from_slot] = dst
         session.inventory[to_slot] = src
@@ -7516,9 +8498,7 @@ async def handle_inv_move(session, msg):
 
 
 async def handle_pickup(session, msg):
-    """Manual pickup: take one stack, or all=True for the whole pile.
-    Item types on the never-pickup list stay on the ground unless this click forces one.
-    """
+    """Manual pickup: take one stack, or all=True for the whole pile."""
     expire_ground_items()
     if session.dungeon and session.dungeon.get("v2"):
         import void_v2
@@ -7526,7 +8506,6 @@ async def handle_pickup(session, msg):
         return
     await vacuum_ground_loot(session, quiet=True)
     take_all = bool(msg.get("all"))
-    force = bool(msg.get("force"))
     want = msg.get("item_id")
     picked = 0
     while True:
@@ -7540,14 +8519,20 @@ async def handle_pickup(session, msg):
                 continue
             if quest_ground_item_hidden(session, cid):
                 continue
-            if pickup_ignored(session, cid) and not (force and cid == want):
-                continue
             idx = i
             break
         if idx is None:
             break
         entry = items_here.pop(idx)
         item_id, qty = entry["item_id"], entry["qty"]
+        quest_prop = item_id in QUEST_GROUND_ITEMS
+        if quest_prop and (
+            WORLD.count_item(session, item_id) > 0
+            or WORLD.count_item_bank(session, item_id) > 0
+        ):
+            items_here.insert(idx, entry)
+            await send(session.ws, "ERROR", message="You already have what you need for that quest.")
+            break
         if item_id == "coins":
             gained, left = WORLD.add_coins(session, qty)
             if left:
@@ -7557,11 +8542,6 @@ async def handle_pickup(session, msg):
                 if not take_all:
                     await send(session.ws, "CHAT_MSG", **{"from": "World", "text": f"You pick up {gained} coins."})
             if left or not take_all:
-                break
-        elif ITEMS.get(item_id, {}).get("karma_xp"):
-            await bury_bone_stack(session, item_id, qty, quiet=False)
-            picked += 1
-            if not take_all:
                 break
         elif item_id in ORE_ITEM_IDS and WORLD.count_ores(session) + qty > MAX_ORES:
             items_here.insert(idx, entry)
@@ -7573,6 +8553,9 @@ async def handle_pickup(session, msg):
             break
         else:
             picked += 1
+            # Shared quest props stay on the ground for other players.
+            if quest_prop:
+                items_here.insert(idx, entry)
             if not take_all:
                 await send(session.ws, "CHAT_MSG", **{
                     "from": "World", "text": f"You pick up {ITEMS[item_id]['name']}.",
@@ -7609,6 +8592,27 @@ async def handle_quest_accept(session, msg):
         if clans.clan_of(session.player_id):
             await guild_tutorial_event(session, "guild", quiet=True)
     await send(session.ws, "QUEST_LOG", quests={qid: quest_status_for(session, qid) for qid in QUESTS})
+    # One short tip per accept — the gold trail already shows where to go.
+    import quest_ux
+    giver = next((n for n in NPCS if n.get("id") == qdef.get("giver")), None)
+    giver_name = (giver or {}).get("name") or "Guide"
+    who, tip = quest_ux.accept_chat(qdef, giver_name)
+    await send(session.ws, "CHAT_MSG", **{"from": who, "text": tip})
+    # First accepted quest: teach the bag filter chips (Quest / Weapon / Armour…).
+    await send_ui_coach(
+        session, welcome_kit.COACH_INV_FILTERS, "inv_filters",
+        "Bag filters: Quest shows quest items. Weapon, Armour, Food and Material sort the rest.",
+    )
+    if quest_id == "liras_lost_locket":
+        await send_ui_coach(
+            session, welcome_kit.COACH_INVENTORY, "inventory",
+            "Quest items go in Inventory. Tap Quest above to find them fast.",
+        )
+    elif quest_id == "rat_problem":
+        await send(session.ws, "CHAT_MSG", **{
+            "from": giver_name,
+            "text": "Click a rat to attack (or Space). Hurt? Press R to eat.",
+        })
 
 
 GUILD_STEP_BITS = {"guild": 1, "deposit": 2}
@@ -7685,6 +8689,8 @@ async def handle_quest_turnin(session, msg):
     # Mark complete before granting rewards so a crash mid-reward cannot re-turn-in.
     prog["status"] = "complete"
     WORLD.db.set_quest_progress(session.player_id, quest_id, "complete", prog.get("progress", 0))
+    # Strip leftover undroppable quest props (e.g. duplicate Lost Lockets).
+    prune_quest_ground_items(session)
 
     # Grant all item rewards without aborting mid-list (slots pre-checked).
     await grant_quest_rewards(session, rewards)
@@ -7963,6 +8969,9 @@ async def handler(ws):
                     await handle_move(session, msg)
                 elif mtype == "CHAT":
                     await handle_chat(session, msg)
+                elif mtype == "GUILD_SYNC":
+                    import clans
+                    await clans._notify(session)
                 elif mtype == "ATTACK":
                     await handle_attack(session, msg)
                 elif mtype == "SET_PK":
@@ -7996,6 +9005,8 @@ async def handler(ws):
                     await handle_persuade(session, msg)
                 elif mtype == "NPC_OPTION":
                     await handle_npc_option(session, msg)
+                elif mtype == "BARRACKS":
+                    await handle_barracks(session, msg)
                 elif mtype == "WELCOME_SKIP":
                     await welcome_skip(session)
                 elif mtype in ("COURT_CHOOSE", "NEWS_BOARD", "KINGDOM_STATE"):
@@ -8104,11 +9115,12 @@ async def logout_session(session, reason="logout"):
     if getattr(session, "trade_partner_id", None):
         await handle_trade_cancel(session, {})
     if session.dungeon and session.dungeon.get("id") == "castle_realm":
-        session.x = int(session.dungeon.get("return_x", session.x))
-        session.y = int(session.dungeon.get("return_y", session.y))
+        # Persist realm plane/tile; keep overworld portal coords as the safe login fallback.
+        _save_dungeon_resume(session)
+        rx = int(session.dungeon.get("return_x", session.x))
+        ry = int(session.dungeon.get("return_y", session.y))
+        WORLD.db.save_player_position(session.player_id, rx, ry)
         session.dungeon = None
-        WORLD.db.save_player_position(session.player_id, session.x, session.y)
-        _clear_dungeon_resume(session)
     elif session.dungeon:
         _save_dungeon_resume(session)
         session.dungeon = None
@@ -8296,6 +9308,8 @@ async def game_loop():
             import depths_v2
             await depths_v2.tick_sessions()
             process_pets(events)
+            process_field_soldiers(events)
+            await process_arena_matches(events)
             await _flush_pk_notices()
             await process_stat_boosts()
             await process_equip_regen()
@@ -8357,8 +9371,27 @@ async def game_loop():
         for session in list(WORLD.sessions.values()):
             if session.dungeon:
                 d = session.dungeon
-                alive = [m.public_state() for m in d["monsters"].values() if m.alive and not getattr(m, "concealed", False)]
                 if d.get("id") == "castle_realm":
+                    import castle_realm
+                    import mercenaries as _merc
+                    castle_realm.ensure_plane_monsters(session)
+                    plane_mobs = castle_realm.monsters_on_plane(session)
+                    alive = [
+                        m.public_state() for m in plane_mobs
+                        if m.alive and not getattr(m, "concealed", False)
+                    ]
+                    match = getattr(session, "arena_match", None)
+                    if match and match.get("phase") == "fight" and d.get("plane") == "realm":
+                        alive = alive + [
+                            _merc.unit_public(u) for u in match["units"]
+                            if u.get("alive") and u.get("hp", 0) > 0
+                        ]
+                    elif _merc.deployed_list(session):
+                        # Field squad — follow in any Castle Realm plane (bailey + keep).
+                        alive = alive + [
+                            _merc.unit_public(u) for u in _merc.deployed_list(session)
+                            if u.get("alive") and u.get("hp", 0) > 0
+                        ]
                     plane = d.get("plane")
                     realm_players = [
                         other.public_state()
@@ -8367,11 +9400,17 @@ async def game_loop():
                         and (other.dungeon or {}).get("plane") == plane
                     ]
                 else:
+                    alive = [m.public_state() for m in d["monsters"].values() if m.alive and not getattr(m, "concealed", False)]
                     realm_players = [session.public_state()]
+                # Hide the companion while a field squad is out (soldiers take the escort slot).
+                import mercenaries as _merc_pets
+                show_pet = bool(session.pet_id) and not (
+                    d.get("id") == "castle_realm" and _merc_pets.deployed_list(session)
+                )
                 await send(session.ws, "STATE_UPDATE", **{
                     "players": realm_players,
                     "monsters": alive,
-                    "pets": [session.pet_public()] if session.pet_id else [],
+                    "pets": [session.pet_public()] if show_pet else [],
                     "ground_items": (
                         __import__("void_v2").ground_public(d) if d.get("v2") else {}
                     ),
@@ -8464,7 +9503,14 @@ async def process_combat(events):
     MAX_ATTACKERS = 1
     for session in list(WORLD.sessions.values()):
         if session.dungeon:
-            pool = [m for m in session.dungeon["monsters"].values() if m.alive and not getattr(m, "concealed", False)]
+            if session.dungeon.get("id") == "castle_realm":
+                import castle_realm
+                pool = [
+                    m for m in castle_realm.monsters_on_plane(session)
+                    if m.alive and not getattr(m, "concealed", False)
+                ]
+            else:
+                pool = [m for m in session.dungeon["monsters"].values() if m.alive and not getattr(m, "concealed", False)]
             dungeon_tag = session.player_id
         else:
             pool = list(WORLD.monsters.values())
@@ -8491,11 +9537,11 @@ async def process_combat(events):
             primary = next((m for m in pool if m.id == mid), None)
             reach = session.attack_reach()
             if primary:
-                mreach = int(primary.def_stats().get("attack_range") or 1)
+                mreach = melee_reach((primary.def_stats() or {}).get("attack_range"))
                 if session.y == primary.y and abs(session.x - primary.x) <= mreach:
                     reach = max(reach, mreach)
             if primary and (primary.def_stats() or {}).get("requires_pk") and not session.player_killer:
-                session.in_combat_with = None
+                _end_duelist_bout(session, primary)
                 primary = None
             elif primary and not primary.alive:
                 primary = None
@@ -8504,13 +9550,16 @@ async def process_combat(events):
                 close = wyrm if wyrm is not None else chebyshev(session.x, session.y, primary.x, primary.y) <= reach
                 if not close:
                     # The wyrm does not chase. Once you leave the fire, the fight ends.
-                    if wyrm is False:
-                        session.in_combat_with = None
+                    # Duelists also end the bout out of reach and heal to full.
+                    if wyrm is False or _is_training_duelist(primary):
+                        if not _end_duelist_bout(session, primary):
+                            session.in_combat_with = None
                     primary = None
         fights = gear_rules.can_fight(session, ITEMS)
         if not fights:
             if primary is not None:
-                session.in_combat_with = None
+                if not _end_duelist_bout(session, primary):
+                    session.in_combat_with = None
             primary = None
         if primary is None and attackers and fights:
             # Auto-retaliate only when the monster forces it (default). Bosses like
@@ -8525,9 +9574,8 @@ async def process_combat(events):
 
         if primary:
             reach = session.attack_reach()
-            # Side-by-side fights may leave a 1–2 tile gap; allow melee to land across it
-            # when the foe fights at extended range (e.g. dragonfire).
-            mreach = int(primary.def_stats().get("attack_range") or 1)
+            # Sword-range fights leave a stand-off gap; allow melee across it.
+            mreach = melee_reach((primary.def_stats() or {}).get("attack_range"))
             if session.y == primary.y and abs(session.x - primary.x) <= mreach:
                 reach = max(reach, mreach)
             wyrm = _ember_wyrm_can_hit(primary, session.x, session.y)
@@ -8544,7 +9592,8 @@ async def process_combat(events):
                             session.ws, "CHAT_MSG",
                             **{"from": "You", "text": "You have run out of arrows."},
                         )
-                        session.in_combat_with = None
+                        if not _end_duelist_bout(session, primary):
+                            session.in_combat_with = None
                         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
                         skip_player_swing = True
                     else:
@@ -8752,7 +9801,8 @@ async def process_combat(events):
             lost = int(session.coins * 0.25)
             session.hp = session.max_hp()
             session.coins = max(0, session.coins - lost)
-            session.in_combat_with = None
+            if not _end_duelist_bout(session):
+                session.in_combat_with = None
             session.pet_target_id = None
             where = "village"
             if session.dungeon:
@@ -8802,6 +9852,18 @@ async def process_combat(events):
                 death_data["_dungeon_player"] = dungeon_tag
             events.append({"type": "DEATH", "data": death_data})
             await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+            # First death: make the failure cheap and legible (eat, then try again).
+            if welcome_kit.mark_coach_seen(WORLD.db.conn, session.player_id, welcome_kit.COACH_DEATH):
+                await send(session.ws, "CHAT_MSG", **{
+                    "from": "Guide",
+                    "text": "You woke up. Press R to eat, stick to green nameplates, then follow the trail.",
+                })
+                await send_ui_coach(
+                    session, welcome_kit.COACH_EAT, "eat",
+                    "Eat / R restores HP before you go back out.",
+                    dismiss_key="r",
+                )
+                await send_welcome_state(session)
         elif not session.in_combat_with and not attackers:
             pass
 
@@ -9013,8 +10075,13 @@ def _pet_note_player_step(session):
 
 def process_pets(events):
     """Pets follow their owner and only attack monsters the player has attacked."""
+    import mercenaries as merc
     for session in list(WORLD.sessions.values()):
         if not session.pet_id or session.pet_id not in PETS:
+            continue
+        # Field squad replaces the pet escort while deployed in Castle Realm.
+        if merc.deployed_list(session):
+            session.pet_target_id = None
             continue
         pdef = PETS[session.pet_id]
         if session.pet_hp <= 0:
@@ -9251,27 +10318,25 @@ def process_resource_respawns():
 
 
 def side_by_side_goal(monster, px, py, can_stand):
-    """Post for a foe that must share the player's row.
+    """Post east/west of the player at sword range so sprites don't stack.
 
-    False: already in reach, so hold still.
-    None: this foe does not fight side by side.
+    Used for every melee foe (not only those flagged side_by_side).
+    False: already posted well — hold still.
     (x, y): walk toward that tile.
     """
     mdef = monster.def_stats() or {}
-    if not mdef.get("side_by_side"):
-        return None
     px, py = int(px), int(py)
-    reach = max(1, int(mdef.get("attack_range") or 1))
+    reach = melee_reach(mdef.get("attack_range"))
+    prefer = max(MELEE_STAND_GAP, min(int(mdef.get("side_gap") or MELEE_STAND_GAP), reach))
     gap = abs(int(monster.x) - px)
-    if int(monster.y) == py and 1 <= gap <= reach:
+    if int(monster.y) == py and prefer <= gap <= reach:
         return False
-    prefer = max(1, min(int(mdef.get("side_gap") or 2), reach))
     side = getattr(monster, "fight_side", None)
     if side not in (1, -1):
         side = 1 if monster.x >= px else -1
         monster.fight_side = side
     fallback = None
-    for g in (prefer, 3, 2, 1, 4):
+    for g in (prefer, 3, 2, 4, 1):
         if g < 1 or g > reach:
             continue
         for s in (side, -side):
@@ -9396,7 +10461,20 @@ def process_dungeon_ai():
             import void_v2
             void_v2.process_ai(session)
             continue
-        monsters = list(session.dungeon["monsters"].values())
+        realm = session.dungeon.get("id") == "castle_realm"
+        if realm:
+            import castle_realm
+            castle_realm.ensure_plane_monsters(session)
+            monsters = list(castle_realm.monsters_on_plane(session))
+            plane_name = session.dungeon.get("plane")
+
+            def _walkable(nx, ny):
+                return castle_realm.walkable(plane_name, nx, ny)
+        else:
+            monsters = list(session.dungeon["monsters"].values())
+
+            def _walkable(nx, ny, _mod=mod, _tiles=tiles):
+                return _mod.dungeon_walkable(_tiles, nx, ny)
 
         def occupied(nx, ny, me):
             return any(o.alive and o.id != me.id and o.x == nx and o.y == ny for o in monsters)
@@ -9421,7 +10499,7 @@ def process_dungeon_ai():
                     continue
                 if stay_in_room and m.home_room and not in_room(nx, ny, m.home_room):
                     continue
-                if not mod.dungeon_walkable(tiles, nx, ny) or occupied(nx, ny, m):
+                if not _walkable(nx, ny) or occupied(nx, ny, m):
                     continue
                 m.x, m.y = nx, ny
                 if ember:
@@ -9433,7 +10511,7 @@ def process_dungeon_ai():
                 return False
             if me.home_room and not in_room(nx, ny, me.home_room):
                 return False
-            if not mod.dungeon_walkable(tiles, nx, ny) or occupied(nx, ny, me):
+            if not _walkable(nx, ny) or occupied(nx, ny, me):
                 return False
             return True
 
@@ -9471,12 +10549,11 @@ def process_dungeon_ai():
             m.patrol_steps_left = 0
             m.patrol_leg = ""
             m.target_player_id = session.player_id
-            reach = 1
             mdef = MONSTERS.get(m.type) or {}
             if m.stats:
-                reach = max(1, int(m.stats.get("attack_range") or mdef.get("attack_range") or 1))
+                reach = melee_reach(m.stats.get("attack_range") or mdef.get("attack_range"))
             else:
-                reach = max(1, int(mdef.get("attack_range") or 1))
+                reach = melee_reach(mdef.get("attack_range"))
             if dist <= reach and closest_strike is None:
                 closest_strike = m.id
 
@@ -9489,12 +10566,13 @@ def process_dungeon_ai():
                     return False
                 return True
 
+            # Always post at sword range so bodies don't stack on the player.
             goal = side_by_side_goal(m, session.x, session.y, can_stand)
             if goal is False:
                 pass
             elif goal:
                 step_toward(m, goal[0], goal[1], stay_in_room=True)
-            elif dist > 1:
+            elif dist > reach:
                 step_toward(m, session.x, session.y, stay_in_room=True)
         engaged = None
         if session.in_combat_with and session.in_combat_with[0] == "monster":
@@ -9537,7 +10615,8 @@ def process_monster_ai():
                 sess = WORLD.sessions.get(m.target_player_id)
                 fighting = sess and sess.in_combat_with == ("monster", m.id)
                 if not fighting:
-                    m.target_player_id = None
+                    # Bout over (player walked / stopped / died) — full heal for next duel.
+                    _reset_training_duelist(m)
             else:
                 m.target_player_id = None
             continue
@@ -9575,7 +10654,7 @@ def process_monster_ai():
                 m.target_player_id = None
                 continue
             dist = max(abs(session.x - m.x), abs(session.y - m.y))
-            atk_reach = max(1, int(mdef.get("attack_range") or 1))
+            atk_reach = melee_reach(mdef.get("attack_range"))
             # Leave the lair → drop aggro immediately and walk home
             left_area = bool(m.home_room) and not in_room(session.x, session.y, m.home_room)
             leash = max(int(aggro) * 2, 10) if aggro else 10
@@ -9607,72 +10686,40 @@ def process_monster_ai():
                     session.in_combat_with = ("monster", m.id)
                 elif session.in_combat_with[1] not in WORLD.monsters or not WORLD.monsters[session.in_combat_with[1]].alive:
                     session.in_combat_with = ("monster", m.id)
-            # Side-by-side bosses: snap onto the player's row when above/below,
-            # then hold still once parallel (stops the jump flicker).
-            side_by_side = bool(mdef.get("side_by_side"))
-            prefer = max(1, min(int(mdef.get("side_gap") or 2), atk_reach))
-            if side_by_side:
-                gap = abs(m.x - session.x)
-                lined_up = (m.y == session.y and 1 <= gap <= atk_reach)
-                if lined_up:
-                    # Stay put on the side post (Y already matches)
-                    pass
-                else:
-                    side = getattr(m, "fight_side", None)
-                    if side not in (1, -1):
-                        side = 1 if m.x >= session.x else -1
-                        m.fight_side = side
-                    placed = False
-                    # Drop onto the player's row (same Y), east or west
-                    for g in (prefer, 3, 2, 1, 4):
-                        if g > atk_reach and g != prefer:
-                            continue
-                        for s in (side, -side):
-                            tx = session.x + s * g
-                            ty = session.y
-                            if (tx, ty) == (session.x, session.y):
-                                continue
-                            if (is_walkable(WORLD.grid, tx, ty)
-                                    and in_room(tx, ty, m.home_room)
-                                    and not WORLD.occupied(tx, ty)):
-                                m.x, m.y = tx, ty
-                                m.fight_side = s
-                                placed = True
-                                break
-                        if placed:
-                            break
-                    if not placed:
-                        # At minimum, drop onto the player's row this tick
-                        if m.y != session.y:
-                            old_y = m.y
-                            m.y = session.y
-                            if (WORLD.occupied(m.x, m.y)
-                                    or not is_walkable(WORLD.grid, m.x, m.y)
-                                    or not in_room(m.x, m.y, m.home_room)):
-                                # Side-step off the player / unblock
-                                stepped = False
-                                for s in (side, -side, 1, -1):
-                                    nx = session.x + s
-                                    if (is_walkable(WORLD.grid, nx, session.y)
-                                            and in_room(nx, session.y, m.home_room)
-                                            and not WORLD.occupied(nx, session.y)):
-                                        m.x, m.y = nx, session.y
-                                        m.fight_side = s if s in (1, -1) else side
-                                        stepped = True
-                                        break
-                                if not stepped:
-                                    m.y = old_y
+
+            def can_stand(tx, ty, me=m):
+                if (tx, ty) == (session.x, session.y):
+                    return False
+                if not is_walkable(WORLD.grid, tx, ty):
+                    return False
+                if me.home_room and not in_room(tx, ty, me.home_room):
+                    return False
+                if WORLD.occupied(tx, ty):
+                    return False
+                return True
+
+            # Every melee chase posts at sword range (east/west) so bodies don't stack.
+            goal = side_by_side_goal(m, session.x, session.y, can_stand)
+            if goal is False:
+                pass
+            elif goal:
+                dx = 0 if goal[0] == m.x else (1 if goal[0] > m.x else -1)
+                dy = 0 if goal[1] == m.y else (1 if goal[1] > m.y else -1)
+                for sx, sy in ((dx, 0), (0, dy), (dx, dy)):
+                    if sx == 0 and sy == 0:
+                        continue
+                    nx, ny = m.x + sx, m.y + sy
+                    if can_stand(nx, ny):
+                        m.x, m.y = nx, ny
+                        break
             elif dist > atk_reach:
-                # Generic chase: step toward the player
                 dx = 0 if session.x == m.x else (1 if session.x > m.x else -1)
                 dy = 0 if session.y == m.y else (1 if session.y > m.y else -1)
                 for sx, sy in ((dx, 0), (0, dy), (dx, dy)):
                     if sx == 0 and sy == 0:
                         continue
                     nx, ny = m.x + sx, m.y + sy
-                    if (is_walkable(WORLD.grid, nx, ny)
-                            and in_room(nx, ny, m.home_room)
-                            and not WORLD.occupied(nx, ny)):
+                    if can_stand(nx, ny):
                         m.x, m.y = nx, ny
                         break
             continue

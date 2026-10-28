@@ -32,6 +32,9 @@ _ZONE = {
     "city": "city",
     "fishing_village": "harbour",
     "mountains": "cautious_march",
+    # Emberdeep overworld + Void Sanctum share crypt so the track keeps playing
+    # when you walk between the volcano field and the sanctum approach.
+    "volcano": "crypt",
     "shadow_crypt": "crypt",
 }
 
@@ -103,10 +106,12 @@ def _key(client):
     dungeon = getattr(client, "dungeon", None) or {}
     if dungeon.get("id") == "castle_realm":
         return "castle"
-    # Void Sanctum / crypt dungeon
+    # Void Sanctum + Emberdeep (inside or on the approach) share crypt music.
+    if dungeon.get("id") == "emberdeep":
+        return "crypt"
     if dungeon.get("v2") or dungeon.get("id") in ("void", "sanctum", "shadow_crypt"):
         return "crypt"
-    # Emberdeep, depths, generic dungeons — no dedicated song yet
+    # Other private dungeons — Rising Theme until they get their own track
     if dungeon:
         return "theme"
     for building in getattr(client, "buildings", None) or []:
@@ -118,7 +123,19 @@ def _key(client):
         return "fairy_glade"
     if _in_wolf_pass(x, y):
         return "cautious_march"
+    if _in_emberdeep_music(x, y):
+        return "crypt"
     return _ZONE.get(wm.get_zone(x, y), "theme")
+
+
+def _in_emberdeep_music(x, y):
+    """Crypt track covers the Emberdeep scorched field even if zone edges clip it."""
+    if wm.get_zone(x, y) == "volcano":
+        return True
+    try:
+        return bool(wm.is_emberdeep_volcano_field(x, y))
+    except Exception:
+        return False
 
 
 def _in_fairy_music(x, y):

@@ -13,9 +13,10 @@ import content  # noqa: E402
 # "new" column of the spec table (bandits are listed there but don't exist in content yet)
 SPEC = {
     "giant_rat": 21, "goblin": 32, "skeleton": 47, "giant": 72, "big_skeleton": 76, "spider": 130, "dragon": 377,
-    "wolf": 116, "guard": 90, "knight": 146, "adamant_duelist": 199, "mythos_champion": 328, "shade": 157,
+    "wolf": 116, "guard": 90, "knight": 146, "adamant_duelist": 250, "mythos_champion": 328, "shade": 157,
     "crypt_ghoul": 182, "void_imp": 205, "obsidian_colossus": 259, "shadow_knight": 309, "void_horror": 375,
     "gallery_warden": 208, "void_crawler": 253, "knight_captain_vorn": 337, "rift_wraith": 310, "nyxarath": 1100,
+    "eclipse_champion": 1471,
     "ossuary_keeper": 78, "drowned_dead": 93, "barrow_knight": 114, "sir_aldric": 143, "morvath": 196,
     "magma_slug": 72, "ash_imp": 107, "ember_wolf": 157, "magma_knight": 241, "crucible_beast": 301,
     "bandit_archer": 52, "bandit_thug": 75, "bandit_leader": 109,

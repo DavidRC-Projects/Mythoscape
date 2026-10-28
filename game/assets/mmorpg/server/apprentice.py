@@ -65,10 +65,12 @@ def wage_tax(amount):
 def info_lines(key):
     name, sk, w, xp, lvl = WORKPLACES[key]
     return [
-        f"{name} apprentice: {w} coins a shift (5% wage tax to the Crown), {xp} {sk.title()} XP a shift.",
+        f"{name} apprentice: {w} coins a shift (5% wage tax to the Crown), {xp} {sk.title()} XP a shift, "
+        f"and {ETIQUETTE_PER_SHIFT} Etiquette XP a shift.",
         f"One shift is an hour, online or offline. At most {DAILY_SHIFT_CAP} shifts a day, "
         f"and up to {BACKLOG_DAYS} days of shifts wait for you.",
-        "Wages go to your bank. Working the craft yourself always teaches more.",
+        "Wages go to your bank. Working the craft yourself always teaches more. "
+        "Etiquette helps with noble ranks at the Chamberlain.",
     ]
 
 

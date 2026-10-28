@@ -48,7 +48,8 @@ ZONES = {
     "forest":  (98, 1, 132, 42),
     # Wolf Pass + keep sit here after SHIFT_X (-24 from the authored 136–165 pack).
     "mountains": (110, 1, 145, 42),
-    "fishing_village": (168, 1, 198, 42),
+    # East edge reaches the relocated Tidehollow mouth; south stops at the docks.
+    "fishing_village": (168, 1, 212, 30),
     "mine":    (50, 99, 84, 132),
     "fairy_village": (1, 56, 40, 88),
     "dungeon": (44, 54, 90, 143),
@@ -462,33 +463,42 @@ def generate_world():
     for x in (176, 177, 178):
         grid[14][x] = PATH  # 3-wide shop door
 
-    # Tidehollow cave — a little further south of the harbour, clear of the shops.
-    _rect(grid, 176, 38, 192, 48, GRASS)
-    for y in range(37, 47):
-        if grid[y][184] != WATER:
-            grid[y][184] = PATH
-    for dx in (-1, 0, 1):
-        grid[44][184 + dx] = PATH
-        grid[43][184 + dx] = PATH
-    grid[44][184] = FLOOR
-
-    # Harbour / bay on the east shore
-    harbour = (184, 8, 197, 26)
+    # Harbour / bay on the east shore — extended east for more fishing water.
+    harbour = (184, 8, 200, 28)
     _rect(grid, *harbour, WATER)
     # Shore willows by the harbour
     for hx, hy in ((181, 10), (181, 22), (180, 14), (180, 24)):
         if 0 <= hx < WIDTH and 0 <= hy < HEIGHT and grid[hy][hx] == GRASS:
             grid[hy][hx] = WILLOW_TREE
     # Shore strip west of the bay
-    for y in range(8, 27):
+    for y in range(8, 29):
         if grid[y][183] == WATER:
             grid[y][183] = PATH
         if grid[y][182] in (GRASS, PATH) and y in (17, 18, 19):
             grid[y][182] = PATH
-    # Wide wooden pier
-    _rect(grid, 181, 17, 190, 19, PATH)
-    # Larger end deck
-    _rect(grid, 189, 15, 193, 21, PATH)
+    # Pier spine + south finger docks so decking reaches the fishing water.
+    _rect(grid, 181, 17, 192, 19, PATH)
+    for y in (21, 23, 25, 27):
+        _rect(grid, 185, y, 193, y, PATH)
+        # Short stubs east into deeper water
+        for x in (195, 197, 199):
+            if grid[y][x] == WATER:
+                grid[y][x] = PATH
+    # Larger end deck covering the main fishing apron
+    _rect(grid, 189, 14, 198, 22, PATH)
+    # Keep open water pockets inside the deck for cast spots (not solid planks).
+    for wx, wy in (
+        (191, 16), (192, 16), (193, 16),
+        (191, 20), (192, 20), (193, 20),
+        (195, 17), (196, 17), (195, 18), (196, 18),
+        (195, 24), (196, 24), (197, 24),
+        (188, 22), (189, 26), (190, 26),
+    ):
+        if 0 <= wx < WIDTH and 0 <= wy < HEIGHT:
+            grid[wy][wx] = WATER
+
+    # Tidehollow — north of the pier / east of the bay (behind a south-facing stand).
+    stamp_tidehollow_mouth(grid)
 
     # --- Dungeon rooms (upper) ---
     dx0, dy0, dx1, dy1 = ZONES["dungeon"]
@@ -781,6 +791,8 @@ def generate_world():
         if 0 <= ay < HEIGHT and 0 <= ax < WIDTH:
             grid[ay][ax] = WALL
     restore_city_and_void_paving(grid)
+    # Wayfinder / trim can pave over the cave floor — restamp last.
+    stamp_tidehollow_mouth(grid)
     return grid
 
 
@@ -802,8 +814,8 @@ _BUILDING_FOOTPRINTS = [
     (109, 60, 117, 68), (109, 74, 117, 82), (130, 74, 138, 84), (118, 58, 136, 70),
     # void sanctum entrance building (south massif mouth, +VOID_DX)
     (169 + VOID_DX, 122, 181 + VOID_DX, 128),
-    # tidehollow cave mouth, south of Harbourreach
-    (186, 49, 194, 56),
+    # tidehollow cave mouth, north-east of Harbourreach pier
+    (200, 8, 208, 16),
     # crypt graveyard east of the plaza
     (52, 4, 74, 20),
 ]
@@ -1001,6 +1013,37 @@ def stamp_outfitters_shell(grid):
         if 0 <= ay < HEIGHT and 0 <= ax < WIDTH:
             grid[ay][ax] = WALL
     restore_city_and_void_paving(grid)
+
+
+# Tidehollow overworld mouth — north-east of the Harbourreach pier.
+TIDEHOLLOW_MOUTH = (204, 12)
+TIDEHOLLOW_RETURN = (204, 14)
+
+
+def stamp_tidehollow_mouth(grid):
+    """Small rock cave north of the pier with a south-facing enter apron."""
+    mx, my = TIDEHOLLOW_MOUTH
+    # Rock shell around the mouth
+    for y in range(my - 3, my + 1):
+        for x in range(mx - 3, mx + 4):
+            if not (0 <= x < WIDTH and 0 <= y < HEIGHT):
+                continue
+            if ((x - mx) / 3.2) ** 2 + ((y - (my - 1)) / 2.4) ** 2 <= 1.0:
+                if grid[y][x] != WATER:
+                    grid[y][x] = WALL
+    # Clear 3-wide mouth + south stand tiles
+    for ax in (mx - 1, mx, mx + 1):
+        for ay in (my, my + 1, my + 2):
+            if 0 <= ax < WIDTH and 0 <= ay < HEIGHT:
+                grid[ay][ax] = PATH
+    rx, ry = TIDEHOLLOW_RETURN
+    if 0 <= rx < WIDTH and 0 <= ry < HEIGHT:
+        grid[ry][rx] = PATH
+    # Short approach from the east pier road
+    _stamp_road(grid, 198, 18, mx, 18)
+    _stamp_road(grid, mx, ry, mx, 18)
+    # Mouth tile last so road stamps cannot overwrite the cave floor.
+    grid[my][mx] = FLOOR
 
 
 def stamp_emberdeep_mouth(grid):
@@ -1357,16 +1400,9 @@ def _lay_wayfinder_roads(grid):
         (100, 16, 107, 16),      # north of lake only (does not cross water)
         (141, 16, 176, 16),      # east exit after the massif
         (170, 15, 178, 15),
-        # Harbourreach is reached only through the pass now; the old
-        # south road out of the harbour ends at the Harbour Inlet.
-        (171, 16, 171, 36),
-        (171, 36, 184, 36),
-        (184, 36, 184, 41),
-        # Tidehollow — skirt east of the housing ward (x 148–166).
-        (167, 58, 172, 58),
-        (172, 48, 172, 58),
-        (172, 48, 188, 48),
-        (188, 48, 188, 52),
+        # Pier → Tidehollow (north-east of the bay).
+        (193, 18, 204, 18),
+        (204, 14, 204, 18),
         # Fairy Glade approach — village dirt up to the arch mouth.
         (31, 51, 54, 51),
         (31, 52, 54, 52),
@@ -1604,12 +1640,12 @@ def is_walkable(grid, x, y):
 
 def _harbour_fish_type(x, y):
     """Tiered fishing spots in the fishing village harbour."""
-    # North pier / deep water → higher fish; south → mid; near shore → trout
-    if y <= 10:
+    # North / deep east water → higher fish; pier apron → mid; south fingers → trout
+    if y <= 12 or x >= 196:
         return "fishing_spot_swordfish" if (x + y) % 3 == 0 else "fishing_spot_tuna"
-    if y <= 14:
+    if y <= 16:
         return "fishing_spot_lobster" if (x + y) % 2 == 0 else "fishing_spot_salmon"
-    if y <= 18:
+    if y <= 22:
         return "fishing_spot_salmon" if (x + y) % 2 == 0 else "fishing_spot_trout"
     return "fishing_spot_trout"
 
@@ -1668,11 +1704,12 @@ def build_resource_nodes(grid):
     fish_rng = random.Random(4242)
     fish_rng.shuffle(fish_candidates)
     placed = []
-    min_gap = 2  # Chebyshev distance between spots
     for x, y in fish_candidates:
+        zone = get_zone(x, y)
+        # Harbour docks: denser spots so the extended deck has plenty to cast to.
+        min_gap = 1 if zone == "fishing_village" else 2
         if any(max(abs(x - px), abs(y - py)) <= min_gap for px, py in placed):
             continue
-        zone = get_zone(x, y)
         if zone == "fishing_village":
             ftype = _harbour_fish_type(x, y)
         else:

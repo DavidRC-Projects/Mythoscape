@@ -4,7 +4,8 @@
  "px_per_m": {
   "1x": 43.9,
   "2x": 87.8,
-  "4x": 175.6
+  "4x": 175.6,
+  "8x": 351.2
  },
  "tile_px_1x": 40,
  "canvas": {
@@ -19,6 +20,10 @@
   "4x": [
    576,
    576
+  ],
+  "8x": [
+   1152,
+   1152
   ]
  },
  "feet_px": {
@@ -33,12 +38,16 @@
   "4x": [
    288,
    496
+  ],
+  "8x": [
+   576,
+   992
   ]
  },
  "canvas_note": "same px-per-metre, 30 deg camera and feet-anchor convention as assets/npc_hd (NPC 2x canvas 192x256 feet 96,236). The player canvas is wider/taller only so weapon reach, bow, rod and the death fall are not clipped; blit with feet_px exactly like NPCs and the figure lands on the same ground point / tile footprint (1 tile = 40 px at 1x = 0.91 m).",
  "anchors_file": "anchors.json (per sex/anim/facing/frame: head_top, chest, hand_R, hand_L, weapon tip; 2x px, 1x = /2, 4x = x2, w: x' = canvas_w - x)",
  "path": "{sex}/{scale}/{layer}/{anim}_{facing}.png  (+ {anim}_{facing}_tint.png for tintable parts)",
- "strip": "frames laid left->right, each frame = canvas width; 4x holds idle frame 0 (creator / shop / wardrobe preview) plus the full melee/ranged s and n strips",
+ "strip": "frames laid left->right, each frame = canvas width; 4x holds idle frame 0 plus melee/ranged s and n strips; 8x holds AI-upscaled idle s/e/n portraits for Outfitters / creator preview (downscaled to tile at runtime)",
  "facings": {
   "s": "front (game facing 'front')",
   "e": "game facing 1",

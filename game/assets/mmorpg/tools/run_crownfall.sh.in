@@ -1,0 +1,55 @@
+#!/bin/bash
+# Launcher for Crownfall.app — @WS_URL@ is replaced at pack time.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+export CROWNFALL_WS_URL="${CROWNFALL_WS_URL:-@WS_URL@}"
+export PYTHONDONTWRITEBYTECODE=1
+export PYTHONUNBUFFERED=1
+export PYTHONPATH="$ROOT/mmorpg/client:$ROOT/mmorpg/server:$ROOT/characters:${PYTHONPATH:-}"
+
+PY="$ROOT/mmorpg/.venv/bin/python"
+LOG_DIR="$HOME/Library/Logs"
+mkdir -p "$LOG_DIR"
+CLIENT_LOG="$LOG_DIR/Crownfall.log"
+SERVER_LOG="$LOG_DIR/Crownfall-server.log"
+SERVER_PID=""
+
+cleanup() {
+  if [[ -n "${SERVER_PID}" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
+    kill "$SERVER_PID" 2>/dev/null || true
+    wait "$SERVER_PID" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
+
+# Local play: start the bundled server, then the client. Quitting the game stops the server.
+case "$CROWNFALL_WS_URL" in
+  ws://localhost:*|ws://127.0.0.1:*|ws://[::1]:*)
+    cd "$ROOT/mmorpg/server"
+    "$PY" -u -B server.py >>"$SERVER_LOG" 2>&1 &
+    SERVER_PID=$!
+    # Wait up to ~15s for the port to accept connections
+    for _ in $(seq 1 30); do
+      if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+        echo "Server exited early — see $SERVER_LOG" >>"$CLIENT_LOG"
+        exit 1
+      fi
+      if "$PY" - <<'PY' 2>/dev/null
+import asyncio, os, sys
+uri = os.environ.get("CROWNFALL_WS_URL", "ws://127.0.0.1:8765")
+async def main():
+    import websockets
+    async with websockets.connect(uri, open_timeout=0.4):
+        pass
+asyncio.run(main())
+PY
+      then
+        break
+      fi
+      sleep 0.5
+    done
+    ;;
+esac
+
+cd "$ROOT/mmorpg/client"
+"$PY" -u -B client.py >>"$CLIENT_LOG" 2>&1

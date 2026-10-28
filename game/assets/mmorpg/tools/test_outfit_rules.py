@@ -316,9 +316,10 @@ def test_pair_unequip_needs_two_spaces():
 
 def test_pair_solo_piece_works_alone():
     s = make()
-    _bag(s, "goblin_mail")
-    run(server.handle_equip(s, {"slot_index": _idx(s, "goblin_mail")}))
-    assert s.equipment[server.ITEMS["goblin_mail"]["equip_slot"]] == "goblin_mail", errors(s)
+    _bag(s, "bronze_helmet")
+    # Helmet has no body/legs partner — equips alone.
+    run(server.handle_equip(s, {"slot_index": _idx(s, "bronze_helmet")}))
+    assert s.equipment[server.ITEMS["bronze_helmet"]["equip_slot"]] == "bronze_helmet", errors(s)
 
 
 def test_pair_ui_hint():

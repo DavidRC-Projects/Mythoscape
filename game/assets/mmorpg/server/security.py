@@ -36,10 +36,15 @@ def is_production() -> bool:
 
 
 def bind_host() -> str:
+    """Default localhost only — do not expose the game on all interfaces.
+
+    LAN friends: set CROWNFALL_HOST=0.0.0.0 explicitly (and firewall carefully).
+    Public play: bind 127.0.0.1 and put your own domain's TLS reverse proxy in front.
+    """
     override = os.environ.get("CROWNFALL_HOST")
     if override:
         return override.strip()
-    return "127.0.0.1" if is_production() else "0.0.0.0"
+    return "127.0.0.1"
 
 
 def bind_port() -> int:

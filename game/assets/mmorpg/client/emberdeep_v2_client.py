@@ -969,67 +969,46 @@ def _wyrm_fight_facing(client, monster):
 
 
 def _draw_local_player(client, pose, sx, sy, tile_px, t, player_depth=1.0):
-    import procedural_sprites_finished as sprites
     face = _combat_facing(client, pose, sx, tile_px, player_depth)
     pose["face"] = face
     client._entity_facing[pose["key"]] = face
     p = client.player or {}
     gender = pose["gender"]
     eq = pose["eq"]
-    hd_on = p.get("hd_player", True)
-    appearance = p.get("appearance") or {
-        "skin": "skin_light",
-        "hair": "hair_side_part" if gender == "male" else "hair_ponytail",
-        "hair_colour": "dark_brown",
-        "top": "top_linen_shirt",
-        "bottom": "bottom_work_trousers" if gender == "male" else "bottom_long_skirt",
-        "shoes": "shoes_leather",
-        "outfit": None,
-        "accessories": [],
-    }
+    import player_hd_client
+    appearance = p.get("appearance") or player_hd_client.get_default_appearance(gender)
     hit_t = t - client.player_hit_at.get(p.get("id"), t - 999)
     death_t = t - client.player_death_at.get(p.get("id"), t - 999)
-    drawn = False
-    if hd_on:
-        import player_hd_client
-        weapon_id = (eq or {}).get("weapon") or ""
-        ranged = client.attack_anim_kind.get(p.get("id")) == "ranged" or "bow" in str(weapon_id)
-        # Progress is exactly 0 on the first beat, while the swing is still in attack_anims.
-        pid = p.get("id")
-        in_swing = pose["atk"] > 0 or pid in client.attack_anims or str(pid) in client.attack_anims
-        leaving = getattr(client, "_leaving_fight", None)
-        attacking = in_swing and not pose["action"] and not (leaving and leaving())
-        if attacking:
-            anim = "ranged" if ranged else "melee"
-        else:
-            anim = pose["action"] or ("walk" if pose["moving"] else "idle")
-        body_px = int(round(tile_px * 1.1))
-        # A hit flash must not swap the swing for hit frames. The tint still shows.
-        swing_hit = -1.0 if attacking else (hit_t if 0 <= hit_t < 0.36 else -1.0)
-        drawn = player_hd_client.draw_player(
-            client.screen, gender, appearance, sx, sy, body_px, t,
+    weapon_id = (eq or {}).get("weapon") or ""
+    ranged = client.attack_anim_kind.get(p.get("id")) == "ranged" or "bow" in str(weapon_id)
+    # Progress is exactly 0 on the first beat, while the swing is still in attack_anims.
+    pid = p.get("id")
+    in_swing = pose["atk"] > 0 or pid in client.attack_anims or str(pid) in client.attack_anims
+    leaving = getattr(client, "_leaving_fight", None)
+    attacking = in_swing and not pose["action"] and not (leaving and leaving())
+    if attacking:
+        anim = "ranged" if ranged else "melee"
+    else:
+        anim = pose["action"] or ("walk" if pose["moving"] else "idle")
+    body_px = int(round(tile_px * 1.1))
+    # A hit flash must not swap the swing for hit frames. The tint still shows.
+    swing_hit = -1.0 if attacking else (hit_t if 0 <= hit_t < 0.36 else -1.0)
+    drawn = player_hd_client.draw_player(
+        client.screen, gender, appearance, sx, sy, body_px, t,
+        anim=anim, progress=pose["atk"] if attacking else None, facing=face,
+        hit_t=swing_hit,
+        death_t=death_t if 0 <= death_t < 1.2 else -1.0,
+        equipment=eq, fx_seed=eclipse_fx.player_seed(p.get("id")),
+    )
+    if not drawn:
+        # Never fall back to old 2D player sprites — retry HD villager default.
+        player_hd_client.draw_player(
+            client.screen, gender, player_hd_client.get_default_appearance(gender),
+            sx, sy, body_px, t,
             anim=anim, progress=pose["atk"] if attacking else None, facing=face,
             hit_t=swing_hit,
             death_t=death_t if 0 <= death_t < 1.2 else -1.0,
             equipment=eq, fx_seed=eclipse_fx.player_seed(p.get("id")),
-        )
-        if not drawn:
-            drawn = player_hd_client.draw_player(
-                client.screen, gender, appearance, sx, sy, min(80, body_px), t,
-                anim="idle", facing=face, equipment=eq,
-                fx_seed=eclipse_fx.player_seed(p.get("id")),
-            )
-    if hd_on:
-        return
-    if not drawn:
-        sprites.draw_humanoid_detailed(
-            client.screen, sx, sy, tile_px,
-            (70, 210, 90), (235, 195, 150), (70, 45, 30),
-            weapon=_weapon_style(eq.get("weapon")),
-            shield=bool(eq.get("shield")),
-            moving=pose["moving"], t=t, facing=face,
-            equipment=eq, attacking=pose["atk"], action=pose["action"],
-            gender=gender,
         )
 
 

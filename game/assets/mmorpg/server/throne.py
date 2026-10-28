@@ -30,11 +30,11 @@ CASTLE_CHALLENGE_COOLDOWN = WEEK   # per castle, from the last challenge's start
 CASTLE_WINDOW = 20 * 60
 CASTLE_GUARDS = 2
 KING_CASTLE_ID = "king"
-# Throne room (castle_realm plane king_f1) and the hold area around the throne
+# Throne hold (castle_realm plane king_f1) — Great Hall, middle room of the keep
 THRONE_PLANE = "king_f1"
-THRONE_AREA = (17, 24, 36, 30)          # x0, y0, x1, y1 inclusive
-THRONE_GUARD_SPOTS = ((22, 27), (24, 27), (28, 27), (30, 27))
-CAPTAIN_SPOT = (26, 27)
+THRONE_AREA = (16, 12, 36, 22)          # x0, y0, x1, y1 inclusive — Great Hall
+THRONE_GUARD_SPOTS = ((22, 17), (24, 17), (28, 17), (30, 17))
+CAPTAIN_SPOT = (26, 17)
 GUARD_MONSTER = "knight"
 CAPTAIN_HP_MULT = 2
 PRISON_PLANE = "king_barracks_f1"
@@ -62,6 +62,31 @@ COURT_TASKS = {
     "court_bar": ("Bring a metal bar", ("bronze_bar", "iron_bar", "steel_bar", "mithril_bar")),
     "court_gem": ("Bring a cut gem", ("jade", "topaz", "sapphire", "emerald", "ruby", "diamond")),
 }
+# Expensive gold / gem sinks → small Favour + Charisma/Etiquette XP (daily caps).
+# Coin rates are intentionally worse than questing (~500–1000 coins per XP).
+# cost, favour, charisma_xp, etiquette_xp, reputation
+TRIBUTE_COIN_OFFERS = (
+    (10_000, 4, 20, 20, 1),
+    (50_000, 12, 80, 80, 2),
+    (250_000, 35, 250, 250, 5),
+)
+# gem_id, qty, favour, charisma_xp, etiquette_xp, reputation
+TRIBUTE_GEM_OFFERS = (
+    ("sapphire", 5, 8, 35, 35, 1),
+    ("emerald", 4, 12, 55, 55, 2),
+    ("ruby", 3, 18, 80, 80, 3),
+    ("diamond", 2, 28, 120, 120, 4),
+    ("onyx", 1, 40, 160, 160, 6),
+)
+TRIBUTE_OFFERS = TRIBUTE_COIN_OFFERS  # alias for older imports/tests
+TRIBUTES_PER_DAY = 3
+TRIBUTE_FAVOUR_DAILY_CAP = 80
+TRIBUTE_XP_DAILY_CAP = 800
+TRIBUTE_OPTION_IDS = (
+    tuple(f"tribute_coin_{cost}" for cost, *_ in TRIBUTE_COIN_OFFERS)
+    + tuple(f"tribute_gem_{gem}" for gem, *_ in TRIBUTE_GEM_OFFERS)
+)
+TRIBUTE_MENU_OPTION = {"id": "tribute_menu", "label": "Offer tribute to the Crown"}
 # Marriage
 MARRIAGE_FEE = 10_000       # split equally
 PROPOSAL_SECONDS = 60
@@ -75,6 +100,7 @@ HERALD_OPTIONS = [
 ]
 CELIA_OPTIONS = [
     {"id": "court_status", "label": "Court Favour"},
+    TRIBUTE_MENU_OPTION,
     {"id": "court_fish", "label": "Bring a cooked fish"},
     {"id": "court_bar", "label": "Bring a metal bar"},
     {"id": "court_gem", "label": "Bring a cut gem"},
@@ -688,6 +714,162 @@ def add_favour(conn, pid, delta):
     conn.execute("UPDATE court_favour SET favour = ? WHERE player_id = ?", (new, pid))
     conn.commit()
     return new
+
+
+def tribute_coin_offer(cost):
+    """(cost, favour, charisma_xp, etiquette_xp, rep) or None."""
+    cost = int(cost or 0)
+    for row in TRIBUTE_COIN_OFFERS:
+        if row[0] == cost:
+            return row
+    return None
+
+
+def tribute_gem_offer(gem_id):
+    """(gem_id, qty, favour, charisma_xp, etiquette_xp, rep) or None."""
+    gem_id = str(gem_id or "")
+    for row in TRIBUTE_GEM_OFFERS:
+        if row[0] == gem_id:
+            return row
+    return None
+
+
+def tribute_offer(cost):
+    """Back-compat alias for coin offers."""
+    return tribute_coin_offer(cost)
+
+
+def tribute_menu_lines():
+    lines = [
+        "Tribute is costly on purpose: gold or gems for a little Court Favour and manners XP — never a shortcut past quests.",
+        f"Up to {TRIBUTES_PER_DAY} tributes a day; Favour and XP are tightly capped.",
+        "— Gold —",
+    ]
+    for cost, fav, ch, et, rep in TRIBUTE_COIN_OFFERS:
+        lines.append(f"· {cost:,} coins → +{fav} Favour, +{ch}/{et} Cha/Eti XP, +{rep} standing")
+    lines.append("— Gems (from your bag) —")
+    for gem, qty, fav, ch, et, rep in TRIBUTE_GEM_OFFERS:
+        name = gem.replace("_", " ").title()
+        lines.append(f"· {qty}× {name} → +{fav} Favour, +{ch}/{et} Cha/Eti XP, +{rep} standing")
+    return lines
+
+
+def tribute_options():
+    opts = [{"id": f"tribute_coin_{cost}", "label": f"{cost:,} coins"} for cost, *_ in TRIBUTE_COIN_OFFERS]
+    for gem, qty, *_ in TRIBUTE_GEM_OFFERS:
+        opts.append({"id": f"tribute_gem_{gem}", "label": f"{qty}× {gem.replace('_', ' ').title()}"})
+    return opts
+
+
+def take_tribute_payment(session, conn, cost):
+    """Pull `cost` from purse then bank. Returns (ok, message)."""
+    import apprentice
+    cost = int(cost)
+    purse = int(getattr(session, "coins", 0) or 0)
+    bank = int(getattr(session, "bank_coins", 0) or 0)
+    if purse + bank < cost:
+        return False, f"You need {cost:,} coins (purse or bank)."
+    from_purse = min(purse, cost)
+    from_bank = cost - from_purse
+    session.coins = purse - from_purse
+    if from_bank:
+        session.bank_coins = apprentice.bank_add(conn, session.player_id, -from_bank)
+    else:
+        session.bank_coins = apprentice.bank_get(conn, session.player_id)
+    conn.execute(
+        "UPDATE players SET coins = ?, bank_coins = ? WHERE id = ?",
+        (session.coins, session.bank_coins, session.player_id),
+    )
+    conn.commit()
+    royal_treasury.credit(conn, "tribute", session.player_id, cost)
+    return True, f"You offer {cost:,} coins to the Crown."
+
+
+def _reserve_tribute_slot(conn, pid, fav, now):
+    """Consume one daily tribute + favour budget. Returns (ok, fav_gain, err_lines)."""
+    import reputation
+    day = _day(now)
+    used = reputation.daily_take(conn, pid, "tribute_count", 1, TRIBUTES_PER_DAY, now=now)
+    if used <= 0:
+        return False, 0, [f"The Crown will take no more tribute today ({TRIBUTES_PER_DAY} gifts a day)."]
+    fav_gain = reputation.daily_take(conn, pid, "tribute_favour", fav, TRIBUTE_FAVOUR_DAILY_CAP, now=now)
+    return True, fav_gain, []
+
+
+def _refund_tribute_slot(conn, pid, fav_gain, now):
+    day = _day(now)
+    conn.execute(
+        "UPDATE social_daily SET value = MAX(0, value - 1) WHERE player_id = ? AND day = ? AND key = ?",
+        (pid, day, "tribute_count"),
+    )
+    if fav_gain:
+        conn.execute(
+            "UPDATE social_daily SET value = MAX(0, value - ?) WHERE player_id = ? AND day = ? AND key = ?",
+            (fav_gain, pid, day, "tribute_favour"),
+        )
+    conn.commit()
+
+
+def _finish_tribute(conn, pid, fav, fav_gain, ch, et, rep, msg):
+    before = favour_row(conn, pid)["favour"]
+    if fav_gain:
+        add_favour(conn, pid, fav_gain)
+    after = favour_row(conn, pid)["favour"]
+    lines = [
+        msg,
+        f"Court Favour {before} → {after} (+{after - before}).",
+        f"+{ch} Charisma XP, +{et} Etiquette XP" + (f", +{rep} standing" if rep else "") + ".",
+    ]
+    if fav_gain < fav:
+        lines.append("Daily favour from tribute is capped — further gifts today teach manners more than Favour.")
+    return True, lines, {"charisma": ch, "etiquette": et}, rep
+
+
+def pay_tribute(session, conn, cost, now=None):
+    """Charge gold tribute. Returns (ok, lines, xp_dict, rep)."""
+    return pay_tribute_coin(session, conn, cost, now=now)
+
+
+def pay_tribute_coin(session, conn, cost, now=None):
+    offer = tribute_coin_offer(cost)
+    if not offer:
+        return False, ["That is not a tribute the Crown accepts."], None, 0
+    cost, fav, ch, et, rep = offer
+    now = time.time() if now is None else now
+    ok, fav_gain, err = _reserve_tribute_slot(conn, session.player_id, fav, now)
+    if not ok:
+        return False, err, None, 0
+    paid, msg = take_tribute_payment(session, conn, cost)
+    if not paid:
+        _refund_tribute_slot(conn, session.player_id, fav_gain, now)
+        return False, [msg], None, 0
+    return _finish_tribute(conn, session.player_id, fav, fav_gain, ch, et, rep, msg)
+
+
+def pay_tribute_gem(session, conn, gem_id, take_items, now=None):
+    """Spend gems from the bag. take_items(gem_id, qty) -> bool must remove them."""
+    offer = tribute_gem_offer(gem_id)
+    if not offer:
+        return False, ["That gem is not accepted as tribute."], None, 0
+    gem_id, qty, fav, ch, et, rep = offer
+    now = time.time() if now is None else now
+    ok, fav_gain, err = _reserve_tribute_slot(conn, session.player_id, fav, now)
+    if not ok:
+        return False, err, None, 0
+    if not take_items or not take_items(gem_id, qty):
+        _refund_tribute_slot(conn, session.player_id, fav_gain, now)
+        name = gem_id.replace("_", " ")
+        return False, [f"You need {qty}× {name} in your bag (not the Gem Bag)."], None, 0
+    # Gem value credited to the treasury at shop sell floor (keeps the ledger honest).
+    try:
+        from content import ITEMS
+        unit = int((ITEMS.get(gem_id) or {}).get("value") or 0)
+        royal_treasury.credit(conn, "tribute_gem", session.player_id, unit * qty)
+    except Exception:
+        pass
+    name = gem_id.replace("_", " ")
+    msg = f"You offer {qty}× {name} to the Crown."
+    return _finish_tribute(conn, session.player_id, fav, fav_gain, ch, et, rep, msg)
 
 
 def court_task(conn, pid, now=None):

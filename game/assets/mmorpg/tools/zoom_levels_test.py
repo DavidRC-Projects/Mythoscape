@@ -1,4 +1,4 @@
-"""Zoom levels 40..200 step 20, snapping, and HD source choice (never upscale).
+"""Zoom levels ZOOM_MIN..ZOOM_MAX step ZOOM_STEP, snapping, and HD source choice.
 
 Run: python3 tools/zoom_levels_test.py
 """
@@ -16,9 +16,13 @@ import client as C  # noqa: E402
 
 
 def test_levels():
-    assert C.ZOOM_LEVELS == (40, 60, 80, 100, 120, 140, 160, 180, 200)
+    assert C.ZOOM_LEVELS == tuple(range(C.ZOOM_MIN, C.ZOOM_MAX + 1, C.ZOOM_STEP))
+    assert C.ZOOM_LEVELS[0] == 100 and C.ZOOM_LEVELS[-1] == 200
     snap = lambda v: C.GameClient._snap_zoom(None, v)  # noqa: E731
-    cases = {0: 40, 30: 40, 49: 40, 50: 60, 110: 120, 150: 160, 199: 200, 250: 200, 100: 100}
+    cases = {
+        0: 100, 30: 100, 90: 100, 100: 100, 110: 120, 130: 140,
+        150: 160, 199: 200, 250: 200,
+    }
     for v, want in cases.items():
         assert snap(v) == want, (v, snap(v), want)
 
@@ -33,26 +37,21 @@ def test_hd_scale_for():
 
 
 def test_ease():
-    import time
     import emberdeep_v2_client
     emberdeep_v2_client.fp_active = lambda _c: False
     c = C.GameClient.__new__(C.GameClient)
     c.zoom_pct, c._zoom_goal, c._zoom_anim, c._zoom_from, c._zoom_t0 = 100, 100, 100.0, 100.0, 0.0
     c._zoom_latched = False
+    c._area_view = False
+    base_tile = C.TILE
     c.adjust_zoom(1)
     c._zoom_latched = False
     c.adjust_zoom(1)          # retargets, not queued per frame: goal 140
     assert c._zoom_goal == 140
     c._pump_zoom()
-    assert c.zoom_pct == 140 and C.TILE == 40 and c._zoom_view_scale() >= 1.0
-    seen = []
-    t0 = time.time()
-    while c._zoom_anim != 140.0 and time.time() - t0 < 1.0:
-        c._pump_zoom()
-        seen.append(c._zoom_anim)
-        time.sleep(0.01)
-    assert c._zoom_anim == 140.0 and C.TILE == 56, (c._zoom_anim, C.TILE)
-    assert all(a <= b for a, b in zip(seen, seen[1:])) and 0.15 < time.time() - t0 < 0.4
+    # Zoom-in above ZOOM_MIN is a cheap view-scale; physical TILE stays at min.
+    assert c.zoom_pct == 140 and C.TILE == base_tile
+    assert abs(c._zoom_view_scale() - 1.4) < 0.05
 
 
 if __name__ == "__main__":

@@ -2,3 +2,7 @@
 # blend2bam requires Blender on PATH.
 -r requirements.txt
 panda3d-blend2bam==0.26.0
+# Desktop smoke playtest: tools/playtest_pyautogui.py (macOS Accessibility + Quartz)
+pyautogui>=0.9.54
+pyobjc-framework-Quartz>=10.0
+pyobjc-framework-Cocoa>=10.0

@@ -134,6 +134,25 @@ def draw_precipitation(client, map_w, map_h, dt=1 / 60):
 
 
 def draw(client, map_w, map_h):
-    """Phase tint under weather particles. Call after world entities."""
+    """Phase tint under weather particles. Call after world entities.
+
+    map_h should cover the full playfield column (including the chat strip
+    under the map) so rain/season tint don't stop in a dry rectangle beside
+    the chat panel.
+    """
     draw_phase_tint(client, map_w, map_h)
     draw_precipitation(client, map_w, map_h)
+    # Soft wet/cold wash so precipitation reads as a sky change, not only streaks.
+    if not outdoors(client):
+        return
+    env = _env(client)
+    weather = env.get("weather") or "clear"
+    intensity = float(env.get("intensity") or 0.0)
+    if weather in ("clear", "windy_clear") or intensity <= 0.05:
+        return
+    wash = _overlay_surface(map_w, map_h)
+    if "snow" in weather:
+        wash.fill((200, 215, 235, int(18 + 28 * intensity)))
+    else:
+        wash.fill((40, 55, 75, int(22 + 36 * intensity)))
+    client.screen.blit(wash, (0, 0))

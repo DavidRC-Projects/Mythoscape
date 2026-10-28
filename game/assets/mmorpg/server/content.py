@@ -97,13 +97,12 @@ ITEMS = {
         "tradeable": False, "sellable": False, "bound_username": "david",
         "desc": "A black blade edged in gold, an eclipse disc set in its guard.",
     },
-    # Bound unique companion shield — future monster drop (not on any table yet)
+    # Rare drop from Eclipse Champion (village PK duel). Unbound so any killer may keep it.
     "eclipse_shield": {
-        "name": "Eclipse Aegis", "type": "armor", "stackable": False, "value": 0,
+        "name": "Eclipse Aegis", "type": "armor", "stackable": False, "value": 25000,
         "equip_slot": "shield", "def_bonus": 150,
-        "tradeable": False, "sellable": False, "bound_username": "david",
-        "bound_to_inventory": True,
-        "desc": "Black steel and gold — the twin of the Eclipse Cleaver. Destined as a rare monster drop (not obtainable yet).",
+        "tradeable": False, "sellable": False,
+        "desc": "Black steel and gold — the twin of the Eclipse Cleaver. A rare prize from the Eclipse Champion.",
     },
     "eclipse_body": {
         "name": "Eclipse Platebody", "type": "armor", "stackable": False, "value": 0,
@@ -119,12 +118,12 @@ ITEMS = {
         "bound_to_inventory": True,
         "desc": "Black steel greaves with gold knee-cops and thrice-riveted faulds. Future monster drop — not obtainable yet.",
     },
+    # Rare drop from Eclipse Champion (village PK duel). Unbound so any killer may keep it.
     "eclipse_helmet": {
-        "name": "Eclipse Grillhelm", "type": "armor", "stackable": False, "value": 0,
+        "name": "Eclipse Grillhelm", "type": "armor", "stackable": False, "value": 22000,
         "equip_slot": "helmet", "def_bonus": 150, "att_bonus": 150,
-        "tradeable": False, "sellable": False, "bound_username": "david",
-        "bound_to_inventory": True,
-        "desc": "Full black helm with a gold-barred face grill. Outclasses the Mythos Dragon Helm. Future monster drop — not obtainable yet.",
+        "tradeable": False, "sellable": False,
+        "desc": "Full black helm with a gold-barred face grill. Outclasses the Mythos Dragon Helm. A rare prize from the Eclipse Champion.",
     },
 
     "bronze_axe":       {"name": "Bronze Axe",         "type": "tool",    "stackable": False, "value": 15,  "equip_slot": "tool", "tool_for": "woodcutting"},
@@ -163,7 +162,6 @@ ITEMS = {
     "mithril_body":     {"name": "Mithril Platebody",  "type": "armor", "stackable": False, "value": 480, "equip_slot": "body",  "def_bonus": 52},
     "adamant_chainbody":{"name": "Adamantite Chainbody","type": "armor","stackable": False, "value": 600, "equip_slot": "body",  "def_bonus": 54},
     "adamant_body":     {"name": "Adamantite Platebody","type": "armor","stackable": False, "value": 900, "equip_slot": "body",  "def_bonus": 72},
-    "goblin_mail":      {"name": "Goblin Mail",        "type": "armor", "stackable": False, "value": 8,  "equip_slot": "body",   "def_bonus": 3},
     "leather_chaps":    {"name": "Leather Chaps",      "type": "armor", "stackable": False, "value": 15, "equip_slot": "legs",   "def_bonus": 5},
     "bronze_chainlegs": {"name": "Bronze Chainlegs",   "type": "armor", "stackable": False, "value": 28, "equip_slot": "legs",   "def_bonus": 7},
     "bronze_legs":      {"name": "Bronze Platelegs",   "type": "armor", "stackable": False, "value": 42, "equip_slot": "legs",   "def_bonus": 11},
@@ -306,11 +304,15 @@ ITEMS = {
     "coal":             {"name": "Coal",               "type": "resource", "stackable": True, "value": 8,  "equip_slot": None},
     "mithril_ore":      {"name": "Mithril Ore",        "type": "resource", "stackable": True, "value": 22, "equip_slot": None},
     "adamantite_ore":   {"name": "Adamantite Ore",     "type": "resource", "stackable": True, "value": 45, "equip_slot": None},
+    "mythos_ore":       {"name": "Mythos Ore",         "type": "resource", "stackable": True, "value": 400, "equip_slot": None,
+                         "desc": "Crownsteel ore. Smelt at Smithing 60 + Command 60."},
     "bronze_bar":       {"name": "Bronze Bar",         "type": "resource", "stackable": True, "value": 12, "equip_slot": None},
     "iron_bar":         {"name": "Iron Bar",           "type": "resource", "stackable": True, "value": 25, "equip_slot": None},
     "steel_bar":        {"name": "Steel Bar",          "type": "resource", "stackable": True, "value": 55, "equip_slot": None},
     "mithril_bar":      {"name": "Mithril Bar",        "type": "resource", "stackable": True, "value": 120, "equip_slot": None},
     "adamantite_bar":   {"name": "Adamantite Bar",     "type": "resource", "stackable": True, "value": 250, "equip_slot": None},
+    "mythos_bar":       {"name": "Mythos Bar",         "type": "resource", "stackable": True, "value": 2_000, "equip_slot": None,
+                         "desc": "Smelted crownsteel. Smith Mythos gear at Command 80 + Smithing 70."},
 
     "raw_shrimp":       {"name": "Raw Shrimp",         "type": "resource", "stackable": True, "value": 2,  "equip_slot": None},
     "raw_sardine":      {"name": "Raw Sardine",        "type": "resource", "stackable": True, "value": 3,  "equip_slot": None},
@@ -334,6 +336,8 @@ ITEMS = {
     "burnt_tuna":       {"name": "Burnt Tuna",         "type": "food",     "stackable": True, "value": 1,  "equip_slot": None, "heal": 0},
     "burnt_swordfish":  {"name": "Burnt Swordfish",    "type": "food",     "stackable": True, "value": 1,  "equip_slot": None, "heal": 0},
     "bread":            {"name": "Bread",              "type": "food",     "stackable": True, "value": 6,  "equip_slot": None, "heal": 5},
+    "giant_bread":      {"name": "Giant Bread",        "type": "food",     "stackable": True, "value": 14, "equip_slot": None, "heal": 10,
+                         "desc": "A loaf the size of a shield. Heals twice as much as ordinary bread.", "art_as": "bread"},
     "health_potion":    {"name": "Health Potion",      "type": "food",     "stackable": True, "value": 25, "equip_slot": None, "heal": 12},
     # Mad Scientist combat elixirs — temporary level boosts (seconds)
     "attack_potion":    {"name": "Attack Potion",      "type": "potion", "stackable": True, "value": 40,  "equip_slot": None,
@@ -351,9 +355,9 @@ ITEMS = {
 
     "rat_tail":         {"name": "Giant Rat Tail",     "type": "quest",  "stackable": True,  "value": 0, "equip_slot": None},
     "spider_silk":      {"name": "Spider Silk",        "type": "misc",   "stackable": True,  "value": 4, "equip_slot": None},
-    "bones":            {"name": "Bones",              "type": "misc",   "stackable": True,  "value": 1, "equip_slot": None, "karma_xp": 18},
-    "big_bones":        {"name": "Big Bones",          "type": "misc",   "stackable": True,  "value": 3, "equip_slot": None, "karma_xp": 54},
-    "dragon_bones":     {"name": "Dragon Bones",       "type": "misc",   "stackable": True,  "value": 12, "equip_slot": None, "karma_xp": 144},
+    "bones":            {"name": "Bones",              "type": "misc",   "stackable": True,  "max_stack": 100, "value": 1, "equip_slot": None, "karma_xp": 18},
+    "big_bones":        {"name": "Big Bones",          "type": "misc",   "stackable": True,  "max_stack": 100, "value": 3, "equip_slot": None, "karma_xp": 54},
+    "dragon_bones":     {"name": "Dragon Bones",       "type": "misc",   "stackable": True,  "max_stack": 100, "value": 12, "equip_slot": None, "karma_xp": 144},
     # --- Cut gems (stackable drops — set into jewelry at the anvil) ---
     "opal": {
         "name": "Opal", "type": "gem", "stackable": True, "value": 15, "equip_slot": None,
@@ -652,37 +656,35 @@ MONSTERS = {
     "giant_rat": {
         "name": "Giant Rat", "level": 3, "hp": 8, "attack": 11, "strength": 11, "defence": 1,
         "def_bonus": 0, "xp": 12, "respawn_ticks": 15,
+        # Locked drop table — rates are what the player sees (no silent caps).
+        "drops_locked": True,
         "drops": [
             ("bones", 1.0, (1, 1)),
-            ("coins", 0.85, (1, 8)),
-            ("rat_tail", 0.5, (1, 1)),
-            ("cooked_shrimp", 0.35, (1, 1)),
-            ("bread", 0.12, (1, 1)),
-            ("opal", 0.10, (1, 1)),
-            ("bronze_amulet", 0.02, (1, 1)),
-            ("opal_ring", 0.015, (1, 1)),
+            ("coins", 1.0, (2, 10)),
+            ("rat_tail", 0.25, (1, 1)),
+            ("bread", 0.08, (1, 1)),
+            ("opal", 0.04, (1, 1)),  # 1/25
         ],
         "wander_radius": 3, "aggro_range": 0,
     },
     "goblin": {
         "name": "Goblin", "level": 8, "hp": 15, "attack": 15, "strength": 15, "defence": 4,
         "def_bonus": 2, "xp": 28, "respawn_ticks": 25,
+        # Locked — early dungeon; bronze gear actually drops (was silently stripped before).
+        "drops_locked": True,
         "drops": [
             ("bones", 1.0, (1, 1)),
-            ("coins", 0.95, (4, 18)),
-            ("goblin_mail", 0.35, (1, 1)),
-            # 1 in 10 — one random bronze weapon or armour piece
+            ("coins", 1.0, (6, 20)),
             (("bronze_sword", "bronze_helmet", "bronze_sq_shield",
-              "bronze_chainbody", "bronze_chainlegs"), 0.10, (1, 1)),
-            ("spider_silk", 0.10, (1, 1)),
-            ("feather", 0.45, (1, 4)),
-            ("bronze_arrow", 0.18, (2, 8)),
-            ("cooked_shrimp", 0.30, (1, 2)),
-            ("bread", 0.22, (1, 1)),
-            (("opal", "jade"), 0.12, (1, 1)),
-            ("gold_ring", 0.03, (1, 1)),
-            ("bronze_amulet", 0.04, (1, 1)),
-            (("opal_ring", "jade_ring", "jade_amulet"), 0.03, (1, 1)),
+              "bronze_chainbody", "bronze_chainlegs"), 0.10, (1, 1)),  # 1/10
+            ("bronze_axe", 0.08, (1, 1)),  # 1/12
+            ("iron_helmet", 0.04, (1, 1)),  # 1/25
+            ("feather", 0.20, (1, 3)),
+            ("bronze_arrow", 0.15, (2, 6)),
+            ("bread", 0.10, (1, 1)),
+            (("opal", "jade"), 0.04, (1, 1)),  # 1/25
+            ("bronze_amulet", 0.02, (1, 1)),  # 1/50
+            (("opal_ring", "jade_ring", "jade_amulet"), 0.015, (1, 1)),  # ~1/67
         ],
         "wander_radius": 4, "aggro_range": 3,
     
@@ -695,22 +697,20 @@ MONSTERS = {
     "skeleton": {
         "name": "Skeleton", "level": 15, "hp": 26, "attack": 20, "strength": 20, "defence": 8,
         "def_bonus": 4, "xp": 55, "respawn_ticks": 35,
+        # Locked — Crypt mid-early; iron gear actually drops.
+        "drops_locked": True,
         "drops": [
             ("bones", 1.0, (1, 1)),
-            ("coins", 0.95, (10, 32)),
-            ("iron_ore", 0.22, (1, 2)),
-            # 1 in 10 — one random iron weapon or armour piece
+            ("coins", 1.0, (12, 36)),
+            ("iron_ore", 0.20, (1, 2)),
             (("iron_sword", "iron_helmet", "iron_sq_shield",
-              "iron_chainbody", "iron_chainlegs"), 0.10, (1, 1)),
-            ("gold_ring", 0.05, (1, 1)),
-            ("feather", 0.25, (2, 6)),
+              "iron_chainbody", "iron_chainlegs"), 0.10, (1, 1)),  # 1/10
+            ("iron_battleaxe", 0.05, (1, 1)),  # 1/20
             ("iron_arrow", 0.15, (3, 10)),
-            ("cooked_sardine", 0.28, (1, 2)),
-            ("bread", 0.20, (1, 1)),
-            (("jade", "topaz", "sapphire"), 0.10, (1, 1)),
-            ("sapphire_ring", 0.02, (1, 1)),
-            ("sapphire_amulet", 0.015, (1, 1)),
-            (("topaz_ring", "topaz_amulet", "opal_amulet"), 0.035, (1, 1)),
+            (("jade", "topaz", "sapphire"), 0.04, (1, 1)),  # 1/25
+            ("gold_ring", 0.025, (1, 1)),  # 1/40
+            ("sapphire_ring", 0.015, (1, 1)),  # ~1/67
+            (("topaz_ring", "topaz_amulet", "sapphire_amulet"), 0.012, (1, 1)),  # ~1/83
         ],
         "wander_radius": 3, "aggro_range": 6,
     
@@ -723,18 +723,21 @@ MONSTERS = {
     "giant": {
         "name": "Giant", "level": 28, "hp": 55, "attack": 28, "strength": 30, "defence": 14,
         "def_bonus": 8, "xp": 120, "respawn_ticks": 50,
+        # Locked — mid-game; steel gear + big bones, no cooked food flood.
+        "drops_locked": True,
         "drops": [
             ("big_bones", 1.0, (1, 1)),
-            ("coins", 0.95, (25, 70)),
-            ("coal", 0.35, (1, 3)),
-            ("iron_ore", 0.25, (1, 2)),
-            ("steel_longsword", 0.02, (1, 1)),  # 1 in 50
-            ("bread", 0.35, (1, 2)),
-            ("cooked_sardine", 0.25, (1, 2)),
+            ("coins", 1.0, (28, 80)),
+            ("coal", 0.30, (1, 3)),
+            ("iron_ore", 0.22, (1, 2)),
+            (("steel_longsword", "steel_helmet", "steel_sq_shield",
+              "steel_chainbody", "steel_chainlegs"), 0.10, (1, 1)),  # 1/10
+            ("steel_battleaxe", 0.04, (1, 1)),  # 1/25
+            ("giant_bread", 0.18, (1, 1)),
             ("health_potion", 0.08, (1, 1)),
-            (("topaz", "sapphire", "emerald"), 0.12, (1, 1)),
-            ("emerald_ring", 0.03, (1, 1)),
-            ("emerald_amulet", 0.025, (1, 1)),
+            (("topaz", "sapphire", "emerald"), 0.04, (1, 1)),  # 1/25
+            ("emerald_ring", 0.02, (1, 1)),  # 1/50
+            ("emerald_amulet", 0.015, (1, 1)),  # ~1/67
         ],
         "wander_radius": 4, "aggro_range": 0,  # peaceful unless you attack
     
@@ -748,18 +751,21 @@ MONSTERS = {
     "big_skeleton": {
         "name": "Big Skeleton", "level": 30, "hp": 52, "attack": 30, "strength": 30, "defence": 16,
         "def_bonus": 8, "xp": 110, "respawn_ticks": 40,
+        # Locked — mithril cavern intro; gear actually drops; no food flood.
+        "drops_locked": True,
         "drops": [
             ("bones", 1.0, (1, 1)),
-            ("coins", 0.95, (20, 60)),
-            ("mithril_ore", 0.28, (1, 2)),
+            ("coins", 1.0, (24, 70)),
+            ("mithril_ore", 0.25, (1, 2)),
             (("mithril_sword", "mithril_helmet", "mithril_sq_shield",
-              "mithril_chainbody", "mithril_chainlegs"), 0.10, (1, 1)),
-            ("gold_ring", 0.08, (1, 1)),
-            ("bread", 0.30, (1, 2)),
+              "mithril_chainbody", "mithril_chainlegs"), 0.10, (1, 1)),  # 1/10
+            ("mithril_battleaxe", 0.035, (1, 1)),  # ~1/29
+            ("mithril_arrow", 0.14, (4, 12)),
             ("health_potion", 0.10, (1, 1)),
-            (("sapphire", "emerald"), 0.12, (1, 1)),
-            ("sapphire_ring", 0.04, (1, 1)),
-            ("emerald_amulet", 0.03, (1, 1)),
+            (("sapphire", "emerald"), 0.04, (1, 1)),  # 1/25
+            ("gold_ring", 0.03, (1, 1)),  # ~1/33
+            ("sapphire_ring", 0.018, (1, 1)),  # ~1/56
+            ("emerald_amulet", 0.015, (1, 1)),  # ~1/67
         ],
         "wander_radius": 4, "aggro_range": 7,
     
@@ -773,20 +779,22 @@ MONSTERS = {
     "spider": {
         "name": "Giant Spider", "level": 48, "hp": 95, "attack": 48, "strength": 52, "defence": 30,
         "def_bonus": 14, "xp": 210, "respawn_ticks": 55,
+        # Locked — silk is the signature; mithril gear actually drops; no food flood.
+        "drops_locked": True,
         "drops": [
             ("bones", 1.0, (1, 1)),
-            ("coins", 0.95, (40, 110)),
-            ("spider_silk", 0.85, (1, 3)),
-            ("feather", 0.70, (3, 12)),
-            ("mithril_arrow", 0.20, (5, 15)),
-            ("mithril_ore", 0.18, (1, 2)),
-            (("mithril_sword", "mithril_helmet"), 0.08, (1, 1)),
-            ("health_potion", 0.18, (1, 1)),
-            ("bread", 0.25, (1, 2)),
-            ("cooked_sardine", 0.20, (1, 2)),
-            (("emerald", "ruby"), 0.14, (1, 1)),
-            ("ruby_ring", 0.035, (1, 1)),
-            ("ruby_amulet", 0.03, (1, 1)),
+            ("coins", 1.0, (45, 120)),
+            ("spider_silk", 0.80, (1, 3)),
+            ("feather", 0.25, (2, 6)),
+            ("mithril_arrow", 0.18, (5, 15)),
+            ("mithril_ore", 0.16, (1, 2)),
+            (("mithril_sword", "mithril_helmet", "mithril_sq_shield",
+              "mithril_chainbody", "mithril_chainlegs"), 0.10, (1, 1)),  # 1/10
+            ("mithril_battleaxe", 0.04, (1, 1)),  # 1/25
+            ("health_potion", 0.12, (1, 1)),
+            (("emerald", "ruby"), 0.04, (1, 1)),  # 1/25
+            ("ruby_ring", 0.02, (1, 1)),  # 1/50
+            ("ruby_amulet", 0.015, (1, 1)),  # ~1/67
         ],
         "wander_radius": 4, "aggro_range": 7,
     
@@ -800,23 +808,22 @@ MONSTERS = {
     "dragon": {
         "name": "Adamant Dragon", "level": 78, "hp": 200, "attack": 100, "strength": 165, "defence": 80,
         "def_bonus": 50, "xp": 650, "respawn_ticks": 120,
+        # Locked — adamant gear only (no Mythos); health potion; no food flood.
+        "drops_locked": True,
         "drops": [
             ("dragon_bones", 1.0, (1, 1)),
             ("coins", 1.0, (250, 900)),
-            ("adamantite_ore", 0.55, (1, 3)),
+            ("adamantite_ore", 0.50, (1, 3)),
             ("adamantite_bar", 0.12, (1, 1)),
-            ("mythos_longsword", 0.012, (1, 1)),   # 1 in ~83
-            ("mythos_battleaxe", 0.010, (1, 1)),   # 1 in 100
-            ("mythos_helmet", 0.01, (1, 1)),       # 1 in 100
-            ("mythos_legs", 0.008, (1, 1)),        # 1 in 125
-            ("mythos_shield", 0.008, (1, 1)),      # 1 in 125
-            ("mythos_body", 0.006, (1, 1)),        # 1 in ~167
-            ("health_potion", 0.40, (1, 2)),
-            ("bread", 0.35, (2, 4)),
-            (("ruby", "diamond"), 0.22, (1, 2)),
-            ("diamond_ring", 0.06, (1, 1)),
-            ("diamond_amulet", 0.05, (1, 1)),
-            ("onyx", 0.04, (1, 1)),
+            (("adamant_sword", "adamant_helmet", "adamant_sq_shield",
+              "adamant_chainbody", "adamant_chainlegs"), 0.10, (1, 1)),  # 1/10
+            ("adamant_battleaxe", 0.04, (1, 1)),  # 1/25
+            ("adamant_arrow", 0.20, (8, 24)),
+            ("health_potion", 0.22, (1, 2)),
+            (("ruby", "diamond"), 0.06, (1, 2)),   # ~1/17
+            ("diamond_ring", 0.025, (1, 1)),       # 1/40
+            ("diamond_amulet", 0.02, (1, 1)),      # 1/50
+            ("onyx", 0.03, (1, 1)),                # ~1/33
         ],
         "wander_radius": 5, "aggro_range": 12, "confine_room": True,
         # Hit the player and lock them into fighting back — STOP_ATTACK / flee clears it.
@@ -830,44 +837,23 @@ MONSTERS = {
         # 1s gap after each swing so you can click away and run.
         "attack_cooldown": 1.0,
     },
-    # Mountain pass — packs of wolves guarding the route to the harbour
-    "wolf": {
-        "name": "Wolf", "level": 40, "hp": 62, "attack": 42, "strength": 44, "defence": 28,
-        "def_bonus": 10, "xp": 145, "respawn_ticks": 40,
-        "drops": [
-            ("bones", 1.0, (1, 1)),
-            ("coins", 0.90, (18, 55)),
-            ("cooked_trout", 0.22, (1, 1)),
-            ("raw_trout", 0.18, (1, 1)),
-            ("health_potion", 0.08, (1, 1)),
-            (("topaz", "sapphire", "emerald"), 0.10, (1, 1)),
-            ("emerald_ring", 0.025, (1, 1)),
-        ],
-        "wander_radius": 4, "aggro_range": 6,
-        # Drop the chase once the player leaves the mountain pass.
-        "leash_area": (138, 1, 162, 42),
-        "force_retaliate": True,
-        "attack_range": 2,
-        "side_by_side": True,
-        "side_gap": 2,
-        "attack_cooldown": 1.0,
-    },
     # Stonehaven City — peaceful until attacked
     "guard": {
         "name": "City Guard", "level": 28, "hp": 55, "attack": 30, "strength": 30, "defence": 26,
         "def_bonus": 28, "xp": 120, "respawn_ticks": 45,
+        # Locked — city steel; no bread flood.
+        "drops_locked": True,
         "drops": [
             ("bones", 1.0, (1, 1)),
-            ("coins", 0.95, (25, 70)),
-            ("steel_helmet", 0.08, (1, 1)),
-            ("steel_body", 0.04, (1, 1)),
-            ("steel_legs", 0.04, (1, 1)),
-            ("steel_shield", 0.06, (1, 1)),
-            ("steel_longsword", 0.05, (1, 1)),
-            ("bread", 0.35, (1, 2)),
+            ("coins", 1.0, (28, 65)),
+            (("steel_longsword", "steel_helmet", "steel_sq_shield",
+              "steel_chainbody", "steel_chainlegs"), 0.10, (1, 1)),  # 1/10
+            ("steel_shield", 0.05, (1, 1)),  # 1/20 kite
+            ("steel_body", 0.03, (1, 1)),  # ~1/33 plate
+            ("steel_legs", 0.03, (1, 1)),
             ("health_potion", 0.12, (1, 1)),
-            (("sapphire", "emerald"), 0.08, (1, 1)),
-            ("sapphire_amulet", 0.03, (1, 1)),
+            (("sapphire", "emerald"), 0.04, (1, 1)),  # 1/25
+            ("sapphire_amulet", 0.015, (1, 1)),  # ~1/67
         ],
         "wander_radius": 3, "wander_ticks": 10, "wander_chance": 0.4,
         "patrol_steps": (1, 3),  # short street beat, then idle
@@ -876,15 +862,23 @@ MONSTERS = {
     "knight": {
         "name": "Castle Knight", "level": 48, "hp": 100, "attack": 48, "strength": 50, "defence": 42,
         "def_bonus": 40, "xp": 260, "respawn_ticks": 60,
+        # Locked — keep mithril; no bread flood.
+        "drops_locked": True,
         "drops": [
             ("bones", 1.0, (1, 1)),
-            ("coins", 0.95, (60, 160)),
-            ("health_potion", 0.22, (1, 1)),
-            ("bread", 0.30, (1, 2)),
-            (("emerald", "ruby", "diamond"), 0.12, (1, 1)),
-            ("ruby_ring", 0.04, (1, 1)),
-            ("ruby_amulet", 0.035, (1, 1)),
-            ("diamond_amulet", 0.02, (1, 1)),
+            ("coins", 1.0, (70, 160)),
+            (("mithril_sword", "mithril_helmet", "mithril_sq_shield",
+              "mithril_chainbody", "mithril_chainlegs"), 0.10, (1, 1)),  # 1/10
+            ("mithril_battleaxe", 0.04, (1, 1)),  # 1/25
+            ("mithril_shield", 0.035, (1, 1)),  # ~1/29 kite
+            ("mithril_body", 0.025, (1, 1)),  # 1/40 plate
+            ("mithril_legs", 0.025, (1, 1)),
+            ("adamant_sword", 0.025, (1, 1)),  # 1/40
+            ("health_potion", 0.15, (1, 1)),
+            (("emerald", "ruby", "diamond"), 0.04, (1, 1)),  # 1/25
+            ("ruby_ring", 0.02, (1, 1)),  # 1/50
+            ("ruby_amulet", 0.015, (1, 1)),  # ~1/67
+            ("diamond_amulet", 0.012, (1, 1)),  # ~1/83
         ],
         "wander_radius": 4, "wander_ticks": 8, "wander_chance": 0.5,
         "patrol_steps": (2, 4),  # walk a short leg around the keep, then idle
@@ -895,9 +889,20 @@ MONSTERS = {
         "name": "Adamant Duelist", "level": 76, "hp": 160,
         "attack": 78, "strength": 82, "defence": 66,
         "def_bonus": 80, "xp": 420, "respawn_ticks": 5,
+        "level_override": 250,
+        # Locked — full adamant set can drop; Mythos sword is rare.
+        "drops_locked": True,
         "drops": [
             ("bones", 1.0, (1, 1)),
             ("coins", 1.0, (40, 90)),
+            (("adamant_sword", "adamant_helmet", "adamant_sq_shield",
+              "adamant_chainbody", "adamant_chainlegs"), 0.10, (1, 1)),  # 1/10
+            ("adamant_battleaxe", 0.05, (1, 1)),  # 1/20
+            ("adamant_shield", 0.04, (1, 1)),  # 1/25 kite
+            ("adamant_body", 0.03, (1, 1)),  # ~1/33 plate
+            ("adamant_legs", 0.03, (1, 1)),
+            ("mythos_longsword", 0.012, (1, 1)),  # ~1/83
+            ("health_potion", 0.12, (1, 1)),
         ],
         "wander_radius": 0,
         "aggro_range": 0,
@@ -929,43 +934,96 @@ MONSTERS = {
             "legs": "adamant_legs",
         },
     },
+    # Village PK duel near Castle Realm — strongest foe; talks when PvP is off.
+    "eclipse_champion": {
+        "name": "Eclipse Champion", "level": 400, "hp": 1400,
+        "attack": 520, "strength": 540, "defence": 220,
+        "def_bonus": 180, "xp": 5000, "respawn_ticks": 8,
+        "boss": True,
+        # Locked — PK duel elite; rare Eclipse helm / aegis.
+        "drops_locked": True,
+        "drops": [
+            ("bones", 1.0, (1, 1)),
+            ("coins", 1.0, (800, 1600)),
+            (("super_attack_potion", "super_strength_potion", "super_defence_potion"), 0.35, (1, 2)),
+            ("health_potion", 0.40, (2, 4)),
+            ("onyx", 0.10, (1, 2)),
+            ("eclipse_helmet", 1 / 64, (1, 1)),
+            ("eclipse_shield", 1 / 64, (1, 1)),
+        ],
+        "wander_radius": 0,
+        "aggro_range": 0,
+        "force_retaliate": False,
+        "passive": True,
+        "strikes_in_place": True,
+        "attack_cooldown": 1.0,
+        "requires_pk": True,
+        "side_by_side": True,
+        "side_gap": 2,
+        "attack_range": 2,
+        "pk_tutorial": [
+            "I am the Eclipse Champion. I duel only killers.",
+            "Turn on PvP — the red skull — then face me.",
+            "I do not chase. Stand your ground, or leave.",
+            "Best me, and the night may gift you its helm or aegis.",
+            "With PvP off, I have only words.",
+        ],
+        "training_dummy": True,
+        "humanoid": True,
+        "player_art": True,
+        "equipment": {
+            "weapon": "eclipse_sword",
+            "shield": "eclipse_shield",
+            "helmet": "eclipse_helmet",
+            "body": "eclipse_body",
+            "legs": "eclipse_legs",
+        },
+    },
     "mythos_champion": {
         "name": "Mythos Champion", "level": 90, "hp": 280, "attack": 105, "strength": 110, "defence": 98,
         "def_bonus": 70, "xp": 850, "respawn_ticks": 120,
+        # Locked — castle elite; full Mythos set can drop; no food flood.
+        "drops_locked": True,
         "drops": [
             ("bones", 1.0, (1, 1)),
             ("coins", 1.0, (300, 900)),
-            (("mythos_longsword", "mythos_helmet"), 0.06, (1, 1)),
-            (("mythos_legs", "mythos_shield"), 0.04, (1, 1)),
-            ("mythos_longsword", 0.03, (1, 1)),
-            ("mythos_battleaxe", 0.025, (1, 1)),
-            ("mythos_body", 0.02, (1, 1)),
-            ("super_attack_potion", 0.25, (1, 2)),
-            ("super_strength_potion", 0.25, (1, 2)),
-            ("super_defence_potion", 0.25, (1, 2)),
-            ("health_potion", 0.45, (2, 3)),
-            (("diamond", "onyx"), 0.18, (1, 2)),
-            ("diamond_ring", 0.07, (1, 1)),
-            ("onyx_ring", 0.04, (1, 1)),
-            ("onyx_amulet", 0.035, (1, 1)),
+            # Mythos gear / ore — rare castle elite loot (was too common to farm).
+            ("mythos_longsword", 0.02, (1, 1)),  # 1/50
+            ("mythos_helmet", 0.016, (1, 1)),  # ~1/62
+            ("mythos_shield", 0.014, (1, 1)),  # ~1/71
+            ("mythos_legs", 0.012, (1, 1)),  # ~1/83
+            ("mythos_body", 0.01, (1, 1)),  # 1/100
+            ("mythos_ore", 0.05, (1, 1)),  # 1/20 (was 18% for 1–2)
+            ("super_attack_potion", 0.20, (1, 2)),
+            ("super_strength_potion", 0.20, (1, 2)),
+            ("super_defence_potion", 0.20, (1, 2)),
+            ("health_potion", 0.30, (2, 3)),
+            (("diamond", "onyx"), 0.06, (1, 2)),
+            ("diamond_ring", 0.03, (1, 1)),  # ~1/33
+            ("onyx_ring", 0.02, (1, 1)),  # 1/50
+            ("onyx_amulet", 0.015, (1, 1)),  # ~1/67
         ],
         "wander_radius": 2, "wander_ticks": 14, "wander_chance": 0.3,
         "patrol_steps": (1, 2),
-        "aggro_range": 0,  # peaceful unless you attack — mostly stands post
+        # Stonehaven bailey / overworld: peaceful until the player attacks.
+        # Inside the King's keep (castle_realm king_f1) dungeon AI chases on sight.
+        "aggro_range": 0,
+        "force_retaliate": True,
     },
     # Void Sanctum (SE mystical dungeon) — high-level rooms
     "shade": {
         "name": "Shade", "level": 55, "hp": 110, "attack": 58, "strength": 60, "defence": 40,
         "def_bonus": 18, "xp": 260, "respawn_ticks": 50,
+        # Locked — Void Sanctum room 1; no bones (shade); lean loot; no food flood.
+        "drops_locked": True,
         "drops": [
-            ("bones", 1.0, (1, 1)),
-            ("coins", 0.95, (60, 160)),
+            ("coins", 1.0, (50, 150)),
             ("mithril_arrow", 0.25, (8, 20)),
-            ("health_potion", 0.22, (1, 1)),
-            ("super_attack_potion", 0.06, (1, 1)),
-            (("sapphire", "emerald", "ruby"), 0.14, (1, 1)),
-            ("ruby_ring", 0.03, (1, 1)),
-            ("emerald_amulet", 0.03, (1, 1)),
+            ("health_potion", 0.15, (1, 1)),
+            ("super_attack_potion", 0.05, (1, 1)),  # 1/20
+            (("sapphire", "emerald", "ruby"), 0.04, (1, 1)),  # 1/25
+            ("ruby_ring", 0.02, (1, 1)),  # 1/50
+            ("emerald_amulet", 0.015, (1, 1)),  # ~1/67
         ],
         "wander_radius": 3, "aggro_range": 7,
     
@@ -978,15 +1036,19 @@ MONSTERS = {
     "crypt_ghoul": {
         "name": "Crypt Ghoul", "level": 62, "hp": 135, "attack": 65, "strength": 68, "defence": 48,
         "def_bonus": 22, "xp": 310, "respawn_ticks": 55,
+        # Locked — Void Sanctum room 2; mithril gear + ore; no food flood.
+        "drops_locked": True,
         "drops": [
             ("bones", 1.0, (1, 1)),
-            ("coins", 0.95, (80, 200)),
+            ("coins", 1.0, (80, 200)),
             ("mithril_ore", 0.20, (1, 2)),
-            (("mithril_sword", "mithril_helmet", "mithril_chainbody"), 0.08, (1, 1)),
-            ("health_potion", 0.25, (1, 2)),
-            (("emerald", "ruby", "diamond"), 0.15, (1, 1)),
-            ("diamond_ring", 0.03, (1, 1)),
-            ("ruby_amulet", 0.04, (1, 1)),
+            (("mithril_sword", "mithril_helmet", "mithril_sq_shield",
+              "mithril_chainbody", "mithril_chainlegs"), 0.10, (1, 1)),  # 1/10
+            ("mithril_battleaxe", 0.04, (1, 1)),  # 1/25
+            ("health_potion", 0.18, (1, 2)),
+            (("emerald", "ruby", "diamond"), 0.04, (1, 1)),  # 1/25
+            ("diamond_ring", 0.02, (1, 1)),  # 1/50
+            ("ruby_amulet", 0.015, (1, 1)),  # ~1/67
         ],
         "wander_radius": 3, "aggro_range": 7,
     
@@ -999,15 +1061,18 @@ MONSTERS = {
     "void_imp": {
         "name": "Void Imp", "level": 70, "hp": 150, "attack": 75, "strength": 78, "defence": 52,
         "def_bonus": 24, "xp": 380, "respawn_ticks": 55,
+        # Locked — Void Sanctum room 3; feathers + void gems; no food flood.
+        "drops_locked": True,
         "drops": [
             ("bones", 1.0, (1, 1)),
-            ("coins", 0.95, (100, 260)),
+            ("coins", 1.0, (100, 180)),
+            ("feather", 0.60, (10, 12)),
             ("adamantite_ore", 0.12, (1, 1)),
             ("super_strength_potion", 0.08, (1, 1)),
-            ("feather", 0.60, (4, 14)),
-            (("ruby", "diamond", "onyx"), 0.16, (1, 1)),
-            ("diamond_amulet", 0.04, (1, 1)),
-            ("onyx_ring", 0.025, (1, 1)),
+            ("health_potion", 0.15, (1, 1)),
+            (("ruby", "diamond", "onyx"), 0.04, (1, 1)),  # 1/25
+            ("diamond_amulet", 0.02, (1, 1)),  # 1/50
+            ("onyx_ring", 0.015, (1, 1)),  # ~1/67
         ],
         "wander_radius": 4, "aggro_range": 8,
     
@@ -1020,16 +1085,21 @@ MONSTERS = {
     "obsidian_colossus": {
         "name": "Obsidian Colossus", "level": 78, "hp": 190, "attack": 82, "strength": 88, "defence": 85,
         "def_bonus": 40, "xp": 480, "respawn_ticks": 70,
+        # Locked — Void Sanctum room 4; adamant + ore; no food flood.
+        "drops_locked": True,
         "drops": [
             ("big_bones", 1.0, (1, 1)),
-            ("coins", 0.95, (140, 360)),
+            ("coins", 1.0, (140, 360)),
             ("adamantite_ore", 0.28, (1, 2)),
             ("adamantite_bar", 0.08, (1, 1)),
+            (("adamant_sword", "adamant_helmet", "adamant_sq_shield",
+              "adamant_chainbody", "adamant_chainlegs"), 0.10, (1, 1)),  # 1/10
+            ("adamant_battleaxe", 0.04, (1, 1)),  # 1/25
             ("super_defence_potion", 0.10, (1, 1)),
-            ("health_potion", 0.30, (1, 2)),
-            (("diamond", "onyx"), 0.18, (1, 1)),
-            ("onyx_amulet", 0.035, (1, 1)),
-            ("onyx_ring", 0.03, (1, 1)),
+            ("health_potion", 0.18, (1, 2)),
+            (("diamond", "onyx"), 0.04, (1, 1)),  # 1/25
+            ("onyx_ring", 0.02, (1, 1)),  # 1/50
+            ("onyx_amulet", 0.015, (1, 1)),  # ~1/67
         ],
         "wander_radius": 2, "aggro_range": 6,
     
@@ -1042,44 +1112,52 @@ MONSTERS = {
     "shadow_knight": {
         "name": "Shadow Knight", "level": 88, "hp": 230, "attack": 105, "strength": 110, "defence": 90,
         "def_bonus": 48, "xp": 620, "respawn_ticks": 80,
+        # Locked — Void Sanctum room 5; adamant + rare Mythos/void; no food flood.
+        "drops_locked": True,
         "drops": [
             ("bones", 1.0, (1, 1)),
             ("coins", 1.0, (200, 500)),
-            (("mythos_longsword", "mythos_helmet"), 0.04, (1, 1)),
             ("adamantite_bar", 0.10, (1, 1)),
+            (("adamant_sword", "adamant_helmet", "adamant_sq_shield",
+              "adamant_chainbody", "adamant_chainlegs"), 0.10, (1, 1)),  # 1/10
+            ("adamant_battleaxe", 0.05, (1, 1)),  # 1/20
+            ("adamant_body", 0.03, (1, 1)),  # ~1/33
+            ("adamant_legs", 0.03, (1, 1)),
+            (("mythos_longsword", "mythos_helmet"), 0.015, (1, 1)),  # ~1/67
             ("super_attack_potion", 0.12, (1, 1)),
             ("super_strength_potion", 0.12, (1, 1)),
-            ("health_potion", 0.35, (1, 2)),
-            ("onyx", 0.14, (1, 2)),
-            ("onyx_ring", 0.05, (1, 1)),
-            ("onyx_amulet", 0.045, (1, 1)),
-            ("void_ring", 0.015, (1, 1)),
+            ("health_potion", 0.20, (1, 2)),
+            ("onyx", 0.04, (1, 2)),  # 1/25
+            ("onyx_ring", 0.02, (1, 1)),  # 1/50
+            ("onyx_amulet", 0.015, (1, 1)),  # ~1/67
+            ("void_ring", 0.015, (1, 1)),  # ~1/67
         ],
         "wander_radius": 3, "aggro_range": 8,
     },
     "void_horror": {
         "name": "Void Horror", "level": 95, "hp": 320, "attack": 125, "strength": 135, "defence": 105,
         "def_bonus": 55, "xp": 900, "respawn_ticks": 140,
+        # Locked — Void Sanctum boss; Mythos + void jewelry; no food flood.
+        "drops_locked": True,
         "drops": [
             ("dragon_bones", 1.0, (1, 1)),
-            ("coins", 1.0, (400, 1200)),
+            ("coins", 1.0, (400, 1000)),
             ("adamantite_bar", 0.25, (1, 2)),
-            ("mythos_longsword", 0.03, (1, 1)),
-            ("mythos_battleaxe", 0.025, (1, 1)),
-            ("mythos_body", 0.02, (1, 1)),
-            ("mythos_shield", 0.025, (1, 1)),
-            # Future: ("eclipse_shield", 0.01, (1, 1)),  # Eclipse Aegis — not enabled yet
-            # Future: ("eclipse_body", 0.008, (1, 1)),
-            # Future: ("eclipse_legs", 0.008, (1, 1)),
-            # Future: ("eclipse_helmet", 0.01, (1, 1)),
+            (("adamant_sword", "adamant_helmet", "adamant_sq_shield",
+              "adamant_chainbody", "adamant_chainlegs"), 0.15, (1, 1)),
+            ("adamant_battleaxe", 0.08, (1, 1)),
+            ("mythos_longsword", 0.03, (1, 1)),  # ~1/33
+            ("mythos_battleaxe", 0.025, (1, 1)),  # 1/40
+            ("mythos_helmet", 0.02, (1, 1)),  # 1/50
+            # Future: eclipse set — not enabled yet
             ("super_attack_potion", 0.20, (1, 2)),
             ("super_strength_potion", 0.20, (1, 2)),
             ("super_defence_potion", 0.20, (1, 2)),
-            ("health_potion", 0.50, (2, 3)),
-            ("onyx", 0.28, (1, 3)),
-            ("void_ring", 0.06, (1, 1)),
-            ("void_amulet", 0.05, (1, 1)),
-            ("onyx_amulet", 0.08, (1, 1)),
+            ("health_potion", 0.30, (2, 3)),
+            ("onyx", 0.08, (1, 2)),
+            ("onyx_amulet", 0.04, (1, 1)),  # 1/25
+            ("void_ring", 0.05, (1, 1)),  # 1/20
+            ("void_amulet", 0.04, (1, 1)),  # 1/25
         ],
         "wander_radius": 3, "aggro_range": 9,
     
@@ -1093,38 +1171,79 @@ MONSTERS = {
         "name": "Gallery Warden", "level": 68, "hp": 190, "attack": 72, "strength": 76, "defence": 55,
         "def_bonus": 26, "xp": 520, "respawn_ticks": 55, "aggro_range": 6,
         "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.0,
+        # Locked — Void instance key boss; Amethyst Key always; mithril kit.
+        "drops_locked": True,
         "drops": [
             ("void_key_amethyst", 1.0, (1, 1)),
+            ("bones", 1.0, (1, 1)),
             ("coins", 1.0, (300, 600)),
-            (("mithril_sword", "mithril_helmet", "mithril_chainbody"), 0.15, (1, 1)),
+            (("mithril_sword", "mithril_helmet", "mithril_sq_shield",
+              "mithril_chainbody", "mithril_chainlegs"), 0.25, (1, 1)),
+            ("mithril_battleaxe", 0.12, (1, 1)),
+            ("mithril_body", 0.08, (1, 1)),
+            ("mithril_legs", 0.08, (1, 1)),
+            ("adamant_sword", 0.05, (1, 1)),  # 1/20 tease
+            (("health_potion", "strength_potion"), 0.25, (1, 2)),
+            (("emerald", "ruby", "diamond"), 0.08, (1, 1)),
+            ("ruby_amulet", 0.03, (1, 1)),  # ~1/33
         ],
     },
     "void_crawler": {
         "name": "Void Crawler", "level": 82, "hp": 170, "attack": 90, "strength": 92, "defence": 70,
         "def_bonus": 36, "xp": 520, "respawn_ticks": 60, "aggro_range": 6,
         "force_retaliate": True,
-        "drops": [("onyx", 0.10, (1, 1)), ("coins", 0.8, (80, 180))],
+        # Locked — Void instance trash; lean void loot; no bones; no food flood.
+        "drops_locked": True,
+        "drops": [
+            ("coins", 1.0, (100, 220)),
+            ("feather", 0.40, (6, 10)),
+            ("adamantite_ore", 0.10, (1, 1)),
+            ("health_potion", 0.15, (1, 1)),
+            ("super_defence_potion", 0.06, (1, 1)),
+            ("onyx", 0.04, (1, 1)),  # 1/25
+            ("diamond", 0.04, (1, 1)),  # 1/25
+            ("onyx_ring", 0.015, (1, 1)),  # ~1/67
+        ],
     },
     "knight_captain_vorn": {
         "name": "Knight-Captain Vorn", "level": 92, "hp": 320, "attack": 110, "strength": 118, "defence": 96,
         "def_bonus": 52, "xp": 1100, "respawn_ticks": 80, "aggro_range": 7,
         "scale": 1.2,
         "force_retaliate": True,
+        # Locked — Void instance key boss; Rift Sigil always; adamant + rare Mythos.
+        "drops_locked": True,
         "drops": [
             ("void_rift_sigil", 1.0, (1, 1)),
-            (("mythos_longsword", "mythos_helmet"), 0.06, (1, 1)),
+            ("bones", 1.0, (1, 1)),
             ("coins", 1.0, (600, 1200)),
+            (("adamant_sword", "adamant_helmet", "adamant_sq_shield",
+              "adamant_chainbody", "adamant_chainlegs"), 0.25, (1, 1)),
+            ("adamant_battleaxe", 0.12, (1, 1)),
+            ("adamant_body", 0.08, (1, 1)),
+            ("adamant_legs", 0.08, (1, 1)),
+            ("mythos_longsword", 0.04, (1, 1)),  # 1/25
+            ("mythos_battleaxe", 0.03, (1, 1)),  # ~1/33
+            ("mythos_helmet", 0.03, (1, 1)),  # ~1/33
+            (("super_attack_potion", "super_strength_potion"), 0.25, (1, 2)),
+            ("health_potion", 0.30, (1, 2)),
+            ("onyx", 0.08, (1, 2)),
+            ("void_ring", 0.04, (1, 1)),  # 1/25
         ],
     },
     "rift_wraith": {
         "name": "Rift Wraith", "level": 91, "hp": 210, "attack": 108, "strength": 112, "defence": 88,
         "def_bonus": 46, "xp": 700, "respawn_ticks": 80, "aggro_range": 7,
         "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.0,
+        # Locked — Void instance wraith; no bones; lean void loot; no food flood.
+        "drops_locked": True,
         "drops": [
-            ("void_ring", 0.015, (1, 1)),
-            ("super_attack_potion", 0.25, (1, 1)),
-            ("super_strength_potion", 0.25, (1, 1)),
-            ("coins", 0.9, (100, 240)),
+            ("coins", 1.0, (120, 280)),
+            ("super_attack_potion", 0.18, (1, 1)),
+            ("super_strength_potion", 0.18, (1, 1)),
+            ("health_potion", 0.15, (1, 1)),
+            ("onyx", 0.04, (1, 1)),  # 1/25
+            ("void_ring", 0.015, (1, 1)),  # ~1/67
+            ("onyx_amulet", 0.015, (1, 1)),  # ~1/67
         ],
     },
     "nyxarath": {
@@ -1133,52 +1252,103 @@ MONSTERS = {
         "def_bonus": 60, "xp": 4000, "respawn_ticks": 9999, "aggro_range": 12,
         "confine_room": True,
         "force_retaliate": True, "attack_range": 3, "side_by_side": True, "side_gap": 3, "attack_cooldown": 1.0,
+        # Locked — Void final boss; Eclipse sword/axe rare; Mythos body/legs only.
+        "drops_locked": True,
         "drops": [
-            ("coins", 1.0, (2000, 5000)),
             ("dragon_bones", 1.0, (1, 1)),
+            ("coins", 1.0, (2000, 4000)),
             ("onyx", 1.0, (2, 4)),
-            ("super_attack_potion", 0.60, (1, 2)),
             ("adamantite_bar", 0.40, (3, 3)),
-            ("void_amulet", 0.10, (1, 1)),
+            ("mythos_body", 0.06, (1, 1)),
+            ("mythos_legs", 0.05, (1, 1)),
             ("void_ring", 0.12, (1, 1)),
-            (("mythos_longsword", "mythos_body", "mythos_shield"), 0.06, (1, 1)),
-            ("eclipse_helmet", 1 / 60, (1, 1)),
-            ("eclipse_legs", 1 / 60, (1, 1)),
-            ("eclipse_body", 1 / 60, (1, 1)),
-            ("eclipse_shield", 1 / 60, (1, 1)),
+            ("void_amulet", 0.10, (1, 1)),
+            ("super_attack_potion", 0.50, (1, 2)),
+            ("super_strength_potion", 0.50, (1, 2)),
+            ("super_defence_potion", 0.50, (1, 2)),
+            ("health_potion", 0.60, (2, 4)),
+            ("eclipse_sword", 1 / 60, (1, 1)),
+            ("eclipse_cleaver", 1 / 60, (1, 1)),
         ],
     },
     "ossuary_keeper": {
         "name": "Ossuary Keeper", "level": 34, "hp": 90, "attack": 34, "strength": 36, "defence": 20,
         "def_bonus": 12, "xp": 220, "respawn_ticks": 9999, "aggro_range": 5,
         "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.2,
+        # Locked — Depths key boss; Bone Key always.
+        "drops_locked": True,
         "drops": [
             ("depths_bone_key", 1.0, (1, 1)),
             ("big_bones", 1.0, (1, 1)),
             ("coins", 1.0, (150, 300)),
+            (("iron_sword", "iron_helmet", "iron_sq_shield",
+              "iron_chainbody", "iron_chainlegs"), 0.10, (1, 1)),  # 1/10
+            ("iron_battleaxe", 0.05, (1, 1)),  # 1/20
+            ("health_potion", 0.20, (1, 1)),
+            (("jade", "topaz", "sapphire"), 0.04, (1, 1)),  # 1/25
         ],
     },
     "drowned_dead": {
         "name": "Drowned Dead", "level": 36, "hp": 68, "attack": 36, "strength": 38, "defence": 20,
         "def_bonus": 10, "xp": 140, "respawn_ticks": 45, "aggro_range": 6,
         "force_retaliate": True,
-        "drops": [("bones", 1.0, (1, 1)), ("coins", 0.9, (40, 90))],
+        # Locked — Depths drowned; steel scraps + washed-up fish; no cooked flood.
+        "drops_locked": True,
+        "drops": [
+            ("bones", 1.0, (1, 1)),
+            ("coins", 1.0, (50, 110)),
+            (("raw_trout", "raw_salmon"), 0.25, (1, 1)),
+            (("steel_longsword", "steel_helmet", "steel_sq_shield",
+              "steel_chainbody", "steel_chainlegs"), 0.10, (1, 1)),  # 1/10
+            ("steel_battleaxe", 0.04, (1, 1)),  # 1/25
+            ("health_potion", 0.12, (1, 1)),
+            (("topaz", "sapphire", "emerald"), 0.04, (1, 1)),  # 1/25
+        ],
     },
     "barrow_knight": {
         "name": "Barrow Knight", "level": 44, "hp": 88, "attack": 44, "strength": 46, "defence": 32,
         "def_bonus": 22, "xp": 190, "respawn_ticks": 50, "aggro_range": 6,
         "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.1,
-        "drops": [("bones", 1.0, (1, 1)), ("coins", 1.0, (80, 160)), ("steel_longsword", 0.08, (1, 1))],
+        # Locked — Depths knight; full steel + rare mithril tease; no food flood.
+        "drops_locked": True,
+        "drops": [
+            ("bones", 1.0, (1, 1)),
+            ("coins", 1.0, (80, 160)),
+            (("steel_longsword", "steel_helmet", "steel_sq_shield",
+              "steel_chainbody", "steel_chainlegs"), 0.10, (1, 1)),  # 1/10
+            ("steel_battleaxe", 0.05, (1, 1)),  # 1/20
+            ("steel_shield", 0.04, (1, 1)),  # 1/25 kite
+            ("steel_body", 0.03, (1, 1)),  # ~1/33 plate
+            ("steel_legs", 0.03, (1, 1)),
+            ("mithril_sword", 0.025, (1, 1)),  # 1/40
+            ("health_potion", 0.15, (1, 1)),
+            (("sapphire", "emerald", "ruby"), 0.04, (1, 1)),  # 1/25
+            ("emerald_ring", 0.02, (1, 1)),  # 1/50
+            ("emerald_amulet", 0.015, (1, 1)),  # ~1/67
+        ],
     },
     "sir_aldric": {
         "name": "Sir Aldric the Unquiet", "level": 52, "hp": 180, "attack": 52, "strength": 54, "defence": 40,
         "def_bonus": 30, "xp": 520, "respawn_ticks": 9999, "aggro_range": 8,
         "scale": 1.3,
         "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.1,
+        # Locked — Depths mid-boss; Knights' Seal always; mithril kit.
+        "drops_locked": True,
         "drops": [
             ("depths_knight_seal", 1.0, (1, 1)),
-            (("mithril_sword", "mithril_sq_shield"), 0.5, (1, 1)),
+            ("bones", 1.0, (1, 1)),
             ("coins", 1.0, (400, 700)),
+            (("mithril_sword", "mithril_helmet", "mithril_sq_shield",
+              "mithril_chainbody", "mithril_chainlegs"), 0.35, (1, 1)),
+            ("mithril_battleaxe", 0.15, (1, 1)),
+            ("mithril_shield", 0.12, (1, 1)),
+            ("mithril_body", 0.10, (1, 1)),  # 1/10 plate
+            ("mithril_legs", 0.10, (1, 1)),
+            ("adamant_sword", 0.05, (1, 1)),  # 1/20 tease
+            (("health_potion", "strength_potion"), 0.30, (1, 2)),
+            (("emerald", "ruby"), 0.12, (1, 1)),
+            ("ruby_ring", 0.04, (1, 1)),  # 1/25
+            ("ruby_amulet", 0.025, (1, 1)),  # 1/40
         ],
     },
     "morvath": {
@@ -1186,14 +1356,23 @@ MONSTERS = {
         "def_bonus": 40, "xp": 1800, "respawn_ticks": 9999, "aggro_range": 12,
         "confine_room": True,
         "force_retaliate": True, "attack_range": 2, "side_by_side": True, "side_gap": 2, "attack_cooldown": 1.2,
+        # Locked — Depths final boss; Bone Crown rare; adamant + mithril kit.
+        "drops_locked": True,
         "drops": [
             ("big_bones", 1.0, (3, 3)),
-            ("coins", 1.0, (800, 1500)),
-            (("mithril_sword", "mithril_helmet", "mithril_chainbody"), 0.20, (1, 1)),
+            ("coins", 1.0, (800, 1200)),
+            (("mithril_sword", "mithril_helmet", "mithril_sq_shield",
+              "mithril_chainbody", "mithril_chainlegs"), 0.30, (1, 1)),
+            (("adamant_sword", "adamant_helmet", "adamant_sq_shield",
+              "adamant_chainbody", "adamant_chainlegs"), 0.15, (1, 1)),
+            ("adamant_battleaxe", 0.08, (1, 1)),
+            ("adamant_body", 0.05, (1, 1)),  # 1/20 plate
+            ("adamant_legs", 0.05, (1, 1)),
+            (("strength_potion", "health_potion"), 0.30, (2, 2)),
             ("ruby", 0.15, (1, 1)),
-            ("diamond", 0.05, (1, 1)),
-            (("strength_potion", "health_potion"), 0.20, (2, 2)),
-            (("ruby_ring", "diamond_ring"), 1 / 40, (1, 1)),
+            ("diamond", 0.08, (1, 1)),
+            (("ruby_ring", "diamond_ring"), 0.04, (1, 1)),  # 1/25
+            ("diamond_amulet", 0.025, (1, 1)),  # 1/40
             ("bone_crown", 1 / 64, (1, 1)),
         ],
     },
@@ -1201,25 +1380,39 @@ MONSTERS = {
     "magma_slug": {
         "name": "Magma Slug", "level": 22, "hp": 48, "attack": 28, "strength": 28, "defence": 16,
         "def_bonus": 8, "xp": 90, "respawn_ticks": 40,
-        "drops": [("coins", 0.9, (20, 60)), ("topaz", 0.08, (1, 1))],
+        # Locked — early Emberdeep; coins only (no bones).
+        "drops_locked": True,
+        "drops": [
+            ("coins", 1.0, (22, 55)),
+        ],
         "wander_radius": 2, "aggro_range": 5,
     },
     "ash_imp": {
         "name": "Ash Imp", "level": 38, "hp": 70, "attack": 42, "strength": 40, "defence": 26,
         "def_bonus": 12, "xp": 160, "respawn_ticks": 45,
-        "drops": [("coins", 0.95, (40, 100)), ("sapphire", 0.10, (1, 1)), ("health_potion", 0.2, (1, 1))],
+        # Locked — Emberdeep mid; lean ash loot.
+        "drops_locked": True,
+        "drops": [
+            ("bones", 1.0, (1, 1)),
+            ("coins", 1.0, (40, 95)),
+            ("coal", 0.20, (1, 2)),
+            ("health_potion", 0.12, (1, 1)),
+            ("sapphire", 0.04, (1, 1)),  # 1/25
+            ("sapphire_ring", 0.015, (1, 1)),  # ~1/67
+        ],
         "wander_radius": 3, "aggro_range": 6,
     },
+    # Mountain pass — packs of wolves guarding the route to the harbour
     "wolf": {
         "name": "Wolf", "level": 40, "hp": 72, "attack": 44, "strength": 46, "defence": 28,
         "def_bonus": 12, "xp": 180, "respawn_ticks": 40,
+        # Locked — overworld pass; no cooked food flood. (Duplicate wolf def removed.)
+        "drops_locked": True,
         "drops": [
             ("bones", 1.0, (1, 1)),
-            ("coins", 0.95, (40, 120)),
-            ("feather", 0.35, (1, 3)),
-            ("cooked_shrimp", 0.30, (1, 2)),
-            ("sapphire", 0.08, (1, 1)),
-            ("health_potion", 0.15, (1, 1)),
+            ("coins", 1.0, (35, 50)),
+            ("health_potion", 0.10, (1, 1)),
+            (("topaz", "sapphire", "emerald"), 0.04, (1, 1)),  # 1/25
         ],
         "wander_radius": 4, "aggro_range": 6,
         "leash_area": (138, 1, 162, 42),
@@ -1232,9 +1425,17 @@ MONSTERS = {
     "ember_wolf": {
         "name": "Ember Wolf", "level": 58, "hp": 110, "attack": 58, "strength": 60, "defence": 40,
         "def_bonus": 18, "xp": 280, "respawn_ticks": 50,
-        "drops": [("bones", 1.0, (1, 1)), ("coins", 0.95, (80, 180)), ("ruby", 0.10, (1, 1))],
+        # Locked — Emberdeep pack; lean volcanic loot.
+        "drops_locked": True,
+        "drops": [
+            ("bones", 1.0, (1, 1)),
+            ("coins", 1.0, (70, 150)),
+            ("coal", 0.22, (1, 2)),
+            ("health_potion", 0.12, (1, 1)),
+            ("ruby", 0.04, (1, 1)),  # 1/25
+            ("ruby_ring", 0.015, (1, 1)),  # ~1/67
+        ],
         "wander_radius": 3, "aggro_range": 7,
-    
         "force_retaliate": True,
         "attack_range": 2,
         "side_by_side": True,
@@ -1244,19 +1445,42 @@ MONSTERS = {
     "magma_knight": {
         "name": "Magma Knight", "level": 78, "hp": 180, "attack": 82, "strength": 85, "defence": 70,
         "def_bonus": 40, "xp": 520, "respawn_ticks": 70,
+        # Locked — Emberdeep elite; adamant gear + volcanic gems.
+        "drops_locked": True,
         "drops": [
-            ("bones", 1.0, (1, 1)), ("coins", 1.0, (150, 400)),
-            ("ruby", 0.14, (1, 1)), ("diamond", 0.06, (1, 1)),
+            ("bones", 1.0, (1, 1)),
+            ("coins", 1.0, (150, 380)),
+            (("adamant_sword", "adamant_helmet", "adamant_sq_shield",
+              "adamant_chainbody", "adamant_chainlegs"), 0.10, (1, 1)),  # 1/10
+            ("adamant_battleaxe", 0.04, (1, 1)),  # 1/25
+            ("adamant_shield", 0.03, (1, 1)),  # ~1/33
+            ("coal", 0.25, (1, 3)),
+            ("health_potion", 0.15, (1, 1)),
+            ("ruby", 0.04, (1, 1)),  # 1/25
+            ("diamond", 0.025, (1, 1)),  # 1/40
+            ("ruby_amulet", 0.015, (1, 1)),  # ~1/67
         ],
         "wander_radius": 2, "aggro_range": 8,
     },
     "crucible_beast": {
         "name": "Crucible Beast", "level": 88, "hp": 260, "attack": 100, "strength": 105, "defence": 85,
         "def_bonus": 55, "xp": 780, "respawn_ticks": 100,
+        # Locked — Emberdeep boss; big bones, adamant, rare Mythos sword.
+        "drops_locked": True,
         "drops": [
-            ("bones", 1.0, (1, 1)), ("coins", 1.0, (300, 800)),
-            ("diamond", 0.18, (1, 2)), ("onyx", 0.08, (1, 1)),
-            ("mythos_longsword", 0.04, (1, 1)),
+            ("big_bones", 1.0, (1, 1)),
+            ("coins", 1.0, (300, 800)),
+            ("adamantite_ore", 0.35, (1, 2)),
+            ("adamantite_bar", 0.10, (1, 1)),
+            (("adamant_sword", "adamant_helmet", "adamant_sq_shield",
+              "adamant_chainbody", "adamant_chainlegs"), 0.10, (1, 1)),  # 1/10
+            ("adamant_battleaxe", 0.05, (1, 1)),  # 1/20
+            ("adamant_body", 0.03, (1, 1)),  # ~1/33
+            ("adamant_legs", 0.03, (1, 1)),
+            ("health_potion", 0.20, (1, 2)),
+            ("diamond", 0.05, (1, 2)),  # 1/20
+            ("onyx", 0.03, (1, 1)),  # ~1/33
+            ("mythos_longsword", 0.015, (1, 1)),  # ~1/67
         ],
         "wander_radius": 2, "aggro_range": 9,
     },
@@ -1285,9 +1509,9 @@ def _apply_monster_levels():
 
 MONSTER_LEVEL_CHANGES = _apply_monster_levels()
 
-# Under this combat level, bones are rare. Gear still needs HIGH_GEAR_LEVEL.
+# Under this combat level, unlocked tables still get soft caps (see drops_for_kill).
+# Monsters with drops_locked=True use authored rates as-is (player-visible).
 LOW_LEVEL_DROP_CAP = 50
-RARE_BONE_CHANCE = 0.15
 # Weapons and armour only. Ammo, ore, and quest pieces are not gear.
 HIGH_GEAR_LEVEL = 70
 RARE_GEM_CHANCE = 0.04
@@ -1295,7 +1519,9 @@ UNCOMMON_FOOD_CHANCE = 0.12
 UNCOMMON_FLETCH_CHANCE = 0.15
 RARE_MYTHOS_CHANCE = 0.02
 # Quest pieces keep the chance and quantity written on the creature.
-QUEST_DROP_IDS = {"rat_tail", "goblin_mail", "spider_silk"}
+QUEST_DROP_IDS = {"rat_tail", "spider_silk"}
+# Shown in the monster "Rare drops" menu (and anything rarer than this).
+RARE_DROP_CHANCE = 0.10
 
 
 def _drop_ids(item_id):
@@ -1324,20 +1550,59 @@ def _drop_kind(item_id):
     return "other"
 
 
+def format_drop_chance(chance):
+    """Player-facing rate label."""
+    chance = float(chance)
+    if chance >= 0.999:
+        return "Always"
+    if chance <= 0.0:
+        return "Never"
+    if chance <= RARE_DROP_CHANCE:
+        return f"1/{max(1, int(round(1.0 / chance)))}"
+    return f"{int(round(chance * 100))}%"
+
+
+def rare_drops_for_monster(monster_type):
+    """Rows for the right-click drops panel: (label, chance_label, rare_bool)."""
+    rows = []
+    for item_id, chance, bounds in drops_for_kill(monster_type):
+        lo, hi = bounds
+        ids = _drop_ids(item_id)
+        if len(ids) > 1:
+            names = " / ".join((ITEMS.get(i) or {}).get("name", i) for i in ids)
+            label = f"One of: {names}"
+        else:
+            label = (ITEMS.get(ids[0]) or {}).get("name", ids[0])
+        if lo == hi:
+            if lo != 1:
+                label = f"{label} ×{lo}"
+        else:
+            label = f"{label} ×{lo}–{hi}"
+        rare = float(chance) <= RARE_DROP_CHANCE and float(chance) < 0.999
+        if _drop_kind(item_id) in ("gem", "gear", "mythos", "key"):
+            rare = True
+        rows.append((label, format_drop_chance(chance), rare))
+    return rows
+
+
 def drops_for_kill(monster_type):
     """One kill's loot.
 
-    Gear only from combat level 70+. Mythos gear only from dragons, and rare.
-    Gems are rare. Food, feathers, and bowstring are uncommon.
+    Locked tables (drops_locked) use authored rates unchanged.
+    Unlocked: gear only from tier 70+, mythos from dragons, soft caps on gems/food/fletch.
     """
     spec = MONSTERS.get(monster_type) or {}
     drops = list(spec.get("drops") or [])
     level = int(spec.get("tier") or spec.get("level") or 1)     # loot gates use the tier, not the shown level
+    locked = bool(spec.get("drops_locked"))
     dragon = "dragon" in str(monster_type)
     out = []
     for item_id, chance, bounds in drops:
-        kind = _drop_kind(item_id)
         chance = float(chance)
+        if locked:
+            out.append((item_id, chance, bounds))
+            continue
+        kind = _drop_kind(item_id)
         if kind == "gear" and level < HIGH_GEAR_LEVEL:
             continue
         if kind == "gear" and any(str(i).startswith("adamant_") for i in _drop_ids(item_id)):
@@ -1352,9 +1617,6 @@ def drops_for_kill(monster_type):
             chance = min(chance, UNCOMMON_FLETCH_CHANCE)
         elif kind == "food":
             chance = min(chance, UNCOMMON_FOOD_CHANCE)
-        elif kind == "other" and level < LOW_LEVEL_DROP_CAP and item_id in ("bones", "big_bones"):
-            chance = RARE_BONE_CHANCE
-            bounds = (1, 1)
         if item_id == "coins" and level < LOW_LEVEL_DROP_CAP:
             lo, hi = bounds
             lo = max(int(lo), max(1, level))
@@ -1417,6 +1679,9 @@ MONSTER_SPAWNS = [
     *_mountain_wolves(),
     # South of the wishing well — combat practice. Only a player killer can attack him.
     ("adamant_duelist", 35, 28),
+    # West of the well by Castle Realm portal — top-tier PK duel (Eclipse Champion).
+    # Keep clear of the portal tile (9,19) so the gold gate art does not hide him.
+    ("eclipse_champion", 13, 22),
     # Stonehaven City — guards on the streets, knights by the castle
     ("guard", 110, 72), ("guard", 116, 76), ("guard", 122, 72),
     ("guard", 106, 66), ("guard", 114, 80), ("guard", 132, 78),
@@ -1524,6 +1789,7 @@ TELEPORT_DESTINATIONS = [
     {"id": "realm", "label": "Castle Realm", "blurb": "The plaza", "where": "castle", "x": 150, "y": 183},
     {"id": "gothic", "label": "Gothic Castle", "blurb": "Outside the gate", "where": "castle", "x": 52, "y": 78},
     {"id": "king", "label": "King's Castle", "blurb": "Outside the gate", "where": "castle", "x": 152, "y": 78},
+    {"id": "arena", "label": "Crownfall Arena", "blurb": "Mercenary sand & practice board", "where": "castle", "x": 196, "y": 128},
     {"id": "rose", "label": "White Rose Castle", "blurb": "Outside the gate", "where": "castle", "x": 257, "y": 86},
     {"id": "sky", "label": "Sky-Anchor", "blurb": "Outside the gate", "where": "castle", "x": 52, "y": 168},
 ]
@@ -1540,7 +1806,7 @@ NPCS = [
      "teleport_teacher": True},
 
     {"id": "warden_tamsin", "name": "Warden Tamsin", "x": 36, "y": 22,
-     "lines": ["Well met! Talk to me for your Bronze kit and a word on how things work."],
+     "lines": ["Well met! Talk to me for your Bronze kit — I'll show you walk, zoom, Travel (M), then the kit."],
      "welcome_guide": True},
 
     {"id": "outfitter_mae", "name": "Mae the Outfitter", "x": 51, "y": 58,
@@ -1572,21 +1838,13 @@ NPCS = [
 
     {"id": "jeweler_lira", "name": "Lira the Jeweler", "x": 48, "y": 20,
      "lines": [
-         "Rings, amulets, and unset gems — press B to browse.",
-         "I stock everyday pieces. Rubies, diamonds, onyx and void jewelry you'll have to find yourself.",
-         "I'll buy any jewelry or gems you bring, rare included — just not for a king's ransom.",
-         "Need a Gem Bag? It packs unset stones so your pack stays clear for the anvil.",
-         "The taxes are terrible. Fortunately, I can afford them.",
-         "Gold always finds its way up the hill. I just make sure some of it stops here.",
+         "Rings and gems — press B to browse. I buy jewellery too.",
      ],
      "shop_id": "jewelry_shop", "quest_id": "liras_lost_locket"},
 
     {"id": "fletcher_elena", "name": "Fletcher Elena", "x": 72, "y": 24,
      "lines": [
-         "Welcome to my bow shop! Press B to browse bows, arrows, and supplies.",
-         "Fletching: chop logs → use a knife (N) to carve shafts or an unstrung bow.",
-         "Shafts + feathers = headless arrows; add smith'd arrowtips = arrows.",
-         "String an unstrung bow with bowstring, equip the bow + arrows, then fight with Archery.",
+         "Bows and arrows — press B to shop. Talk to me for a free starter kit.",
      ],
      "shop_id": "fletcher_shop",
      "quest_id": "elena_archery_lesson",
@@ -1594,11 +1852,8 @@ NPCS = [
 
     {"id": "blacksmith_gareth", "name": "Blacksmith Gareth", "x": 86, "y": 8,
      "lines": [
-         "Welcome to my smithy! Furnace for smelting, anvil for smithing.",
-         "I sell bronze, iron, steel, and mithril. Adamantite you smith yourself — Mythos is not for sale.",
-         "I buy ores, bars, weapons and armour — open the shop to buy or sell.",
-         "Knight orders keep coming. They want better swords.",
-         "Meanwhile the people can't afford horseshoes.",
+         "Furnace to smelt, anvil to smith. Press B to shop. Press S to forge.",
+         "Need copper and tin? Accept the quest — trail to the mine.",
      ],
      "shop_id": "blacksmith_shop", "quest_id": "ore_for_the_forge", "forge": True},
 
@@ -1620,11 +1875,9 @@ NPCS = [
 
     {"id": "elder_miriam", "name": "Elder Miriam", "x": 9, "y": 7,
      "lines": [
-         "The rats in the mine have gotten out of hand. Could you thin their numbers?",
-         "Those giant rats leave tails behind — bring me a handful and I'll pay extra.",
-         "In my day the King visited the village. Now only his collectors do.",
+         "Welcome. I have work if you want it — start with the rats.",
      ],
-     "quest_ids": ["rat_problem", "rat_tails"]},
+     "quest_ids": ["rat_problem", "rat_tails", "crypt_first_delve"]},
 
     # Crownfall phase 8: Hall of Records (north-east room of the King's Great Hall)
     {"id": "keeper_records", "name": "Keeper of Records", "x": 42, "y": 4, "plane": "king_f1",
@@ -1642,16 +1895,15 @@ NPCS = [
     # Crownfall phase 6: noble patents
     {"id": "chamberlain_aric", "name": "Lord Chamberlain Aric", "x": 149, "y": 48,
      "lines": ["The Crown grants patents of rank to those of good standing, manners and means.",
-               "Squire, Knight, Baron, Count, Duke. One step at a time."]},
+               "Squire, Knight, Baron, Count, Duke. One step at a time.",
+               "Ask me about Charisma and Etiquette — or offer tribute if you have gold for the King."]},
 
     # Crownfall phase 5: guild tutorial
     {"id": "guildmaster_ysolde", "name": "Guildmaster Ysolde", "x": 118, "y": 76,
      "quest_id": "guild_basics",
      "lines": [
-         "A guild charter costs 10,000 coins from your bank (/guild create <name>).",
-         "Ranks: Leader, Officer, Member, Recruit. Officers invite and kick; Members may draw 5,000 a day.",
-         "The guild bank holds coins. Hire NPC recruits (Guard, Squire, Steward) for 5,000 and 250 a day.",
-         "The Royal Challenge needs 20 members: at least 12 real players, and up to 8 active recruits.",
+         "Guilds start here. /guild create <name> costs 10,000 from the bank.",
+         "Need a starter task? Accept Guild Basics — join or create, then /guild deposit.",
      ]},
 
     # Crownfall phase 4: apprentice masters (options handled by server/apprentice.py)
@@ -1663,26 +1915,20 @@ NPCS = [
      "lines": ["Gareth forges for the shop. I train apprentices. An hour at my bellows earns honest coin."]},
 
     {"id": "farmer_tom", "name": "Farmer Tom", "x": 41, "y": 40,
-     "lines": ["My daughter Mia wandered off into the forest and hasn't come back!",
-         "Used to sell wheat in the market. Now half of what I grow goes to the Crown.",
-         "The collector counts my sacks better than I do."],
+     "lines": ["Mia wandered into the forest. Accept the quest — the trail finds her."],
      "quest_id": "lost_child"},
 
     {"id": "innkeeper_sarah", "name": "Innkeeper Sarah", "x": 9, "y": 40,
      "lines": [
-         "Rooms are full up, but stay a while and rest your feet.",
-         "Cook your catch on the hearth — raw fish won't restore your health.",
-         "Bring me a platter of cooked trout for the evening rush and I'll tip you well.",
-         "Rooms are full of farmers who couldn't pay their land fees.",
+         "Welcome — rest a spell.",
+         "Hits drain HP. Press R / Eat for food or potions. Raw fish won't heal — cook it on the hearth.",
+         "Need work? Bring me cooked trout for the evening rush.",
      ],
      "quest_id": "inn_special"},
 
     {"id": "guard_marcus", "name": "Guard Marcus", "x": 28, "y": 6,
      "lines": [
-         "Halt! ...just kidding, welcome to the village.",
-         "Stay safe out in the wilds.",
-         "Goblins keep spilling from the dungeon. Thin eight of them for the watch.",
-         "You think we enjoy collecting taxes? The King's army has to eat too.",
+         "Welcome to the village. Goblins spill from the Crypt — Accept if you'll thin eight.",
      ],
      "quest_id": "goblin_watch"},
 
@@ -1694,15 +1940,14 @@ NPCS = [
      "lines": ["Wanna race? ...no? Okay.",
          "My dad says the King has a room just for coins. Do you think he swims in it?"]},
 
-    {"id": "village_idiot_bob", "name": "Bob", "x": 18, "y": 24,
+    {"id": "village_idiot_bob", "name": "Bob", "x": 26, "y": 27,
      "lines": ["I once punched a goblin. It hurt. A lot. Don't recommend it.",
          "I tried paying my tax in goblin teeth. They didn't laugh."]},
 
     {"id": "priest_cedric", "name": "Priest Cedric", "x": 6, "y": 8,
      "lines": [
-         "May your travels be safe. If you're ever low on health, a meal will do you good.",
-         "The fallen leave bones. Bring me a stack and I'll bless your karma.",
-         "Even the collection plate is tithed now. The Crown takes a tenth of our charity.",
+         "Safe travels. Need work? Bring me bones for a blessing.",
+         "Tip: Coins+bones above ATK/STR (or P) auto-grabs coins and bones — off until you turn it on.",
      ],
      "quest_id": "blessed_bones"},
 
@@ -1712,8 +1957,7 @@ NPCS = [
 
     # Forest / lake
     {"id": "old_fisherman_pete", "name": "Old Fisherman Pete", "x": 94, "y": 16,
-     "lines": ["Bring me some fresh shrimp and I'll teach you a thing or two about fishing.",
-         "They tax the lake now. Per fish. I've started throwing the small ones back out of spite."],
+     "lines": ["Need shrimp? Accept the quest — trail to the lake. Catch ten, bring them back."],
      "quest_id": "fishermans_request"},
 
     {"id": "mia", "name": "Mia", "x": 102, "y": 8,
@@ -1721,7 +1965,7 @@ NPCS = [
      "quest_target_for": "lost_child"},
 
     {"id": "mysterious_traveler", "name": "Mysterious Traveler", "x": 96, "y": 10,
-     "lines": ["The goblins in the dungeon wear strange mail. Bring me a piece and I'll make it worth your while."],
+     "lines": ["Goblins in the Crypt. Accept — kill five, return here."],
      "quest_id": "the_mysterious_traveler"},
 
     {"id": "merchant_wanderer", "name": "Wandering Merchant", "x": 96, "y": 24,
@@ -1744,18 +1988,14 @@ NPCS = [
     # Mine / dungeon fringe
     {"id": "mine_scout", "name": "Scout Elena", "x": 22, "y": 54,
      "lines": [
-         "Rats down there. Lots of rats. And ore, if you're brave.",
-         "Deeper still — a spider nest. Bring me their silk and I'll pay well.",
+         "Spider nest deeper in the Crypt. Accept — bring me eight silk.",
      ],
      "quest_id": "silk_harvest"},
 
     {"id": "dungeon_hermit", "name": "Hermit Cole", "x": 42, "y": 86,
      "lines": [
-         "Skeletons hunt by sight — only two will pile on you at once.",
-         "Clear a dozen of those rattling fools and I'll tip you for it.",
-         "Deeper south: iron, coal, and giants. Bring me their big bones.",
-         "Past the mithril bones lies a spider nest — harder than big skeletons, softer than the dragon.",
-         "Prove yourself against the adamant dragon — one set of dragon bones will do.",
+         "Crypt work: skeletons, then giant bones, then the adamant dragon.",
+         "Accept the quest on offer — the gold trail leads inside.",
      ],
      "quest_ids": ["bone_and_blade", "giants_tithe", "adamant_proof"]},
 
@@ -1772,11 +2012,8 @@ NPCS = [
 
     {"id": "mad_scientist", "name": "Mad Scientist", "x": 100, "y": 23,
      "lines": [
-         "Behold! Potions of pure combat potential!",
-         "Regular doses raise Attack, Strength or Defence by 10 for one minute.",
-         "My SUPER formulae push them by 20 — then the effect wears off completely.",
-         "Don't ask what I put in them. Buy. Drink. Dominate.",
-         "The Void Sanctum has shades — then ghouls, imps, and worse. Fetch me samples!",
+         "Potions: +10 or SUPER +20 to combat stats. Press B to buy.",
+         "Void Sanctum work? Accept the quest — trail to the gate.",
      ],
      "shop_id": "potion_lab",
      "quest_ids": ["void_samples", "void_crypt", "void_imps", "sanctum_apex"]},
@@ -1784,9 +2021,7 @@ NPCS = [
     # Mountain pass / fishing village
     {"id": "pass_scout", "name": "Scout Bren", "x": 121, "y": 16,
      "lines": [
-         "The mountain pass leads east to Harbourreach.",
-         "Wolves hunt those rocks — combat around forty. Pack food.",
-         "Thin the packs for me and I'll make it worth your while.",
+         "Wolves on the pass — pack food. Accept to thin eight of them.",
      ],
      "quest_id": "wolves_on_the_pass"},
     {"id": "tackle_merchant", "name": "Marina the Angler", "x": 177, "y": 9,
@@ -1807,21 +2042,15 @@ NPCS = [
      "shop_id": "harbour_fishmonger"},
     {"id": "harbour_cook", "name": "Cook Nell", "x": 174, "y": 23,
      "lines": [
-         "Use the harbour hearth to cook your catch.",
-         "Burnt fish is still fish — just worse.",
-         "I need cooked lobsters for a feast — ten will do.",
+         "Cook on the harbour hearth. Need work? Accept — ten cooked lobsters.",
      ],
      "quest_id": "harbour_feast"},
 
     # Stonehaven City
     {"id": "herald_rowan", "name": "Herald Rowan", "x": 130, "y": 63,
      "lines": [
-         "Welcome to Stonehaven Keep.",
-         "The City Guard keeps the plazas safe — leave them be and they'll leave you be.",
-         "Knights of the Keep patrol the courtyard. Strike first and they answer in steel.",
-         "The throne hall is open to travellers. Mind your manners.",
-         "Still — if you can best six guards, then the knights, then our champion… the Keep will notice.",
-         "By royal decree, the tax is fair. I'm paid to say that.",
+         "Stonehaven Keep. Guards and knights fight back if you strike first.",
+         "Accept the quest on offer — trail marks the target.",
      ],
      "quest_ids": ["city_watch", "knights_of_the_keep", "champions_challenge"]},
     {"id": "city_vendor_mira", "name": "Mira the Vendor", "x": 116, "y": 74,
@@ -1833,38 +2062,62 @@ NPCS = [
      ],
      "shop_id": "stonehaven_market"},
 
-    # King's Great Hall (king_f1 interior plane)
-    {"id": "king", "name": "King of Crownfall", "x": 26, "y": 26, "plane": "king_f1",
+    # King's Great Hall — middle room of king_f1 (not the south vestibule)
+    {"id": "king", "name": "King of Crownfall", "x": 26, "y": 16, "plane": "king_f1",
      "lines": [
          "You stand before the Crown. Do be brief, my time is taxed as well.",
          "Taxes? A kingdom is expensive. Someone must pay for it, and it certainly won't be me.",
          "The old law? Anyone strong enough may take my castle. Look around you. No one is.",
          "Kneel, or leave. Either way, the toll on the bridge home is the same.",
      ]},
-    {"id": "mythos_knight_1", "name": "Mythos Knight Valerius", "x": 22, "y": 27, "plane": "king_f1",
+    {"id": "mythos_knight_1", "name": "Mythos Knight Valerius", "x": 22, "y": 17, "plane": "king_f1",
      "lines": [
          "Stand aside.",
          "Hail the King.",
          "No closer without leave.",
      ]},
-    {"id": "mythos_knight_2", "name": "Mythos Knight Cedric", "x": 24, "y": 27, "plane": "king_f1",
+    {"id": "mythos_knight_2", "name": "Mythos Knight Cedric", "x": 24, "y": 17, "plane": "king_f1",
      "lines": [
          "Eyes forward.",
          "The court is in session.",
          "Hail the Crown.",
      ]},
-    {"id": "mythos_knight_3", "name": "Mythos Knight Roland", "x": 28, "y": 27, "plane": "king_f1",
+    {"id": "mythos_knight_3", "name": "Mythos Knight Roland", "x": 28, "y": 17, "plane": "king_f1",
      "lines": [
          "By the crimson plate — hold.",
          "Hail the King.",
          "Your business, traveller?",
      ]},
-    {"id": "mythos_knight_4", "name": "Mythos Knight Garrick", "x": 30, "y": 27, "plane": "king_f1",
+    {"id": "mythos_knight_4", "name": "Mythos Knight Garrick", "x": 30, "y": 17, "plane": "king_f1",
      "lines": [
          "Stand aside.",
          "The King's word is law.",
          "Hail the crown.",
      ]},
+
+    # Crownfall Arena campus (east of the King's road) — barracks / practice board
+    {"id": "marshal_branna", "name": "Marshal Branna", "x": 188, "y": 147, "plane": "realm",
+     "lines": [
+         "Welcome to the Crownfall Arena. Recruit here, train them, then take the practice board.",
+         "Mythos Guards answer only to Command 80. Smelt crownsteel at Smithing 60 with Command 60.",
+         "The sand is yours for practice — PvP wagers come next.",
+     ],
+     "options": [
+         {"id": "barracks_open", "label": "Open barracks"},
+         {"id": "practice_board", "label": "Practice board"},
+         {"id": "command_info", "label": "What is Command?"},
+     ],
+     "barracks": True},
+    {"id": "quartermaster_osric", "name": "Quartermaster Osric", "x": 196, "y": 147, "plane": "realm",
+     "lines": [
+         "Bronze to adamant kits — Mythos plate when your Command proves it.",
+         "I fit soldiers, not shoppers. Open the barracks and pick a kit.",
+     ],
+     "options": [
+         {"id": "barracks_open", "label": "Outfit my soldiers"},
+         {"id": "kit_prices", "label": "Kit prices"},
+     ],
+     "barracks": True},
 ]
 
 # ---------------------------------------------------------------------------
@@ -2109,7 +2362,7 @@ QUESTS = {
     "fairy_oath": {
         "name": "The Royal Challenge",
         "giver": "elowen_moonwhisper",
-        "description": "The Royal Challenge: reach combat 100, own a castle, finish every other quest, and lead or join a clan of 20.",
+        "description": "Combat 100, own a castle, finish every other quest, lead or join a clan of 20.",
         "type": "oath",
         "quest_points": 1,
         "rewards": {},
@@ -2117,24 +2370,25 @@ QUESTS = {
     "rat_problem": {
         "name": "Rat Problem",
         "giver": "elder_miriam",
-        "description": "Kill 5 Giant Rats in the mine and return to Elder Miriam.",
+        "description": "Kill 5 Giant Rats in the southern mine, then return here.",
         "type": "kill", "target": "giant_rat", "count": 5,
+        "guide_travel": "rats",
         "quest_points": 1,
         "rewards": {"coins": 50, "xp": {"attack": 30}},
     },
     "guild_basics": {
         "name": "Guild Basics",
         "giver": "guildmaster_ysolde",
-        "description": "Create or join a guild, put any coins in the guild bank (/guild deposit), "
-                       "then return to Guildmaster Ysolde.",
+        "description": "Join or create a guild, /guild deposit any coins, return to Ysolde.",
         "type": "guild",
+        "guide_travel": "stonehaven",
         "quest_points": 1,
         "rewards": {"coins": 500, "reputation": 15, "charisma_xp": 600},
     },
     "lost_child": {
         "name": "Lost Child",
         "giver": "farmer_tom",
-        "description": "Find Mia in the forest and speak to her, then return to Farmer Tom.",
+        "description": "Find Mia in the forest, speak to her, then return to Tom.",
         "type": "find_npc", "target": "mia",
         "quest_points": 1,
         "rewards": {"coins": 75},
@@ -2142,33 +2396,37 @@ QUESTS = {
     "fishermans_request": {
         "name": "Fisherman's Request",
         "giver": "old_fisherman_pete",
-        "description": "Catch 10 Raw Shrimp and bring them to Old Fisherman Pete.",
+        "description": "Catch 10 Raw Shrimp and bring them to Pete.",
         "type": "collect", "target": "raw_shrimp", "count": 10,
+        "guide_travel": "lake",
         "quest_points": 2,
         "rewards": {"coins": 40, "xp": {"fishing": 50}},
     },
     "ore_for_the_forge": {
         "name": "Ore for the Forge",
         "giver": "blacksmith_gareth",
-        "description": "Mine 5 Copper Ore and 5 Tin Ore for Blacksmith Gareth.",
+        "description": "Mine 5 Copper Ore and 5 Tin Ore for Gareth.",
         "type": "collect_multi", "targets": {"copper_ore": 5, "tin_ore": 5},
+        "guide_travel": "copper_vein",
         "quest_points": 2,
         "rewards": {"coins": 20, "item": ("bronze_sword", 1)},
     },
     "the_mysterious_traveler": {
         "name": "The Mysterious Traveler",
         "giver": "mysterious_traveler",
-        "description": "Defeat a Goblin, loot its mail, and bring it back.",
-        "type": "collect", "target": "goblin_mail", "count": 1,
+        "description": "Kill 5 Goblins in the Crypt, then return.",
+        "type": "kill", "target": "goblin", "count": 5,
+        "guide_travel": "dungeon_gate",
         "quest_points": 2,
         "rewards": {"coins": 60, "item": ("gold_ring", 1)},
     },
     "elena_archery_lesson": {
         "name": "Elena's Archery Lesson",
         "giver": "fletcher_elena",
-        "description": "Talk to Fletcher Elena (east of the village) to learn fletching and claim a free bow kit.",
+        "description": "Talk to Elena for a free bow kit.",
         "type": "gift",
         "quest_points": 1,
+        "reward_blurb": "Starter bow kit",
         "rewards": {
             "items": [
                 ("knife", 1),
@@ -2188,9 +2446,11 @@ QUESTS = {
     "liras_lost_locket": {
         "name": "Lira's Lost Locket",
         "giver": "jeweler_lira",
-        "description": "Find Lira's Lost Locket near the wishing well (south of the crossroads) and return it. She'll thank you with a Gem Bag and a few stones.",
+        "description": "Pick up the Lost Locket by the wishing well, return it to Lira.",
         "type": "collect", "target": "lost_locket", "count": 1,
+        "guide_travel": "wishing_well",
         "quest_points": 1,
+        "reward_blurb": "Gem bag + gems",
         "rewards": {
             "coins": 40,
             "items": [("gem_bag", 1), ("opal", 3), ("sapphire", 1)],
@@ -2201,49 +2461,56 @@ QUESTS = {
     "wolves_on_the_pass": {
         "name": "Wolves on the Pass",
         "giver": "pass_scout",
-        "description": "Thin the wolf packs on the mountain pass — kill 8 Wolves, then return to Scout Bren.",
+        "description": "Kill 8 Wolves on the mountain pass, return to Scout Bren.",
         "type": "kill", "target": "wolf", "count": 8,
+        "guide_travel": "wolves",
         "quest_points": 3,
         "rewards": {"coins": 120, "xp": {"attack": 80}},
     },
     "bone_and_blade": {
         "name": "Bone and Blade",
         "giver": "dungeon_hermit",
-        "description": "Clear the upper dungeon — kill 12 Skeletons and report to Hermit Cole.",
+        "description": "Enter the Crypt, kill 12 Skeletons, return to Hermit Cole.",
         "type": "kill", "target": "skeleton", "count": 12,
+        "guide_travel": "dungeon_gate",
         "quest_points": 3,
         "rewards": {"coins": 150, "xp": {"defence": 100}, "item": ("health_potion", 3)},
     },
     "harbour_feast": {
         "name": "Harbour Feast",
         "giver": "harbour_cook",
-        "description": "Cook 10 Lobsters on a hearth and bring them to Cook Nell in Harbourreach.",
+        "description": "Cook 10 Lobsters and bring them to Cook Nell.",
         "type": "collect", "target": "cooked_lobster", "count": 10,
+        "guide_travel": "harbour_pier",
         "quest_points": 3,
         "rewards": {"coins": 90, "xp": {"cooking": 120, "fishing": 60}},
     },
     "city_watch": {
         "name": "City Watch",
         "giver": "herald_rowan",
-        "description": "Herald Rowan needs proof you can handle Stonehaven steel — defeat 6 City Guards (they fight back).",
+        "description": "Defeat 6 City Guards in Stonehaven (they fight back), return to Rowan.",
         "type": "kill", "target": "guard", "count": 6,
+        "guide_travel": "guards",
         "quest_points": 4,
         "rewards": {"coins": 200, "xp": {"strength": 120, "defence": 80}},
     },
     "silk_harvest": {
         "name": "Silk Harvest",
         "giver": "mine_scout",
-        "description": "Hunt the spider nest deep in the dungeon — bring Scout Elena 8 Spider Silk.",
+        "description": "Bring Scout Elena 8 Spider Silk from the spider nest in the Crypt (Depths).",
         "type": "collect", "target": "spider_silk", "count": 8,
+        "guide_travel": "dungeon_gate",
         "quest_points": 4,
         "rewards": {"coins": 180, "xp": {"attack": 100}, "item": ("super_defence_potion", 1)},
     },
     "void_samples": {
         "name": "Void Samples",
         "giver": "mad_scientist",
-        "description": "Slay 8 Shades in the Void Sanctum and return to the Mad Scientist.",
+        "description": "Kill 8 Shades in the Void Sanctum, then return.",
         "type": "kill", "target": "shade", "count": 8,
+        "guide_travel": "void_sanctum",
         "quest_points": 4,
+        "reward_blurb": "Potions",
         "rewards": {
             "coins": 250,
             "items": [("super_attack_potion", 2), ("health_potion", 5)],
@@ -2252,97 +2519,120 @@ QUESTS = {
     "rat_tails": {
         "name": "Rat Tails",
         "giver": "elder_miriam",
-        "description": "Collect 5 Giant Rat Tails from the mine rats and return to Elder Miriam.",
+        "description": "Collect 5 Rat Tails from the mine, then return here.",
         "type": "collect", "target": "rat_tail", "count": 5,
         "requires": "rat_problem",
+        "guide_travel": "rats",
         "quest_points": 2,
         "rewards": {"coins": 60, "xp": {"attack": 40}, "item": ("health_potion", 2)},
+    },
+    "crypt_first_delve": {
+        "name": "Shadows in the Crypt",
+        "giver": "elder_miriam",
+        "description": "Enter the Crypt behind the bank, kill 8 Skeletons, return here.",
+        "type": "kill", "target": "skeleton", "count": 8,
+        "requires": "rat_problem",
+        "guide_travel": "dungeon_gate",
+        "quest_points": 2,
+        "rewards": {"coins": 90, "xp": {"attack": 60, "defence": 40}, "item": ("health_potion", 3)},
     },
     "inn_special": {
         "name": "Inn Special",
         "giver": "innkeeper_sarah",
         "description": "Cook 8 Trout and bring them to Innkeeper Sarah.",
         "type": "collect", "target": "cooked_trout", "count": 8,
+        "guide_travel": "inn_hearth",
         "quest_points": 2,
         "rewards": {"coins": 50, "xp": {"cooking": 80}},
     },
     "goblin_watch": {
         "name": "Goblin Watch",
         "giver": "guard_marcus",
-        "description": "Help the village watch — kill 8 Goblins in the upper dungeon, then report to Guard Marcus.",
+        "description": "Kill 8 Goblins near the Crypt, report to Guard Marcus.",
         "type": "kill", "target": "goblin", "count": 8,
+        "guide_travel": "dungeon_gate",
         "quest_points": 2,
         "rewards": {"coins": 70, "xp": {"defence": 50}},
     },
     "blessed_bones": {
         "name": "Blessed Bones",
         "giver": "priest_cedric",
-        "description": "Bring Priest Cedric 12 Bones from fallen foes for a blessing.",
+        "description": "Bring Priest Cedric 12 Bones from fallen foes.",
         "type": "collect", "target": "bones", "count": 12,
+        "guide_travel": "dungeon_gate",
         "quest_points": 2,
         "rewards": {"coins": 40, "xp": {"karma": 100}},
     },
     "giants_tithe": {
         "name": "Giant's Tithe",
         "giver": "dungeon_hermit",
-        "description": "Hunt the dungeon giants — bring Hermit Cole 8 Big Bones.",
+        "description": "Bring Hermit Cole 8 Big Bones from dungeon giants.",
         "type": "collect", "target": "big_bones", "count": 8,
         "requires": "bone_and_blade",
+        "guide_travel": "dungeon_gate",
         "quest_points": 5,
         "rewards": {"coins": 200, "xp": {"strength": 120}},
     },
     "adamant_proof": {
         "name": "Adamant Proof",
         "giver": "dungeon_hermit",
-        "description": "Slay the Adamant Dragon and bring Hermit Cole 1 Dragon Bones.",
+        "description": "Slay the Adamant Dragon; bring Cole 1 Dragon Bones.",
         "type": "collect", "target": "dragon_bones", "count": 1,
         "requires": "giants_tithe",
+        "guide_travel": "dungeon_gate",
         "quest_points": 6,
         "rewards": {"coins": 400, "xp": {"attack": 200, "defence": 150}, "item": ("super_strength_potion", 2)},
     },
     "knights_of_the_keep": {
         "name": "Knights of the Keep",
         "giver": "herald_rowan",
-        "description": "Defeat 5 Castle Knights in Stonehaven (they fight back), then return to Herald Rowan.",
+        "description": "Defeat 5 Castle Knights, return to Herald Rowan.",
         "type": "kill", "target": "knight", "count": 5,
         "requires": "city_watch",
+        "guide_travel": "knights",
         "quest_points": 5,
         "rewards": {"coins": 280, "xp": {"defence": 160, "strength": 100}},
     },
     "champions_challenge": {
         "name": "Champion's Challenge",
         "giver": "herald_rowan",
-        "description": "Defeat the Mythos Champion in the castle courtyard, then report to Herald Rowan.",
+        "description": "Defeat the Mythos Champion, report to Herald Rowan.",
         "type": "kill", "target": "mythos_champion", "count": 1,
         "requires": "knights_of_the_keep",
+        "guide_travel": "mythos_champion",
         "quest_points": 6,
         "rewards": {"coins": 500, "xp": {"attack": 200}, "item": ("super_defence_potion", 2)},
     },
     "void_crypt": {
         "name": "Void Crypt",
         "giver": "mad_scientist",
-        "description": "Cull 6 Crypt Ghouls in the Void Sanctum and return to the Mad Scientist.",
+        "description": "Kill 6 Crypt Ghouls in the Void Sanctum, then return.",
         "type": "kill", "target": "crypt_ghoul", "count": 6,
         "requires": "void_samples",
+        "guide_travel": "void_sanctum",
         "quest_points": 5,
         "rewards": {"coins": 320, "item": ("super_attack_potion", 2)},
     },
     "void_imps": {
         "name": "Impish Samples",
         "giver": "mad_scientist",
-        "description": "Slay 6 Void Imps deeper in the Sanctum and return with the news.",
+        "description": "Kill 6 Void Imps in the Sanctum, then return.",
         "type": "kill", "target": "void_imp", "count": 6,
         "requires": "void_crypt",
+        "guide_travel": "void_sanctum",
         "quest_points": 5,
+        "reward_blurb": "Potions",
         "rewards": {"coins": 360, "items": [("super_strength_potion", 1), ("health_potion", 5)]},
     },
     "sanctum_apex": {
         "name": "Sanctum Apex",
         "giver": "mad_scientist",
-        "description": "Defeat a Void Horror in the Sanctum depths, then report to the Mad Scientist.",
+        "description": "Defeat a Void Horror in the Sanctum, then return.",
         "type": "kill", "target": "void_horror", "count": 1,
         "requires": "void_imps",
+        "guide_travel": "void_sanctum",
         "quest_points": 8,
+        "reward_blurb": "Potion haul",
         "rewards": {
             "coins": 750,
             "xp": {"attack": 200},
@@ -2460,7 +2750,7 @@ MAGIC_ABILITY_ORDER = (
 XP_SKILLS = [
     "attack", "strength", "defence", "archery",
     "woodcutting", "mining", "fishing", "cooking", "smithing", "fletching", "karma",
-    "charisma", "etiquette",
+    "charisma", "etiquette", "command",
 ]
 
 # Trained combat skills. Hitpoints is derived and has no experience.
@@ -2472,7 +2762,7 @@ SKILL_DISPLAY_NAMES = {
     "woodcutting": "Woodcutting", "mining": "Mining",
     "fishing": "Fishing", "cooking": "Cooking", "firemaking": "Firemaking",
     "smithing": "Smithing", "fletching": "Fletching", "karma": "Karma",
-    "charisma": "Charisma", "etiquette": "Etiquette",
+    "charisma": "Charisma", "etiquette": "Etiquette", "command": "Command",
 }
 
 # Karma blesses worn gear. Level 2 weapons get +2 attack (matches L).
@@ -2551,10 +2841,10 @@ MAX_PURSE_COINS = 65000
 MAX_BANK_COINS = 500_000_000
 MAX_ORES = 100
 ORE_ITEM_IDS = frozenset({
-    "copper_ore", "tin_ore", "iron_ore", "coal", "mithril_ore", "adamantite_ore",
+    "copper_ore", "tin_ore", "iron_ore", "coal", "mithril_ore", "adamantite_ore", "mythos_ore",
 })
 BAR_ITEM_IDS = frozenset({
-    "bronze_bar", "iron_bar", "steel_bar", "mithril_bar", "adamantite_bar",
+    "bronze_bar", "iron_bar", "steel_bar", "mithril_bar", "adamantite_bar", "mythos_bar",
 })
 # Inventory pages (skill-related). Flat slot index = tab_index * TAB_SIZE + local.
 INVENTORY_TAB_SIZE = 24
@@ -2717,10 +3007,10 @@ TRAVEL_DESTINATIONS = [
     {"id": "harbour_tackle", "kind": "place", "label": "Tackle Shop",
      "x": 177, "y": 10, "blurb": "Rods, pots, harpoons"},
     {"id": "tidehollow", "kind": "place", "label": "Tidehollow Cave",
-     "x": 189, "y": 54, "blurb": "Private chambers · dragons at the end · medal",
+     "x": 204, "y": 14, "blurb": "Midgame harbour delve · private chambers · medal",
      "action": {"type": "ENTER_DUNGEON", "dungeon_id": "tidehollow"}},
     {"id": "harbour_pier", "kind": "place", "label": "Harbour Pier",
-     "x": 183, "y": 18, "blurb": "Shore fishing — trout → swordfish"},
+     "x": 190, "y": 18, "blurb": "Shore fishing — trout → swordfish"},
     {"id": "stonehaven", "kind": "place", "label": "Stonehaven City",
      "x": 118, "y": 74, "blurb": "Stone plazas & castle"},
     {"id": "estate_agent", "kind": "place", "label": "Estate Agent Mira",
@@ -2735,7 +3025,7 @@ TRAVEL_DESTINATIONS = [
     {"id": "stonehaven_castle", "kind": "place", "label": "Castle Keep",
      "x": 128, "y": 66, "blurb": "Knights on patrol"},
     {"id": "dungeon_gate", "kind": "place", "label": "Crypt",
-     "x": 64, "y": 16, "blurb": "Graveyard behind the bank"},
+     "x": 64, "y": 16, "blurb": "Early delve · The Depths · behind the bank"},
     {"id": "dungeon_bank", "kind": "place", "label": "Dungeon Bank",
      "x": 38, "y": 84, "blurb": "Chest near the gate", "action": {"type": "BANK"}},
     {"id": "void_sanctum", "kind": "place", "label": "Void Sanctum",
@@ -2754,38 +3044,44 @@ TRAVEL_DESTINATIONS = [
     # Monsters (camp centres)
     {"id": "rats", "kind": "monster", "label": "Giant Rats",
      "x": 67, "y": 107, "monster": "giant_rat", "blurb": "Mine under the volcano"},
+    {"id": "copper_vein", "kind": "place", "label": "Copper & Tin",
+     "x": 61, "y": 101, "blurb": "Starter ores in the rat mine"},
     {"id": "goblins", "kind": "monster", "label": "Goblins",
-     "x": 54, "y": 60, "monster": "goblin", "blurb": "Upper dungeon"},
+     "x": 64, "y": 16, "monster": "goblin", "blurb": "Crypt (Depths) — Ruined Chapel"},
     {"id": "skeletons", "kind": "monster", "label": "Skeletons",
-     "x": 70, "y": 62, "monster": "skeleton", "blurb": "Upper dungeon"},
+     "x": 64, "y": 16, "monster": "skeleton", "blurb": "Crypt (Depths) — chapel & ossuary"},
     {"id": "giants", "kind": "monster", "label": "Giants",
-     "x": 71, "y": 90, "monster": "giant", "blurb": "Peaceful until hit"},
+     "x": 64, "y": 16, "monster": "giant", "blurb": "Crypt (Depths) — deep halls"},
     {"id": "guards", "kind": "monster", "label": "City Guards",
      "x": 118, "y": 74, "monster": "guard", "blurb": "Stonehaven — peaceful until hit"},
     {"id": "knights", "kind": "monster", "label": "Castle Knights",
      "x": 128, "y": 66, "monster": "knight", "blurb": "Castle keep — peaceful until hit"},
     {"id": "mythos_champion", "kind": "monster", "label": "Mythos Champion",
-     "x": 130, "y": 64, "monster": "mythos_champion", "blurb": f"⚠ Lv {MONSTERS['mythos_champion']['level']} — full Mythos plate (peaceful until hit)"},
+     "x": 130, "y": 64, "monster": "mythos_champion",
+     "blurb": f"⚠ Lv {MONSTERS['mythos_champion']['level']} — bailey post (peaceful until hit); aggressive inside the keep"},
+    {"id": "eclipse_champion", "kind": "monster", "label": "Eclipse Champion",
+     "x": 13, "y": 22, "monster": "eclipse_champion",
+     "blurb": f"⚠ Lv {MONSTERS['eclipse_champion']['level']} — PK duel by Castle Realm (talks if PvP off)"},
     {"id": "big_skeletons", "kind": "monster", "label": "Big Skeletons",
-     "x": 54, "y": 110, "monster": "big_skeleton", "blurb": "Mithril cavern"},
+     "x": 64, "y": 16, "monster": "big_skeleton", "blurb": "Crypt (Depths) — Ossuary"},
     {"id": "spiders", "kind": "monster", "label": "Giant Spiders",
-     "x": 72, "y": 101, "monster": "spider", "blurb": "Spider nest"},
+     "x": 64, "y": 16, "monster": "spider", "blurb": "Crypt (Depths) — Webbed Crypt north of the Ossuary"},
     {"id": "dragon", "kind": "monster", "label": "Adamant Dragon",
-     "x": 70, "y": 112, "monster": "dragon", "blurb": "Adamantite lair"},
+     "x": 64, "y": 16, "monster": "dragon", "blurb": "Crypt (Depths) — Wyrm Ossuary"},
     {"id": "wolves", "kind": "monster", "label": "Mountain Wolves",
-     "x": 147, "y": 16, "monster": "wolf", "blurb": f"Mountain pass (lvl {MONSTERS['wolf']['level']})"},
+     "x": 126, "y": 16, "monster": "wolf", "blurb": f"Mountain pass (lvl {MONSTERS['wolf']['level']})"},
     {"id": "shades", "kind": "monster", "label": "Shades",
-     "x": 160, "y": 110, "monster": "shade", "blurb": "Void Sanctum room 1"},
+     "x": 205, "y": 128, "monster": "shade", "blurb": "Void Sanctum — entry hall"},
     {"id": "crypt_ghouls", "kind": "monster", "label": "Crypt Ghouls",
-     "x": 173, "y": 110, "monster": "crypt_ghoul", "blurb": "Void Sanctum room 2"},
+     "x": 205, "y": 128, "monster": "crypt_ghoul", "blurb": "Void Sanctum — galleries"},
     {"id": "void_imps", "kind": "monster", "label": "Void Imps",
-     "x": 160, "y": 117, "monster": "void_imp", "blurb": "Void Sanctum room 3"},
+     "x": 205, "y": 128, "monster": "void_imp", "blurb": "Void Sanctum — barracks"},
     {"id": "obsidian_colossi", "kind": "monster", "label": "Obsidian Colossi",
-     "x": 173, "y": 117, "monster": "obsidian_colossus", "blurb": "Void Sanctum room 4"},
+     "x": 205, "y": 128, "monster": "obsidian_colossus", "blurb": "Void Sanctum — barracks"},
     {"id": "shadow_knights", "kind": "monster", "label": "Shadow Knights",
-     "x": 160, "y": 125, "monster": "shadow_knight", "blurb": "Void Sanctum room 5"},
+     "x": 205, "y": 128, "monster": "shadow_knight", "blurb": "Void Sanctum — crystal depths"},
     {"id": "void_horror", "kind": "monster", "label": "Void Horror",
-     "x": 173, "y": 125, "monster": "void_horror", "blurb": f"Sanctum boss (lvl {MONSTERS['void_horror']['level']})"},
+     "x": 205, "y": 128, "monster": "void_horror", "blurb": f"Sanctum boss (lvl {MONSTERS['void_horror']['level']})"},
 ]
 
 
@@ -2854,8 +3150,9 @@ INTERACTABLES = [
     {"id": "lily_fountain", "kind": "moonwater", "name": "Lily Fountain",
      "x": 35, "y": 78, "stand": [35, 79]},
     {"id": "tidehollow_cave", "kind": "cave_entrance", "name": "Tidehollow Cave",
-     "x": 189, "y": 52, "blurb": "9 chambers · 3 beasts each · dragons + medal at the end",
-     "dungeon_id": "tidehollow", "pack": "goblin_cave"},
+     "x": 204, "y": 12, "blurb": "9 chambers · 3 beasts each · dragons + medal at the end",
+     "dungeon_id": "tidehollow", "pack": "goblin_cave",
+     "stand": [204, 14]},
     {"id": "emberdeep_mouth", "kind": "volcano_entrance", "name": "Emberdeep Mouth",
      "x": 196, "y": 78, "blurb": "Cave in a small volcano · 8 lava floors · Emberdeep Medal",
      "dungeon_id": "emberdeep", "pack": "dragon_lair",
@@ -3288,6 +3585,42 @@ CRAFT_RECIPES = {
         "name": "Smelt Adamantite Bar", "category": "smelt", "skill": "smithing", "level_req": 46, "xp": 120,
         "inputs": {"adamantite_ore": 1, "coal": 6}, "output": ("adamantite_bar", 1),
     },
+    "smelt_mythos": {
+        "name": "Smelt Mythos Bar", "category": "smelt", "skill": "smithing", "level_req": 60, "xp": 280,
+        "inputs": {"mythos_ore": 4, "coal": 8}, "output": ("mythos_bar", 1),
+        "command_req": 60,
+        "gate_message": "Mythos ore needs Smithing 60 and Command 60.",
+    },
+    "smith_mythos_helmet": {
+        "name": "Mythos Dragon Helm", "category": "smith", "skill": "smithing", "level_req": 70, "xp": 420,
+        "inputs": {"mythos_bar": 2}, "output": ("mythos_helmet", 1),
+        "command_req": 80,
+        "gate_message": "Smithing Mythos gear needs Command 80 and Smithing 70.",
+    },
+    "smith_mythos_sword": {
+        "name": "Mythos Longsword", "category": "smith", "skill": "smithing", "level_req": 72, "xp": 480,
+        "inputs": {"mythos_bar": 2}, "output": ("mythos_longsword", 1),
+        "command_req": 80,
+        "gate_message": "Smithing Mythos gear needs Command 80 and Smithing 70.",
+    },
+    "smith_mythos_body": {
+        "name": "Mythos Armour", "category": "smith", "skill": "smithing", "level_req": 75, "xp": 620,
+        "inputs": {"mythos_bar": 5}, "output": ("mythos_body", 1),
+        "command_req": 80,
+        "gate_message": "Smithing Mythos gear needs Command 80 and Smithing 70.",
+    },
+    "smith_mythos_legs": {
+        "name": "Mythos Platelegs", "category": "smith", "skill": "smithing", "level_req": 73, "xp": 540,
+        "inputs": {"mythos_bar": 3}, "output": ("mythos_legs", 1),
+        "command_req": 80,
+        "gate_message": "Smithing Mythos gear needs Command 80 and Smithing 70.",
+    },
+    "smith_mythos_shield": {
+        "name": "Mythos Kiteshield", "category": "smith", "skill": "smithing", "level_req": 71, "xp": 450,
+        "inputs": {"mythos_bar": 2}, "output": ("mythos_shield", 1),
+        "command_req": 80,
+        "gate_message": "Smithing Mythos gear needs Command 80 and Smithing 70.",
+    },
     "smith_mithril_helmet": {
         "name": "Mithril Helmet", "category": "smith", "skill": "smithing", "level_req": 40, "xp": 95,
         "inputs": {"mithril_bar": 1}, "output": ("mithril_helmet", 1),
@@ -3603,6 +3936,18 @@ def bow_attack_range(item_id):
     return max(4, int(item.get("range") or 4))
 
 
+# Melee fighters stand this many tiles apart so sword swings meet without
+# stacking bodies (player↔monster, PvP-style duels, and arena soldiers).
+MELEE_STAND_GAP = 2
+
+
+def melee_reach(explicit=None):
+    """Chebyshev tiles a melee hit can cover; never tighter than MELEE_STAND_GAP."""
+    if explicit is None:
+        return MELEE_STAND_GAP
+    return max(MELEE_STAND_GAP, int(explicit))
+
+
 def _apply_castle_v2():
     """Move only the castle's own spots onto the v2 footprint. Flag off leaves the literals above."""
     import castle_v2
@@ -3754,9 +4099,10 @@ def _apply_village_compact_layout():
     # Final outdoor pins land in _pin_visible_npcs() after buildings_v2.
     npc_pins = {
         WIZARD_ID: (20, 18),
-        "warden_tamsin": (32, 28),
+        # Chebyshev 5–12 from spawn so the welcome trail reads clearly.
+        "warden_tamsin": (36, 22),
         "village_kid_timmy": (24, 30),
-        "village_idiot_bob": (16, 22),
+        "village_idiot_bob": (26, 27),
         "packer_nell": (28, 14),
         "jeweler_lira": (42, 16),
         "fletcher_elena": (54, 20),
@@ -3963,9 +4309,9 @@ def _pin_visible_npcs():
     """
     pins = {
         WIZARD_ID: (20, 18),
-        "warden_tamsin": (32, 28),
+        "warden_tamsin": (36, 22),
         "village_kid_timmy": (24, 30),
-        "village_idiot_bob": (16, 22),
+        "village_idiot_bob": (26, 27),
         "packer_nell": (28, 14),
         "jeweler_lira": (42, 16),
         # East of plaza, clear of the bank roof (bank shell y0=26).

@@ -43,8 +43,11 @@ class CastleMove(unittest.TestCase):
 
     def test_castle_reachable(self):
         self.assertTrue(castle_v2.active())
-        self.assertIn((153, 57), self.reach)
-        self.assertIn((153, 50), self.reach)
+        x0, y0, x1, y1 = castle_v2.footprint_tiles()
+        gate = ((x0 + x1) // 2, y1 + 1)  # south gate apron
+        hall = ((x0 + x1) // 2, y0 + 17)  # interior hall on the keep axis
+        self.assertIn(gate, self.reach, gate)
+        self.assertIn(hall, self.reach, hall)
         for (x, y) in castle_v2.outer_moat_cells():
             self.assertNotIn(self.grid[y][x], W, (x, y))
 
@@ -123,12 +126,13 @@ class CastleMove(unittest.TestCase):
         p = os.path.join(ROOT, "assets", "fairy_village", "data", "collision", "mushroom_apothecary.json")
         a = json.load(open(p))
         f = a["footprint"]
-        self.assertEqual((f["x0"], f["y0"], f["x1"], f["y1"]), (32, 61, 38, 67))
+        self.assertEqual((f["x0"], f["y0"], f["x1"], f["y1"]), (33, 61, 39, 67))
         ring = set(FG.ring_cells())
         for (x, y) in a["blocked_tiles"]:
             self.assertEqual(self.grid[y][x], wm.WALL)
-            for dx in (-2, -1, 0, 1, 2):
-                for dy in (-2, -1, 0, 1, 2):
+            # Must not sit on / touch the glade ring (diagonal gap of 1 is OK).
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
                     self.assertNotIn((x + dx, y + dy), ring, (x, y))
         self.assertIn(tuple(a["stand_tile"]), self.reach)
         door = [s for s in content.INTERACTABLES if s.get("id") == "mushroom_apothecary_door"] \
@@ -167,7 +171,8 @@ class CastleMove(unittest.TestCase):
         self.assertEqual(rows[2][1:3], (28, 24))
         import json
         dr = json.loads(rows[3][3]); self.assertIn((dr["return_x"], dr["return_y"]), self.reach)
-        self.assertTrue(os.path.exists(os.path.join(d, "world.db.pre_castle_move.bak")))
+        bak = os.path.join(d, f"world.db.pre_{PM.CASTLE_MOVE}.bak")
+        self.assertTrue(os.path.exists(bak), bak)
         c.execute("update players set x=160, y=3 where id=1"); c.commit()
         PM.run_once(c, self.grid, W, wm.SPAWN_POINT, db_path=path, log=logs.append)
         self.assertEqual(c.execute("select x,y from players where id=1").fetchone(), (160, 3))

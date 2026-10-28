@@ -1,9 +1,10 @@
 """Code-drawn chat and combat bar.
 
-Used when USE_HUD_DRAWN_PANELS is on. Chat, the style row, and the
-sword / potion / bones / trash row are pygame rects and text. The
-sidebar inventory and profile stay on the navy/gold drawer in hud_v2.
-No chat plate, inventory crop, or action-bar plate is blitted.
+Used when USE_HUD_DRAWN_PANELS is on. Chat, the Coins+bones toggle, the
+style row (ATK / STR / DEF / RNG / EAT), and the utility row under it
+(Mounts / Pets / Lore / Achieve / Menu) are pygame rects and text. The
+sidebar inventory and profile stay on the navy/gold drawer in hud_v2. No
+chat plate, inventory crop, or action-bar plate is blitted.
 """
 import pygame
 
@@ -16,28 +17,33 @@ STYLES = (
     ("archery", "RNG"),
     ("eat", "EAT"),
 )
-TOOLS = (
-    ("sword", "Sword"),
-    ("potion", "Potion"),
-    ("bones", "Bones"),
-    ("trash", "Trash"),
+
+UTILITY = (
+    ("mounts", "Mounts"),
+    ("pets", "Pets"),
+    ("lore", "Lore"),
+    ("achievements", "Achiev"),
+    ("menu", "Menu"),
 )
 
 
 def _metrics():
     """Chat leaves a 16 px gap, then the combat bar, then 8 px before the sidebar."""
     _map_w, map_h, sidebar_x, _screen_w, screen_h = hud_v2._layout()
-    slot_w = 44
+    slot_w = 48
     gap = 4
     bar_w = 10 + len(STYLES) * (slot_w + gap)
     room = sidebar_x - 8 - 16 - 8
     if bar_w > room - 240:
         slot_w = max(28, (room - 240 - 10 - len(STYLES) * gap) // len(STYLES))
         bar_w = 10 + len(STYLES) * (slot_w + gap)
+    # Wide enough for "Coins+bones ON (P)" above the style row.
+    bar_w = max(bar_w, 168)
     chat_w = max(160, sidebar_x - 8 - 16 - bar_w - 8)
     chat = pygame.Rect(8, map_h, chat_w, screen_h - map_h - 8)
-    bar_h = 78
-    bar = pygame.Rect(chat.right + 16, screen_h - bar_h - 12, bar_w, bar_h)
+    # Coins+bones + styles + Mounts/Pets/… row grouped in one card.
+    bar_h = 104
+    bar = pygame.Rect(chat.right + 16, screen_h - bar_h - 8, bar_w, bar_h)
     if bar.right + 8 > sidebar_x:
         bar.w = max(1, sidebar_x - 8 - bar.x)
     return chat, bar, slot_w
@@ -99,7 +105,17 @@ def draw_chat(client):
 
     input_rect = pygame.Rect(chat.x + 8, chat.bottom - 26, chat.w - 16, 20)
     hud_v2._panel(screen, input_rect, (8, 12, 24), hud_v2.GOLD if client.chat_typing else hud_v2.GOLD_DIM, radius=4)
-    prompt = ("> " + client.chat_text) if client.chat_typing else "Press Enter to chat"
+    ch = getattr(client, "hud_channel", None) or "world"
+    if ch == "all":
+        ch = "world"
+        client.hud_channel = "world"
+    idle = {
+        "world": "World chat — Enter to talk",
+        "guild": "Guild chat — members only",
+        "party": "Party chat",
+        "whisper": "Whisper — /w Name message",
+    }.get(ch, "Press Enter to chat")
+    prompt = (f"[{ch[:1].upper()}]> " + client.chat_text) if client.chat_typing else idle
     hud_v2._blit(client, client.font_tiny, prompt, (input_rect.x + 6, input_rect.y + 2), hud_v2.INK if client.chat_typing else hud_v2.MUTED)
     client.hud_rects["chat_input"] = input_rect
     _draw_combat_bar(client, bar, slot_w)
@@ -119,47 +135,76 @@ def _draw_combat_bar(client, bar, slot_w):
     screen = client.screen
     hud_v2._panel(screen, bar, hud_v2.NAVY, hud_v2.GOLD, radius=8, width=2)
     mx, my = pygame.mouse.get_pos()
+    auto_on = bool((getattr(client, "player", None) or {}).get("auto_pickup_items"))
+    auto_r = pygame.Rect(bar.x + 5, bar.y + 4, bar.w - 10, 20)
+    hover_auto = auto_r.collidepoint(mx, my)
+    fill = (36, 92, 52) if auto_on else (72, 40, 38)
+    border = hud_v2.GOLD if hover_auto else hud_v2.GOLD_DIM
+    hud_v2._panel(screen, auto_r, fill, border, radius=5, width=2 if hover_auto else 1)
+    auto_label = f"Coins+bones {'ON' if auto_on else 'OFF'} (P)"
+    surf = hud_v2._text(client, client.font_tiny, auto_label, hud_v2.INK)
+    screen.blit(surf, (auto_r.centerx - surf.get_width() // 2,
+                        auto_r.centery - surf.get_height() // 2))
+
     style = getattr(client, "combat_style", None)
-    tools = {}
-    gap = 4
-    tool_w = max(28, (bar.w - 10 - gap * (len(TOOLS) - 1)) // len(TOOLS))
-    for i, (key, label) in enumerate(TOOLS):
-        rect = pygame.Rect(bar.x + 5 + i * (tool_w + gap), bar.y + 6, tool_w, 26)
-        _button(client, rect, label, False, rect.collidepoint(mx, my))
-        tools[key] = rect
     styles = {}
+    gap = 4
+    style_y = bar.y + 28
     for i, (key, label) in enumerate(STYLES):
-        rect = pygame.Rect(bar.x + 5 + i * (slot_w + gap), bar.bottom - 40, slot_w, 32)
+        rect = pygame.Rect(bar.x + 5 + i * (slot_w + gap), style_y, slot_w, 30)
         if rect.right > bar.right - 4:
             rect.w = max(1, bar.right - 4 - rect.x)
         selected = style == key
         _button(client, rect, label, selected, rect.collidepoint(mx, my))
         styles[key] = rect
+
+    # Mounts / Pets / Lore / Achieve / Menu sit under the combat styles.
+    utility = {}
+    util_y = style_y + 34
+    util_h = 28
+    for i, (key, label) in enumerate(UTILITY):
+        rect = pygame.Rect(bar.x + 5 + i * (slot_w + gap), util_y, slot_w, util_h)
+        if rect.right > bar.right - 4:
+            rect.w = max(1, bar.right - 4 - rect.x)
+        active = client.hud_focus == key or (key == "menu" and client.hud_menu)
+        _button(client, rect, label[:6], active, rect.collidepoint(mx, my))
+        utility[key] = rect
+
     world = client.hud_world_rects
-    world["tools"] = tools
+    world["tools"] = {}
     world["actions"] = styles
+    world["utility"] = utility
+    world["auto_pickup"] = auto_r
     world["combat_bar"] = bar
+    # Keep coach / legacy click paths working.
+    client.auto_pickup_btn_rect = auto_r
+    if getattr(client, "hud_rects", None) is not None:
+        client.hud_rects["menu_auto_pickup"] = auto_r
+        client.hud_rects["utility"] = utility
+    if client.hud_menu:
+        hud_v2._draw_menu(client, client.hud_rects or {"utility": utility})
 
 
 def handle_click(client, mx, my, button):
-    hud_v2.ensure(client)
-    world = client.hud_world_rects or {}
-    for key, rect in (world.get("tools") or {}).items():
+    """Combat-bar clicks: Coins+bones, Mounts/Pets/…, and Menu flyout."""
+    rects = getattr(client, "hud_rects", None) or {}
+    if client.hud_menu:
+        if rects.get("menu_logout") and rects["menu_logout"].collidepoint(mx, my):
+            client.hud_menu = False
+            client.logout()
+            return True
+        if rects.get("menu_help") and rects["menu_help"].collidepoint(mx, my):
+            client.hud_menu = False
+            client.show_help = True
+            client.help_scroll = 0
+            return True
+    world = getattr(client, "hud_world_rects", None) or {}
+    auto_r = world.get("auto_pickup")
+    if auto_r and auto_r.collidepoint(mx, my):
+        client.toggle_auto_pickup()
+        return True
+    for key, rect in (world.get("utility") or {}).items():
         if rect.collidepoint(mx, my):
-            _tool_click(client, key)
+            hud_v2._utility_click(client, key)
             return True
     return False
-
-
-def _tool_click(client, key):
-    if key == "sword":
-        client.set_combat_style("attack")
-        client.add_chat("Combat style: attack.")
-        return
-    if key == "potion":
-        client.net.send("QUICK_CONSUME", kind="health")
-        return
-    if key == "bones":
-        client.add_chat("Select bones in the inventory, then Use.")
-        return
-    hud_v2._inventory_action(client, "drop")

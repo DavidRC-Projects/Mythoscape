@@ -807,18 +807,27 @@ async def handle_pickup(session, msg):
 
 
 async def vacuum(session, quiet=False):
-    """Coins on the dungeon pile underfoot. Other drops stay until clicked."""
+    """When auto-pickup is ON: coins and bones underfoot. Other drops stay until clicked."""
     import server as srv
+    if not getattr(session, "auto_pickup_items", False):
+        return
     d = session.dungeon
     pile = d["ground"].get((session.x, session.y))
     if not pile:
         return
     kept = []
     coins = 0
+    bones = []
     for entry in pile:
-        if entry["item_id"] == "coins":
+        iid = entry["item_id"]
+        if iid == "coins":
             _give(session, "coins", entry["qty"])
             coins += entry["qty"]
+        elif srv.is_auto_loot_item(iid):
+            if _give(session, iid, entry["qty"]):
+                bones.append(entry.get("qty", 1))
+            else:
+                kept.append(entry)
         else:
             kept.append(entry)
     if kept:
@@ -827,6 +836,11 @@ async def vacuum(session, quiet=False):
         d["ground"].pop((session.x, session.y), None)
     if coins and not quiet:
         await srv.send(session.ws, "CHAT_MSG", **{"from": "You", "text": f"You pick up {coins} coins."})
+    if bones and not quiet:
+        n = sum(bones)
+        await srv.send(session.ws, "CHAT_MSG", **{
+            "from": "You", "text": f"You pick up {n} bone{'s' if n != 1 else ''}.",
+        })
 
 
 def mitigate(session, monster, dmg):

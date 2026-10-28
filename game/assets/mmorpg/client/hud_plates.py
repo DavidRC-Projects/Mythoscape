@@ -506,9 +506,11 @@ def _draw_sidebar(client):
         client, client.font_tiny, hud_v2._title(client),
         pygame.Rect(block.x, block.y, block.w, block.h // 2), GOLD, align="center",
     )
+    gname = hud_v2._guild_label(client)
     _clip_text(
-        client, client.font_tiny, "No guild",
-        pygame.Rect(block.x + 28, block.y + block.h // 2, block.w - 28, block.h // 2), MUTED,
+        client, client.font_tiny, gname,
+        pygame.Rect(block.x + 28, block.y + block.h // 2, block.w - 28, block.h // 2),
+        GOLD if hud_v2._clan(client).get("name") else MUTED,
     )
     coins = int(player.get("coins") or 0)
     _clip_text(client, client.font_small, f"{coins:,}", hole("gold"), GOLD)
@@ -585,11 +587,13 @@ def _draw_sidebar_body(client, holes):
     if focus == "achievements":
         hud_v2._draw_achievements(client, grid.y, grid.bottom)
         return
-    if focus in ("mounts", "party", "guild", "events"):
+    if focus == "guild":
+        hud_v2._draw_guild(client, grid.y, grid.bottom, client.hud_rects)
+        return
+    if focus in ("mounts", "party", "events"):
         messages = {
             "mounts": "No mounts yet.",
             "party": "You are not in a party.",
-            "guild": "You are not in a guild.",
             "events": "No world event is active.",
         }
         _clip_text(client, client.font_small, messages[focus], grid, MUTED)
@@ -812,6 +816,11 @@ def _draw_actions(client):
 def handle_click(client, mx, my, button):
     hud_v2.ensure(client)
     rects = client.hud_rects or {}
+    if getattr(client, "guild_prompt", None):
+        hud_v2.handle_guild_prompt_click(client, mx, my)
+        return True
+    if hud_v2._handle_chat_chrome_click(client, mx, my, rects):
+        return True
     if client.hud_menu:
         if rects.get("menu_logout") and rects["menu_logout"].collidepoint(mx, my):
             client.hud_menu = False
@@ -823,6 +832,25 @@ def handle_click(client, mx, my, button):
             client.help_scroll = 0
             return True
         client.hud_menu = False
+    if client.hud_focus == "guild":
+        for key, rect in (rects.get("guild_tabs") or {}).items():
+            if rect.collidepoint(mx, my):
+                client.guild_tab = key
+                if key not in ("members", "board"):
+                    client.guild_selected = None
+                if key in ("members", "board"):
+                    client.guild_scroll = 0
+                return True
+        for key, rect in (rects.get("guild_btns") or {}).items():
+            if rect.collidepoint(mx, my):
+                hud_v2._guild_click(client, key)
+                return True
+        for name, rect in (rects.get("guild_members") or {}).items():
+            if rect.collidepoint(mx, my):
+                client.guild_selected = name
+                client.guild_tab = "members"
+                return True
+        # Swallow leftover clicks so inventory slots under the panel never fire.
         return True
     event = (client.hud_world_rects or {}).get("event") or {}
     join = event.get("join")

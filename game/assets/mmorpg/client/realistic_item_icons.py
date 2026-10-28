@@ -11,6 +11,8 @@ _SCALED = {}
 # Items whose pack icon hasn't been painted yet: (source icon, RGB multiply). Real files win.
 _STAND_IN = {
     "mythos_battleaxe": ("adamant_battleaxe", (255, 120, 110)),
+    "mythos_ore": ("adamantite_ore", (255, 120, 110)),
+    "mythos_bar": ("adamantite_bar", (255, 120, 110)),
 }
 
 

@@ -75,7 +75,7 @@ On the login screen, click **Hiscores** (or press **F3**) for top players per sk
 - **H** — help · **E** — equipment · **Tab** — skills · **M** — travel / world map
 - **F** — forge (furnace/anvil) · **C** — cook · **N** — fletch (needs a knife)
 - **B** — bank or shop (when beside booth / in dialogue)
-- **G** — pickup · **P** — toggle auto-pickup · **Q** — quest log · **Enter** — chat
+- **G** — pickup · **P** — toggle Coins+bones auto-pickup (off by default) · **Q** — quest log · **Enter** — chat
 - Dialogue: **A** accept quest · **T** turn in · **B** shop/bank · **S** forge · **Esc** close
 - Tidehollow: confirm at the cave mouth; **Esc** abandons the run when no modal is open
 - Equipment slots: weapon / shield / body / legs / helmet / amulet / ring / ammo

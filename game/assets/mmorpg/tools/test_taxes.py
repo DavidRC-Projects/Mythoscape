@@ -72,8 +72,12 @@ def test_buy_refused_without_tax_room():
     shop_id, item_id, price = next(
         (k, iid, i["price"]) for k, v in server.SHOPS.items() for iid, i in v["stock"].items()
         if i["price"] >= 20 and (server.ITEMS.get(iid) or {}).get("type") != "pet")
-    sess = types.SimpleNamespace(reputation=0, coins=price, bank_coins=0, ws=None, player_id=1, owned_pets=[],
-                                 equipment={}, inventory={}, bank={})
+    # Stand next to the shop NPC so near_shop passes; refusal must be tax/purse.
+    npc = next(n for n in server.NPCS if n.get("shop_id") == shop_id)
+    sess = types.SimpleNamespace(
+        reputation=0, coins=price, bank_coins=0, ws=None, player_id=1, owned_pets=[],
+        equipment={}, inventory={}, bank={}, x=npc["x"], y=npc["y"],
+    )
     asyncio.run(server.handle_shop_buy(sess, {"shop_id": shop_id, "item_id": item_id, "qty": 1}))
     assert sess.coins == price and sent and sent[0][0] == "ERROR"
 

@@ -18,6 +18,30 @@ def _bbox_rows(mask, w, h):
             bot = y; break
     return top, bot
 
+def _ear_points(sm, m, w, h, x0, x1, ear_y, u, facing, cx, fw, body_h):
+    """Earlobe anchors — inset from face center (old 98% of face_box sat on the hair edge)."""
+    hw = max(fw, 0.09 * body_h) / 2
+    # ~58% of face half-width lands on the lobe for these HD figures.
+    safe_l, safe_r = cx - hw * 0.58, cx + hw * 0.58
+    if facing == "e":
+        return [[cx - 0.12 * max(fw, 1.0), ear_y], [cx - 0.12 * max(fw, 1.0), ear_y]]
+    xs = []
+    y0b, y1b = max(0, int(ear_y - u)), min(h, int(ear_y + 1.5 * u) + 1)
+    x_lo, x_hi = max(0, int(x0 - u)), min(w, int(x1 + u) + 1)
+    mask = sm if sm is not None else m
+    for y in range(y0b, y1b):
+        for x in range(x_lo, x_hi):
+            if mask.get_at((x, y)):
+                xs.append(x)
+    if len(xs) >= 2:
+        left, right = float(min(xs)), float(max(xs))
+        # Trust skin only when it is tighter than the face box (avoids hair/jaw blobs).
+        if (right - left) < fw * 0.85:
+            left, right = left - 0.15 * u, right + 0.15 * u
+            return [[max(left, safe_l), ear_y], [min(right, safe_r), ear_y]]
+    return [[safe_l, ear_y], [safe_r, ear_y]]
+
+
 def frame_anchors(fr, sk, facing):
     w, h = fr.get_size()
     m = pygame.mask.from_surface(fr, 40)
@@ -27,7 +51,7 @@ def frame_anchors(fr, sk, facing):
     top, bot = bb.top, bb.bottom - 1; H = bot - top + 1; u = H / 60.0
     band = [x for y in range(top, int(top + 0.2 * H)) for x in range(w) if m.get_at((x, y))]
     band.sort(); cx = band[len(band) // 2] if band else bb.centerx
-    face = None; hands = []
+    face = None; hands = []; sm = None
     if sk is not None:
         sm = pygame.mask.from_surface(sk, 40)
         for c in sm.connected_components(max(2, int(6 * u))):
@@ -41,9 +65,7 @@ def frame_anchors(fr, sk, facing):
         face = (cx - hw2, top + 0.03 * H, cx + hw2, top + 0.175 * H, 0)
     x0, y0, x1, y1 = [float(v) for v in face[:4]]; fw = x1 - x0
     chin = min(y1, top + 0.175 * H); neck = [(x0 + x1) / 2, chin + 0.02 * H]; ear_y = top + 0.11 * H
-    hw = max(fw, 0.09 * H) / 2
-    if facing == "e": ear_l = ear_r = [(x0 + x1) / 2 - 0.15 * fw, ear_y]
-    else: ear_l, ear_r = [(x0 + x1) / 2 - hw * 0.98, ear_y], [(x0 + x1) / 2 + hw * 0.98, ear_y]
+    ear_l, ear_r = _ear_points(sm, m, w, h, x0, x1, ear_y, u, facing, (x0 + x1) / 2, fw, H)
     hands.sort()
     if facing == "e":
         hp = list(hands[-1][:2]) if hands else [cx + 0.02 * H, top + 0.5 * H]; hand_l = hand_r = hp
@@ -73,6 +95,12 @@ if __name__ == "__main__":
     dirs = sys.argv[1:]
     if not dirs:
         base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "player_hd", "assets")
-        dirs = [d for pat in ("outfit_*_hd", "armour_*_hd") for d in glob.glob(f"{base}/*/2x/{pat}")]
+        dirs = []
+        for scale in ("1x", "2x", "4x"):
+            for pat in ("outfit_*_hd", "armour_*_hd"):
+                dirs.extend(glob.glob(f"{base}/*/{scale}/{pat}"))
     for d in dirs:
-        layer(d); print("ok", d)
+        if not os.path.isdir(d):
+            continue
+        layer(d)
+        print("ok", d)

@@ -351,6 +351,58 @@ def overworld_return_xy():
     return int(arrival[0]), int(arrival[1])
 
 
+# Aggressive Mythos Champions inside the King's keep (king_f1).
+# Two flank the throne in the Great Hall; the rest patrol nearby rooms.
+# Overworld / Stonehaven bailey champions stay peaceful until attacked.
+PLANE_MONSTER_SPAWNS = {
+    "king_f1": (
+        ("mythos_champion", 24, 15),  # near king
+        ("mythos_champion", 28, 15),  # near king
+        ("mythos_champion", 18, 14),  # west Great Hall
+        ("mythos_champion", 34, 18),  # east Great Hall
+        ("mythos_champion", 26, 28),  # vestibule
+        ("mythos_champion", 8, 24),   # service passage
+        ("mythos_champion", 42, 18),  # stair approach
+    ),
+}
+
+
+def ensure_plane_monsters(session) -> None:
+    """Spawn per-session keep champions once; tag them with their plane."""
+    data = session.dungeon or {}
+    if data.get("id") != "castle_realm":
+        return
+    import server as srv
+    mons = data.setdefault("monsters", {})
+    for plane, spawns in PLANE_MONSTER_SPAWNS.items():
+        floor = _floor_for(plane) or {}
+        bounds = (0, 0, max(1, int(floor.get("width") or 48) - 1),
+                  max(1, int(floor.get("height") or 32) - 1))
+        for index, (mtype, x, y) in enumerate(spawns):
+            mid = f"realm_mob_{plane}_{index}"
+            if mid in mons:
+                continue
+            if mtype not in srv.MONSTERS:
+                continue
+            monster = srv.MonsterInstance(mid, mtype, int(x), int(y))
+            monster.realm_plane = plane
+            monster.home_room = bounds
+            mons[mid] = monster
+
+
+def monsters_on_plane(session):
+    """Monsters visible/active on the session's current castle plane."""
+    data = session.dungeon or {}
+    plane = data.get("plane")
+    out = []
+    for monster in (data.get("monsters") or {}).values():
+        tagged = getattr(monster, "realm_plane", None)
+        if tagged is not None and tagged != plane:
+            continue
+        out.append(monster)
+    return out
+
+
 def enter(session) -> None:
     if session.dungeon:
         raise RuntimeError('session is already inside an instance')
@@ -384,6 +436,7 @@ def enter(session) -> None:
     session.pet_target_id = None
     if getattr(session, 'pet_id', None):
         session.pet_x, session.pet_y = session.x, session.y
+    ensure_plane_monsters(session)
 
 
 def leave(session) -> None:
@@ -401,9 +454,13 @@ def leave(session) -> None:
     session.in_combat_with = None
     session.pet_target_id = None
     session.gathering_node = None
+    # Field squad only exists inside the realm; companion returns on exit.
+    session.deployed_soldiers = []
     session.x, session.y = x, y
     if getattr(session, 'pet_id', None):
+        # Park on the player; process_pets / next STATE_UPDATE will place them beside you.
         session.pet_x, session.pet_y = x, y
+        session.pet_target_id = None
 
 
 def floor_story(plane_name: str):
@@ -459,14 +516,20 @@ def move_to_plane(session, plane_name: str, arrive) -> None:
         'label': castle,
     })
     session.x, session.y = int(arrive[0]), int(arrive[1])
+    ensure_plane_monsters(session)
 
 
 def payload(session) -> dict:
     data = session.dungeon or {}
     plane = data.get('plane', 'realm')
+    ensure_plane_monsters(session)
     # Include NPCs that belong to this plane
     from content import NPCS
     plane_npcs = [n for n in NPCS if n.get('plane') == plane]
+    alive = [
+        m.public_state() for m in monsters_on_plane(session)
+        if m.alive and not getattr(m, "concealed", False)
+    ]
     return {
         'id': 'castle_realm',
         'plane': plane,
@@ -477,9 +540,9 @@ def payload(session) -> dict:
         'tiles': data.get('tiles', []),
         'width': data.get('width', 0),
         'height': data.get('height', 0),
-        'monsters': [],
+        'monsters': alive,
         'npcs': plane_npcs,
-        'remaining': 0,
+        'remaining': sum(1 for m in monsters_on_plane(session) if m.alive),
         'player_x': session.x,
         'player_y': session.y,
         'exit_x': data.get('exit_x') if data.get('plane') == 'realm' else -1,

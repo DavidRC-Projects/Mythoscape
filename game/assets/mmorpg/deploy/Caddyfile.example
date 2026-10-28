@@ -1,12 +1,21 @@
-# Example Caddyfile for Crownfall behind TLS.
-# Replace play.example.com with your domain. App must bind 127.0.0.1:8765.
+# Dual-host Crownfall friends beta on your own domain.
+# Replace example.com hosts with yours. Game binds 127.0.0.1:8765 only.
 #
 #   caddy run --config Caddyfile
 #
 # Firewall: allow 22, 80, 443 only. Do NOT expose 8765 publicly.
-# Optional: put Cloudflare (orange cloud) in front of this host for DDoS absorption.
+# Put Caddy (or nginx) on your VPS with your domain's TLS certs — no tunnel service.
 
-play.example.com {
+# Marketing / download site (static files from the repo's website/ folder)
+crownfall.example.com {
+	encode gzip
+	root * /var/www/crownfall
+	file_server
+	try_files {path} /index.html
+}
+
+# Game WebSocket (wss) — desktop client connects here
+play.crownfall.example.com {
 	encode gzip
 	reverse_proxy 127.0.0.1:8765
 }

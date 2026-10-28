@@ -54,6 +54,11 @@ SET_GENDER       {gender}                 -- creator only
 LOGOUT           {}
 INPUT_PING       {last_input_ms_ago}      -- every 30 s while there was local input; doesn't count as an action
                                               -- by itself and can't extend idle time past 30 s after the last one
+BARRACKS         {action, ...}            -- open | recruit | dismiss | kit | kit_all | train | train_all | practice
+                                              -- upgrade | deploy | deploy_all | recall | recall_all
+                                              -- recruit: template_id; dismiss/kit/train/upgrade/deploy/recall: soldier_id;
+                                              -- kit: tier; train: skill; practice: foe_id
+                                              -- deploy*: Castle Realm only — soldiers follow & fight with you
 
 Server -> Client message types
 -------------------------------
@@ -85,6 +90,10 @@ TRADE_CANCELLED   {reason}
 QUEST_LOG         {quests}
 QUEST_COMPLETE    {quest_id, rewards, quest_points?, total_quest_points?}
 ERROR             {message}
+BARRACKS_STATE    {roster, recruit, kits, practice, command_level, roster_total_cl, ...}
+ARENA_MATCH_START {foe_name, foe_id, spectator, pit, units, hud}  -- live practice on the sand
+ARENA_MATCH_UPDATE  {units, hud}            -- per-tick soldier positions / HP
+ARENA_MATCH_END   {summary, flash}        -- settle Command XP; barracks reopens
 IDLE_WARNING      {seconds}               -- 4:30 idle: logout in <seconds> unless you act
 IDLE_CLEAR        {}                      -- you acted; hide the warning
 LOGGED_OUT        {reason}                -- reason "idle"; the server closes the socket after this

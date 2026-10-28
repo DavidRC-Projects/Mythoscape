@@ -104,7 +104,7 @@ def base_look(look, sex, set_items=None):
 
 # ---- body + legs pair (David, 23 Oct 2026) -------------------------------------------------------------
 # Body and legs are equipped and removed together, and both are needed: equipping one puts on its matching
-# partner from the bag; taking one off takes both off. Pieces with no partner (goblin mail) work alone.
+# partner from the bag; taking one off takes both off. Pieces with no partner (e.g. helmets) work alone.
 PAIR_SLOTS = ("body", "legs")
 PAIR_NEED_MSG = "Body and legs are worn as a pair. You need the matching {partner} in your bag as well."
 PAIR_ROOM_MSG = "You need two free bag spaces to take off your body and legs together."

@@ -251,8 +251,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "legacy": true,
    "alias_of": "tone_3",
@@ -354,8 +354,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "legacy": true,
    "alias_of": "tone_6",
@@ -457,8 +457,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "legacy": true,
    "alias_of": "tone_9",
@@ -560,8 +560,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0
@@ -661,8 +661,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0
@@ -762,8 +762,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0
@@ -863,8 +863,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0
@@ -964,8 +964,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0
@@ -1065,8 +1065,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0
@@ -1166,8 +1166,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0,
@@ -1268,8 +1268,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0,
@@ -1370,8 +1370,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0,
@@ -1472,8 +1472,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0,
@@ -1574,8 +1574,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0,
@@ -1676,8 +1676,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0,
@@ -1778,8 +1778,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0,
@@ -1880,8 +1880,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0,
@@ -1982,8 +1982,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0,
@@ -2084,8 +2084,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0,
@@ -2186,8 +2186,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0,
@@ -2288,8 +2288,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0,
@@ -2390,8 +2390,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0,
@@ -2492,8 +2492,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0,
@@ -2594,8 +2594,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0,
@@ -2696,8 +2696,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0,
@@ -2798,8 +2798,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0,
@@ -2900,8 +2900,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0,
@@ -3002,8 +3002,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0,
@@ -3104,8 +3104,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0,
@@ -3206,8 +3206,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0,
@@ -3308,8 +3308,8 @@
        "n",
        "s"
       ]
-     }
     }
+   }
    },
    "sex": null,
    "tier": 0,
@@ -5870,6 +5870,42 @@
     226
    ],
    "name": "White"
+  },
+  {
+   "id": "light_blue",
+   "mul": [
+    130,
+    210,
+    255
+   ],
+   "name": "Light blue"
+  },
+  {
+   "id": "bright_red",
+   "mul": [
+    240,
+    48,
+    56
+   ],
+   "name": "Bright red"
+  },
+  {
+   "id": "bright_green",
+   "mul": [
+    72,
+    230,
+    110
+   ],
+   "name": "Bright green"
+  },
+  {
+   "id": "bright_purple",
+   "mul": [
+    176,
+    88,
+    255
+   ],
+   "name": "Bright purple"
   },
   {
    "id": "platinum",
@@ -11816,7 +11852,11 @@
   "honey",
   "blonde",
   "ash_grey",
-  "white"
+  "white",
+  "light_blue",
+  "bright_red",
+  "bright_green",
+  "bright_purple"
  ],
  "appearance_version": 2,
  "sidebar_tabs": [

@@ -165,6 +165,50 @@ def _clan_row(clan_id):
     ).fetchone()
 
 
+def _member_totals(clan_id):
+    """Per-member total level + XP for the guild board (sorted best first)."""
+    import combat
+    from content import XP_SKILLS
+    people = members(clan_id)
+    if not people:
+        return [], 0, 0
+    cols = {r[1] for r in _db().execute("PRAGMA table_info(players)")}
+    xp_cols = [f"{s}_xp" for s in XP_SKILLS if f"{s}_xp" in cols]
+    if not xp_cols:
+        rows = [{"name": p["name"], "rank": p["rank"], "total_level": 0, "total_xp": 0} for p in people]
+        return rows, 0, 0
+    select = ", ".join(["id", "char_name"] + xp_cols)
+    by_id = {
+        int(r[0]): r for r in _db().execute(
+            f"SELECT {select} FROM players WHERE id IN ({','.join('?' * len(people))})",
+            tuple(int(p["id"]) for p in people),
+        ).fetchall()
+    }
+    board = []
+    guild_xp = 0
+    guild_levels = 0
+    for p in people:
+        row = by_id.get(int(p["id"]))
+        total_xp = 0
+        total_level = 0
+        if row:
+            # row: id, char_name, skill_xp...
+            for i, _col in enumerate(xp_cols):
+                xp = int(row[2 + i] or 0)
+                total_xp += xp
+                total_level += combat.level_from_xp(xp)
+        board.append({
+            "name": p["name"],
+            "rank": p["rank"],
+            "total_level": total_level,
+            "total_xp": total_xp,
+        })
+        guild_xp += total_xp
+        guild_levels += total_level
+    board.sort(key=lambda e: (-e["total_level"], -e["total_xp"], e["name"]))
+    return board, guild_levels, guild_xp
+
+
 def public(clan_id):
     row = _clan_row(clan_id) if clan_id else None
     people = members(clan_id) if row else []
@@ -176,9 +220,13 @@ def public(clan_id):
         "ranks": {p["name"]: p["rank"] for p in people},
         "count": len(people),
         "max_members": MAX_PLAYER_MEMBERS,
+        "board": [],
+        "guild_total_level": 0,
+        "guild_total_xp": 0,
     }
     if row:
         players, active, counted, eligible = royal_challenge_strength(clan_id)
+        board, g_lvl, g_xp = _member_totals(clan_id)
         info.update({
             "bank_coins": bank_balance(clan_id),
             "recruits": recruit_count(clan_id),
@@ -186,6 +234,9 @@ def public(clan_id):
             "max_recruits": recruit_cap(clan_id),
             "challenge": strength_line(clan_id),
             "challenge_eligible": eligible,
+            "board": board,
+            "guild_total_level": g_lvl,
+            "guild_total_xp": g_xp,
         })
     return info
 
@@ -204,17 +255,67 @@ def _clean_invites():
         _INVITES.pop(pid, None)
 
 
+def pending_invite(player_id):
+    """Open invite for the Guild panel, or None."""
+    _clean_invites()
+    pending = _INVITES.get(int(player_id))
+    if not pending:
+        return None
+    clan_id, inviter_id, exp = pending
+    row = _clan_row(clan_id)
+    if not row:
+        return None
+    inviter = _db().execute(
+        "SELECT char_name FROM players WHERE id = ?", (int(inviter_id),),
+    ).fetchone()
+    return {
+        "clan_id": int(clan_id),
+        "name": row[1],
+        "from": (inviter[0] if inviter else "Someone"),
+        "expires_in": max(0, int(exp - time.time())),
+    }
+
+
+def _info_for(session):
+    """CLAN_INFO payload for one player (guild + optional pending invite)."""
+    clan_id = clan_of(session.player_id)
+    info = dict(public(clan_id))
+    info["rank"] = rank_of(session.player_id) or ""
+    invite = pending_invite(session.player_id)
+    if invite:
+        info["invite"] = invite
+    return info
+
+
 async def _push(clan_id):
+    """Push CLAN_INFO to every online member. Never raise into command handlers."""
     from server import WORLD, send
-    info = public(clan_id)
+    if not clan_id:
+        return
+    try:
+        cid = int(clan_id)
+    except (TypeError, ValueError):
+        return
     for session in list(WORLD.sessions.values()):
-        if clan_of(session.player_id) == int(clan_id):
-            await send(session.ws, "CLAN_INFO", rank=rank_of(session.player_id), **info)
+        try:
+            if clan_of(session.player_id) == cid:
+                await send(session.ws, "CLAN_INFO", **_info_for(session))
+        except Exception:
+            pass
+
+
+async def _notify(session):
+    """CLAN_INFO for one player (create / deposit / invite target)."""
+    from server import send
+    try:
+        await send(session.ws, "CLAN_INFO", **_info_for(session))
+    except Exception:
+        pass
 
 
 async def _say(session, text):
     from server import send
-    await send(session.ws, "CHAT_MSG", **{"from": "Guild", "text": text})
+    await send(session.ws, "CHAT_MSG", **{"from": "Guild", "text": text, "channel": "guild"})
 
 
 async def on_login(session):
@@ -222,7 +323,7 @@ async def on_login(session):
     clan_id = clan_of(session.player_id)
     if clan_id:
         settle_upkeep(_db(), clan_id)
-    await send(session.ws, "CLAN_INFO", rank=rank_of(session.player_id), **public(clan_id))
+    await send(session.ws, "CLAN_INFO", **_info_for(session))
 
 
 async def tick_upkeep():
@@ -575,7 +676,7 @@ def set_challenge(clan_id, castle_id, **kw):
 
 
 # ---- chat commands ------------------------------------------------------------
-_HELP = ("Guild: /guild create <name> (10,000) · invite <p> · accept · leave · kick <p> · list · "
+_HELP = ("Guild: /guild create <name> (10,000) · invite <p> · accept · decline · leave · kick <p> · list · "
          "promote <p> · demote <p> · leader <p> · bank · deposit <n> · withdraw <n> · "
          "recruits · hire <Guard|Squire|Steward> · dismiss <id> · challenge [castle] · help")
 
@@ -597,6 +698,8 @@ async def handle_command(session, text):
         await invite(session, arg)
     elif cmd == "accept":
         await accept(session)
+    elif cmd == "decline":
+        await decline(session)
     elif cmd == "leave":
         await leave(session)
     elif cmd == "kick":
@@ -632,15 +735,19 @@ async def handle_command(session, text):
         ok, msg = fn(session.player_id, n)
         await _say(session, msg)
         if ok:
-            if cmd == "deposit":
-                import reputation
-                from server import social_event
-                await social_event(session, "guild_deposit", rep=n // REP_DEPOSIT_PER,
-                                   rep_cap_key="rep_guild_deposit", rep_cap=REP_DEPOSIT_DAILY_CAP)
-                import server
-                await server.guild_tutorial_event(session, "deposit")
+            # Bank figure on the Guild panel comes from CLAN_INFO / PLAYER_UPDATE.
             await _refresh(session)
+            await _notify(session)
             await _push(clan_of(session.player_id))
+            if cmd == "deposit":
+                try:
+                    from server import social_event
+                    import server
+                    await social_event(session, "guild_deposit", rep=n // REP_DEPOSIT_PER,
+                                       rep_cap_key="rep_guild_deposit", rep_cap=REP_DEPOSIT_DAILY_CAP)
+                    await server.guild_tutorial_event(session, "deposit")
+                except Exception:
+                    pass
     elif cmd == "recruits":
         cid = clan_of(session.player_id)
         if not cid:
@@ -688,12 +795,20 @@ async def create(session, name):
     await _say(session, msg)
     if not ok:
         return
-    from server import social_event
-    import server
-    await social_event(session, "guild_create", rep=REP_CREATE)
-    await server.guild_tutorial_event(session, "guild")
-    await _refresh(session)
+    # Notify before refresh/social so the panel never stays on "Create guild".
+    await _notify(session)
+    try:
+        await _refresh(session)
+    except Exception:
+        pass
     await _push(clan_id)
+    try:
+        from server import social_event
+        import server
+        await social_event(session, "guild_create", rep=REP_CREATE)
+        await server.guild_tutorial_event(session, "guild")
+    except Exception:
+        pass
 
 
 async def invite(session, target_name):
@@ -713,35 +828,60 @@ async def invite(session, target_name):
         await _say(session, f"{target[1]} is already in a guild.")
         return
     _INVITES[int(target[0])] = (int(clan_id), int(session.player_id), time.time() + _INVITE_SECONDS)
-    await _say(session, f"Invited {target[1]}. They have two minutes to /guild accept.")
+    await _say(session, f"Invited {target[1]}. They have two minutes to Accept in Guild.")
     from server import WORLD, send
     other = WORLD.sessions.get(int(target[0]))
     if other:
         await send(other.ws, "CHAT_MSG", **{
             "from": "Guild",
-            "text": f"{session.char_name} invited you to {row[1]}. /guild accept",
+            "text": f"{session.char_name} invited you to {row[1]}. Open Guild to Accept.",
         })
+        await send(other.ws, "CLAN_INFO", **_info_for(other))
 
 
 async def accept(session):
+    from server import send
     _clean_invites()
     pending = _INVITES.get(int(session.player_id))
     if not pending:
         await _say(session, "You have no guild invite.")
+        await _notify(session)  # clear a stuck invite banner if already joined
         return
     if clan_of(session.player_id):
         _INVITES.pop(int(session.player_id), None)
         await _say(session, "You are already in a guild.")
+        await _notify(session)
         return
     clan_id, _inviter, _exp = pending
     _INVITES.pop(int(session.player_id), None)
     if not join_core(session.player_id, clan_id):
         await _say(session, "That guild is full.")
+        await _notify(session)
         return
     await _say(session, "You joined the guild as a Recruit.")
-    import server
-    await server.guild_tutorial_event(session, "guild")
+    # Notify first so the panel never stays on Create/Invite if refresh fails.
+    await _notify(session)
+    try:
+        await _refresh(session)
+    except Exception:
+        pass
     await _push(clan_id)
+    try:
+        import server
+        await server.guild_tutorial_event(session, "guild")
+    except Exception:
+        pass
+
+
+async def decline(session):
+    _clean_invites()
+    pending = _INVITES.pop(int(session.player_id), None)
+    if not pending:
+        await _say(session, "You have no guild invite.")
+        await _notify(session)  # resync panel (e.g. already joined, banner stuck)
+        return
+    await _say(session, "You declined the guild invite.")
+    await _notify(session)
 
 
 async def leave(session):
@@ -750,7 +890,7 @@ async def leave(session):
     if not clan_id:
         await _say(session, "You are not in a guild.")
         return
-    await send(session.ws, "CLAN_INFO", **public(None))
+    await send(session.ws, "CLAN_INFO", **_info_for(session))
     if disbanded:
         await _say(session, "You left, and the guild disbanded.")
         return
@@ -772,7 +912,7 @@ async def kick(session, target_name):
     from server import WORLD, send
     other = WORLD.sessions.get(int(target[0]))
     if other:
-        await send(other.ws, "CLAN_INFO", **public(None))
+        await send(other.ws, "CLAN_INFO", **_info_for(other))
         await send(other.ws, "CHAT_MSG", **{"from": "Guild", "text": "You were kicked from the guild."})
     await _push(clan_id)
 

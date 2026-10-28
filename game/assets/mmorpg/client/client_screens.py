@@ -556,7 +556,8 @@ class ScreensMixin:
         elif event.key == pygame.K_s and self.dialogue.get("forge"):
             self.dialogue = None
             self.open_forge_at()
-        elif event.key == pygame.K_a and quest and quest["state"] == "offerable":
+        elif (event.key == pygame.K_a and quest and quest["state"] == "offerable"
+              and quest.get("type") != "gift"):
             self.net.send("QUEST_ACCEPT", quest_id=quest["quest_id"])
             self.dialogue = None
         elif event.key == pygame.K_t and quest and quest["state"] == "ready":
@@ -1073,7 +1074,10 @@ class ScreensMixin:
         canvas = self.world_map_canvas_rect()
         pygame.draw.rect(self.screen, (14, 18, 26), box, border_radius=8)
         pygame.draw.rect(self.screen, (120, 170, 220), box, 2, border_radius=8)
-        title = self.font_big.render("World Map", True, WHITE)
+        in_realm = bool(self.dungeon and self.dungeon.get("id") == "castle_realm")
+        title = self.font_big.render(
+            "Castle Realm Map" if in_realm else "World Map", True, WHITE,
+        )
         self.screen.blit(title, (box.x + 20, box.y + 14))
         self.screen.blit(
             self.font_small.render(
@@ -1102,6 +1106,18 @@ class ScreensMixin:
                 if wx < 0 or wx >= self.world_w or wx >= len(row):
                     continue
                 col = self.minimap_tile_color(row[wx])
+                if in_realm and self.dungeon.get("plane") == "realm":
+                    try:
+                        import castle_realm_renderer as _crr
+                        rows = _crr.REALM_ROWS
+                        if 0 <= wy < len(rows) and 0 <= wx < len(rows[wy]):
+                            ch = rows[wy][wx]
+                            if ch == "s":
+                                col = (220, 175, 55)
+                            elif ch == "A":
+                                col = (165, 150, 130)
+                    except Exception:
+                        pass
                 pygame.draw.rect(
                     self.screen, col,
                     (canvas.x + tx * scale, canvas.y + ty * scale, scale, scale),
@@ -1114,10 +1130,20 @@ class ScreensMixin:
         self.world_map_pin_rects = []
         mouse = pygame.mouse.get_pos()
         hover_pin = None
-        map_dests = list(TRAVEL_DESTINATIONS)
-        home = self._home_destination() if hasattr(self, "_home_destination") else None
-        if home:
-            map_dests = [home] + [d for d in map_dests if d.get("id") != "home"]
+        if in_realm:
+            # Castle landmarks (teleport landings) — walk-to on the realm plane.
+            from content import TELEPORT_DESTINATIONS
+            map_dests = [
+                {**d, "kind": d.get("kind") or "place"}
+                for d in TELEPORT_DESTINATIONS
+                if d.get("where") == "castle"
+            ]
+            home = None
+        else:
+            map_dests = [d for d in TRAVEL_DESTINATIONS if d.get("where") != "castle"]
+            home = self._home_destination() if hasattr(self, "_home_destination") else None
+            if home:
+                map_dests = [home] + [d for d in map_dests if d.get("id") != "home"]
         for dest in map_dests:
             dx = dest["x"] - ox
             dy = dest["y"] - oy
@@ -1248,7 +1274,10 @@ class ScreensMixin:
         box = pygame.Rect(140, 40, 720, 580)
         pygame.draw.rect(self.screen, (16, 20, 28), box)
         pygame.draw.rect(self.screen, (120, 170, 220), box, 2)
-        title = self.font_big.render("Travel", True, WHITE)
+        in_realm = bool(self.dungeon and self.dungeon.get("id") == "castle_realm")
+        title = self.font_big.render(
+            "Travel · Castle Realm" if in_realm else "Travel", True, WHITE,
+        )
         self.screen.blit(title, (box.x + 20, box.y + 12))
         self.screen.blit(
             self.font_small.render(
@@ -1261,16 +1290,25 @@ class ScreensMixin:
         places = self._travel_places() if hasattr(self, "_travel_places") else [
             d for d in TRAVEL_DESTINATIONS if d["kind"] == "place"
         ]
-        monsters = [d for d in TRAVEL_DESTINATIONS if d["kind"] == "monster"]
+        monsters = [] if in_realm else [d for d in TRAVEL_DESTINATIONS if d["kind"] == "monster"]
         self.travel_btn_rects = []
 
         # Leave room for the scrollbar on the right edge of the panel
-        col_w = (box.w - 72) // 2
-        left_x = box.x + 20
-        right_x = box.x + 36 + col_w
+        if in_realm:
+            col_w = box.w - 72
+            left_x = box.x + 20
+            right_x = None
+        else:
+            col_w = (box.w - 72) // 2
+            left_x = box.x + 20
+            right_x = box.x + 36 + col_w
         hdr_y = box.y + 74
-        self.screen.blit(self.font.render("Places", True, (255, 220, 140)), (left_x, hdr_y))
-        self.screen.blit(self.font.render("Monsters", True, (255, 160, 140)), (right_x, hdr_y))
+        self.screen.blit(
+            self.font.render("Castles & landmarks" if in_realm else "Places", True, (255, 220, 140)),
+            (left_x, hdr_y),
+        )
+        if right_x is not None:
+            self.screen.blit(self.font.render("Monsters", True, (255, 160, 140)), (right_x, hdr_y))
 
         row_h = 48
         list_top = hdr_y + 28
@@ -1315,7 +1353,8 @@ class ScreensMixin:
                 self.screen.blit(self.font_tiny.render(blurb, True, GREY), (row.x + 12, row.y + 24))
 
         draw_btns(places, left_x)
-        draw_btns(monsters, right_x)
+        if right_x is not None:
+            draw_btns(monsters, right_x)
         self.screen.set_clip(prev_clip)
 
         if max_scroll > 0:
@@ -1429,7 +1468,7 @@ class ScreensMixin:
             self._sb_card(row, bg=(72, 40, 38), border=(170, 90, 70), radius=7)
         self._sb_icon_person(row.x + 14, row.centery)
         auto_txt = self.font_small.render(
-            f"Auto-pickup {'ON' if auto else 'OFF'} (P)", True, WHITE,
+            f"Auto coins+bones {'ON' if auto else 'OFF'} (P)", True, WHITE,
         )
         self.screen.blit(auto_txt, (row.x + 28, row.y + 6))
         self._sb_icon_gear(
@@ -1865,7 +1904,8 @@ class ScreensMixin:
             self.dialogue_btn_rects[action] = r
             return r.right + 8
 
-        if quest and quest.get("state") == "offerable":
+        # Gift quests grant on talk — no Accept button (bag-full just means try again).
+        if quest and quest.get("state") == "offerable" and quest.get("type") != "gift":
             bx = add_btn("accept", "Accept (A)", (50, 110, 60), bx)
         if quest and quest.get("state") == "ready":
             bx = add_btn("turnin", "Turn in (T)", (160, 120, 40), bx)
@@ -1971,12 +2011,14 @@ class ScreensMixin:
                         (text_x, y),
                     )
                     y += 14
-            if quest.get("state") == "offerable":
+            if quest.get("state") == "offerable" and quest.get("type") == "gift":
+                hint, hcol = "Free up bag space, then talk again.", YELLOW
+            elif quest.get("state") == "offerable":
                 hint, hcol = "Accept this quest to begin.", GREEN
             elif quest.get("state") == "active":
-                hint, hcol = "Quest in progress — check your journal.", GREY
+                hint, hcol = "Follow the gold trail — then return here.", GREY
             elif quest.get("state") == "ready":
-                hint, hcol = "You have what they need — turn it in!", YELLOW
+                hint, hcol = "Turn in below for your reward.", YELLOW
             else:
                 hint, hcol = "Quest already completed.", GREEN
             if y + 16 <= text_bottom:
@@ -2919,16 +2961,9 @@ class ScreensMixin:
             True, GREY,
         )
         self.screen.blit(hint, (box.x + 16, box.y + 44))
-        hd_on = bool((self.player or {}).get("hd_player", True))
-        self.hd_look_rect = pygame.Rect(box.x + 16, box.y + 66, 220, 28)
-        pygame.draw.rect(self.screen, (32, 42, 68), self.hd_look_rect, border_radius=14)
-        pygame.draw.rect(self.screen, (212, 175, 90), self.hd_look_rect, 1, border_radius=14)
-        look = self.font_small.render(
-            "Player look: 3D" if hd_on else "Player look: 2D", True, (232, 226, 210),
-        )
-        self.screen.blit(look, (self.hd_look_rect.x + 12, self.hd_look_rect.y + 5))
+        self.hd_look_rect = None  # old 2D/3D player toggle removed — HD villager only
         follow_on = bool(getattr(self, "ember_follow_behind", False))
-        self.ember_follow_rect = pygame.Rect(box.x + 248, box.y + 66, 310, 28)
+        self.ember_follow_rect = pygame.Rect(box.x + 16, box.y + 66, 310, 28)
         pygame.draw.rect(self.screen, (32, 42, 68), self.ember_follow_rect, border_radius=14)
         pygame.draw.rect(self.screen, (212, 175, 90), self.ember_follow_rect, 1, border_radius=14)
         follow = self.font_small.render(
@@ -2977,7 +3012,7 @@ class ScreensMixin:
                 ("Use tinderbox", "Ask to light logs into a campfire"),
                 ("G", "Pick up one stack on your tile"),
                 ("Shift+G / Shift+click loot", "Take all items on the pile"),
-                ("P / sidebar button", "Toggle auto-pickup items (coins always auto)"),
+                ("P / Coins+bones", "Toggle auto-pickup for coins & bones (above ATK/STR/DEF/RNG)"),
                 ("X", "Toggle floating XP drops above your head (off = chat XP)"),
                 ("Minimap left-click", "Walk toward that area · click again on the frame to hide/show"),
                 ("Minimap right-click", "Open the world map (named buildings, click a pin to walk there)"),
@@ -3023,8 +3058,13 @@ class ScreensMixin:
                 ("Archery XP", "Damage & XP scale with Archery level (not Strength)"),
                 ("Fletching", "Knife + N: logs→shafts/bows · shafts+feathers→headless · +tips→arrows"),
             ]),
-            ("Tidehollow", [
-                ("Cave mouth", "Harbourreach — private chamber dungeon"),
+            ("Crypt (early)", [
+                ("Entrance", "Graveyard behind the bank — The Depths"),
+                ("First quest", "Elder Miriam: Shadows in the Crypt (after Rat Problem)"),
+                ("Why here", "Your first real delve — before Harbourreach / Tidehollow"),
+            ]),
+            ("Tidehollow (midgame)", [
+                ("Cave mouth", "Harbourreach — private chamber dungeon (after the Crypt)"),
                 ("Per room", "Three different beasts; dragons in the last chamber"),
                 ("Clear all", "Open every sealed door; medal drops on completion"),
             ]),
@@ -3050,7 +3090,7 @@ class ScreensMixin:
             ("Inventory", [
                 ("Left-click", "Equip, eat, drink, use, or open bag Pack/Unpack"),
                 ("Drag item", "Rearrange inventory slots"),
-                ("Right-click", "Drop, or set Never pick up so this item stays on the ground"),
+                ("Right-click", "Drop items, or bury bones (Bury 1 / Bury all)"),
                 ("Shift+right", "Drop the whole stack immediately"),
                 ("Bags", "Pack/Unpack storage bags; crafting draws from bags first"),
             ]),
@@ -3153,20 +3193,24 @@ class ScreensMixin:
         box = pygame.Rect(160, 70, 780, 580)
         pygame.draw.rect(self.screen, (14, 16, 24), box)
         pygame.draw.rect(self.screen, (230, 190, 70), box, 2)
-        title = self.font_big.render("Hiscores — Top Players", True, YELLOW)
+        title = self.font_big.render("Hiscores — Top Players & Guilds", True, YELLOW)
         self.screen.blit(title, (box.x + 20, box.y + 14))
 
         skills = self.leaderboard_skills or list(self.leaderboard.keys()) or (
-            ["total"] + list(XP_SKILLS)
+            ["total", "guild"] + list(XP_SKILLS)
         )
         if not self.leaderboard_skill or self.leaderboard_skill not in skills:
             self.leaderboard_skill = "total" if "total" in skills else skills[0]
+        guild_board = self.leaderboard_skill == "guild"
         self.leaderboard_tab_rects = {}
         tx, ty = box.x + 20, box.y + 55
         for skill in skills:
-            label = SKILL_DISPLAY_NAMES.get(skill, skill.title())
             if skill == "total":
                 label = "Total"
+            elif skill == "guild":
+                label = "Guilds"
+            else:
+                label = SKILL_DISPLAY_NAMES.get(skill, skill.title())
             short = label if len(label) <= 10 else label[:8]
             tw = max(72, self.font_small.size(short)[0] + 16)
             if tx + tw > box.right - 20:
@@ -3175,24 +3219,35 @@ class ScreensMixin:
             r = pygame.Rect(tx, ty, tw, 26)
             self.leaderboard_tab_rects[skill] = r
             active = skill == self.leaderboard_skill
-            pygame.draw.rect(self.screen, (70, 90, 40) if active else (32, 34, 44), r)
+            fill = (70, 90, 40) if active else ((40, 48, 70) if skill == "guild" else (32, 34, 44))
+            pygame.draw.rect(self.screen, fill, r)
             pygame.draw.rect(self.screen, YELLOW if active else PANEL_LINE, r, 1)
             txt = self.font_small.render(short, True, WHITE if active else GREY)
             self.screen.blit(txt, (r.x + (r.w - txt.get_width()) // 2, r.y + 5))
             tx += tw + 6
 
         header_y = ty + 44
-        skill_name = "Total" if self.leaderboard_skill == "total" else (
-            SKILL_DISPLAY_NAMES.get(self.leaderboard_skill, self.leaderboard_skill.title())
-        )
+        if guild_board:
+            skill_name = "Guild"
+            level_hdr, xp_hdr, name_hdr = "Σ Levels", "Σ XP", "Guild"
+        elif self.leaderboard_skill == "total":
+            skill_name = "Total"
+            level_hdr, xp_hdr, name_hdr = "Total lvl", "Total XP", "Player"
+        else:
+            skill_name = SKILL_DISPLAY_NAMES.get(self.leaderboard_skill, self.leaderboard_skill.title())
+            level_hdr, xp_hdr, name_hdr = "Level", "XP", "Player"
         skill_title = self.font.render(f"{skill_name} rankings", True, WHITE)
         self.screen.blit(skill_title, (box.x + 24, header_y))
         self.screen.blit(self.font_small.render("Rank", True, GREY), (box.x + 30, header_y + 30))
-        self.screen.blit(self.font_small.render("Player", True, GREY), (box.x + 90, header_y + 30))
-        level_hdr = "Total lvl" if self.leaderboard_skill == "total" else "Level"
-        self.screen.blit(self.font_small.render(level_hdr, True, GREY), (box.x + 400, header_y + 30))
-        xp_hdr = "Total XP" if self.leaderboard_skill == "total" else "XP"
-        self.screen.blit(self.font_small.render(xp_hdr, True, GREY), (box.x + 520, header_y + 30))
+        self.screen.blit(self.font_small.render(name_hdr, True, GREY), (box.x + 90, header_y + 30))
+        if guild_board:
+            self.screen.blit(self.font_small.render("Members", True, GREY), (box.x + 320, header_y + 30))
+            self.screen.blit(self.font_small.render(level_hdr, True, GREY), (box.x + 420, header_y + 30))
+            self.screen.blit(self.font_small.render(xp_hdr, True, GREY), (box.x + 540, header_y + 30))
+        else:
+            self.screen.blit(self.font_small.render("Guild", True, GREY), (box.x + 280, header_y + 30))
+            self.screen.blit(self.font_small.render(level_hdr, True, GREY), (box.x + 430, header_y + 30))
+            self.screen.blit(self.font_small.render(xp_hdr, True, GREY), (box.x + 550, header_y + 30))
 
         rows = self.leaderboard.get(self.leaderboard_skill) or []
         list_top = header_y + 52
@@ -3202,11 +3257,9 @@ class ScreensMixin:
         max_scroll = max(0, len(rows) * row_h - view_h)
         self.leaderboard_max_scroll = max_scroll
         self.leaderboard_scroll = max(0, min(max_scroll, int(getattr(self, "leaderboard_scroll", 0) or 0)))
+        empty = "No guilds yet — found one!" if guild_board else "No players yet — be the first!"
         if not rows:
-            self.screen.blit(
-                self.font.render("No players yet — be the first!", True, GREY),
-                (box.x + 30, list_top),
-            )
+            self.screen.blit(self.font.render(empty, True, GREY), (box.x + 30, list_top))
         else:
             clip = self.screen.get_clip()
             self.screen.set_clip(pygame.Rect(box.x + 16, list_top, box.w - 40, view_h))
@@ -3216,10 +3269,33 @@ class ScreensMixin:
                     rank_color = YELLOW if i == 0 else (200, 200, 210) if i < 3 else WHITE
                     pygame.draw.rect(self.screen, (28, 30, 40), (box.x + 24, y, 700, row_h - 2))
                     self.screen.blit(self.font_small.render(str(i + 1), True, rank_color), (box.x + 36, y + 4))
-                    self.screen.blit(self.font_small.render(entry.get("name", "?"), True, WHITE), (box.x + 90, y + 4))
-                    self.screen.blit(self.font_small.render(str(entry.get("level", 1)), True, GREEN), (box.x + 410, y + 4))
-                    xp_val = int(entry.get("xp", 0) or 0)
-                    self.screen.blit(self.font_small.render(f"{xp_val:,}", True, GREY), (box.x + 520, y + 4))
+                    name = str(entry.get("name") or "?")
+                    if len(name) > 22:
+                        name = name[:21] + "…"
+                    self.screen.blit(self.font_small.render(name, True, WHITE), (box.x + 90, y + 4))
+                    if guild_board:
+                        members = int(entry.get("members") or 0)
+                        self.screen.blit(self.font_small.render(str(members), True, GREY), (box.x + 330, y + 4))
+                        self.screen.blit(
+                            self.font_small.render(f"{int(entry.get('level', 0) or 0):,}", True, GREEN),
+                            (box.x + 430, y + 4),
+                        )
+                        xp_val = int(entry.get("xp", 0) or 0)
+                        self.screen.blit(self.font_small.render(f"{xp_val:,}", True, GREY), (box.x + 540, y + 4))
+                    else:
+                        gname = str(entry.get("guild") or "—")
+                        if len(gname) > 16:
+                            gname = gname[:15] + "…"
+                        self.screen.blit(
+                            self.font_small.render(gname, True, (160, 190, 140) if entry.get("guild") else GREY),
+                            (box.x + 280, y + 4),
+                        )
+                        self.screen.blit(
+                            self.font_small.render(str(entry.get("level", 1)), True, GREEN),
+                            (box.x + 440, y + 4),
+                        )
+                        xp_val = int(entry.get("xp", 0) or 0)
+                        self.screen.blit(self.font_small.render(f"{xp_val:,}", True, GREY), (box.x + 550, y + 4))
                 y += row_h
             self.screen.set_clip(clip)
             if max_scroll:
@@ -3231,7 +3307,7 @@ class ScreensMixin:
 
         self.screen.blit(
             self.font_small.render(
-                "Scroll for the rest  ·  Arrows change skill  ·  Esc closes",
+                "Scroll  ·  Arrows change tab  ·  Guilds = combined member levels/XP  ·  Esc closes",
                 True, GREY,
             ),
             (box.x + 24, box.y + box.h - 28),

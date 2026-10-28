@@ -22,6 +22,7 @@ _CATALOGUE_PATH = os.path.join(_BASE, "catalogue.json")
 
 _IMAGES = {}
 _FRAMES = {}
+_IMAGE_MISS = object()
 _META = None
 _CATALOGUE = None
 
@@ -55,21 +56,32 @@ def _load_catalogue():
 
 
 def _load_image(path):
-    if path not in _IMAGES:
-        full = os.path.join(_BASE, path)
-        if not os.path.isfile(full):
-            _IMAGES[path] = None
-        else:
-            _IMAGES[path] = pygame.image.load(full).convert_alpha()
+    hit = _IMAGES.get(path, _IMAGE_MISS)
+    if hit is not _IMAGE_MISS and hit is not None:
+        return hit
+    # Retry when a prior miss was cached (e.g. hair masks landed after the shop opened).
+    full = os.path.join(_BASE, path)
+    if not os.path.isfile(full):
+        _IMAGES[path] = None
+        return None
+    _IMAGES[path] = pygame.image.load(full).convert_alpha()
     return _IMAGES[path]
 
 
-def _scale_for(tile):
-    """Source scale at or above the target, then smoothscale down."""
+def _scale_for(tile, preview=False):
+    """Source scale at or above the target, then smoothscale down.
+
+    preview=True prefers 8x AI idle portraits when present (downscaled to tile);
+    falls back to 4x via _resolve_scale if an 8x sheet is missing.
+    """
     if tile <= 40:
         return "1x", 40
     if tile <= 80:
         return "2x", 80
+    # 8x preview temporarily disabled — AI sheets shifted/clipped and broke the stage.
+    # Re-enable when 8x assets are re-centered to meta feet_px.
+    if False and (preview or tile > 160):
+        return "8x", 320
     return "4x", 160
 
 
@@ -196,28 +208,43 @@ def _frame_for_anim(anim, t=None, progress=None, hit_t=-1.0, death_t=-1.0):
 
 
 def _layer_parts(sex, scale_tag, layer, anim, facing, frame_idx, tile, base):
-    """Base and tint independently. Either may be missing."""
-    if scale_tag == "4x" and not _has_4x_frame(sex, layer, anim, facing, frame_idx):
-        # Missing 4x strip (or a single-frame 4x portrait while animating): use 2x quietly.
-        scale_tag, base = "2x", 80
+    """Base and tint independently. Either may be missing.
+
+    Returns (main, tint, scale_tag, base) so skin/hair masks load at the same scale.
+    """
+    scale_tag, base = _resolve_scale(sex, layer, anim, facing, frame_idx, scale_tag, base)
     stem = f"{sex}/{scale_tag}/{layer}/{anim}_{facing}"
     main = _frame_surface(stem + ".png", frame_idx, scale_tag, tile, base)
     tint = _frame_surface(stem + "_tint.png", frame_idx, scale_tag, tile, base)
-    return main, tint
+    return main, tint, scale_tag, base
+
+
+def _resolve_scale(sex, layer, anim, facing, frame_idx, scale_tag, base):
+    """Fall back 8x→4x→2x when a preview sheet is missing or is a single-frame idle."""
+    if scale_tag == "8x" and not _has_scale_frame(sex, "8x", layer, anim, facing, frame_idx):
+        scale_tag, base = "4x", 160
+    if scale_tag == "4x" and not _has_scale_frame(sex, "4x", layer, anim, facing, frame_idx):
+        # Missing 4x strip (or a single-frame 4x portrait while animating): use 2x quietly.
+        scale_tag, base = "2x", 80
+    return scale_tag, base
 
 
 def _has_4x_frame(sex, layer, anim, facing, frame_idx):
-    strip = _load_image(f"{sex}/4x/{layer}/{anim}_{facing}.png")
+    return _has_scale_frame(sex, "4x", layer, anim, facing, frame_idx)
+
+
+def _has_scale_frame(sex, scale_tag, layer, anim, facing, frame_idx):
+    strip = _load_image(f"{sex}/{scale_tag}/{layer}/{anim}_{facing}.png")
     if strip is None:
-        strip = _load_image(f"{sex}/4x/{layer}/{anim}_{facing}_tint.png")
+        strip = _load_image(f"{sex}/{scale_tag}/{layer}/{anim}_{facing}_tint.png")
     if strip is None:
         return False
     frames = max(1, strip.get_width() // max(1, strip.get_height()))
-    if frames == 1:
-        # A single-frame 4x portrait (creator / shop preview). If the 2x strip animates, use 2x for
-        # every frame: mixing 4x frame 0 with 2x frames 1-7 made a zoomed-in idle figure pop each loop.
+    if frames == 1 and scale_tag in ("4x", "8x"):
+        # Single-frame portrait (creator / shop). Hold it only for frame 0 — if the 2x strip
+        # animates, frames 1–7 must use 2x so the figure does not pop between scales.
         two = _load_image(f"{sex}/2x/{layer}/{anim}_{facing}.png")
-        if two is not None and two.get_width() // max(1, two.get_height()) > 1:
+        if two is not None and two.get_width() // max(1, two.get_height()) > 1 and int(frame_idx) > 0:
             return False
     return frame_idx < frames or frames > 1
 
@@ -474,7 +501,7 @@ def _body_spec(item_id, sex=None):
     tier = _tier_layers(iid, sex)
     if tier:
         return tier
-    if iid in ("leather_body", "goblin_mail"):
+    if iid in ("leather_body",):
         return [("arm_chainbody", _tier_rgb(iid, "leather"))]
     if iid.endswith("_chainbody"):
         return [("arm_chainbody", _tier_rgb(iid))]
@@ -807,7 +834,8 @@ def _draw_outfit_fx(dest, which, sex, appearance, layer, anim, facing, flip, pos
                   special_flags=pygame.BLEND_RGB_ADD)
 
 
-def _draw_jewellery(dest, which, sex, appearance, layer, anim, facing, frame_idx, flip, main_surf, pos, equipment, t, fx_ctx):
+def _draw_jewellery(dest, which, sex, appearance, layer, anim, facing, frame_idx, flip, main_surf, pos, equipment, t, fx_ctx,
+                    scale_tag="2x"):
     """HD jewellery overlays + Crown Jewels sparkle (client/jewellery.py, JEWELLERY_SPEC.md)."""
     look = appearance or {}
     if not (look.get("jewellery") or look.get("head")):
@@ -824,7 +852,11 @@ def _draw_jewellery(dest, which, sex, appearance, layer, anim, facing, frame_idx
         ctx["armour_glow"] = bool(ctx.get("armour_glow") or set_tier(equipment) in ("mithril", "adamant", "dragon", "eclipse")
                                   or ctx.get("eclipse"))
         ctx["elemental_full"] = bool(coll.get("fx"))
-        layer_dir = os.path.join(_BASE, sex, "2x", layer)
+        # Prefer anchors that match the figure scale (shop idle can be 4x/8x); fall back to 2x.
+        tag = scale_tag if scale_tag in ("1x", "2x", "4x", "8x") else "2x"
+        layer_dir = os.path.join(_BASE, sex, tag, layer)
+        if not os.path.isfile(os.path.join(layer_dir, "jw_anchors.json")):
+            layer_dir = os.path.join(_BASE, sex, "2x", layer)
         rect = pygame.Rect(pos[0], pos[1], main_surf.get_width(), main_surf.get_height())
         _jw.draw(dest, main_surf, rect, layer_dir, anim, facing, frame_idx, flip, look, ctx, which=which)
     except Exception as exc:   # never break the figure for an accessory
@@ -888,23 +920,48 @@ def starter_outfit_look(appearance, sex):
 
 def _layer_skin(sex, scale_tag, layer, anim, facing, frame_idx, tile, base):
     """The _skin strip that pairs with a whole-figure frame (RGB = shade ratio*128, A = face/neck/hands)."""
-    if scale_tag == "4x" and not _has_4x_frame(sex, layer, anim, facing, frame_idx):
-        scale_tag, base = "2x", 80
+    scale_tag, base = _resolve_scale(sex, layer, anim, facing, frame_idx, scale_tag, base)
     return _frame_surface(f"{sex}/{scale_tag}/{layer}/{anim}_{facing}_skin.png", frame_idx, scale_tag, tile, base)
 
 
 def _layer_hair(sex, scale_tag, layer, anim, facing, frame_idx, tile, base):
-    """The _hair strip of a bare-head figure (RGB = shade ratio*128, A = hair), else None."""
-    if scale_tag == "4x" and not _has_4x_frame(sex, layer, anim, facing, frame_idx):
-        scale_tag, base = "2x", 80
+    """The _hair strip of a whole figure (RGB = shade ratio*128, A = hair), else None.
+
+    scale_tag/base should already match the body frame (caller passes part_scale).
+    """
     path = f"{sex}/{scale_tag}/{layer}/{anim}_{facing}_hair.png"
     if not os.path.isfile(os.path.join(_BASE, path)):
+        # Fall back to 2x hair when a 4x/8x portrait has no hair mask yet.
+        if scale_tag in ("4x", "8x"):
+            path2 = f"{sex}/2x/{layer}/{anim}_{facing}_hair.png"
+            if os.path.isfile(os.path.join(_BASE, path2)):
+                return _frame_surface(path2, frame_idx, "2x", tile, 80)
         return None
     return _frame_surface(path, frame_idx, scale_tag, tile, base)
 
 
+def _hair_without_skin(hair_surf, skin_surf):
+    """Drop hair-mask pixels that sit on skin so colour changes never recolour the face."""
+    if hair_surf is None:
+        return None
+    if skin_surf is None or skin_surf.get_size() != hair_surf.get_size():
+        return hair_surf
+    import numpy as np
+    out = hair_surf.copy()
+    ha = pygame.surfarray.pixels_alpha(out)
+    sa = pygame.surfarray.pixels_alpha(skin_surf)
+    # Where skin is opaque, hair must not tint (forehead / cheeks / hands bleed).
+    ha[...] = np.where(sa > 60, 0, ha)
+    del ha, sa
+    return out
+
+
 def _skin_whole(main_surf, skin_surf, rgb):
-    """Recolour only the skin of a painted figure: lerp(src, tone * ratio, mask)."""
+    """Recolour only the skin of a painted figure: lerp(src, tone * ratio, mask).
+
+    Painted shade ratios span a wide range (~0.3–1.6). On brown / dark / deep tones that
+    reads as pale patches on the face — compress ratios toward 1.0 as the tone darkens.
+    """
     import numpy as np
     out = main_surf.copy()
     if skin_surf is None or skin_surf.get_size() != out.get_size():
@@ -912,8 +969,17 @@ def _skin_whole(main_surf, skin_surf, rgb):
     px = pygame.surfarray.pixels3d(out)
     src = px.astype(np.float32)
     ratio = pygame.surfarray.pixels3d(skin_surf).astype(np.float32) / 128.0
+    tone = np.array(rgb, dtype=np.float32)
+    # tone_7 olive ~ mid; tone_8–10 need stronger compression
+    tone_lum = float(tone.mean())
+    if tone_lum < 110.0:
+        # 110 → 0, 55 → ~1 (deep brown). Soften painted highlight ratios so they
+        # don't read as pale patches on brown / dark / deep tones.
+        t = float(np.clip((110.0 - tone_lum) / 55.0, 0.0, 1.0))
+        keep = 1.0 - 0.40 * t  # keep 60–100% of painted deviation from 1.0
+        ratio = 1.0 + (ratio - 1.0) * keep
     w = (pygame.surfarray.pixels_alpha(skin_surf).astype(np.float32) / 255.0)[..., None]
-    toned = np.clip(np.array(rgb, dtype=np.float32) * ratio, 0, 255)
+    toned = np.clip(tone * ratio, 0, 255)
     px[...] = (src * (1.0 - w) + toned * w).astype(np.uint8)
     del px
     return out
@@ -1086,7 +1152,10 @@ def draw_player(
     anim="idle", progress=None, facing=1,
     hit_t=-1.0, death_t=-1.0, equipment=None, fx_seed=None, tool=None, starter=True, fx_ctx=None,
 ):
-    """Draw the HD paper doll. starter=False skips the free-outfit default (creator item thumbnails). False means the body art is missing, so use 2D.
+    """Draw the HD villager paper doll. starter=False skips the free-outfit default (creator item thumbnails).
+
+    Returns False only if body art is missing after retries. Callers must not use the
+    old 2D humanoid for players — retry with get_default_appearance instead.
 
     fx_seed (players only): enables the worn-gear sparkle overlay (eclipse_fx)
     when the equipment qualifies. NPCs, monsters and pets leave it None.
@@ -1103,7 +1172,7 @@ def draw_player(
             )
     sex = "female" if sex == "female" else "male"
     # Armour never switches to the layered doll: partial armour keeps the outfit figure, a full set
-    # shows its painted tier figure. The doll is only a dormant backup for missing art or an error.
+    # shows its painted tier figure. Prefer the whole villager figure; layered is HD-only backup.
     try:
         hd_look = starter_outfit_look(appearance, sex) if starter else (appearance or {})
         probe = _whole_anim_for(*_frame_for_anim(anim, t, progress, -1.0, -1.0), t, equipment)[0]
@@ -1116,11 +1185,21 @@ def draw_player(
                 ctx["full_armour"] = False
             return _draw_player_core(surf, sex, hd_look, cx, cy_feet, tile, t, anim, progress, facing,
                                      hit_t, death_t, equipment, tool, fx_ctx=ctx)
-    except Exception:   # dormant backup: any error in the HD path falls through to the layered doll
+    except Exception:
         import logging
-        logging.getLogger("player_hd").exception("HD outfit draw failed; using the layered doll")
-    return _draw_player_core(surf, sex, appearance or get_default_appearance(sex, starter=False), cx, cy_feet,
-                             tile, t, anim, progress, facing, hit_t, death_t, equipment, tool, layered=True)
+        logging.getLogger("player_hd").exception("HD outfit draw failed; retrying villager default")
+        appearance = get_default_appearance(sex, starter=True)
+    default = get_default_appearance(sex, starter=True)
+    ok = _draw_player_core(
+        surf, sex, appearance or default, cx, cy_feet, tile, t, anim, progress, facing,
+        hit_t, death_t, equipment, tool, layered=False,
+    )
+    if ok:
+        return True
+    return _draw_player_core(
+        surf, sex, default, cx, cy_feet, tile, t, anim, progress, facing,
+        hit_t, death_t, equipment, tool, layered=False,
+    )
 
 
 def _draw_player_core(surf, sex, appearance, cx, cy_feet, tile, t, anim, progress, facing,
@@ -1130,12 +1209,16 @@ def _draw_player_core(surf, sex, appearance, cx, cy_feet, tile, t, anim, progres
     if not layered and final_anim in ("hit", "death") and anim in _WHOLE_ANIMS:
         # outfits have no hit/death strips: hold the outfit's own frame instead of flashing the doll
         final_anim, frame_idx = _frame_for_anim(anim, t, progress, -1.0, -1.0)
-    scale_tag, base = _scale_for(tile)
+    preview = bool((fx_ctx or {}).get("preview"))
+    scale_tag, base = _scale_for(tile, preview=preview)
     meta = _load_meta()
-    # 4x sheets are idle previews for the creator and shop. Walk and combat
+    # 8x/4x sheets are idle previews for the creator and shop. Walk and combat
     # live at 2x, so a close camera scales those up instead of dropping to 2D.
-    if scale_tag == "4x" and final_anim != "idle":
+    if scale_tag in ("4x", "8x") and final_anim != "idle":
         scale_tag, base = "2x", 80
+    # Outfitters stage: hold the AI/portrait idle (frame 0) so we never mix 8x with 2x breath frames.
+    if preview and scale_tag in ("4x", "8x") and final_anim == "idle":
+        frame_idx = 0
     facing_tag = _facing_str(facing)
     flip_x = False
     if final_anim in ("melee", "ranged"):
@@ -1166,7 +1249,7 @@ def _draw_player_core(surf, sex, appearance, cx, cy_feet, tile, t, anim, progres
             facing_tag, flip_x = _facing_str(facing), False
             if facing_tag == "w":
                 facing_tag, flip_x = "e", True
-            if scale_tag == "4x":
+            if scale_tag in ("4x", "8x"):
                 scale_tag, base = "2x", 80
     if whole:
         hair_id = (appearance or {}).get("hair_colour") or ("chestnut" if sex == "female" else "dark_brown")
@@ -1205,13 +1288,13 @@ def _draw_player_core(surf, sex, appearance, cx, cy_feet, tile, t, anim, progres
     for layer_name, tint_rgb, _z in visible:
         use_facing = facing_tag
         layer_flip = flip_x
-        main_surf, tint_surf = _layer_parts(
+        main_surf, tint_surf, part_scale, part_base = _layer_parts(
             sex, scale_tag, layer_name, final_anim, use_facing, frame_idx, tile, base,
         )
         if main_surf is None and tint_surf is None and use_facing != "e":
             if final_anim in ("melee", "ranged") and use_facing in ("s", "n"):
                 _warn_missing_strip(sex, final_anim, use_facing)
-            main_surf, tint_surf = _layer_parts(
+            main_surf, tint_surf, part_scale, part_base = _layer_parts(
                 sex, scale_tag, layer_name, final_anim, "e", frame_idx, tile, base,
             )
             layer_flip = True
@@ -1237,14 +1320,21 @@ def _draw_player_core(surf, sex, appearance, cx, cy_feet, tile, t, anim, progres
             last_draw.clear()
             last_draw.update({"anim": final_anim, "facing": file_facing, "strip": f"{final_anim}_{file_facing}.png",
                               "frame": frame_idx, "flip": bool(layer_flip), "whole": layer_name})
-            skin_surf = _layer_skin(sex, scale_tag, layer_name, final_anim, file_facing, frame_idx, tile, base)
+            # Load skin/hair at the same resolved scale as the body (shop 4x portraits).
+            skin_surf = _layer_skin(sex, part_scale, layer_name, final_anim, file_facing, frame_idx, tile, part_base)
             rgb = tuple(tint_rgb["skin_whole"])
             main_surf = _cached(("whole", id(main_surf), rgb), lambda: _skin_whole(main_surf, skin_surf, rgb))
-            if is_barehead_layer(layer_name):
-                hair_surf = _layer_hair(sex, scale_tag, layer_name, final_anim, file_facing, frame_idx, tile, base)
-                hrgb = tuple(tint_rgb.get("hair_whole") or (112, 76, 52))
-                if hair_surf is not None:
-                    main_surf = _cached(("hair", id(main_surf), hrgb), lambda: _skin_whole(main_surf, hair_surf, hrgb))
+            # Hair tint whenever a ratio mask exists (bare-head armour, fire/water, starters, …).
+            # Missing mask → leave painted hair alone (avoids walk/idle colour flash).
+            # Never let hair tint touch skin pixels (face / neck / hands).
+            hair_surf = _hair_without_skin(
+                _layer_hair(sex, part_scale, layer_name, final_anim, file_facing, frame_idx, tile, part_base),
+                skin_surf,
+            )
+            hrgb = tuple(tint_rgb.get("hair_whole") or (112, 76, 52))
+            if hair_surf is not None and hair_surf.get_size() == main_surf.get_size():
+                main_surf = _cached(("hair", id(main_surf), id(hair_surf), hrgb),
+                                    lambda: _skin_whole(main_surf, hair_surf, hrgb))
             tint_rgb = None
         if isinstance(tint_rgb, dict):
             main_surf, tint_surf = _recolour(tint_rgb, main_surf, tint_surf)
@@ -1276,7 +1366,7 @@ def _draw_player_core(surf, sex, appearance, cx, cy_feet, tile, t, anim, progres
             dest.blit(main_surf, pos)
         if fx_here:
             _draw_jewellery(dest, "jewellery", sex, appearance, whole, final_anim, _vf, frame_idx, layer_flip,
-                            main_surf, pos, equipment, t, fx_ctx)
+                            main_surf, pos, equipment, t, fx_ctx, scale_tag=scale_tag)
         if fx_here:
             _draw_outfit_fx(dest, "front", sex, appearance, whole, final_anim, _vf, layer_flip,
                             (cx + off_dx, cy_feet + off_dy), tile, t, fx_ctx)
@@ -1284,7 +1374,7 @@ def _draw_player_core(surf, sex, appearance, cx, cy_feet, tile, t, anim, progres
             _slung.draw(dest, main_surf, pos, vis_facing, equipment, "over")
         if fx_here:
             _draw_jewellery(dest, "head", sex, appearance, whole, final_anim, _vf, frame_idx, layer_flip,
-                            main_surf, pos, equipment, t, fx_ctx)
+                            main_surf, pos, equipment, t, fx_ctx, scale_tag=scale_tag)
         if (layer_name == whole and main_surf is not None and (str(whole).startswith("outfit_") or is_barehead_layer(whole))
                 and final_anim in _helm.HELMET_ANIMS):
             _helm.draw(dest, main_surf, pos, sex, "w" if (file_facing == "e" and layer_flip) else file_facing,
@@ -1304,7 +1394,7 @@ def _draw_player_core(surf, sex, appearance, cx, cy_feet, tile, t, anim, progres
 def _erase_under(dest, sex, scale_tag, layer_name, anim, facing, frame_idx, tile, base, flip, pos):
     """Multiply everything drawn so far by (1 - mask alpha), using the same frame, facing and flip."""
     mask_name = mask_layer_for(sex, layer_name)
-    m_main, m_tint = _layer_parts(sex, scale_tag, mask_name, anim, facing, frame_idx, tile, base)
+    m_main, m_tint, _ps, _pb = _layer_parts(sex, scale_tag, mask_name, anim, facing, frame_idx, tile, base)
     frame = m_main or m_tint
     if frame is None:
         key = (sex, mask_name, anim, facing)

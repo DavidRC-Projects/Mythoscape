@@ -23,7 +23,11 @@ TIDEHOLLOW_FLOORS = [
 DUNGEON_W, DUNGEON_H = 71, 38
 # Entrance hall centre (chamber 0) with the exit passage running south.
 DUNGEON_SPAWN = (7, 33)
-CAVE_RETURN = (189, 54)  # just south of the cave mouth
+try:
+    import world_map as _wm
+    CAVE_RETURN = tuple(_wm.TIDEHOLLOW_RETURN)
+except Exception:
+    CAVE_RETURN = (204, 14)  # south apron of the Harbourreach mouth
 
 # Per chamber: combat level + three distinct monster types.
 # Room 0 is the entrance (EXIT south) — it fights too, so the first sealed door

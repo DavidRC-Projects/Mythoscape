@@ -568,6 +568,14 @@ def support(conn, pid, direction, now=None):
 
 
 def title_suffix(conn, pid):
+    # Personal house (e.g. House of the Creator) wins over kingdom pledge titles.
+    # Crest icon on the client replaces the long "of House …" nameplate text.
+    try:
+        import player_houses
+        if player_houses.has_house(conn, pid):
+            return ""
+    except Exception:
+        pass
     try:
         p = pledge_of(conn, pid)
     except Exception:
@@ -586,11 +594,19 @@ def title_suffix(conn, pid):
 def house_lines(conn, pid=None):
     st = stances(conn)
     lines = [f"{HOUSES[k]}: {stance_band(st[k])} ({st[k]:+d})" for k in HOUSES]
+    if pid is not None:
+        try:
+            import player_houses
+            ph = player_houses.get_house(conn, pid)
+            if ph:
+                lines.append(f"Your personal house: {ph['name']}.")
+        except Exception:
+            pass
     p = pledge_of(conn, pid) if pid is not None else None
     if p:
         lines.append(f"You are pledged to {HOUSES[p['house']]}, favour {p['favour']}/{FAVOUR_MAX}.")
     elif pid is not None:
-        lines.append("You are not pledged to any house. Speak with an envoy in the castle courtyard.")
+        lines.append("You are not pledged to any kingdom house. Speak with an envoy in the castle courtyard.")
     return lines
 
 

@@ -43,11 +43,13 @@ pip install -r requirements-dev.txt
 
 Open **two terminals**, both with the venv activated.
 
-**1. Server** (binds `0.0.0.0:8765`):
+**1. Server** (binds `127.0.0.1:8765` by default — not exposed on the LAN/internet):
 
 ```bash
 cd game/assets/mmorpg/server
 python server.py
+# LAN only if you really need it:
+# CROWNFALL_HOST=0.0.0.0 python server.py
 ```
 
 **2. Client**:
@@ -55,7 +57,7 @@ python server.py
 ```bash
 cd game/assets/mmorpg/client
 python client.py              # connect to localhost
-python client.py 192.168.1.5  # connect to a LAN host
+python client.py 192.168.1.5  # only if the host explicitly bound 0.0.0.0
 ```
 
 Create an account on the login screen, then enter the world. Player data is stored in a local SQLite database under `server/` (gitignored).
@@ -64,9 +66,13 @@ On the login screen you can open **Hiscores** (or press **F3**) for top players 
 
 ### LAN / friends on the same network
 
-1. Start the server on the host machine as above.
+Only if you intentionally want LAN play (this opens the game port on your machine):
+
+1. `CROWNFALL_HOST=0.0.0.0 python server.py` on the host.
 2. Allow inbound TCP **8765** on that machine’s firewall if needed.
 3. On other PCs, run `python client.py <host-lan-ip>`.
+
+For friends over the internet, host on a VPS behind **your own domain** + Caddy/nginx — do not tunnel a home PC to the public internet.
 
 ## How to play
 
@@ -158,6 +164,26 @@ Source art packs and HD pipelines live under `game/assets/` (buildings, monsters
 | Shop | `SHOPS` + NPC `shop_id` |
 | Map area | `server/world_map.py` |
 
+## Friends beta (website + one-click Mac client)
+
+Closed beta for friends: a small site with an invite code, and a **double-click Mac app** that already points at your `wss://` server — no terminal for players.
+
+| Piece | Path |
+|-------|------|
+| Landing site | [`website/`](website/) |
+| Pack Mac zip | [`game/assets/mmorpg/tools/pack_beta_macos.sh`](game/assets/mmorpg/tools/pack_beta_macos.sh) |
+| Site + play Caddy | [`game/assets/mmorpg/deploy/Caddyfile.example`](game/assets/mmorpg/deploy/Caddyfile.example) |
+
+```bash
+# 1) Build the download (on a Mac)
+CROWNFALL_PLAY_HOST=play.yourdomain.com ./game/assets/mmorpg/tools/pack_beta_macos.sh
+
+# 2) Preview the site
+cd website && python3 -m http.server 8080
+```
+
+Change the invite code in `website/js/site.js` before you share the URL. Set `CROWNFALL_ALLOW_REGISTER=1` only while friends need new accounts (or hand out accounts yourself and set it to `0`).
+
 ## Security / deploy (go-live checklist)
 
 Crownfall is designed to sit **behind a TLS reverse proxy**. Never expose port `8765` to the public internet.
@@ -165,16 +191,20 @@ Crownfall is designed to sit **behind a TLS reverse proxy**. Never expose port `
 ### Recommended layout
 
 ```
-Internet → (optional Cloudflare) → Caddy :443 (wss) → 127.0.0.1:8765 (Python)
+Internet → your domain (Caddy/nginx :443 with your TLS certs)
+   ├─ crownfall.example.com  → static website/ (invite + download)
+   └─ play.crownfall.example.com → 127.0.0.1:8765 (Python / wss)
 ```
+
+The game process listens on **localhost only** by default. Do not put a public tunnel in front of your home machine — host the server on a VPS (or similar) behind your own domain.
 
 Example configs: [`game/assets/mmorpg/deploy/Caddyfile.example`](game/assets/mmorpg/deploy/Caddyfile.example) and [`game/assets/mmorpg/deploy/crownfall.service.example`](game/assets/mmorpg/deploy/crownfall.service.example).
 
 ### Production environment
 
 ```bash
-export CROWNFALL_ENV=production          # binds 127.0.0.1 by default
-export CROWNFALL_HOST=127.0.0.1
+export CROWNFALL_ENV=production          # production hardening
+export CROWNFALL_HOST=127.0.0.1          # default anyway — never 0.0.0.0 on a public box
 export CROWNFALL_PORT=8765
 export CROWNFALL_ALLOW_REGISTER=1        # set 0 for closed beta
 export CROWNFALL_DEV=0                   # never 1 on a public box unless needed
@@ -194,13 +224,13 @@ export CROWNFALL_WS_URL=wss://play.example.com
 python client.py
 ```
 
-Local / LAN without TLS still works: `python client.py` or `python client.py 192.168.1.5:8765`.
+Local play (same machine): `python client.py`. Same LAN only if you explicitly set `CROWNFALL_HOST=0.0.0.0` and open the firewall yourself.
 
 ### Before you go live
 
-- [ ] App binds `127.0.0.1` only (`CROWNFALL_ENV=production`)
-- [ ] Caddy/nginx terminates TLS; firewall allows **22 / 80 / 443** only — **not** 8765
-- [ ] Optional Cloudflare proxy for volumetric DDoS
+- [ ] App binds `127.0.0.1` only (default; confirm with `lsof -iTCP:8765`)
+- [ ] Caddy/nginx on **your domain** terminates TLS; firewall allows **22 / 80 / 443** only — **not** 8765
+- [ ] No public tunnel / proxy pointing at a home PC
 - [ ] `CROWNFALL_DEV=0` (no `::` god commands for normal players)
 - [ ] Passwords are argon2id; registration rate-limited; login lockout after failed attempts
 - [ ] `world.db` is mode `600`, not under any static HTTP root; WAL enabled

@@ -231,11 +231,12 @@ def _overworld_cases():
         problems = []
         if tag != want:
             problems.append(f"facing {face} tag {tag}")
-        if drawn.get("anim") != "melee":
+        if drawn.get("anim") not in ("melee", "melee_sword"):
             problems.append(f"anim {drawn.get('anim')}")
         letter = "e" if want == "w" else want
-        if drawn.get("strip") != f"melee_{letter}.png":
-            problems.append(f"strip {drawn.get('strip')}")
+        strip = drawn.get("strip") or ""
+        if strip not in (f"melee_{letter}.png", f"melee_sword_{letter}.png"):
+            problems.append(f"strip {strip}")
         if want == "w" and not drawn.get("flip"):
             problems.append("west was not mirrored")
         if drawn.get("frame") != 4:
@@ -343,8 +344,9 @@ def main():
                     )[1]
                     drawn = dict(player_hd_client.last_draw)
                     frames_for_yaw.append(frame)
-                    if anim != "melee" or drawn.get("anim") != "melee":
-                        problems.append(f"anim {anim}/{drawn.get('anim')}")
+                    drawn_anim = drawn.get("anim")
+                    if anim != "melee" or drawn_anim not in ("melee", "melee_sword"):
+                        problems.append(f"anim {anim}/{drawn_anim}")
                     if facing not in (1, -1, "front", "back"):
                         problems.append(f"facing {facing}")
 
@@ -365,7 +367,12 @@ def main():
                 strip = drawn.get("strip") or ""
                 if anim == "melee" and facing in (1, -1, "front", "back"):
                     letter = {1: "e", -1: "e", "front": "s", "back": "n"}[facing]
-                    if strip != f"melee_{letter}.png" or "idle" in strip:
+                    # HD packs use melee_<dir>.png or melee_sword_<dir>.png.
+                    ok_strip = strip in (
+                        f"melee_{letter}.png",
+                        f"melee_sword_{letter}.png",
+                    ) and "idle" not in strip
+                    if not ok_strip:
                         problems.append(f"strip {strip}")
                     if facing == -1 and not drawn.get("flip"):
                         problems.append("west did not mirror the east strip")

@@ -199,10 +199,25 @@ async def open_talk(session, npc):
     lines, ready = oath_progress(session)
     status_line = " · ".join(lines)
     prog = session.quests.get("fairy_oath")
+    others = [qid for qid in __import__("content").QUESTS if qid != "fairy_oath"]
+    others_done = bool(others) and all(
+        (quest_status_for(session, qid) or {}).get("status") == "complete" for qid in others
+    )
     if prog is None:
         session.quests["fairy_oath"] = {"status": "active", "progress": 0}
         WORLD.db.set_quest_progress(session.player_id, "fairy_oath", "active", 0)
         pages = [list(page.get("lines") or []) for page in data.get("pages") or []]
+        if not others_done:
+            await send(
+                session.ws, "CHAT_MSG",
+                **{
+                    "from": npc["name"],
+                    "text": (
+                        "The Royal Challenge waits in your journal — finish the realm's "
+                        "other quests first. Your next quest will guide you."
+                    ),
+                },
+            )
     elif ready:
         if prog.get("status") != "complete":
             session.quests["fairy_oath"] = {"status": "complete", "progress": 1}

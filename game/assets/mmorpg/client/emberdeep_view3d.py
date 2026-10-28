@@ -43,8 +43,15 @@ def _load_rgb(path):
 
 def _sample(tex, u, v):
     h, w = tex.shape[:2]
-    x = (np.floor(u * w).astype(np.int32)) % w
-    y = (np.floor(v * h).astype(np.int32)) % h
+    # Degenerate rays / behind-camera UVs can be NaN; treat as 0 so sampling never traps.
+    u = np.asarray(u, dtype=np.float64)
+    v = np.asarray(v, dtype=np.float64)
+    u = np.where(np.isfinite(u), u, 0.0)
+    v = np.where(np.isfinite(v), v, 0.0)
+    x = np.remainder(np.floor(u * w), w).astype(np.int64)
+    y = np.remainder(np.floor(v * h), h).astype(np.int64)
+    x = np.clip(x, 0, max(0, w - 1)).astype(np.int32)
+    y = np.clip(y, 0, max(0, h - 1)).astype(np.int32)
     return tex[y, x]
 
 

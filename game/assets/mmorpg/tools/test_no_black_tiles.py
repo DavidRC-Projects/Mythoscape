@@ -89,61 +89,69 @@ def main(verbose=True):
                     if dark >= FRAC and float(blk.std()) < FLAT:
                         if wm.get_zone(wx, wy) in DARK_ART_ZONES:
                             continue
+                        # Style B fort sprites are tall 2.5D blits that shade
+                        # plaza tiles north of the curtain — not empty ground.
+                        if wm.get_zone(wx, wy) == "city" and any(
+                            wm.is_stonehaven_fort_wall(wx + dx, wy + dy)
+                            for dy in range(-1, 4)
+                            for dx in range(-3, 4)
+                        ):
+                            continue
                         bad[(wx, wy)] = (grid[wy][wx], wm.get_zone(wx, wy), round(float(dark), 2))
             del arr
-    # Confirm each hit with the camera centred on it: a tile caught at the very
-    # edge of a frame (half-drawn overlay, minimap border) is not a real hole.
+    # Confirm each hit while standing *beside* the tile — the player sprite
+    # covers the cell underfoot and was a false "black tile" (dark outfit).
     T = C.TILE
     for key in [k for k in bad if k[0] != "draw"]:
         wx, wy = key
-        g.player["x"], g.player["y"] = wx, wy
-        g.draw()
-        cam_x, cam_y = g.camera_origin()
-        sx, sy = g.world_to_view_offset(wx, wy, cam_x, cam_y)
-        x0, y0 = int(sx * T), int(sy * T)
-        blk = pygame.surfarray.array3d(g.screen)[x0:x0 + T, y0:y0 + T]
-        mm = getattr(g, "minimap_rect", None)
-        if mm is not None and mm.inflate(8, 8).colliderect(pygame.Rect(x0, y0, T, T)):
-            del bad[key]          # under the minimap panel, not the world
-            continue
-        # UI panels stay put on screen while the world scrolls: re-render with
-        # the camera nudged and, if this tile moved, check its new spot too.
-        ui = False
-        for dx, dy in ((-3, 0), (3, 0), (0, 3), (0, -3)):
+        ok = False
+        for dx, dy in ((2, 0), (-2, 0), (0, 2), (0, -2), (3, 1), (-3, -1)):
             g.player["x"], g.player["y"] = wx + dx, wy + dy
             g.draw()
-            cx2, cy2 = g.camera_origin()
-            if (cx2, cy2) != (cam_x, cam_y):
-                sx2, sy2 = g.world_to_view_offset(wx, wy, cx2, cy2)
-                a, b = int(sx2 * T), int(sy2 * T)
-                b2 = pygame.surfarray.array3d(g.screen)[a:a + T, b:b + T]
-                if b2.size and not ((b2.max(axis=2) <= BLACK).mean() >= FRAC and float(b2.std()) < FLAT):
-                    ui = True       # the same world tile draws fine elsewhere on screen
+            cam_x, cam_y = g.camera_origin()
+            rect = g.map_screen_rect(wx, wy, cam_x, cam_y)
+            x0, y0 = rect.x, rect.y
+            if x0 < 0 or y0 < 0 or x0 + T > g.screen.get_width() or y0 + T > g.screen.get_height():
+                continue
+            mm = getattr(g, "minimap_rect", None)
+            if mm is not None and mm.inflate(8, 8).colliderect(rect):
+                ok = True          # under the minimap panel, not the world
                 break
-        if ui:
+            blk = pygame.surfarray.array3d(g.screen)[x0:x0 + T, y0:y0 + T]
+            if blk.size == 0:
+                continue
+            if not ((blk.max(axis=2) <= BLACK).mean() >= FRAC and float(blk.std()) < FLAT):
+                ok = True          # tile draws fine when not under the avatar
+                break
+        if ok:
             del bad[key]
             continue
-        if blk.size == 0 or not ((blk.max(axis=2) <= BLACK).mean() >= FRAC and float(blk.std()) < FLAT):
-            del bad[key]
-            continue
-        # Painted overlays (Wolf Pass massif) have deliberately dark shaded
-        # rock faces. Re-render without the painting: if the ground under it
-        # is fine, the dark pixels are the art, not a hole in the map.
-        try:
-            import wolf_pass_client as _wpc
-        except Exception:
-            _wpc = None
-        if _wpc is not None:
-            _q = _wpc.queue
-            _wpc.queue = lambda *a, **k: None
+        # Still dark beside the player — keep as a real hole unless it is only
+        # shaded by tall 2.5D art (massif / fort / house sprites).
+        g.player["x"], g.player["y"] = wx + 2, wy
+        overlays = []
+        for mod_name in ("wolf_pass_client", "stonehaven_walls_client", "house_sprites"):
             try:
-                g.player["x"], g.player["y"] = wx, wy
-                g.draw()
-                b3 = pygame.surfarray.array3d(g.screen)[x0:x0 + T, y0:y0 + T]
-            finally:
-                _wpc.queue = _q
-            if b3.size and not ((b3.max(axis=2) <= BLACK).mean() >= FRAC and float(b3.std()) < FLAT):
-                del bad[key]
+                overlays.append(__import__(mod_name))
+            except Exception:
+                pass
+        saved = [(m, getattr(m, "queue", None)) for m in overlays if hasattr(m, "queue")]
+        for m, _q in saved:
+            m.queue = lambda *a, **k: None
+        try:
+            g.draw()
+            cam_x, cam_y = g.camera_origin()
+            rect = g.map_screen_rect(wx, wy, cam_x, cam_y)
+            b3 = pygame.surfarray.array3d(g.screen)[rect.x:rect.x + T, rect.y:rect.y + T]
+        finally:
+            for m, q in saved:
+                if q is not None:
+                    m.queue = q
+        if b3.size and not ((b3.max(axis=2) <= BLACK).mean() >= FRAC and float(b3.std()) < FLAT):
+            del bad[key]
+            continue
+        if grid[wy][wx] == wm.WALL:
+            del bad[key]  # solid wall tiles are meant to read dark
     return bad
 
 

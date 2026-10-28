@@ -29,40 +29,31 @@ SWORD_COOLDOWN_S = 3600
 OPT_WEAR, OPT_TAKE, OPT_COLLECT, OPT_EQUIP = "kit_wear", "kit_take", "kit_collect", "kit_equip"
 OPT_SWORD, OPT_REMIND, OPT_SKIP = "kit_sword", "remind", "skip"
 
-TOOLS_STEP = (
-    "Tools: your hatchet, pickaxe and fishing net are in your bag. Click one to equip it. It moves into the "
-    "tool slot on your Equipment screen and leaves your bag.",
-    "You chop, mine or fish with the tool you have equipped, so swap to the right one first: "
-    "hatchet for trees, pickaxe for rocks, net or rod for fishing spots.",
+# First talk: short, idiot-proof controls + kit. Long systems wait for Remind / later NPCs.
+FIRST_VISIT = (
+    ("Walk: click the ground, or use arrow keys / number pad.",
+     "Zoom: mouse wheel over the map (or - and =)."),
+    ("Travel: press M, pick a place — you still walk there.",
+     "Minimap shows the way. H = every control."),
+    ("Take the Recruit's Bronze kit below — prefer \"Take the kit and put it on\".",
+     "Axe, pickaxe and net are already on — click trees, rocks or fish spots. Sword is for fighting."),
 )
 
+# Remind me: a bit more, still short. Bank / reputation / outfits live here, not the first dump.
 TOUR = (
-    ("Walking: click the ground and you'll walk there. The arrow keys move you one tile at a time.",
-     "Zoom with the mouse wheel over the map, or with - and =. The minimap shows where you are. "
-     "Right-click it to open the world map. M opens Travel. H lists every control."),
+    ("Walking: click the ground to walk there, or use arrow keys / number pad one tile at a time.",
+     "Zoom: mouse wheel over the map, or - and =. Travel: press M. World map: right-click the minimap. H = all controls."),
     ("Fighting: you need a sword or axe in your hand. Click a monster to attack, or press Space for the nearest "
-     "one. R eats food.",
-     "Nameplates are coloured against your level: green you'll win, yellow it's even, orange it's risky, "
-     "red you should leave alone.",
-     "Armour helps but isn't required. Without a sword or axe you can't fight at all, so if something "
-     "attacks you empty-handed, run."),
-    ("Dungeons: the gate opens for anyone with a sword or axe equipped. Armour is up to you.",),
-    ("Outfits and armour don't mix. Put on any armour piece and your outfit comes off.",
-     "Put on an outfit from Mae and your armour goes to your bag, or the bank if your bag is full. "
-     "Nothing is ever lost. Your sword or axe stays in your hand either way."),
-    TOOLS_STEP,
-    ("Skills: chop, mine, fish, cook, smith, fletch and more. Each one levels up as you use it. "
-     "Press Tab to see them all.",
-     "Gareth's smithy, far to the north-east, sells bronze to mithril and buys ore. "
-     "Elena, to the east, teaches archery."),
-    ("The bank: press B near a booth. Your purse holds 65,000 coins, so keep the rest in the vault. "
-     "Land fees are taken from the bank first.",),
-    ("Reputation: honest work, quests and paying your dues all raise it. Shops treat you better as it grows, "
-     "and it opens noble ranks with the Chamberlain.",
-     "A high-ranking noble with a guild behind them can challenge for a castle, and one day the Crown itself. "
-     "That's the road to the throne."),
-    ("Where next: Elder Miriam, in the north-west cottage, has a rat problem. It's a good first fight in your new kit.",
-     "Come back any time and I'll go over all of this again."),
+     "one.",
+     "Nameplates: green = easy, yellow = even, orange = risky, red = leave alone. "
+     "Empty-handed? Run. Innkeeper Sarah (south of Miriam) shows you how to eat food."),
+    ("Tools: axe, pickaxe and net start equipped — Equipment (E) or the Gathering tab. "
+     "Keep your sword on; gathering plays the right tool when you click the resource.",
+     "After Miriam's rats, the Crypt behind the bank (The Depths) is your first dungeon. "
+     "Tidehollow by the harbour is later."),
+    ("Skills: Tab. Bank: B near a booth. Outfits (Mae) swap off armour into your bag — nothing is lost.",
+     "Where next: Elder Miriam NW cottage, then Lira by the well and Elena to the east. "
+     "Come back any time for this reminder."),
 )
 
 
@@ -226,21 +217,23 @@ def status(conn, session, items, now=None):
     }
 
 
-def public_state(st, guide):
+def public_state(st, guide, coaches=None):
     """What the client gets: only enough to draw the trail. The server re-checks everything on each request."""
     g = guide or {}
+    seen = set(coaches or ())
     return {"show_path": bool(st["show_path"]), "claimed": bool(st["claimed"]), "owed": len(st["owed"]),
             "skipped": bool(st["skipped"]),
+            # Spine after kit: Sarah (eat) → Miriam. Client stages the trail from this.
+            "eat_done": COACH_EAT in seen,
             "guide": {"id": GUIDE_ID, "name": GUIDE_NAME, "x": g.get("x"), "y": g.get("y")}}
 
 
-def public_state_after_claim(st, guide):
-    """State right after the kit is claimed: the trail is off, but stage 2 (Miriam's quest) can begin.
+def public_state_after_claim(st, guide, coaches=None):
+    """State right after the kit is claimed: trail stays on for Sarah → Miriam.
 
-    The client uses show_path + claimed to run stage 2 while no quest is underway, so a fresh WELCOME_STATE
-    must arrive after the claim — the client can't derive it from QUEST_LOG alone.
+    The client uses show_path + claimed (+ eat_done) while no quest is underway.
     """
-    state = public_state(st, guide)
+    state = public_state(st, guide, coaches=coaches)
     state["claimed"] = True
     state["show_path"] = True
     return state
@@ -275,26 +268,70 @@ def allowed(st):
 
 def greeting(st, name):
     if st["can_claim"]:
-        return [f"Well met, {name}! I'm Warden Tamsin. I get new arrivals ready for Crownfall.",
-                "I've a Recruit's Bronze kit with your name on it: helmet, chest plate, leg armour and a sword. "
-                "Click Next to hear how things work, or just take the kit."]
+        return [f"Well met, {name}! I'm Warden Tamsin.",
+                "Click Next for walk, zoom and Travel — then take your Bronze kit."]
     if st["owed"]:
-        return ["I'm still holding part of your kit. Make some room in your bag and I'll hand it over."]
+        return ["Still holding part of your kit. Free bag space and talk again."]
     if st["sword_offer"]:
-        return ["No weapon at all? That won't do. You can't fight empty-handed.",
-                "Gareth's smithy sells bronze, or you can smith your own at the anvil. "
-                "I can spare one Recruit's sword to tide you over."]
+        return ["Empty-handed? Gareth sells bronze, or take one spare sword from me."]
     if st["claimed"]:
-        return [f"Good to see you, {name}. Lost your kit? I can only hand it out once, but Gareth's smithy "
-                "sells bronze, and you can smith your own at the anvil."]
-    return [f"Good to see you, {name}. You look well equipped already. The kit's for those starting out.",
-            "Ask me anything you like, though."]
+        return [f"Good to see you, {name}. Kit's one-time — Gareth sells bronze if you need more."]
+    return [f"Good to see you, {name}. You're set. Pick Remind me if you want a refresher."]
 
 
 def pages(st, name, tour=False, note=None):
-    """Paged dialogue: a short first page, then the tour when asked (or on a first, unclaimed visit)."""
+    """Paged dialogue: greeting, then first-visit controls (or Remind tour). Notes stay single-page."""
     first = list(note) if note else greeting(st, name)
     out = [first]
-    if tour or (note is None and st["can_claim"]):
+    if note is not None:
+        return out
+    if tour:
         out += [list(p) for p in TOUR]
+    elif st["can_claim"]:
+        out += [list(p) for p in FIRST_VISIT]
     return out
+
+
+# ---- UI coaches (one tip per NPC beat; persisted so reconnects don't re-spam) -------------------------------
+COACH_EQUIP = "equip_gear_v2"  # sidebar Equipment + unequip/equip; waits for dialogue close
+COACH_QUEST_ACCEPT = "quest_accept"
+COACH_INVENTORY = "inventory"
+COACH_INV_FILTERS = "inv_filters"  # bag filter chips (Quest / Weapon / Armour…) on first quest
+COACH_SKILLS = "skills"
+COACH_EAT = "eat_hp"  # why food/potions matter + Eat/R pointer
+COACH_AUTO_PICKUP = "auto_pickup_coins_bones"  # Coins+bones toggle (off by default)
+COACH_FIRST_FIGHT = "first_fight"  # first attack: click/Space + R
+COACH_FIRST_KILL = "first_kill"    # first quest kill — confidence beat
+COACH_DEATH = "first_death"        # post-death recovery once
+
+
+def ensure_coaches_col(conn):
+    ensure_schema(conn)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(welcome_kit)").fetchall()}
+    if "coaches_seen" not in cols:
+        conn.execute("ALTER TABLE welcome_kit ADD COLUMN coaches_seen TEXT NOT NULL DEFAULT '[]'")
+        conn.commit()
+
+
+def coaches_seen(conn, player_id):
+    ensure_coaches_col(conn)
+    row = conn.execute("SELECT coaches_seen FROM welcome_kit WHERE player_id = ?", (player_id,)).fetchone()
+    if not row:
+        return set()
+    try:
+        return set(json.loads(row[0] or "[]"))
+    except (TypeError, ValueError):
+        return set()
+
+
+def mark_coach_seen(conn, player_id, coach_id):
+    ensure_coaches_col(conn)
+    _ensure_row(conn, player_id)
+    seen = coaches_seen(conn, player_id)
+    if coach_id in seen:
+        return False
+    seen.add(coach_id)
+    conn.execute("UPDATE welcome_kit SET coaches_seen = ? WHERE player_id = ?",
+                 (json.dumps(sorted(seen)), player_id))
+    conn.commit()
+    return True

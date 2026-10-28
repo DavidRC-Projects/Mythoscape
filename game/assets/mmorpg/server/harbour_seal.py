@@ -1,37 +1,30 @@
-"""Wolf Pass is the only walkable way into Harbourreach.
+"""Wolf Pass is the only deliberate chokepoint into Harbourreach from the west.
 
-Two pieces close every other route:
-  * a rock spur (x 166–169) north and south of the pass mouth, joining the
-    Wolf Pass massif to the castle's east moat, and
-  * the Harbour Inlet, a 3-tile channel of sea from that moat to the east
-    coast (y 43–45), cutting off the open fields south of the harbour.
-The pass road itself (y 13–17) stays open. Collision is per tile; the client
-draws the inlet as water and the spur as rock.
+A rock spur (x 166–169) runs the full map height except the pass road (y 13–17),
+so nothing can slip south around the massif into the harbour. The old Harbour
+Inlet (sea at y 43–45) was removed — it cut the fields south of the docks.
 """
 
 ROCK_X = (166, 169)
-ROCK_ROWS = tuple(range(0, 13)) + tuple(range(18, 29))
-PASS_ROWS = (13, 17)
-INLET_X = (170, 198)
-INLET_Y = (43, 45)
+PASS_Y0, PASS_Y1 = 13, 17
+PASS_ROWS = (PASS_Y0, PASS_Y1)
 
 
-def rock_cells():
-    return {(x, y) for y in ROCK_ROWS for x in range(ROCK_X[0], ROCK_X[1] + 1)}
-
-
-def inlet_cells():
-    return {(x, y) for y in range(INLET_Y[0], INLET_Y[1] + 1)
-            for x in range(INLET_X[0], INLET_X[1] + 1)}
+def rock_cells(height):
+    """Impassable spur cells for a grid of the given height (pass rows stay open)."""
+    open_y = set(range(PASS_Y0, PASS_Y1 + 1))
+    return {
+        (x, y)
+        for y in range(height)
+        if y not in open_y
+        for x in range(ROCK_X[0], ROCK_X[1] + 1)
+    }
 
 
 def stamp(grid, wm):
     """Runs after the wayfinder roads so no road reopens a gap."""
     h, w = len(grid), len(grid[0])
-    for x, y in rock_cells():
+    for x, y in rock_cells(h):
         if 0 < x < w - 1 and 0 <= y < h and grid[y][x] in wm.WALKABLE_TILES | wm.TREE_TILES:
             grid[y][x] = wm.WALL
-    for x, y in inlet_cells():
-        if 0 < x < w - 1 and 0 <= y < h and grid[y][x] != wm.WALL:
-            grid[y][x] = wm.WATER
     return grid

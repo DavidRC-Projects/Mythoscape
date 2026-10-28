@@ -104,7 +104,8 @@ def _placements(it, A, facing):
     if an in ("ears", "neck+ears"):
         sz = [1, 3] if an == "neck+ears" else it["size60"]
         for p in ([A["ear_r"]] if facing == "e" else [A["ear_l"], A["ear_r"]]):
-            yield ("ear" if an == "neck+ears" else None, [p[0], p[1] + u], "top", sz, "ears")
+            # Hook at the lobe point (no +u — that dropped earrings beside/below the head).
+            yield ("ear" if an == "neck+ears" else None, [p[0], p[1]], "top", sz, "ears")
     if an == "wrist" and facing != "n":
         yield (None, [A["hand_l"][0], A["hand_l"][1] - 2 * u], "center", it["size60"], "wrist")
     if an == "hand" and facing != "n":

@@ -269,7 +269,10 @@ def test_softlock_replacement_sword():
     t = _player()
     _opt(t, wk.OPT_TAKE)
     t.inventory = {k: e for k, e in t.inventory.items() if e["item_id"] != wk.SWORD}
-    assert any(e["item_id"] == "bronze_axe" for e in t.inventory.values())
+    # Starter gather tools begin equipped (not sitting in the bag).
+    assert t.equipment.get("tool_woodcutting") == "bronze_axe" or any(
+        e["item_id"] == "bronze_axe" for e in t.inventory.values()
+    )
     assert not wk.has_weapon_slot_item(t, ITEMS) and wk.status(W.db.conn, t, ITEMS)["sword_offer"]
     # a battleaxe is enough to fight with, so no free sword
     server.WORLD.add_item_to_inventory(t, "bronze_battleaxe", 1)
@@ -329,22 +332,38 @@ def test_dialogue_flow():
     s = _player()
     asyncio.run(server.handle_talk(s, {"npc_id": wk.GUIDE_ID}))
     d = s.ws.last("DIALOGUE")
-    assert d["npc_name"] == wk.GUIDE_NAME and d["lines"] == d["pages"][0] and len(d["pages"]) == 1 + len(wk.TOUR)
+    assert d["npc_name"] == wk.GUIDE_NAME and d["lines"] == d["pages"][0]
+    assert len(d["pages"]) == 1 + len(wk.FIRST_VISIT)
     ids = [o["id"] for o in d["options"]]
     assert ids[:2] == [wk.OPT_WEAR, wk.OPT_TAKE] and wk.OPT_REMIND in ids and wk.OPT_SKIP in ids
     text = " ".join(" ".join(p) for p in d["pages"]).lower()
-    for word in ("walk", "zoom", "sword or axe", "outfit", "run", "chest plate", "leg armour", "helmet", "skills",
-                 "bank", "reputation", "throne", "miriam", "tool slot", "hatchet", "pickaxe"):
+    for word in ("walk", "click the ground", "zoom", "mouse wheel", "travel", "press m",
+                 "arrow keys", "number pad", "axe", "pickaxe"):
         assert word in text, word
+    # First visit must NOT dump bank / reputation / throne — those are Remind-only.
+    for word in ("reputation", "throne", "tribute"):
+        assert word not in text, word
     _opt(s, wk.OPT_WEAR)
     d = s.ws.last("DIALOGUE")
-    assert d["pages"] is None and "Recruit's Bronze kit" in d["lines"][0]
+    assert d.get("pages") in (None, []) or len(d["pages"]) == 1
+    assert "Recruit's Bronze kit" in d["lines"][0]
+    assert any("Elder Miriam" in line for line in d["lines"])
     ids = [o["id"] for o in d["options"]]
     assert wk.OPT_WEAR not in ids and wk.OPT_SKIP not in ids and wk.OPT_REMIND in ids
+    coach = s.ws.last("UI_COACH")
+    assert coach and coach["id"] == wk.COACH_EQUIP
+    steps = coach.get("steps") or []
+    assert steps and steps[0]["target"] == "equipment" and steps[0].get("wait") == "open_equipment"
+    targets = [st["target"] for st in steps]
+    assert "equip_weapon" in targets and "inv_sword" in targets
     _opt(s, wk.OPT_REMIND)
-    assert len(s.ws.last("DIALOGUE")["pages"]) == 1 + len(wk.TOUR)
+    remind = s.ws.last("DIALOGUE")
+    assert len(remind["pages"]) == 1 + len(wk.TOUR)
+    remind_text = " ".join(" ".join(p) for p in remind["pages"]).lower()
+    for word in ("walk", "zoom", "travel", "bank", "miriam", "crypt"):
+        assert word in remind_text, word
     asyncio.run(server.handle_talk(s, {"npc_id": wk.GUIDE_ID}))
-    assert s.ws.last("DIALOGUE")["pages"] is None                  # later visits are short
+    assert s.ws.last("DIALOGUE").get("pages") in (None, []) or len(s.ws.last("DIALOGUE")["pages"]) == 1
     far = _player(near=False)
     far.x, far.y = GUIDE["x"] + 6, GUIDE["y"]
     _opt(far, wk.OPT_TAKE)
