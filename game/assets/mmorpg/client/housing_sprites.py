@@ -159,6 +159,15 @@ def _surface(relative, tile, style=0, hd_tag=None):
         if image is not None:
             style = -1
     if image is None:
+        # Painted HD estate art (<layer>_hd.png beside the old layer); old art is the fallback.
+        hd = path[:-4] + "_hd.png"
+        if os.path.isfile(hd):
+            try:
+                image = pygame.image.load(hd).convert_alpha()
+                style = -1          # HD cutaways already have painted floors and rugs
+            except Exception:
+                image = None
+    if image is None:
         image = pygame.image.load(path).convert_alpha()
     if style != -1 and rel.endswith("cutaway.png"):
         key_name = rel.split("/")[-2]
