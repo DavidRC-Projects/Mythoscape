@@ -27,6 +27,8 @@ _NOISE = None
 _SKIP_GRASS = ("shadow_crypt", "volcano")
 # Overworld dirt lanes use dirt_world.jpg (one year-round look). Stonehaven
 # keeps flagstone and the void keeps crypt floor — never dirt there.
+# Zones whose lanes get the organic field edge (the starter vale and its wilds).
+_LANE_ZONES = ("village", "forest", "dungeon", "mine", "mountains", "fishing_village", None)
 _SKIP_PATH = ("volcano", "city", "shadow_crypt")
 # N NE E SE S SW W NW
 _NEIGH = (
@@ -298,6 +300,13 @@ def draw_world_grass(screen, rect, wx, wy, client=None):
     if tile <= 0 or rect.h != tile:
         return False
     # One meadow sheet map-wide (no seasonal grade) so village and wilderness match.
+    try:
+        import village_sheet
+        if village_sheet.draw(screen, rect, wx, wy, client):
+            _ground_tint(screen, rect, *_view_xy(client, wx, wy))
+            return True
+    except Exception:
+        pass
     tex = _grass_texture(tile, season=None)
     if tex is None:
         return False
@@ -310,7 +319,108 @@ def draw_world_grass(screen, rect, wx, wy, client=None):
     ox = (int(vx) % _GRASS_PERIOD) * tile
     oy = (int(vy) % _GRASS_PERIOD) * tile
     screen.blit(tex, rect.topleft, pygame.Rect(ox, oy, tile, tile))
+    if client is not None and getattr(client, "tiles", None) and not getattr(client, "dungeon", None):
+        try:
+            _lane_bleed_on_grass(screen, rect, wx, wy, vx, vy, client)
+        except Exception:
+            pass
+    _ground_tint(screen, rect, vx, vy)
     return True
+
+
+# ---- organic lane edges (village review, 31 Oct 2026) -------------------------------
+# A smooth "meadow-ness" field (same gaussian field as the lake shores) decides
+# where dirt meets grass, so lanes get wavy edges and rounded corners on BOTH
+# sides of the tile seam, and the grass texture's own blades break the line.
+# A large slow tint field (period 37 tiles, unlike the 24-tile meadow sheet)
+# hides the repeat and warms the ground toward the HD painted buildings.
+_LANE = {}
+_TINT = {}
+_TINT_PERIOD = 37
+
+
+def _lane_alpha(client, tile, vx, vy, grass_tex_sub, on_path):
+    key = ("lane", on_path, _shore_bits(client, vx, vy, pred=lambda x, y: not _is_path(client, x, y)) if not on_path
+           else _shore_bits(client, vx, vy, pred=lambda x, y: _grass_like(client, x, y)), tile, int(vx), int(vy))
+    hit = _LANE.get(key)
+    if hit is not None:
+        return hit
+    bits = key[2]
+    f = shore_field(bits, tile, vx, vy, wobble=0.55, freq=4.0)
+    lum = pygame.surfarray.array3d(grass_tex_sub).astype(np.float32).mean(axis=2) / 255.0
+    lum = (lum - float(lum.mean())) * 1.6
+    g = _smooth(0.36, 0.60, f + 0.20 * lum)          # 1 = meadow
+    if not on_path:
+        # worn verge: trampled grass shows a little earth a short way past the edge
+        worn = (1.0 - _smooth(0.55, 0.92, f)) * np.clip(0.55 - lum, 0, 1) * 0.9
+        g = np.minimum(g, 1.0 - worn)
+    if len(_LANE) > 4000:
+        _LANE.clear()
+    _LANE[key] = g
+    return g
+
+
+def _lane_bleed_on_grass(screen, rect, wx, wy, vx, vy, client):
+    """Grass tile beside a lane: let the lane's rounded/wavy edge cross the seam."""
+    if not _view_mask(client, vx, vy, lambda x, y: _is_path(client, x, y)):
+        return
+    if wm.get_zone(int(wx), int(wy)) not in _LANE_ZONES:
+        return
+    tile = rect.w
+    dirt = _wrap_texture("dirt_world.jpg", _GRASS_PERIOD, tile)
+    grass = _grass_texture(tile, season=None)
+    if dirt is None or grass is None:
+        return
+    ox, oy = (int(vx) % _GRASS_PERIOD) * tile, (int(vy) % _GRASS_PERIOD) * tile
+    sub = pygame.Rect(ox, oy, tile, tile)
+    g = _lane_alpha(client, tile, vx, vy, grass.subsurface(sub), False)
+    a = 1.0 - g
+    if float(a.max()) < 0.02:
+        return
+    over = dirt.subsurface(sub).convert_alpha()
+    px = pygame.surfarray.pixels_alpha(over)
+    px[:, :] = (a * 255).astype(np.uint8)
+    del px
+    screen.blit(over, rect.topleft)
+
+
+def _ground_tint(screen, rect, vx, vy):
+    tile = rect.w
+    tex = _TINT.get(tile)
+    if tex is None:
+        n = 64
+        rng = np.random.default_rng(31)
+        base = rng.random((n // 8, n // 8)).astype(np.float32)
+        base = np.kron(base, np.ones((8, 8), np.float32))
+        # wrap-around blur for a soft field
+        for _ in range(6):
+            base = (base + np.roll(base, 1, 0) + np.roll(base, -1, 0) + np.roll(base, 1, 1) + np.roll(base, -1, 1)) / 5
+        base = (base - base.min()) / max(1e-6, float(base.max() - base.min()))
+        img = pygame.Surface((n, n))
+        rgb = pygame.surfarray.pixels3d(img)
+        # 0 -> slightly cool/dark, 1 -> warm sunlit (multiply, 255 = neutral)
+        rgb[:, :, 0] = (226 + 29 * base).astype(np.uint8)
+        rgb[:, :, 1] = (232 + 23 * base).astype(np.uint8)
+        rgb[:, :, 2] = (226 + 14 * base).astype(np.uint8)
+        del rgb
+        size = _TINT_PERIOD * tile
+        # scale a 3x3 wrap of the field and keep the middle, so the period edges
+        # interpolate across the wrap instead of clamping (that clamp was a hard seam)
+        wrap = pygame.Surface((n * 3, n * 3))
+        for a in range(3):
+            for b in range(3):
+                wrap.blit(img, (a * n, b * n))
+        big = pygame.transform.smoothscale(wrap, (size * 3, size * 3)).subsurface(
+            pygame.Rect(size, size, size, size)).copy()
+        tex = pygame.Surface((size + tile, size + tile)).convert()
+        for a in (0, size):
+            for b in (0, size):
+                tex.blit(big, (a, b))
+        if len(_TINT) > 4:
+            _TINT.clear()
+        _TINT[tile] = tex
+    ox, oy = (int(vx) % _TINT_PERIOD) * tile, (int(vy) % _TINT_PERIOD) * tile
+    screen.blit(tex, rect.topleft, pygame.Rect(ox, oy, tile, tile), special_flags=pygame.BLEND_RGB_MULT)
 
 
 def draw_grass(screen, rect, wx, wy, client=None):
@@ -555,6 +665,16 @@ def draw_world_path(screen, rect, wx, wy, client=None):
     tile = rect.w
     if tile <= 0 or rect.h != tile:
         return False
+    try:
+        import village_sheet
+        if village_sheet.draw(screen, rect, wx, wy, client):
+            fd = _fairy_path_dirs(client, wx, wy) if client is not None and getattr(client, "tiles", None) else []
+            if fd:
+                _blit_petal_merge(screen, rect, wx, wy, fd)
+            _ground_tint(screen, rect, *_view_xy(client, wx, wy))
+            return True
+    except Exception:
+        pass
     # One consistent dirt look year-round (no seasonal grade / wash).
     tex = _wrap_texture("dirt_world.jpg", _GRASS_PERIOD, tile, season=None, path_grade=False)
     if tex is None:
@@ -565,14 +685,29 @@ def draw_world_path(screen, rect, wx, wy, client=None):
     if client is not None and getattr(client, "tiles", None):
         mask = _view_mask(client, vx, vy, lambda x, y: _grass_like(client, x, y))
         if mask:
-            over = _overlay_from(
-                "grass_world.jpg", _GRASS_PERIOD, mask, tile, vx, vy, season=None,
-            )
+            over = None
+            if wm.get_zone(int(wx), int(wy)) in _LANE_ZONES:
+                try:
+                    grass = _grass_texture(tile, season=None)
+                    sub = pygame.Rect(ox, oy, tile, tile)
+                    g = _lane_alpha(client, tile, vx, vy, grass.subsurface(sub), True)
+                    if float(g.max()) > 0.02:
+                        over = grass.subsurface(sub).convert_alpha()
+                        px = pygame.surfarray.pixels_alpha(over)
+                        px[:, :] = (g * 255).astype(np.uint8)
+                        del px
+                except Exception:
+                    over = None
+            if over is None:
+                over = _overlay_from(
+                    "grass_world.jpg", _GRASS_PERIOD, mask, tile, vx, vy, season=None,
+                )
             if over is not None:
                 screen.blit(over, rect.topleft)
         fairy_dirs = _fairy_path_dirs(client, wx, wy)
         if fairy_dirs:
             _blit_petal_merge(screen, rect, wx, wy, fairy_dirs)
+    _ground_tint(screen, rect, vx, vy)
     return True
 
 
@@ -679,7 +814,7 @@ def _shore_bits(client, vx, vy, pred=None):
     return bits
 
 
-def shore_field(bits, n, vx, vy):
+def shore_field(bits, n, vx, vy, wobble=0.30, freq=7.0):
     """n x n float field ([x, y] like surfarray), 1 = land, 0 = water."""
     c = (np.arange(n, dtype=np.float32) + 0.5) / n
     xs, ys = c[:, None], c[None, :]
@@ -696,11 +831,11 @@ def shore_field(bits, n, vx, vy):
             i += 1
     f = num / np.maximum(den, 1e-6)
     # Gentle, world-continuous wobble so long banks are not ruler-straight.
-    px = (int(vx) * n + np.arange(n, dtype=np.float32))[:, None] * (7.0 / n)
-    py = (int(vy) * n + np.arange(n, dtype=np.float32))[None, :] * (7.0 / n)
+    px = (int(vx) * n + np.arange(n, dtype=np.float32))[:, None] * (freq / n)
+    py = (int(vy) * n + np.arange(n, dtype=np.float32))[None, :] * (freq / n)
     wob = (0.5 * (_sample(px + py * 0.37 + 5.0) + _sample(py - px * 0.29 + 400.0)) - 0.5
            + 0.35 * (_sample(px * 2.7 - py + 90.0) - 0.5))
-    return np.clip(f + 0.30 * wob, 0.0, 1.0)
+    return np.clip(f + wobble * wob, 0.0, 1.0)
 
 
 def _smooth(e0, e1, x):

@@ -57,7 +57,7 @@ def tick(client):
     if not feature_flags.USE_AREA_MUSIC:
         stop()
         return
-    if getattr(client, "state", "") == "OPENING_COMIC":
+    if getattr(client, "state", "") in ("OPENING_COMIC", "THRONE_VISION"):
         stop()
         return
     key = _key(client)

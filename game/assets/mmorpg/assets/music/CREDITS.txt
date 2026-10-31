@@ -11,3 +11,7 @@ Cautious March   → cautious_march.wav Wolf Pass
 
 Dedicated songs above; forest, mine, wilderness, Emberdeep, and other
 dungeons use Rising Theme until a track is assigned.
+
+Throne vision film (assets/throne_vision, first login / Settings replay)
+Five Armies by Kevin MacLeod (incompetech.com), CC BY 4.0
+Licensed under Creative Commons: By Attribution 4.0 - https://creativecommons.org/licenses/by/4.0/
