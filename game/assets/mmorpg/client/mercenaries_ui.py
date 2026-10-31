@@ -24,6 +24,8 @@ _TABS = (
     ("roster", "Roster"),
     ("recruit", "Recruit"),
     ("practice", "Practice"),
+    ("champions", "Champions"),
+    ("ladder", "Ladder"),
 )
 
 _HAIR = {
@@ -174,6 +176,9 @@ def _tab_content_height(tab: str, data: dict) -> int:
             h += 28
         h += len(data.get("practice") or []) * 88 + 12
         return h
+    if tab in ("champions", "ladder"):
+        import arena_battles_ui
+        return arena_battles_ui.tab_height(tab, data)
     return 0
 
 
@@ -555,7 +560,7 @@ def _draw_panel_chrome(surf, rect, accent, border=_GOLD, flip_rail=False):
         pygame.draw.circle(surf, accent, (cx, cy), 1)
 
 
-def _hp_bar(surf, small, x, y, w, h, cur, mx, fill, glow):
+def _hp_bar(surf, small, x, y, w, h, cur, mx, fill, glow, pct_above=False):
     pygame.draw.rect(surf, (8, 10, 16), (x - 2, y - 2, w + 4, h + 4), border_radius=5)
     pygame.draw.rect(surf, (32, 36, 48), (x, y, w, h), border_radius=4)
     ratio = min(1.0, max(0.0, cur / max(1, mx)))
@@ -568,8 +573,15 @@ def _hp_bar(surf, small, x, y, w, h, cur, mx, fill, glow):
             tx = x + int(w * t / 4)
             if tx < x + fw:
                 pygame.draw.line(surf, (20, 24, 34), (tx, y + 1), (tx, y + h - 2), 1)
-    pct = small.render(f"{int(ratio * 100)}%", True, _TEXT)
-    surf.blit(pct, pct.get_rect(midright=(x + w - 5, y + h // 2)))
+    txt = f"{int(round(ratio * 100))}%"
+    sh = small.render(txt, True, (8, 8, 12))
+    pct = small.render(txt, True, _TEXT)
+    if pct_above:   # duel cards: keep the number off the fill so it never collides with the bar
+        r = pct.get_rect(bottomright=(x + w, y - 3))
+    else:
+        r = pct.get_rect(midright=(x + w - 5, y + h // 2))
+    surf.blit(sh, r.move(1, 1))  # shadow: readable over the bright fill
+    surf.blit(pct, r)
 
 
 def _alive_pips(surf, x, y, alive, total, on_col, off_col):
@@ -589,6 +601,16 @@ def _count_badge(surf, font, cx, cy, text, accent):
     pygame.draw.circle(surf, _GOLD, (cx, cy), 22, 2)
     label = font.render(str(text), True, _TEXT)
     surf.blit(label, label.get_rect(center=(cx, cy)))
+
+
+def _fit_text(font, text, max_w, col):
+    """Render text, trimming with an ellipsis so it never exceeds max_w."""
+    lab = font.render(text, True, col)
+    if lab.get_width() <= max_w:
+        return lab
+    while text and font.size(text + "…")[0] > max_w:
+        text = text[:-1]
+    return font.render(text.rstrip() + "…", True, col)
 
 
 def draw_match_hud(client):
@@ -620,26 +642,43 @@ def draw_match_hud(client):
     foe_col = (220, 118, 72)
     foe_glow = (255, 186, 130)
 
-    left = pygame.Rect(10, 10, 268, 100)
+    # x=68, y=44: clear of the left Quests/Events/Party rail and the realm "Exit" box.
+    left = pygame.Rect(68, 44, 250, 100)
     right = pygame.Rect(map_w - 278, 10, 268, 100)
     _draw_panel_chrome(surf, left, you_col, (170, 200, 235), flip_rail=False)
     _draw_panel_chrome(surf, right, foe_col, (235, 180, 120), flip_rail=True)
 
-    # Left — your army
-    surf.blit(small.render("YOUR ARMY", True, you_glow), (left.x + 18, left.y + 12))
-    _count_badge(surf, font, left.x + 48, left.y + 58, f"{ya}", you_col)
-    surf.blit(font.render(f"of {yt}", True, _MUTED), (left.x + 78, left.y + 48))
-    _alive_pips(surf, left.x + 82, left.y + 72, ya, yt, you_col, (55, 62, 78))
-    _hp_bar(surf, small, left.x + 78, left.y + 80, left.w - 96, 12, yhp, ymax, you_col, you_glow)
+    if hud.get("duel"):
+        # One-on-one duel: name + HP cards, no army counts.
+        dz = hud["duel"]
+        surf.blit(small.render("YOU", True, you_glow), (left.x + 18, left.y + 12))
+        style = {"bow": "Bow", "axe": "Axe"}.get(dz.get("style"), "Sword")
+        surf.blit(font.render(f"{style} duel", True, _MUTED), (left.x + 18, left.y + 40))
+        _hp_bar(surf, small, left.x + 18, left.y + 72, left.w - 36, 14, yhp, ymax, you_col, you_glow, pct_above=True)
+        surf.blit(small.render("CHAMPION", True, foe_glow), (right.x + 18, right.y + 12))
+        ename = _fit_text(small, str(foe).split(",")[0].strip(), right.w - 110, _GOLD)
+        surf.blit(ename, (right.right - ename.get_width() - 16, right.y + 12))
+        tag = "Second Wind spent" if dz.get("second_wind_used") else ("Guarding" if dz.get("boss_guard") else "")
+        if tag:
+            surf.blit(small.render(tag, True, _MUTED), (right.x + 18, right.y + 44))
+        _hp_bar(surf, small, right.x + 18, right.y + 72, right.w - 36, 14, fhp, fmax, foe_col, foe_glow, pct_above=True)
+    else:
+        # Left — your army
+        surf.blit(small.render("YOUR ARMY", True, you_glow), (left.x + 18, left.y + 12))
+        _count_badge(surf, font, left.x + 48, left.y + 58, f"{ya}", you_col)
+        surf.blit(font.render(f"of {yt}", True, _MUTED), (left.x + 78, left.y + 48))
+        _alive_pips(surf, left.x + 82, left.y + 72, ya, yt, you_col, (55, 62, 78))
+        _hp_bar(surf, small, left.x + 78, left.y + 80, left.w - 96, 12, yhp, ymax, you_col, you_glow)
 
-    # Right — enemy
-    surf.blit(small.render("ENEMY", True, foe_glow), (right.x + 18, right.y + 12))
-    ename = small.render(str(foe)[:18], True, _GOLD)
-    surf.blit(ename, (right.right - ename.get_width() - 16, right.y + 12))
-    _count_badge(surf, font, right.right - 48, right.y + 58, f"{fa}", foe_col)
-    surf.blit(font.render(f"of {ft}", True, _MUTED), (right.x + 18, right.y + 48))
-    _alive_pips(surf, right.x + 18, right.y + 72, fa, ft, foe_col, (55, 62, 78))
-    _hp_bar(surf, small, right.x + 18, right.y + 80, right.w - 96, 12, fhp, fmax, foe_col, foe_glow)
+        # Right — enemy
+        surf.blit(small.render("ENEMY", True, foe_glow), (right.x + 18, right.y + 12))
+        ename = _fit_text(small, str(foe).split(",")[0].strip(), right.w - 96, _GOLD)
+        surf.blit(ename, (right.right - ename.get_width() - 16, right.y + 12))
+        _count_badge(surf, font, right.right - 48, right.y + 58, f"{fa}", foe_col)
+        surf.blit(font.render(f"of {ft}", True, _MUTED), (right.x + 18, right.y + 48))
+        _alive_pips(surf, right.x + 18, right.y + 72, fa, ft, foe_col, (55, 62, 78))
+        _hp_bar(surf, small, right.x + 18, right.y + 80, right.w - 96, 12, fhp, fmax, foe_col, foe_glow)
+
 
     # Slim centre plaque + commentary dropdown (opens downward)
     feed_open = bool(getattr(client, "arena_feed_open", False))
@@ -661,21 +700,25 @@ def draw_match_hud(client):
         ),
     )
 
-    toggle = pygame.Rect(0, 0, 200, 24)
-    toggle.midtop = (map_w // 2, plaque.bottom + 6)
+    # Commentary sits at the bottom centre under the announcer ribbon, so the
+    # top centre holds only the title and (in boss fights) the champion bar.
+    _is_duel = bool(hud.get("duel") or match.get("duel"))
+    toggle = pygame.Rect(0, 0, 380 if _is_duel else 200, 24)
+    toggle.midtop = (map_w // 2, map_h - (30 if _is_duel else 114))
     tbg = pygame.Surface((toggle.w, toggle.h), pygame.SRCALPHA)
     tbg.fill((16, 20, 30, 220))
     surf.blit(tbg, toggle.topleft)
     pygame.draw.rect(surf, _GOLD_DIM, toggle, 1, border_radius=8)
-    chev = "▴" if feed_open else "▾"
+    chev = "^" if feed_open else "v"   # ASCII: the UI font has no ▴/▾ glyphs (drew a box)
     latest = log[-1] if log else "Commentary"
-    label = f"{chev}  Commentary" if feed_open or not log else f"{chev}  {str(latest)[:24]}"
+    _room = max(24, (toggle.w - 30) // 7)
+    label = f"{chev}  Commentary" if feed_open or not log else f"{chev}  {str(latest)[:_room]}"
     surf.blit(small.render(label, True, _SAND if feed_open else _MUTED), (toggle.x + 10, toggle.y + 4))
     rects["feed_toggle"] = toggle
 
     if feed_open:
         feed = pygame.Rect(0, 0, 300, 78)
-        feed.midtop = (toggle.centerx, toggle.bottom + 4)
+        feed.midbottom = (toggle.centerx, toggle.y - 42)   # opens upward, above the announcer ribbon
         fbg = pygame.Surface((feed.w, feed.h), pygame.SRCALPHA)
         fbg.fill((10, 14, 22, 240))
         surf.blit(fbg, feed.topleft)
@@ -696,12 +739,14 @@ def draw_match_hud(client):
         pygame.draw.rect(surf, (62, 44, 18), btn, border_radius=14)
         pygame.draw.rect(surf, _GOLD, btn, 3, border_radius=14)
         pygame.draw.rect(surf, (90, 68, 28), btn.inflate(-8, -8), 1, border_radius=10)
-        label = font.render("Start Battle", True, _SAND)
+        label = font.render("Start Duel" if (hud.get("duel") or match.get("duel")) else "Start Battle", True, _SAND)
         surf.blit(label, label.get_rect(center=btn.center))
         rects["start_fight"] = btn
         tip = small.render("Front 5 clash · reserves join on first fall  ·  Space starts", True, _MUTED)
         surf.blit(tip, tip.get_rect(midtop=(btn.centerx, btn.bottom + 10)))
 
+    import arena_battles_ui
+    arena_battles_ui.draw_hud(client, hud, map_w, map_h)
     client.arena_hud_rects = rects
 
 
@@ -718,7 +763,9 @@ def draw_match_result(client, match: dict):
     veil.fill((0, 0, 0, 120))
     surf.blit(veil, (0, 0))
 
-    card = pygame.Rect(0, 0, 540, 300)
+    import arena_battles_ui
+    extra_lines = arena_battles_ui.result_lines(summary)
+    card = pygame.Rect(0, 0, 560, 300 + 22 * len(extra_lines))
     card.center = (sw // 2, sh // 2)
     pygame.draw.rect(surf, _NAVY, card, border_radius=14)
     pygame.draw.rect(surf, _OK if won else _BAD, card, 3, border_radius=14)
@@ -769,6 +816,11 @@ def draw_match_result(client, match: dict):
             True, _OK,
         )
         surf.blit(surv, surv.get_rect(midtop=(card.centerx, card.y + 182)))
+    ey = card.y + 206
+    for text, col in extra_lines:
+        el = small.render(text[:90], True, col)
+        surf.blit(el, el.get_rect(midtop=(card.centerx, ey)))
+        ey += 22
 
     rects = {}
     can_rematch = remaining > 0 and bool(summary.get("foe_id"))
@@ -887,6 +939,12 @@ def draw(client):
         _draw_recruit(client, surf, font, small, body, data, rects, scroll)
     elif tab == "practice":
         _draw_practice(client, surf, font, small, body, data, rects, scroll)
+    elif tab == "champions":
+        import arena_battles_ui
+        arena_battles_ui.draw_champions(client, surf, font, small, body, data, rects, scroll)
+    elif tab == "ladder":
+        import arena_battles_ui
+        arena_battles_ui.draw_ladder(client, surf, font, small, body, data, rects, scroll)
     surf.set_clip(prev_clip)
 
     client.barracks_scroll_meta = _draw_scrollbar(surf, body, scroll, content_h)

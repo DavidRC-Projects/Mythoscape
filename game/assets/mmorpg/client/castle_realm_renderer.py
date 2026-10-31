@@ -255,9 +255,11 @@ def draw_terrain_tile(client, rect, tile_id, wx, wy, t):
         elif char == "~":
             sprites.draw_water_detailed(client.screen, rect, t, wx, wy)
         elif char == "s":
-            _draw_arena_sand(client.screen, rect, wx, wy)
+            if not _draw_arena_painted_tile(client.screen, rect, wx, wy, "sand_tile"):
+                _draw_arena_sand(client.screen, rect, wx, wy)
         elif char == "A":
-            _draw_arena_ring(client.screen, rect, wx, wy)
+            if not _draw_arena_painted_tile(client.screen, rect, wx, wy, "ring_tile"):
+                _draw_arena_ring(client.screen, rect, wx, wy)
         elif char in "=PSol":
             sprites.draw_path(client.screen, rect, wx, wy, zone="realm")
         else:
@@ -312,26 +314,146 @@ def _arena_blob():
     return REALM.get("arena") or {}
 
 
-def _pit_floor_surface(tile, pit_w, pit_h):
-    """Stretched combat-floor art for the sand pit (oval, mid-line, gate stains)."""
-    use_2x = tile > 40
-    rel = f"sprites/{'2x' if use_2x else '1x'}/arena_pit_floor.png"
-    path = _ROOT / "arena" / rel
+_ARENA_META = None
+
+
+def _arena_hd():
+    """Painted HD arena block from arena/meta.json ({} when missing or broken)."""
+    global _ARENA_META
+    if _ARENA_META is None:
+        try:
+            _ARENA_META = (_json(_ROOT / "arena" / "meta.json").get("hd") or {})
+        except (OSError, ValueError):
+            _ARENA_META = {}
+    return _ARENA_META
+
+
+def _arena_hd_path(rel, tile):
+    res = "2x" if tile > 40 else "1x"
+    path = _ROOT / "arena" / rel.replace("{res}", res)
     if not path.is_file():
-        path = _ROOT / "arena" / "sprites/1x/arena_pit_floor.png"
-    if not path.is_file():
+        path = _ROOT / "arena" / rel.replace("{res}", "1x")
+    return path if path.is_file() else None
+
+
+def _arena_hd_surface(kind, tile, target_w, target_h):
+    """Painted HD arena layer, or None so the caller falls back to the old art."""
+    rel = (_arena_hd().get("layers") or {}).get(kind)
+    path = _arena_hd_path(rel, tile) if rel else None
+    if path is None:
         return None
-    key = ("arena_pit", str(path), int(tile), int(pit_w), int(pit_h))
+    key = ("arena_hd", str(path), int(tile), int(target_w), int(target_h))
     image = _CACHE.get(key)
     if image is None:
-        raw = pygame.image.load(str(path)).convert_alpha()
-        image = pygame.transform.smoothscale(raw, (max(1, pit_w), max(1, pit_h)))
+        try:
+            raw = pygame.image.load(str(path)).convert_alpha()
+        except (pygame.error, OSError):
+            return None
+        image = pygame.transform.smoothscale(raw, (max(1, int(target_w)), max(1, int(target_h))))
+        if kind == "ground":
+            try:
+                _cut_pit_from_ground(image, tile)
+            except Exception:
+                pass  # keep the full painted ground if the mask can't be built
         _CACHE[key] = image
     return image
 
 
+def _cut_pit_from_ground(image, tile):
+    """Fade the painted ground out over the sand pit ('s' tiles) so the crisp
+    painted sand texture drawn per tile shows through in the fight view."""
+    import numpy as np
+    art = _arena_hd().get("art_tiles") or []
+    if len(art) < 4:
+        return
+    w, h = image.get_size()
+    sx, sy = w / float(art[2] - art[0]), h / float(art[3] - art[1])
+    small = np.zeros((int(art[3] - art[1]) + 3, int(art[2] - art[0]) + 3), np.float32)
+    x0, y0 = int(art[0]), int(art[1])
+    for ty in range(small.shape[0]):
+        row = REALM_ROWS[y0 + ty] if 0 <= y0 + ty < len(REALM_ROWS) else ""
+        for tx in range(small.shape[1]):
+            if 0 <= x0 + tx < len(row) and row[x0 + tx] == "s":
+                small[ty, tx] = 1.0
+    # erode one tile so the ring edge keeps the painted rim, then feather
+    er = small.copy()
+    er[1:-1, 1:-1] = np.minimum.reduce([small[1:-1, 1:-1], small[:-2, 1:-1], small[2:, 1:-1], small[1:-1, :-2], small[1:-1, 2:]])
+    m = pygame.Surface((small.shape[1], small.shape[0]))
+    pygame.surfarray.blit_array(m, np.repeat((er.T * 255).astype(np.uint8)[:, :, None], 3, axis=2))
+    big = pygame.transform.smoothscale(m, (int(small.shape[1] * sx), int(small.shape[0] * sy)))
+    big = pygame.transform.smoothscale(pygame.transform.smoothscale(big, (max(1, big.get_width() // 8), max(1, big.get_height() // 8))), big.get_size())
+    ox, oy = int((x0 - art[0]) * sx), int((y0 - art[1]) * sy)
+    cut = pygame.surfarray.array3d(big)[:, :, 0].astype(np.float32) / 255.0
+    alpha = pygame.surfarray.pixels_alpha(image)
+    cw, ch = min(alpha.shape[0] - max(0, ox), cut.shape[0]), min(alpha.shape[1] - max(0, oy), cut.shape[1])
+    region = alpha[max(0, ox):max(0, ox) + cw, max(0, oy):max(0, oy) + ch]
+    region[...] = (region * (1.0 - cut[:cw, :ch])).astype(np.uint8)
+    del alpha
+
+
+def _draw_arena_painted_tile(surf, rect, wx, wy, kind):
+    """Blit a world-anchored window of the painted sand / ring texture."""
+    rel = _arena_hd().get(kind)
+    path = _arena_hd_path(rel, rect.w) if rel else None
+    if path is None:
+        return False
+    key = ("arena_tex", str(path), int(rect.w))
+    tex = _CACHE.get(key)
+    if tex is None:
+        try:
+            raw = pygame.image.load(str(path)).convert()
+        except (pygame.error, OSError):
+            return False
+        base = 40 if rect.w <= 40 else 80
+        scale = rect.w / float(base)
+        tex = pygame.transform.smoothscale(raw, (max(rect.w, int(raw.get_width() * scale)), max(rect.h, int(raw.get_height() * scale))))
+        _CACHE[key] = tex
+    tw, th = tex.get_size()
+    ox, oy = (wx * rect.w) % tw, (wy * rect.h) % th
+    # Draw the window piecewise so it wraps cleanly across the texture edge.
+    x = 0
+    while x < rect.w:
+        sx = (ox + x) % tw
+        w = min(rect.w - x, tw - sx)
+        y = 0
+        while y < rect.h:
+            sy = (oy + y) % th
+            h = min(rect.h - y, th - sy)
+            surf.blit(tex, (rect.x + x, rect.y + y), pygame.Rect(sx, sy, w, h))
+            y += h
+        x += w
+    return True
+
+
+def _arena_layer_surface(name, tile, target_w, target_h):
+    """Load a soft-edged arena layer (ground / back / front / gate), scaled to footprint."""
+    use_2x = tile > 40
+    rel = f"sprites/{'2x' if use_2x else '1x'}/{name}"
+    path = _ROOT / "arena" / rel
+    if not path.is_file():
+        path = _ROOT / "arena" / f"sprites/1x/{name}"
+    if not path.is_file():
+        return None
+    key = ("arena_layer", str(path), int(tile), int(target_w), int(target_h))
+    image = _CACHE.get(key)
+    if image is None:
+        raw = pygame.image.load(str(path)).convert_alpha()
+        image = pygame.transform.smoothscale(raw, (max(1, target_w), max(1, target_h)))
+        _CACHE[key] = image
+    return image
+
+
+def _arena_gate_surface(open_: bool, tile):
+    name = "arena_gate_open.png" if open_ else "arena_gate_closed.png"
+    # Gates sit on ~3 tiles of sand between front and rear ranks.
+    w = max(8, int(tile * 2.6))
+    h = max(8, int(tile * 2.8))
+    hd = _arena_hd_surface("gate_open" if open_ else "gate_closed", tile, w, h)
+    return hd if hd is not None else _arena_layer_surface(name, tile, w, h)
+
+
 def _queue_arena(client, draw_list, cam_x, cam_y, tile):
-    """Draw Crownfall Arena: pit floor, campus art, and floating label."""
+    """Draw Crownfall Arena in castle-style layers: ground, back wall, gates, front wall."""
     arena = _arena_blob()
     if not arena:
         return
@@ -339,92 +461,101 @@ def _queue_arena(client, draw_list, cam_x, cam_y, tile):
     x0, y0, x1, y1 = (int(fp[0]), int(fp[1]), int(fp[2]), int(fp[3]))
     if x1 <= x0 or y1 <= y0:
         return
-    root = _ROOT / "arena"
-
-    # Combat pit floor — sits under the campus art so fights read on marked sand.
     pit = arena.get("pit") or []
+    px0 = py0 = px1 = py1 = None
     if len(pit) >= 4:
         px0, py0, px1, py1 = (int(pit[0]), int(pit[1]), int(pit[2]), int(pit[3]))
-        if px1 > px0 and py1 > py0:
-            pit_w = (px1 - px0 + 1) * tile
-            pit_h = (py1 - py0 + 1) * tile
-            pit_img = _pit_floor_surface(tile, pit_w, pit_h)
-            if pit_img is not None:
-                psx, psy = client.world_to_view_offset(px0, py0, cam_x, cam_y)
-                pleft, ptop = psx * tile, psy * tile
 
-                def _blit_pit(img=pit_img, left=pleft, top=ptop):
-                    fighting_now = bool(
-                        getattr(client, "arena_match", None)
-                        and client.arena_match.get("active")
-                    )
-                    # Full floor during a match; still readable when idle on campus.
-                    img.set_alpha(235 if fighting_now else 175)
-                    client.screen.blit(img, (left, top))
+    target_w = max(1, (x1 - x0 + 1) * tile)
+    target_h = max(1, (y1 - y0 + 1) * tile)
+    sx, sy = client.world_to_view_offset(x0, y0, cam_x, cam_y)
+    left, top = sx * tile, sy * tile
+    # Sort rows: back wall behind the pit, front lip south of it (actors walk between).
+    if px0 is not None:
+        back_sy = client.world_to_view_offset(px0, py0 + 1, cam_x, cam_y)[1] * tile
+        front_sy = client.world_to_view_offset(px0, py1, cam_x, cam_y)[1] * tile + tile
+        mid_x = (px0 + px1) / 2.0
+        mid_y = (py0 + py1) / 2.0
+    else:
+        back_sy = sy * tile
+        front_sy = (sy + (y1 - y0)) * tile
+        mid_x = (x0 + x1) / 2.0
+        mid_y = (y0 + y1) / 2.0
 
-                draw_list.append((-10**9 + 40, 0, _blit_pit))
+    art = _arena_hd().get("art_tiles") or []
+    ground = back = front = None
+    if len(art) >= 4:
+        # Painted HD bowl: its own world-tile rect (the walls rise past the footprint).
+        aw = max(1, int(round((art[2] - art[0]) * tile)))
+        ah = max(1, int(round((art[3] - art[1]) * tile)))
+        hd = [_arena_hd_surface(k, tile, aw, ah) for k in ("ground", "back", "front")]
+        if hd[1] is not None and hd[2] is not None:
+            ground, back, front = hd
+            asx, asy = client.world_to_view_offset(art[0], art[1], cam_x, cam_y)
+            left, top = asx * tile, asy * tile
+    if back is None:
+        # Error fallback only: the old campus layers.
+        ground = _arena_layer_surface("arena_ground.png", tile, target_w, target_h)
+        back = _arena_layer_surface("arena_back.png", tile, target_w, target_h)
+        front = _arena_layer_surface("arena_front.png", tile, target_w, target_h)
 
-    use_2x = tile > 40
-    sprite = arena.get("sprite_2x" if use_2x else "sprite_1x") or arena.get("sprite_1x") or {}
-    rel = sprite.get("file")
-    if rel:
-        path = root / rel
-        if path.is_file():
-            target_w = max(1, (x1 - x0 + 1) * tile)
-            target_h = max(1, (y1 - y0 + 1) * tile)
-            key = ("arena", str(path), int(tile), x1 - x0, y1 - y0)
-            image = _CACHE.get(key)
-            if image is None:
-                raw = pygame.image.load(str(path)).convert_alpha()
-                # Stretch to cover the full stamped footprint so it dominates the map.
-                image = pygame.transform.smoothscale(raw, (target_w, target_h))
-                _CACHE[key] = image
-            # Fight cutout: keep stadium seating/walls, clear the sand so the pit floor reads.
-            fight_key = ("arena_fight", str(path), int(tile), x1 - x0, y1 - y0,
-                         tuple(int(v) for v in (pit[:4] if len(pit) >= 4 else ())))
-            fight_image = _CACHE.get(fight_key)
-            if fight_image is None and len(pit) >= 4:
-                fight_image = image.copy()
-                px0, py0, px1, py1 = (int(pit[0]), int(pit[1]), int(pit[2]), int(pit[3]))
-                # Soft elliptical hole over the combat pit (local to campus footprint).
-                hole = pygame.Surface((target_w, target_h), pygame.SRCALPHA)
-                local = pygame.Rect(
-                    (px0 - x0) * tile,
-                    (py0 - y0) * tile,
-                    (px1 - px0 + 1) * tile,
-                    (py1 - py0 + 1) * tile,
-                )
-                # Inset slightly so the inner wall lip still frames the sand.
-                local.inflate_ip(-tile // 2, -tile // 2)
-                pygame.draw.ellipse(hole, (0, 0, 0, 255), local)
-                fight_image.blit(hole, (0, 0), special_flags=pygame.BLEND_RGBA_SUB)
-                _CACHE[fight_key] = fight_image
-            sx, sy = client.world_to_view_offset(x0, y0, cam_x, cam_y)
-            left, top = sx * tile, sy * tile
+    # Fallback: old single campus plate if layers are missing.
+    if ground is None and back is None and front is None:
+        use_2x = tile > 40
+        sprite = arena.get("sprite_2x" if use_2x else "sprite_1x") or arena.get("sprite_1x") or {}
+        rel = sprite.get("file")
+        if rel:
+            path = (_ROOT / "arena" / rel)
+            if path.is_file():
+                key = ("arena_legacy", str(path), int(tile), x1 - x0, y1 - y0)
+                image = _CACHE.get(key)
+                if image is None:
+                    raw = pygame.image.load(str(path)).convert_alpha()
+                    image = pygame.transform.smoothscale(raw, (target_w, target_h))
+                    _CACHE[key] = image
+                draw_list.append((-10**9 + 50, 0, lambda img=image, l=left, t=top: client.screen.blit(img, (l, t))))
+    else:
+        if ground is not None:
+            def _blit_ground(img=ground, l=left, t=top):
+                client.screen.blit(img, (l, t))
+            draw_list.append((-10**9 + 40, 0, _blit_ground))
+        if back is not None:
+            def _blit_back(img=back, l=left, t=top):
+                client.screen.blit(img, (l, t))
+            draw_list.append((back_sy, 40, _blit_back))
+        if front is not None:
+            def _blit_front(img=front, l=left, t=top):
+                client.screen.blit(img, (l, t))
+            # After actors (priority high) so the south lip occludes feet on the near rim.
+            draw_list.append((front_sy, 45, _blit_front))
 
-            def _blit(img=image, fight_img=fight_image, left=left, top=top):
-                fighting_now = bool(
-                    getattr(client, "arena_match", None)
-                    and client.arena_match.get("active")
-                )
-                if fighting_now and fight_img is not None:
-                    fight_img.set_alpha(200)
-                    client.screen.blit(fight_img, (left, top))
-                else:
-                    img.set_alpha(215)
-                    client.screen.blit(img, (left, top))
+    # Reserve gates replace the old sports mid-line — closed until reserves join.
+    match = getattr(client, "arena_match", None) or {}
+    hud = match.get("hud") or {}
+    gates_open = bool(hud.get("reserves_released") or match.get("reserves_released"))
+    if px0 is not None:
+        gate_img = _arena_gate_surface(gates_open, tile)
+        if gate_img is not None:
+            # West (your reserves) and east (foe reserves) between front / rear ranks.
+            for gx, flip in ((mid_x - 8.0, False), (mid_x + 8.0, True)):
+                gsx, gsy = client.world_to_view_offset(gx, mid_y, cam_x, cam_y)
+                gcx = gsx * tile + tile // 2
+                gfeet = gsy * tile + tile * 0.85
+                img = pygame.transform.flip(gate_img, True, False) if flip else gate_img
 
-            # Ground landmark under actors; label floats above.
-            draw_list.append((-10**9 + 50, 0, _blit))
+                def _blit_gate(image=img, cx=gcx, feet=gfeet):
+                    box = image.get_rect(midbottom=(int(cx), int(feet)))
+                    client.screen.blit(image, box.topleft)
 
-    south_row = client.world_to_view_offset(x0, y1, cam_x, cam_y)[1] * tile
+                draw_list.append((gfeet, 38, _blit_gate))
+
     label = arena.get("label") or arena.get("name") or "ARENA"
     cx = (x0 + x1) / 2.0
     cy = y0 + 2
     lsx, lsy = client.world_to_view_offset(cx, cy, cam_x, cam_y)
+    south_row = client.world_to_view_offset(x0, y1, cam_x, cam_y)[1] * tile
 
     def _label(text=label, px=lsx * tile + tile // 2, py=lsy * tile):
-        # Hide the big floating label while the camera is locked on a fight.
         if getattr(client, "arena_match", None) and client.arena_match.get("active"):
             return
         font = getattr(client, "font", None) or pygame.font.Font(None, max(18, tile // 2))

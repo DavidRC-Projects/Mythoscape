@@ -267,6 +267,8 @@ def ensure_schema(conn):
             "ALTER TABLE mercenary_roster ADD COLUMN trains_today INTEGER NOT NULL DEFAULT 0"
         )
     conn.commit()
+    import arena_battles
+    arena_battles.ensure_schema(conn)
 
 
 def _today_key() -> str:
@@ -1290,6 +1292,10 @@ def unit_public(u: dict) -> dict:
         "field_soldier": bool(u.get("field_soldier")),
         "roster_id": u.get("roster_id"),
         "owner_id": u.get("owner_id"),
+        "boss": bool(u.get("boss")),
+        "boss_id": u.get("boss_id"),
+        "stunned": int(u.get("stun") or 0) > 0,
+        "duel_player": bool(u.get("duel_player")),
     }
 
 
@@ -1304,12 +1310,17 @@ def _normalize_army(army) -> list:
 
 
 def validate_practice(conn, session, foe_id: str) -> tuple[bool, str, dict | None]:
-    entry = next((e for e in PRACTICE_TIERS if e["id"] == foe_id), None)
-    if not entry:
-        return False, "Unknown practice opponent.", None
-    highest = practice_highest(conn, session.player_id)
-    if int(entry["tier"]) > highest + 1:
-        return False, "Beat the previous house first.", None
+    import arena_battles
+    entry, special_err = arena_battles.resolve_foe(conn, session, foe_id)
+    if special_err:
+        return False, special_err, None
+    if entry is None:
+        entry = next((e for e in PRACTICE_TIERS if e["id"] == foe_id), None)
+        if not entry:
+            return False, "Unknown practice opponent.", None
+        highest = practice_highest(conn, session.player_id)
+        if int(entry["tier"]) > highest + 1:
+            return False, "Beat the previous house first.", None
     rows = roster_rows(conn, session.player_id)
     if not rows:
         return False, "Recruit at least one soldier first.", None
@@ -1340,13 +1351,18 @@ def start_live_practice(conn, session, foe_id: str) -> tuple[bool, str, dict | N
     your_fighters = [_fighter_from_row(r) for r in rows]
     for f, r in zip(your_fighters, rows):
         f["template_id"] = r["template_id"]
-    foe_fighters = []
-    for t, g, lv in _normalize_army(entry["army"]):
-        f = _fighter_from_snap(t, g, lv)
-        f["template_id"] = t
-        foe_fighters.append(f)
+    import arena_battles
+    foe_fighters = arena_battles.build_foe_fighters(entry)
+    if foe_fighters is None:
+        foe_fighters = []
+        army = entry["army"] if entry.get("boss") else _normalize_army(entry["army"])
+        for t, g, lv in army:
+            f = _fighter_from_snap(t, g, lv)
+            f["template_id"] = t
+            foe_fighters.append(f)
+    n_foe = len(foe_fighters) + (1 if entry.get("boss") else 0)
     your_spots = _line_up(len(your_fighters), x0, x1, y0, y1, west=True)
-    foe_spots = _line_up(len(foe_fighters), x0, x1, y0, y1, west=False)
+    foe_spots = _line_up(n_foe, x0, x1, y0, y1, west=False)
     units = []
     for i, (f, xy) in enumerate(zip(your_fighters, your_spots)):
         u = _unit_from_fighter(f, "you", xy, f.get("template_id"))
@@ -1355,11 +1371,24 @@ def start_live_practice(conn, session, foe_id: str) -> tuple[bool, str, dict | N
         u["file"] = i if i < 5 else i - 5
         u["held_reserve"] = i >= 5
         units.append(u)
+    if entry.get("boss"):
+        # The champion takes the centre of the front rank; his house fills the rest.
+        # Give the champion's lane room: the files either side of him open out two
+        # tiles, so their labels don't crowd him.
+        bx, by = foe_spots[2]
+        units.append(arena_battles.boss_unit(entry, (bx, by)))
+        spread = list(foe_spots)
+        if len(spread) > 1:
+            spread[1] = (spread[1][0], max(y0, spread[1][1] - 2))
+        if len(spread) > 3:
+            spread[3] = (spread[3][0], min(y1, spread[3][1] + 2))
+        foe_spots = spread[:2] + spread[3:]
     for i, (f, xy) in enumerate(zip(foe_fighters, foe_spots)):
+        slot = i + (1 if entry.get("boss") and i >= 2 else 0)
         u = _unit_from_fighter(f, "foe", xy, f.get("template_id"))
-        u["rank"] = "front" if i < 5 else "rear"
-        u["file"] = i if i < 5 else i - 5
-        u["held_reserve"] = i >= 5
+        u["rank"] = "front" if slot < 5 else "rear"
+        u["file"] = slot if slot < 5 else slot - 5
+        u["held_reserve"] = slot >= 5
         units.append(u)
     match = {
         "foe_id": foe_id,
@@ -1372,18 +1401,58 @@ def start_live_practice(conn, session, foe_id: str) -> tuple[bool, str, dict | N
         "phase": "preview",
         "reserves_released": False,
         "roster_cl": roster_total_cl(roster_public(conn, session.player_id)),
-        "foe_cl": _snapshot_army_cl(_normalize_army(entry["army"])),
+        "foe_cl": _snapshot_army_cl(_normalize_army(entry["army"])) if entry.get("army") else int(entry.get("recommend_cl") or 0),
         "spectator": coords["spectator"],
         "pit": coords["pit"],
         "center": coords["center"],
         "daily": daily,
     }
+    if entry.get("boss"):
+        # Gladiator champions are one-on-one duels: the commander alone vs the boss.
+        import arena_duel
+        boss_u = next(u for u in units if u.get("boss"))
+        arena_duel.stage(match, session, entry, _duel_player_unit(session), boss_u)
+    arena_battles.on_start(match)
     session.arena_match = match
     left = daily.get("remaining", 0)
+    if entry.get("boss"):
+        return True, (f"Duel ready vs {entry['name']} — press Start Duel when ready. "
+                      f"({left}/{DAILY_FIGHT_CAP} fights left today)"), match
     return True, (
         f"Armies ready vs {entry['name']} — press Start Battle when you have the view. "
         f"({left}/{DAILY_FIGHT_CAP} fights left today)"
     ), match
+
+
+def _duel_player_unit(session) -> dict:
+    """The commander as a duel fighter (own levels / equipment / HP pool)."""
+    def lv(k):
+        try:
+            return int(session.level(k))
+        except Exception:
+            return 1
+    levels = {k: lv(k) for k in ("attack", "strength", "defence", "hitpoints")}
+    try:
+        hp = int(session.max_hp())
+    except Exception:
+        hp = max(10, levels["hitpoints"])
+    f = {"name": getattr(session, "username", None) or "You", "levels": levels, "hp": hp, "max_hp": hp,
+         "gear_tier": "steel", "template_id": "levy"}
+    u = _unit_from_fighter(f, "you", (0, 0), "levy")
+    u["equipment"] = dict(getattr(session, "equipment", None) or u["equipment"])
+    u["duel_player"] = True
+    u["player_id"] = getattr(session, "player_id", None)
+    return u
+
+
+def duel_action(session, action: str) -> tuple[bool, str]:
+    match = getattr(session, "arena_match", None)
+    if not match or match.get("mode") != "duel":
+        return False, "No duel in progress."
+    if match.get("phase") != "fight":
+        return False, "The duel has not begun."
+    import arena_duel
+    return (True, "") if arena_duel.act(match["duel"], str(action or "")) else (False, "Unknown move.")
 
 
 def begin_live_fight(session) -> tuple[bool, str]:
@@ -1398,7 +1467,8 @@ def begin_live_fight(session) -> tuple[bool, str]:
     match["phase"] = "fight"
     match["tick"] = 0
     match["log"] = list(match.get("log") or [])
-    _push_log(match, "Front ranks advance — reserves hold!")
+    _push_log(match, "The champion salutes — duel!" if match.get("mode") == "duel"
+              else "Front ranks advance — reserves hold!")
     return True, f"Battle! vs {match.get('foe_name')}"
 
 
@@ -1642,9 +1712,15 @@ def tick_live_match(match: dict) -> list[dict]:
     events = []
     if match.get("phase") != "fight":
         return events
+    if match.get("mode") == "duel":
+        import arena_duel
+        return arena_duel.tick_match(match)
     match["tick"] = int(match.get("tick") or 0) + 1
     units = match["units"]
     pit = match.get("pit") or list(ARENA_PIT)
+    import arena_battles
+    dead_before = {u["id"] for u in units if not (u["alive"] and u["hp"] > 0)}
+    arena_battles.on_tick(match, events)
     # Decay attack anim
     for u in units:
         if u.get("attacking"):
@@ -1697,6 +1773,9 @@ def tick_live_match(match: dict) -> list[dict]:
 
     for u in active:
         if not (u["alive"] and u["hp"] > 0):
+            continue
+        if int(u.get("stun") or 0) > 0:
+            u["stun"] = int(u["stun"]) - 1   # netted / roared by a champion
             continue
         target = assigned.get(u["id"])
         if not target or not (target["alive"] and target["hp"] > 0):
@@ -1756,6 +1835,7 @@ def tick_live_match(match: dict) -> list[dict]:
                 events.append({"type": "DEATH", "entity_id": u["id"], "entity_kind": "arena"})
                 _release_reserves(match, events)
 
+    arena_battles.after_tick(match, events, dead_before)
     you_alive = [u for u in units if u["side"] == "you" and u["alive"] and u["hp"] > 0]
     foe_alive = [u for u in units if u["side"] == "foe" and u["alive"] and u["hp"] > 0]
     timed_out = match["tick"] >= MATCH_TIMEOUT_TICKS
@@ -1857,6 +1937,7 @@ def settle_live_practice(conn, session, match: dict) -> tuple[str, dict]:
         (e for e in PRACTICE_TIERS if e["id"] == match.get("foe_id")), None
     )
     won = bool(match.get("won"))
+    ranked_or_boss = bool(entry and (entry.get("boss") or entry.get("ranked")))
     xp = int((entry or {}).get("command_xp_win" if won else "command_xp_loss") or 20)
     coins = 0
     ore = 0
@@ -1864,8 +1945,9 @@ def settle_live_practice(conn, session, match: dict) -> tuple[str, dict]:
         coins = int(entry.get("coin_win") or 0)
         from content import MAX_PURSE_COINS
         session.coins = min(int(session.coins) + coins, MAX_PURSE_COINS)
-        set_practice_highest(conn, session.player_id, int(entry.get("tier") or 1))
-        if int(entry.get("tier") or 0) >= 5:
+        if not ranked_or_boss:
+            set_practice_highest(conn, session.player_id, int(entry.get("tier") or 1))
+        if int(entry.get("tier") or 0) >= 5 and not entry.get("ranked"):
             chance = 0.08 if int(entry["tier"]) == 5 else 0.15
             if command_level(session) >= 70:
                 chance *= 1.35
@@ -1893,7 +1975,13 @@ def settle_live_practice(conn, session, match: dict) -> tuple[str, dict]:
         "live": True,
         "daily": daily,
         "survivor_xp": survivors,
+        "duel": match.get("mode") == "duel",
+        "finisher": match.get("finisher"),
+        "boss_id": ((entry or {}).get("boss") or {}).get("id"),
+        "duel_style": (match.get("duel") or {}).get("style"),
     }
+    import arena_battles
+    extra = arena_battles.settle(conn, session, match, summary)
     verb = "Victory" if won else "Defeat"
     surv_n = len(survivors)
     surv_bit = ""
@@ -1908,6 +1996,7 @@ def settle_live_practice(conn, session, match: dict) -> tuple[str, dict]:
         + (f", +{coins:,} coins" if coins else "")
         + (" · Mythos ore!" if ore else "")
         + surv_bit
+        + extra
         + f" · {daily['remaining']}/{DAILY_FIGHT_CAP} fights left today."
     )
     return msg, summary
@@ -1947,6 +2036,7 @@ def match_hud(match: dict) -> dict:
         "foe_name": match.get("foe_name"),
         "tick": match.get("tick") or 0,
         "phase": match.get("phase"),
+        "reserves_released": bool(match.get("reserves_released")),
         "your_alive": sum(1 for u in you if u["alive"] and u["hp"] > 0),
         "your_total": len(you),
         "foe_alive": sum(1 for u in foe if u["alive"] and u["hp"] > 0),
@@ -1956,23 +2046,28 @@ def match_hud(match: dict) -> dict:
         "foe_hp": sum(max(0, u["hp"]) for u in foe),
         "foe_max_hp": sum(u["max_hp"] for u in foe),
         "log": list(match.get("log") or [])[-6:],
+        **__import__("arena_battles").hud_extra(match),
+        **({"duel": __import__("arena_duel").public(match["duel"])} if match.get("mode") == "duel" else {}),
     }
 
 
 def match_sync_fingerprint(match: dict) -> tuple:
-    """Position / life / facing only — swing anim is client-local after COMBAT_EVENT."""
+    """Position / life / facing / gates — swing anim is client-local after COMBAT_EVENT."""
     units = match.get("units") or []
-    return tuple(
-        (
-            int(u["id"]),
-            int(u["x"]),
-            int(u["y"]),
-            int(u["hp"]),
-            bool(u.get("alive") and u["hp"] > 0),
-            u.get("facing") or "",
-            bool(u.get("held_reserve")),
-        )
-        for u in units
+    return (
+        bool(match.get("reserves_released")),
+        tuple(
+            (
+                int(u["id"]),
+                int(u["x"]),
+                int(u["y"]),
+                int(u["hp"]),
+                bool(u.get("alive") and u["hp"] > 0),
+                u.get("facing") or "",
+                bool(u.get("held_reserve")),
+            )
+            for u in units
+        ),
     )
 
 
@@ -2353,6 +2448,7 @@ def barracks_payload(conn, session) -> dict:
         "deployed_ids": deployed_ids,
         "deployed_count": len(deployed_ids),
         "personal_house": _personal_house_payload(conn, session),
+        "arena": __import__("arena_battles").payload(conn, session),
     }
 
 

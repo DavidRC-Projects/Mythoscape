@@ -1,0 +1,428 @@
+{
+  "_doc": "Crownfall boss duel tuning. Times are in STEPS (1 step = 200 ms; 3 steps per 0.6 s server tick). Damage to the player is a fraction of the player's max HP; damage to the boss is a fraction of the boss's max HP. Edit freely and re-run tools/duel_sim.py.",
+  "step_ms": 200,
+  "steps_per_tick": 3,
+  "timeout_steps": 600,
+  "start_gap": 5.0,
+  "arena_len": 8.0,
+  "stamina": {
+    "max": 100,
+    "regen_per_step": 4.0,
+    "regen_delay_steps": 2
+  },
+  "momentum": {
+    "max": 100,
+    "hit": 4,
+    "perfect_parry": 20,
+    "parry": 10,
+    "perfect_dodge": 16,
+    "dodge": 5,
+    "focus_shot": 12,
+    "counter_hit": 8,
+    "taken_hit": -40,
+    "decay_per_step": 0.5,
+    "hit_ref_dmg": 0.03
+  },
+  "finisher": {
+    "boss_hp_frac": 0.3,
+    "momentum": 90,
+    "melee_reach": 2.0,
+    "window_steps": 10,
+    "bow_focus": 0.75
+  },
+  "level": {
+    "min_mult": 0.7,
+    "max_mult": 1.35,
+    "defence_cut_max": 0.3
+  },
+  "gear_mult": {
+    "bronze": 0.85,
+    "iron": 0.92,
+    "steel": 1.0,
+    "mithril": 1.07,
+    "adamant": 1.14,
+    "rune": 1.2,
+    "mythos": 1.28
+  },
+  "styles": {
+    "sword": {
+      "ranged": false,
+      "reach": 2.0,
+      "light": {
+        "sta": 10,
+        "dmg": 0.026,
+        "recover": 2
+      },
+      "heavy": {
+        "sta": 28,
+        "dmg": 0.07,
+        "windup": 3,
+        "recover": 3,
+        "breaks_guard": true
+      },
+      "parry": {
+        "sta": 12,
+        "active": 3,
+        "perfect": 1,
+        "recover": 2
+      },
+      "dodge": {
+        "sta": 18,
+        "iframes": 2,
+        "recover": 2,
+        "shift": 1.0
+      },
+      "counter": {
+        "window": 4,
+        "mult": 2.2
+      },
+      "move": {
+        "sta": 3,
+        "speed": 0.5
+      }
+    },
+    "axe": {
+      "ranged": false,
+      "reach": 2.0,
+      "light": {
+        "sta": 13,
+        "dmg": 0.038,
+        "recover": 3
+      },
+      "heavy": {
+        "sta": 32,
+        "dmg": 0.105,
+        "windup": 4,
+        "recover": 3,
+        "breaks_guard": true
+      },
+      "parry": {
+        "sta": 14,
+        "active": 2,
+        "perfect": 1,
+        "recover": 3
+      },
+      "dodge": {
+        "sta": 20,
+        "iframes": 2,
+        "recover": 2,
+        "shift": 1.0
+      },
+      "counter": {
+        "window": 4,
+        "mult": 2.6
+      },
+      "move": {
+        "sta": 3,
+        "speed": 0.45
+      },
+      "momentum_mult": 1.1
+    },
+    "bow": {
+      "ranged": true,
+      "reach": 9.0,
+      "light": {
+        "sta": 7,
+        "dmg": 0.024,
+        "recover": 2,
+        "min_gap": 2.0,
+        "close_mult": 0.75
+      },
+      "heavy": {
+        "sta": 24,
+        "dmg": 0.05,
+        "windup": 4,
+        "recover": 2,
+        "focus_bonus": 1.0
+      },
+      "focus": {
+        "per_step": 0.08,
+        "max": 1.0,
+        "lost_on_move": 0.5,
+        "far_gap": 5.0,
+        "far_mult": 1.0
+      },
+      "parry": null,
+      "dodge": {
+        "sta": 13,
+        "iframes": 3,
+        "recover": 1,
+        "shift": 1.6
+      },
+      "counter": {
+        "window": 4,
+        "mult": 1.6
+      },
+      "move": {
+        "sta": 4,
+        "speed": 0.55
+      }
+    }
+  },
+  "bosses": {
+    "varro": {
+      "speed": 0.42,
+      "guard_chance": 0.0,
+      "far_shot_taken": 0.6,
+      "think_steps": [
+        3,
+        6
+      ],
+      "attacks": [
+        {
+          "id": "trident",
+          "windup": 4,
+          "dmg": 0.125,
+          "reach": 2.6,
+          "parry": true,
+          "recover": 3,
+          "w": 3
+        },
+        {
+          "id": "net",
+          "windup": 5,
+          "dmg": 0.05,
+          "reach": 7.0,
+          "parry": false,
+          "recover": 4,
+          "root": 8,
+          "w": 3
+        },
+        {
+          "id": "trident_throw",
+          "windup": 5,
+          "dmg": 0.17,
+          "reach": 8.0,
+          "parry": false,
+          "recover": 5,
+          "min_gap": 2.6,
+          "w": 3
+        }
+      ],
+      "finisher_hp": 0.2,
+      "shot_taken": 0.7,
+      "bow_focus": 0.95,
+      "momentum_mult_bow": 0.75
+    },
+    "brutus": {
+      "speed": 0.16,
+      "guard_chance": 0.45,
+      "guard_steps": 6,
+      "guard_cut": 0.85,
+      "far_shot_taken": 1.5,
+      "think_steps": [
+        4,
+        7
+      ],
+      "_why": "Ranged-advantage boss: slow heavy Murmillo. Walks slowly, charges in a straight line (dodge it and he is stuck in a long recovery), braces his shield vs close blows. Arrows from 5+ tiles hit his open flanks for +45%.",
+      "attacks": [
+        {
+          "id": "shield_bash",
+          "windup": 4,
+          "dmg": 0.13,
+          "reach": 2.0,
+          "parry": true,
+          "recover": 4,
+          "w": 3
+        },
+        {
+          "id": "charge",
+          "windup": 6,
+          "dmg": 0.24,
+          "reach": 9.0,
+          "parry": false,
+          "recover": 10,
+          "lunge_to": 0.8,
+          "min_gap": 3.0,
+          "w": 3
+        },
+        {
+          "id": "stomp",
+          "windup": 4,
+          "dmg": 0.17,
+          "reach": 1.8,
+          "parry": false,
+          "recover": 4,
+          "w": 2
+        }
+      ],
+      "guard_cut_heavy": 0.4,
+      "finisher_hp": 0.15
+    },
+    "crixus": {
+      "speed": 0.42,
+      "guard_chance": 0.0,
+      "far_shot_taken": 1.05,
+      "think_steps": [
+        2,
+        4
+      ],
+      "frenzy_below": 0.5,
+      "frenzy_windup_cut": 1,
+      "attacks": [
+        {
+          "id": "cut",
+          "windup": 4,
+          "dmg": 0.112,
+          "reach": 2.2,
+          "parry": true,
+          "recover": 2,
+          "w": 4
+        },
+        {
+          "id": "cleave",
+          "windup": 6,
+          "dmg": 0.225,
+          "reach": 2.4,
+          "parry": false,
+          "recover": 4,
+          "w": 1
+        },
+        {
+          "id": "rush",
+          "windup": 5,
+          "dmg": 0.15,
+          "reach": 4.5,
+          "parry": true,
+          "recover": 3,
+          "lunge_to": 1.5,
+          "min_gap": 2.6,
+          "w": 2
+        }
+      ],
+      "finisher_hp": 0.34,
+      "shot_taken": 1.15,
+      "bow_focus": 0.3,
+      "momentum_mult_bow": 1.2,
+      "momentum_mult_axe": 0.9
+    },
+    "sabina": {
+      "speed": 0.36,
+      "guard_chance": 0.0,
+      "far_shot_taken": 1.1,
+      "think_steps": [
+        2,
+        4
+      ],
+      "attacks": [
+        {
+          "id": "twin_cut",
+          "windup": 3,
+          "dmg": 0.091,
+          "reach": 2.2,
+          "parry": true,
+          "recover": 2,
+          "w": 4,
+          "double": 0.2
+        },
+        {
+          "id": "leap",
+          "windup": 6,
+          "dmg": 0.156,
+          "reach": 5.0,
+          "parry": false,
+          "recover": 4,
+          "lunge_to": 1.5,
+          "min_gap": 3.0,
+          "w": 1
+        }
+      ],
+      "finisher_hp": 0.38
+    },
+    "ignatius": {
+      "speed": 0.35,
+      "guard_chance": 0.15,
+      "guard_steps": 4,
+      "guard_cut": 0.6,
+      "far_shot_taken": 1.0,
+      "think_steps": [
+        3,
+        5
+      ],
+      "attacks": [
+        {
+          "id": "maul",
+          "windup": 5,
+          "dmg": 0.182,
+          "reach": 2.2,
+          "parry": true,
+          "recover": 3,
+          "w": 3
+        },
+        {
+          "id": "roar",
+          "windup": 6,
+          "dmg": 0.042,
+          "reach": 5.0,
+          "parry": false,
+          "recover": 5,
+          "stun": 5,
+          "w": 1
+        },
+        {
+          "id": "pounce",
+          "windup": 5,
+          "dmg": 0.17,
+          "reach": 6.0,
+          "parry": false,
+          "recover": 5,
+          "lunge_to": 1.5,
+          "min_gap": 3.0,
+          "w": 2
+        }
+      ],
+      "finisher_hp": 0.2,
+      "shot_taken": 0.85,
+      "momentum_mult_sword": 0.9,
+      "momentum_mult_axe": 0.9
+    },
+    "unbroken": {
+      "speed": 0.4,
+      "guard_chance": 0.25,
+      "guard_steps": 4,
+      "guard_cut": 0.85,
+      "far_shot_taken": 0.76,
+      "think_steps": [
+        3,
+        5
+      ],
+      "second_wind": 0.35,
+      "attacks": [
+        {
+          "id": "sun_slash",
+          "windup": 4,
+          "dmg": 0.08,
+          "reach": 2.4,
+          "parry": true,
+          "recover": 3,
+          "w": 4
+        },
+        {
+          "id": "sun_sweep",
+          "windup": 6,
+          "dmg": 0.15,
+          "reach": 3.0,
+          "parry": false,
+          "recover": 5,
+          "w": 2
+        },
+        {
+          "id": "sun_spear",
+          "windup": 5,
+          "dmg": 0.14,
+          "reach": 7.0,
+          "parry": true,
+          "recover": 4,
+          "min_gap": 3.0,
+          "w": 3
+        }
+      ],
+      "second_wind_momentum": 0.5,
+      "finisher_hp": 0.2,
+      "momentum_mult_axe": 1.25
+    }
+  },
+  "recover_walk": 0.5,
+  "_doc_v2": "Tuning pass 2: finisher needs momentum>=finisher.momentum and boss HP <= bosses.<id>.finisher_hp (default finisher.boss_hp_frac); bows also need focus>=finisher.bow_focus (hold still). momentum.hit scales with blow size (dmg/hit_ref_dmg, 0.8-2.5x). bosses.<id>.shot_taken = arrow damage at any range, far_shot_taken = extra at >= far_gap, momentum_mult = crowd gain vs this boss, second_wind_momentum = momentum kept when the boss rises (finisher locked until then).",
+  "_doc_v3": "Tuning pass 3 (deterministic sim seeds): casual melee vs Brutus/Unbroken eased, Varro tougher for bows, finisher rates pulled toward 50-75% (axe momentum_mult 1.25, lower finisher_hp for Brutus/Crixus/Ignatius). Per-boss overrides: bow_focus, momentum_mult_<style>."
+}
