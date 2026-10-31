@@ -31,7 +31,9 @@ def test_meadow_has_no_tile_seams():
     for i in range(4):
         assert village_ground.draw_world_grass(s, pygame.Rect(i * t, 0, t, t), 10 + i, 7)
     tex = village_ground._grass_texture(t)
-    ref = tex.subsurface(pygame.Rect((10 % 24) * t, 7 * t, t * 4, t))
+    ref = tex.subsurface(pygame.Rect((10 % 24) * t, 7 * t, t * 4, t)).copy()
+    for i in range(4):  # the slow anti-repeat tint field (village review, 31 Oct) rides on top
+        village_ground._ground_tint(ref, pygame.Rect(i * t, 0, t, t), 10 + i, 7)
     for x in range(t * 4):
         assert s.get_at((x, t // 2)) == ref.get_at((x, t // 2))
 
@@ -40,7 +42,8 @@ def test_meadow_wraps_period():
     t = 32
     a = pygame.Surface((t, t)); b = pygame.Surface((t, t))
     village_ground.draw_world_grass(a, pygame.Rect(0, 0, t, t), 5, 5)
-    village_ground.draw_world_grass(b, pygame.Rect(0, 0, t, t), 5 + 24, 5 + 48)
+    per = 24 * village_ground._TINT_PERIOD  # meadow sheet (24) x anti-repeat tint field
+    village_ground.draw_world_grass(b, pygame.Rect(0, 0, t, t), 5 + per, 5 + 2 * per)
     assert pygame.image.tobytes(a, "RGB") == pygame.image.tobytes(b, "RGB")
 
 

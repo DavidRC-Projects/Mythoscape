@@ -146,9 +146,16 @@ def queue(client, draw_list, cam_x, cam_y, tile, t=0.0):
     margin_x = max(tile * 3, 80)
     margin_y_top = max(tile, 40)
     margin_y_bot = max(tile * 5, 120)
+    try:
+        import vale_ring as _VR
+        _ring_cut = _VR.glade_tree_replaced
+    except Exception:
+        _ring_cut = None
     for (x, y) in FG.tree_cells():
         if abs(x - px) > r or abs(y - py) > r:
             continue
+        if _ring_cut is not None and _ring_cut(x, y):
+            continue   # the Crownfall Vale ring's peaks stand here instead (south rim)
         sx, sy = client.world_to_view_offset(x, y, cam_x, cam_y)
         cx = int(sx * tile + tile // 2)
         cy = int(sy * tile + tile // 2)
@@ -285,6 +292,11 @@ def banner_text():
 
 
 def draw_banner(client):
+    try:
+        import vale_ring_client
+        vale_ring_client.draw_banner(client)
+    except Exception as exc:
+        print("[vale_ring] banner", exc)
     if getattr(client, "dungeon", None) or not getattr(client, "player", None):
         return
     if _state["zone"] is None:

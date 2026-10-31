@@ -238,7 +238,7 @@ def draw_rotate_controls(client):
         edge = (230, 150, 70) if hot else (140, 90, 50)
         pygame.draw.rect(client.screen, fill, rect, border_radius=5)
         pygame.draw.rect(client.screen, edge, rect, 1, border_radius=5)
-        label = "⟲" if action == "left" else "⟳"
+        label = "<" if action == "left" else ">"
         text = client.font_tiny.render(label, True, (240, 220, 190))
         client.screen.blit(text, (rect.centerx - text.get_width() // 2, rect.centery - text.get_height() // 2))
     if hover:

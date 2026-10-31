@@ -353,6 +353,9 @@ ITEMS = {
     "super_defence_potion":  {"name": "Super Defence Potion",  "type": "potion", "stackable": True, "value": 120, "equip_slot": None,
                               "boost_skill": "defence", "boost_amount": 20, "boost_seconds": 60},
 
+    "ratcatcher_charm": {"name": "Rat-Tail Charm", "type": "misc", "stackable": False, "value": 0,
+                         "equip_slot": None, "tradeable": False, "sellable": False,
+                         "examine": "A giant rat's tail, bound with cord. Proof you cleared the sewer below the village."},
     "rat_tail":         {"name": "Giant Rat Tail",     "type": "quest",  "stackable": True,  "value": 0, "equip_slot": None},
     "spider_silk":      {"name": "Spider Silk",        "type": "misc",   "stackable": True,  "value": 4, "equip_slot": None},
     "bones":            {"name": "Bones",              "type": "misc",   "stackable": True,  "max_stack": 100, "value": 1, "equip_slot": None, "karma_xp": 18},
@@ -653,6 +656,41 @@ def cook_burn_chance(cook_level, level_req):
 # MONSTERS  (RS2001-style stats: attack / strength / defence / hitpoints)
 # ---------------------------------------------------------------------------
 MONSTERS = {
+    # --- Below the Village (sewer tutorial). Placeholders from GUIDE_AND_SEWER_PROPOSAL.md s5;
+    # the game designer tunes these in playtesting. Max hit = floor(0.5 + (strength + 8) / 10).
+    "village_rat": {
+        "name": "Giant Rat", "display_type": "giant_rat", "quest_as": "giant_rat", "level_override": 1,
+        "hp": 8, "attack": 1, "strength": 1, "defence": 1, "def_bonus": 0,   # max hit 1
+        "attack_cooldown": 2.4, "xp": 8, "respawn_ticks": 50,
+        "drops_locked": True,
+        "drops": [("bones", 1.0, (1, 1)), ("coins", 1.0, (2, 6))],
+        "wander_radius": 1, "aggro_range": 0,                                 # passive until attacked
+        "leash_area": (22, 26, 28, 29),
+    },
+    "sewer_rat": {
+        "name": "Sewer Rat", "display_type": "giant_rat", "quest_as": "giant_rat", "level_override": 2,
+        "hp": 5, "attack": 2, "strength": 2, "defence": 1, "def_bonus": 0,    # max hit 1 (tuned: fresh bronze ~99.8% in room 1)
+        "attack_cooldown": 2.4, "xp": 12, "respawn_ticks": 0,
+        "drops_locked": True,
+        "drops": [("bones", 1.0, (1, 1)), ("coins", 1.0, (2, 6))],
+        "wander_radius": 2, "aggro_range": 5,
+    },
+    "sewer_spider": {
+        "name": "Sewer Spider", "display_type": "spider", "level_override": 5,
+        "hp": 6, "attack": 5, "strength": 6, "defence": 1, "def_bonus": 0,    # max hit 1, more accurate + slows (hp 7->6: room 2 ~87% win with 3 shrimp, sim 30 Oct)
+        "attack_cooldown": 3.0, "xp": 18, "respawn_ticks": 0,
+        "drops_locked": True,
+        "drops": [("coins", 1.0, (3, 8)), ("spider_silk", 0.5, (1, 1))],
+        "wander_radius": 2, "aggro_range": 5,
+    },
+    "spiderling": {
+        "name": "Spiderling", "display_type": "spider", "level_override": 1, "scale": 0.6,
+        "hp": 3, "attack": 1, "strength": 1, "defence": 1, "def_bonus": 0,    # max hit 1
+        "attack_cooldown": 2.4, "xp": 4, "respawn_ticks": 0,
+        "drops_locked": True,
+        "drops": [("coins", 1.0, (1, 3))],
+        "wander_radius": 2, "aggro_range": 6,
+    },
     "giant_rat": {
         "name": "Giant Rat", "level": 3, "hp": 8, "attack": 11, "strength": 11, "defence": 1,
         "def_bonus": 0, "xp": 12, "respawn_ticks": 15,
@@ -1646,6 +1684,8 @@ def _mountain_wolves():
 
 # Fixed monster spawn points: (monster_type, x, y)
 MONSTER_SPAWNS = [
+    # Below the Village: two passive rats outside the sewer grate, visible from the square.
+    ("village_rat", 24, 28), ("village_rat", 26, 27),
     ("giant_rat", 62, 103), ("giant_rat", 67, 104), ("giant_rat", 72, 103),
     ("giant_rat", 64, 107), ("giant_rat", 70, 107), ("giant_rat", 66, 110),
     ("giant_rat", 73, 110), ("giant_rat", 63, 106),
@@ -1785,7 +1825,7 @@ TELEPORT_DESTINATIONS = [
     {"id": "keep", "label": "Stonehaven Castle", "blurb": "The overworld keep", "where": "overworld", "x": 128, "y": 66},
     {"id": "harbour", "label": "Harbourreach", "blurb": "The docks", "where": "overworld", "x": 176, "y": 18},
     {"id": "estate", "label": "Estate Agent", "blurb": "Village estate office (north fringe)", "where": "overworld", "x": 85, "y": 11},
-    {"id": "kings_row_south", "label": "King's Row Homes", "blurb": "South-road cottages & Ash Manor", "where": "overworld", "x": 97, "y": 144},
+    {"id": "kings_row_south", "label": "King's Row Homes", "blurb": "South meadow cottages (King's Row)", "where": "overworld", "x": 27, "y": 141},
     {"id": "realm", "label": "Castle Realm", "blurb": "The plaza", "where": "castle", "x": 150, "y": 183},
     {"id": "gothic", "label": "Gothic Castle", "blurb": "Outside the gate", "where": "castle", "x": 52, "y": 78},
     {"id": "king", "label": "King's Castle", "blurb": "Outside the gate", "where": "castle", "x": 152, "y": 78},
@@ -1806,7 +1846,7 @@ NPCS = [
      "teleport_teacher": True},
 
     {"id": "warden_tamsin", "name": "Warden Tamsin", "x": 36, "y": 22,
-     "lines": ["Well met! Talk to me for your Bronze kit — I'll show you walk, zoom, Travel (M), then the kit."],
+     "lines": ["Well met! Talk to me — I'll show you walk, zoom and Travel (M)."],
      "welcome_guide": True},
 
     {"id": "outfitter_mae", "name": "Mae the Outfitter", "x": 51, "y": 58,
@@ -1932,7 +1972,7 @@ NPCS = [
      ],
      "quest_id": "goblin_watch"},
 
-    {"id": "guard_aldric", "name": "Guard Aldric", "x": 28, "y": 50,
+    {"id": "guard_aldric", "name": "Guard Aldric", "x": 32, "y": 40,
      "lines": ["The rat mine is under the volcano, just south of Emberdeep.",
          "I'm meant to note who leaves the village with full carts. It's never the villagers."]},
 
@@ -2021,7 +2061,7 @@ NPCS = [
     # Mountain pass / fishing village
     {"id": "pass_scout", "name": "Scout Bren", "x": 121, "y": 16,
      "lines": [
-         "Wolves on the pass — pack food. Accept to thin eight of them.",
+         "Wolves on the pass — pack food. Accept to thin four of them.",
      ],
      "quest_id": "wolves_on_the_pass"},
     {"id": "tackle_merchant", "name": "Marina the Angler", "x": 177, "y": 9,
@@ -2180,7 +2220,19 @@ SHOPS = {
             "logs": {"price": 5, "qty": 40},
             "oak_logs": {"price": 15, "qty": 20},
         },
+        # Bows, arrows, and fletching parts only — pays better than general stores.
         "buys": True,
+        "buys_types": ("ammo",),
+        "buys_slots": ("ammo",),
+        "buys_ranged_weapons": True,
+        "buys_ids": (
+            "bow_string", "feather", "arrow_shaft", "headless_arrow",
+            "bronze_arrowtips", "iron_arrowtips", "steel_arrowtips",
+            "mithril_arrowtips", "adamant_arrowtips",
+            "unstrung_shortbow", "unstrung_oak_shortbow", "unstrung_willow_shortbow",
+            "unstrung_maple_shortbow", "unstrung_yew_shortbow", "unstrung_magic_shortbow",
+        ),
+        "sell_rate": 0.55,
     },
     "blacksmith_shop": {
         "name": "Gareth's Smithy",
@@ -2230,7 +2282,12 @@ SHOPS = {
             "iron_arrowtips": {"price": 12, "qty": 25},
             "mining_bag": {"price": 45, "qty": 10},
         },
-        "buys": True,  # buys player ores/bars/weapons/armour at 40% value
+        # Melee weapons + armour only (not bows, ores, or bars). Pays better than general stores.
+        "buys": True,
+        "buys_types": ("weapon", "armor"),
+        "buys_slots": ("weapon", "helmet", "body", "legs", "shield"),
+        "buys_exclude_ranged": True,
+        "sell_rate": 0.55,
     },
     "pet_shop": {
         "name": "Pet Emporium",
@@ -2367,6 +2424,19 @@ QUESTS = {
         "quest_points": 1,
         "rewards": {},
     },
+    "below_the_village": {
+        "name": "Below the Village",
+        "giver": None,
+        "optional": True,
+        "hidden_until_offered": True,
+        "description": "Optional. Clear the rats and the spider nest in the sewer below the village. "
+                       "Reward: the Ratcatcher title, a Rat-Tail Charm, 10 cooked shrimp, 75 coins "
+                       "and +10% combat XP for 15 minutes.",
+        "type": "sewer",
+        "guide": {"x": 25, "y": 30, "label": "Sewer grate"},
+        "quest_points": 0,
+        "rewards": {},
+    },
     "rat_problem": {
         "name": "Rat Problem",
         "giver": "elder_miriam",
@@ -2461,8 +2531,8 @@ QUESTS = {
     "wolves_on_the_pass": {
         "name": "Wolves on the Pass",
         "giver": "pass_scout",
-        "description": "Kill 8 Wolves on the mountain pass, return to Scout Bren.",
-        "type": "kill", "target": "wolf", "count": 8,
+        "description": "Kill 4 Wolves on the mountain pass, return to Scout Bren.",
+        "type": "kill", "target": "wolf", "count": 4,
         "guide_travel": "wolves",
         "quest_points": 3,
         "rewards": {"coins": 120, "xp": {"attack": 80}},
@@ -3016,7 +3086,7 @@ TRAVEL_DESTINATIONS = [
     {"id": "estate_agent", "kind": "place", "label": "Estate Agent Mira",
      "x": 85, "y": 11, "blurb": "Village estate office — buy homes & plots"},
     {"id": "kings_row_homes", "kind": "place", "label": "King's Row Homes",
-     "x": 97, "y": 144, "blurb": "South-road player houses (Ash Manor & cottages)"},
+     "x": 27, "y": 141, "blurb": "South meadow player houses (King's Row cottages)"},
     {"id": "emberdeep", "kind": "place", "label": "Emberdeep",
      "x": 196, "y": 78, "blurb": "⚠ Lava dungeon — 8 floors · east volcano massif",
      "action": {"type": "ENTER_DUNGEON", "dungeon_id": "emberdeep"}},
@@ -3104,6 +3174,8 @@ def entrance_mouth_tiles(x, y, kind=None):
             for dy in (0, 1):
                 tiles.add((ax + dx, ay + dy))
         return tiles
+    if kind == "sewer_grate":
+        return {(ax, ay)}   # only the grate itself: fighting the rats beside it never drops you in
     tiles = set()
     for dx in (-1, 0, 1):
         for dy in (0, -1):
@@ -3112,6 +3184,10 @@ def entrance_mouth_tiles(x, y, kind=None):
 
 
 INTERACTABLES = [
+    {"id": "sewer_grate", "kind": "sewer_grate", "name": "Sewer Grate", "x": 25, "y": 30,
+     "stand": [25, 28], "dungeon_id": "sewer"},
+    {"id": "sewer_sign", "kind": "warning_sign", "name": "Beware Sewer Rats", "x": 23, "y": 29,
+     "variant": "sewer"},
     {"id": "smithy_furnace", "kind": "furnace", "name": "Furnace", "x": 80, "y": 6},
     {"id": "smithy_anvil", "kind": "anvil", "name": "Anvil", "x": 87, "y": 6},
     {"id": "smithy_door", "kind": "door", "name": "Smithy Door", "x": 86, "y": 18,
@@ -3122,6 +3198,9 @@ INTERACTABLES = [
      "enter_x": 45, "enter_y": 13, "exit_x": 45, "exit_y": 16, "building": "cottage_ne"},
     {"id": "cottage_sw_door", "kind": "door", "name": "Door", "x": 9, "y": 47,
      "enter_x": 9, "enter_y": 45, "exit_x": 9, "exit_y": 48, "building": "cottage_sw"},
+    # The Resting Ox's stone arch (east of the wooden front door) leads straight into the bar scene.
+    {"id": "resting_ox_arch", "kind": "door", "name": "Arched Door", "x": 20, "y": 42,
+     "enter_x": 20, "enter_y": 40, "exit_x": 20, "exit_y": 43, "building": "cottage_sw", "bar": True},
     {"id": "cottage_se_door", "kind": "door", "name": "Door", "x": 41, "y": 47,
      "enter_x": 41, "enter_y": 45, "exit_x": 41, "exit_y": 48, "building": "cottage_se"},
     {"id": "bank_door", "kind": "door", "name": "Bank Door", "x": 66, "y": 47,
@@ -4132,7 +4211,7 @@ def _apply_village_compact_layout():
         "cottage_se_door": (56, 64, 56, 62, 56, 65),
         "bank_door": (44, 33, 44, 31, 44, 34),
         "pet_door": (70, 52, 70, 50, 70, 53),
-        "smithy_door": (88, 52, 88, 50, 88, 53),
+        "smithy_door": (88, 52, 88, 50, 88, 51),   # exit inside the vale (rim is solid)
         "outfitters_door": (56, 84, 56, 82, 56, 85),
     }
     for ent in INTERACTABLES:
@@ -4155,6 +4234,9 @@ def _apply_village_compact_layout():
         "anvil": (89, 42),
         "pet_shop": (70, 50),
         "inn_hearth": (12, 36),
+        # Outside the smithy capture box — pin so compact layout cannot drag them.
+        "estate_agent": (85, 11),
+        "kings_row_homes": (27, 141),
     }
     for ent in TRAVEL_DESTINATIONS:
         if ent.get("id") in travel_pins:
@@ -4164,6 +4246,12 @@ def _apply_village_compact_layout():
             ent["x"], ent["y"] = 44, 34
         elif ent.get("id") == "outfitters":
             ent["x"], ent["y"] = 56, 85
+        elif ent.get("id") == "estate":
+            # Door apron of Estate Agent Mira (NW fringe). Must not ride the smithy slide.
+            ent["x"], ent["y"] = 85, 11
+        elif ent.get("id") == "kings_row_south":
+            # South meadow housing gate — walkable path by the cottages.
+            ent["x"], ent["y"] = 27, 141
 
     for b in BUILDINGS:
         if b.get("id") == "smithy":
@@ -4320,14 +4408,17 @@ def _pin_visible_npcs():
         "monk_healer": (52, 34),
         "farmer_tom": (58, 66),
         "guard_marcus": (28, 4),
-        "guard_aldric": (28, 50),
+        # Village south road near Fairy Glade approach — clear of canopies.
+        "guard_aldric": (32, 40),
         "mine_scout": (22, 54),
         "elowen_moonwhisper": (18, 68),
         "warden_thorne": (24, 60),
         "tumbleroot": (38, 72),
         "pip_dewdrop": (32, 82),
         "dungeon_hermit": (44, 86),
-        "merchant_wanderer": (94, 28),
+        # Moved 6 tiles in from the Crownfall Vale mountain ring (31 Oct 2026).
+        "merchant_wanderer": (88, 28),
+        "mysterious_traveler": (89, 14),
         "mad_scientist": (100, 23),  # south shore of fishing lake (not in water)
     }
     for ent in NPCS:

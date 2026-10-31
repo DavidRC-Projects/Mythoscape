@@ -88,9 +88,6 @@ USE_EMBERDEEP_FIRST_PERSON = _on("USE_EMBERDEEP_FIRST_PERSON", "1")
 # Set USE_EMBERDEEP_CREATURES=0 to keep the older dungeon monsters.
 USE_EMBERDEEP_CREATURES = _on("USE_EMBERDEEP_CREATURES", "1")
 
-# Painted comic before the first world frame of a new game.
-# Set USE_OPENING_COMIC=0 to skip it.
-USE_OPENING_COMIC = _on("USE_OPENING_COMIC", "1")
 
 # Looping tune for the login screen and for each region.
 # Set USE_AREA_MUSIC=0 to keep the game silent.

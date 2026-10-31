@@ -8,6 +8,7 @@ import os
 import pygame
 
 import wolf_pass as WP
+import vale_ring_client  # Crownfall Vale ring rides on the same hooks (no client.py change)
 
 _IMG = {}
 _SCALED = {}
@@ -47,6 +48,8 @@ def _scaled(which, tile):
 
 def draw_ground(client, rect, wx, wy):
     """Cliff tiles under the painted ridge: draw grass (the ridge art covers them). True when handled."""
+    if vale_ring_client.draw_ground(client, rect, wx, wy):
+        return True
     if not active(client) or not WP.is_cliff(wx, wy):
         return False
     # Same ground painter as the surrounding open tiles, so no rectangle shows where the ridge base feathers out.
@@ -66,6 +69,10 @@ def _origin(client, cam_x, cam_y, tile):
 
 
 def queue(client, draw_list, cam_x, cam_y, tile, t=0.0):
+    try:
+        vale_ring_client.queue(client, draw_list, cam_x, cam_y, tile, t)
+    except Exception as exc:
+        print("[vale_ring] queue", exc)
     if not active(client):
         return
     g = WP.geo()
@@ -133,6 +140,10 @@ def queue(client, draw_list, cam_x, cam_y, tile, t=0.0):
 
 def minimap(client, surf, mm_w, mm_h, vw, vh):
     """One mountain shape: dark grey fill, white peak dots, brown road line, label."""
+    try:
+        vale_ring_client.minimap(client, surf, mm_w, mm_h, vw, vh)
+    except Exception as exc:
+        print("[vale_ring] minimap", exc)
     if not WP.enabled() or int(getattr(client, "camera_yaw", 0)) % 4:
         return
     x0, y0, x1, y1 = WP.bounds()

@@ -41,7 +41,7 @@ class WolfPass(unittest.TestCase):
         self.assertTrue(any(w in (6, 7) for w in mid))
 
     def test_no_old_grey_tiles(self):
-        import castle_v2
+        import castle_v2, vale_ring
         mx0, my0, mx1, my1 = wm.ZONES["mountains"]
         cx0, cy0, cx1, cy1 = castle_v2.footprint_tiles() if castle_v2.active() else (-1, -1, -2, -2)
         spur = set()
@@ -63,6 +63,8 @@ class WolfPass(unittest.TestCase):
                     continue  # the moved castle's own walls (drawn by castle_sprites)
                 if (x, y) in spur:
                     continue
+                if vale_ring.is_cliff(x, y):
+                    continue  # Crownfall Vale ring cliffs (drawn by vale_ring_client)
                 if self.grid[y][x] == wm.WALL:
                     self.assertTrue(WP.blocked(x, y), (x, y))
 

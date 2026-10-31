@@ -36,6 +36,7 @@ TRADE_CONFIRM    {}
 TRADE_CANCEL     {}
 PICKUP           {}
 SET_OPTION       {auto_pickup_items?}
+THRONE_VISION_SEEN {}                     -- intro film watched / skipped; sets the account's played flag once
 BANK_OPEN        {}
 BANK_DEPOSIT     {slot_index?} | {coins?}
 BANK_WITHDRAW    {slot_index?, qty?} | {coins?}

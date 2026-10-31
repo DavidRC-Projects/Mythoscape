@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS players (
     y INTEGER NOT NULL,
     hp INTEGER NOT NULL DEFAULT 10,
     starter_tips_seen INTEGER NOT NULL DEFAULT 0,   -- first-session chat pointers
+    throne_vision_seen INTEGER NOT NULL DEFAULT 0,  -- intro film played (first login)
     attack_xp INTEGER NOT NULL DEFAULT 388,   -- level 5
     strength_xp INTEGER NOT NULL DEFAULT 388,
     defence_xp INTEGER NOT NULL DEFAULT 388,
@@ -171,6 +172,24 @@ class Database:
             self.conn.execute(
                 "ALTER TABLE players ADD COLUMN starter_tips_seen INTEGER NOT NULL DEFAULT 1"
             )
+        if "throne_vision_seen" not in cols:
+            # The intro film is for new accounts: everyone already here counts as having seen it.
+            # New rows default to 0 (unseen).
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN throne_vision_seen INTEGER NOT NULL DEFAULT 0"
+            )
+            self.conn.execute("UPDATE players SET throne_vision_seen = 1")
+        if "guide_tour" not in cols:
+            # Seraphine's first-5-minutes tour. 0 = not started, 1..11 = current step,
+            # 100 = finished, 101 = skipped, 102 = "I've played before". Existing characters
+            # already know the game, so they count as finished (and as having had the bronze gift).
+            self.conn.execute("ALTER TABLE players ADD COLUMN guide_tour INTEGER NOT NULL DEFAULT 0")
+            self.conn.execute("UPDATE players SET guide_tour = 100")
+        if "guide_bronze" not in cols:
+            self.conn.execute("ALTER TABLE players ADD COLUMN guide_bronze INTEGER NOT NULL DEFAULT 0")
+            self.conn.execute("UPDATE players SET guide_bronze = 1")
+        if "sewer_choice" not in cols:
+            self.conn.execute("ALTER TABLE players ADD COLUMN sewer_choice TEXT NOT NULL DEFAULT ''")
         if "smithing_xp" not in cols:
             self.conn.execute(
                 "ALTER TABLE players ADD COLUMN smithing_xp INTEGER NOT NULL DEFAULT 0"

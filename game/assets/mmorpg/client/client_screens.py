@@ -512,8 +512,7 @@ class ScreensMixin:
             if len(p) > 128:
                 self.login_error = "Password must be at most 128 characters."
                 return
-            import feature_flags
-            self.opening_comic_pending = bool(feature_flags.USE_OPENING_COMIC)
+            self.opening_comic_pending = False      # opening comic retired (David, 30 Oct 2026)
             self.arrival_guide = True
             self.net.send("CREATE_CHARACTER", username=u, password=p, char_name=c)
         else:
@@ -640,6 +639,14 @@ class ScreensMixin:
 
     def handle_stat_alloc_event(self, event):
         _bind_client_globals()
+        try:
+            import stats_screen_v2
+            if not getattr(self, "_stats_v2_broken", False):
+                stats_screen_v2.handle_event(self, event)
+                return
+        except Exception as e:   # error fallback only: the old flat screen below
+            self._stats_v2_broken = True
+            print(f"stats screen v2 event failed, using the old screen: {e!r}", flush=True)
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_RETURN:
                 self.submit_stat_alloc()
@@ -677,6 +684,16 @@ class ScreensMixin:
 
     def draw_stat_alloc(self):
         _bind_client_globals()
+        if not getattr(self, "_stats_v2_broken", False):
+            try:
+                import stats_screen_v2
+                stats_screen_v2.draw(self)
+                return
+            except Exception as e:   # error fallback only: the old flat screen below
+                self._stats_v2_broken = True
+                import traceback
+                print(f"stats screen v2 draw failed, using the old screen: {e!r}\n{traceback.format_exc()}", flush=True)
+                self.screen.fill((0, 0, 0))
         title = self.font_big.render("Choose your starting stats", True, WHITE)
         lay = stat_alloc_layout(SCREEN_W)
         self.screen.blit(title, (SCREEN_W // 2 - title.get_width() // 2, 80))
@@ -1070,68 +1087,68 @@ class ScreensMixin:
 
     def draw_world_map_modal(self):
         _bind_client_globals()
+        import map_atlas
+
         box = self.world_map_view_rect()
         canvas = self.world_map_canvas_rect()
-        pygame.draw.rect(self.screen, (14, 18, 26), box, border_radius=8)
-        pygame.draw.rect(self.screen, (120, 170, 220), box, 2, border_radius=8)
+        side = self.world_map_side_rect()
+        pygame.draw.rect(self.screen, (16, 18, 26), box, border_radius=10)
+        pygame.draw.rect(self.screen, (180, 150, 80), box, 2, border_radius=10)
         in_realm = bool(self.dungeon and self.dungeon.get("id") == "castle_realm")
         title = self.font_big.render(
-            "Castle Realm Map" if in_realm else "World Map", True, WHITE,
+            "Castle Realm Atlas" if in_realm else "Kingdom Atlas", True, (255, 230, 170),
         )
-        self.screen.blit(title, (box.x + 20, box.y + 14))
+        self.screen.blit(title, (box.x + 20, box.y + 12))
         self.screen.blit(
             self.font_small.render(
-                "Scroll / drag to pan  ·  Click a tile to walk there  ·  Esc closes",
-                True, GREY,
+                "Scroll to pan  ·  Ctrl+wheel / +− zoom  ·  Click a place to walk  ·  Esc closes",
+                True, (160, 155, 140),
             ),
-            (box.x + 20, box.y + 46),
+            (box.x + 20, box.y + 42),
         )
 
+        # Zoom controls
+        self.world_map_zoom_rects = {}
+        zx = box.x + 320
+        zy = box.y + 10
+        for key, label, dx in (("out", "−", 0), ("in", "+", 70)):
+            r = pygame.Rect(zx + dx, zy, 28, 26)
+            pygame.draw.rect(self.screen, (40, 48, 64), r, border_radius=6)
+            pygame.draw.rect(self.screen, (160, 140, 90), r, 1, border_radius=6)
+            t = self.font.render(label, True, WHITE)
+            self.screen.blit(t, (r.centerx - t.get_width() // 2, r.centery - t.get_height() // 2))
+            self.world_map_zoom_rects[key] = r
+        zoom_pct = int(round(100 * self.world_map_scale / max(1, map_atlas.WORLD_MAP_SCALE_DEFAULT)))
+        zt = self.font_tiny.render(f"{zoom_pct}%", True, (220, 200, 140))
+        self.screen.blit(zt, (zx + 32, zy + 6))
+
+        self.world_map_recenter_rect = pygame.Rect(box.right - 118, box.y + 10, 100, 26)
+        rb = self.world_map_recenter_rect
+        pygame.draw.rect(self.screen, (40, 60, 90), rb, border_radius=6)
+        pygame.draw.rect(self.screen, (120, 170, 220), rb, 1, border_radius=6)
+        rt = self.font_tiny.render("Center on me", True, WHITE)
+        self.screen.blit(rt, (rb.centerx - rt.get_width() // 2, rb.centery - rt.get_height() // 2))
+
         self.clamp_world_map_scroll()
-        scale = self.world_map_scale
+        scale = max(1, int(self.world_map_scale))
         ox, oy = self.world_map_scroll
-        view_w = canvas.w // scale
-        view_h = canvas.h // scale
+        view_w = max(1, canvas.w // scale)
+        view_h = max(1, canvas.h // scale)
 
-        pygame.draw.rect(self.screen, (10, 12, 18), canvas)
-        pygame.draw.rect(self.screen, (70, 90, 120), canvas, 1)
-
-        for ty in range(view_h + 1):
-            wy = oy + ty
-            if wy < 0 or wy >= self.world_h or wy >= len(self.tiles):
-                continue
-            row = self.tiles[wy]
-            for tx in range(view_w + 1):
-                wx = ox + tx
-                if wx < 0 or wx >= self.world_w or wx >= len(row):
-                    continue
-                col = self.minimap_tile_color(row[wx])
-                if in_realm and self.dungeon.get("plane") == "realm":
-                    try:
-                        import castle_realm_renderer as _crr
-                        rows = _crr.REALM_ROWS
-                        if 0 <= wy < len(rows) and 0 <= wx < len(rows[wy]):
-                            ch = rows[wy][wx]
-                            if ch == "s":
-                                col = (220, 175, 55)
-                            elif ch == "A":
-                                col = (165, 150, 130)
-                    except Exception:
-                        pass
-                pygame.draw.rect(
-                    self.screen, col,
-                    (canvas.x + tx * scale, canvas.y + ty * scale, scale, scale),
-                )
+        pygame.draw.rect(self.screen, (12, 14, 20), canvas, border_radius=6)
+        soft = map_atlas.soft_terrain_surface(
+            self, ox, oy, view_w, view_h, canvas.w, canvas.h, in_realm=in_realm,
+        )
+        self.screen.blit(soft, canvas.topleft)
+        pygame.draw.rect(self.screen, (90, 80, 55), canvas, 1, border_radius=6)
 
         prev_clip = self.screen.get_clip()
         self.screen.set_clip(canvas)
 
-        # Destination pins with names; store hover rects so clicking a pin walks exactly there
         self.world_map_pin_rects = []
         mouse = pygame.mouse.get_pos()
         hover_pin = None
         if in_realm:
-            # Castle landmarks (teleport landings) — walk-to on the realm plane.
             from content import TELEPORT_DESTINATIONS
             map_dests = [
                 {**d, "kind": d.get("kind") or "place"}
@@ -1140,67 +1157,90 @@ class ScreensMixin:
             ]
             home = None
         else:
-            map_dests = [d for d in TRAVEL_DESTINATIONS if d.get("where") != "castle"]
+            # Prefer named places over every monster camp for a clearer atlas.
+            map_dests = [
+                d for d in TRAVEL_DESTINATIONS
+                if d.get("where") != "castle" and d.get("kind") == "place"
+            ]
+            # Keep a few iconic monster camps.
+            for mid in ("rats", "wolves", "void_horror", "dragon"):
+                m = next((d for d in TRAVEL_DESTINATIONS if d.get("id") == mid), None)
+                if m:
+                    map_dests.append(m)
             home = self._home_destination() if hasattr(self, "_home_destination") else None
             if home:
                 map_dests = [home] + [d for d in map_dests if d.get("id") != "home"]
+
+        # Portrait pins when zoomed in enough; tiny chips when zoomed out.
+        pin_size = 30 if scale >= 8 else (24 if scale >= 5 else 18)
+        show_labels = scale >= 5
         for dest in map_dests:
             dx = dest["x"] - ox
             dy = dest["y"] - oy
-            if 0 <= dx <= view_w and 0 <= dy <= view_h:
-                px = canvas.x + dx * scale + scale // 2
-                py = canvas.y + dy * scale + scale // 2
-                if dest.get("id") == "castle_realm":
-                    self._draw_castle_realm_pin(px, py, short=False)
-                elif dest.get("home") or dest.get("id") == "home":
+            if not (0 <= dx <= view_w and 0 <= dy <= view_h):
+                continue
+            px = canvas.x + dx * scale + scale // 2
+            py = canvas.y + dy * scale + scale // 2
+            did = dest.get("id") or ""
+            drew = map_atlas.draw_portrait_pin(
+                self.screen, did, px, py, size=pin_size,
+                here=False,
+            )
+            if not drew:
+                if dest.get("home") or did == "home":
                     pulse = 0.5 + 0.5 * math.sin(time.time() * 2.4)
-                    pygame.draw.circle(self.screen, (40, 90, 50), (px, py), 7)
                     pygame.draw.circle(self.screen, (90, 220, 120), (px, py), 5 + int(pulse))
-                    pygame.draw.circle(self.screen, (220, 255, 220), (px, py), 2)
-                elif dest["kind"] == "monster":
+                elif dest.get("kind") == "monster":
                     mdef = MONSTERS.get(dest.get("monster") or "", {})
                     col = self.monster_threat_color(mdef.get("level", 1))
-                    pygame.draw.circle(self.screen, col, (px, py), 4)
-                    pygame.draw.circle(self.screen, (20, 20, 20), (px, py), 4, 1)
+                    pygame.draw.circle(self.screen, col, (px, py), 5)
+                    pygame.draw.circle(self.screen, (20, 20, 20), (px, py), 5, 1)
+                elif did == "castle_realm":
+                    self._draw_castle_realm_pin(px, py, short=False)
                 else:
-                    pygame.draw.rect(self.screen, (255, 220, 120), (px - 2, py - 2, 5, 5))
-                    pygame.draw.rect(self.screen, (60, 40, 10), (px - 2, py - 2, 5, 5), 1)
+                    pygame.draw.circle(self.screen, (255, 220, 120), (px, py), 5)
+                    pygame.draw.circle(self.screen, (60, 40, 10), (px, py), 5, 1)
+            hit = max(12, pin_size)
+            pin_rect = pygame.Rect(px - hit // 2, py - hit // 2, hit, hit).inflate(8, 8)
+            self.world_map_pin_rects.append((pin_rect, dest))
+            if show_labels:
                 label = dest["label"]
-                if dest["kind"] == "monster":
+                if dest.get("kind") == "monster":
                     label = f"{label} (Lv {MONSTERS.get(dest.get('monster') or '', {}).get('level', 1)})"
-                pin_rect = pygame.Rect(px - 5, py - 5, 10, 10).inflate(6, 6)
-                self.world_map_pin_rects.append((pin_rect, dest))
-                # Label under the pin, brighter when hovered
-                lab_col = (160, 255, 180) if dest.get("home") or dest.get("id") == "home" else (
-                    (255, 240, 200) if pin_rect.collidepoint(mouse) else (215, 205, 180)
+                lab_col = (160, 255, 180) if dest.get("home") or did == "home" else (
+                    (255, 245, 210) if pin_rect.collidepoint(mouse) else (230, 215, 175)
                 )
                 lab = self.font_tiny.render(label, True, lab_col)
                 bg = pygame.Surface((lab.get_width() + 8, lab.get_height() + 4), pygame.SRCALPHA)
-                bg.fill((10, 12, 18, 170))
+                bg.fill((12, 10, 8, 185))
                 lx = min(max(canvas.x + 2, px - lab.get_width() // 2), canvas.right - lab.get_width() - 2)
-                ly = min(max(canvas.y + 2, py + 7), canvas.bottom - lab.get_height() - 2)
+                ly = min(max(canvas.y + 2, py + pin_size // 2 + 4), canvas.bottom - lab.get_height() - 2)
                 self.screen.blit(bg, (lx - 4, ly - 2))
                 self.screen.blit(lab, (lx, ly))
-                if pin_rect.collidepoint(mouse):
-                    hover_pin = dest
+            if pin_rect.collidepoint(mouse):
+                hover_pin = dest
 
-        # Player marker + direction/edge arrow so you always know where you are
+        # Player marker
         if self.player:
-            px, py = self.player_xy()
-            dx, dy = px - ox, py - oy
+            ppx, ppy = self.player_xy()
+            dx, dy = ppx - ox, ppy - oy
             if 0 <= dx <= view_w and 0 <= dy <= view_h:
                 mx = canvas.x + dx * scale + scale // 2
                 my = canvas.y + dy * scale + scale // 2
                 pulse = 0.5 + 0.5 * math.sin(time.time() * 3)
-                halo = pygame.Surface((24, 24), pygame.SRCALPHA)
-                pygame.draw.circle(halo, (255, 90, 70, int(40 + 50 * pulse)), (12, 12), 10 + int(2 * pulse))
-                self.screen.blit(halo, (mx - 12, my - 12))
-                pygame.draw.circle(self.screen, (40, 40, 40), (mx, my), 6)
-                pygame.draw.circle(self.screen, (255, 80, 70), (mx, my), 5)
-                pygame.draw.circle(self.screen, (255, 220, 200), (mx, my), 2)
+                halo = pygame.Surface((28, 28), pygame.SRCALPHA)
+                pygame.draw.circle(halo, (255, 90, 70, int(50 + 60 * pulse)), (14, 14), 11 + int(2 * pulse))
+                self.screen.blit(halo, (mx - 14, my - 14))
+                pygame.draw.circle(self.screen, (40, 40, 40), (mx, my), 7)
+                pygame.draw.circle(self.screen, (255, 80, 70), (mx, my), 6)
+                pygame.draw.circle(self.screen, (255, 230, 210), (mx, my), 2)
+                you = self.font_tiny.render("You are here", True, (255, 200, 180))
+                ybg = pygame.Surface((you.get_width() + 8, you.get_height() + 4), pygame.SRCALPHA)
+                ybg.fill((30, 12, 10, 200))
+                self.screen.blit(ybg, (mx - you.get_width() // 2 - 4, my - 28))
+                self.screen.blit(you, (mx - you.get_width() // 2, my - 26))
             else:
                 self._map_edge_arrow(canvas, dx, dy, (255, 90, 70), "You")
-            # Off-screen home arrow so the deed is never lost
             if home:
                 hdx, hdy = home["x"] - ox, home["y"] - oy
                 if not (0 <= hdx <= view_w and 0 <= hdy <= view_h):
@@ -1208,32 +1248,70 @@ class ScreensMixin:
 
         self.screen.set_clip(prev_clip)
 
-        # Hover tooltip: what this pin is + how to walk there
+        # Side rail — nearby / featured places with portraits
+        pygame.draw.rect(self.screen, (22, 24, 34), side, border_radius=8)
+        pygame.draw.rect(self.screen, (100, 90, 60), side, 1, border_radius=8)
+        hdr = self.font_small.render(
+            "Castles & gates" if in_realm else "Nearby places", True, (255, 220, 150),
+        )
+        self.screen.blit(hdr, (side.x + 10, side.y + 8))
+        self.world_map_card_rects = []
+        px, py = self.player_xy() if self.player else (ox + view_w // 2, oy + view_h // 2)
+        featured = map_dests if in_realm else map_atlas.nearest_places(map_dests, px, py, limit=7)
+        if in_realm:
+            featured = map_dests[:8]
+        card_top = side.y + 32
+        card_h = 58
+        fonts = {"small": self.font_small, "tiny": self.font_tiny}
+        for dest in featured:
+            if card_top + card_h > side.bottom - 8:
+                break
+            crect = pygame.Rect(side.x + 8, card_top, side.w - 16, card_h - 6)
+            dist = abs(int(dest["x"]) - int(px)) + abs(int(dest["y"]) - int(py))
+            here = dist <= 6
+            hover = crect.collidepoint(mouse) or (hover_pin and hover_pin.get("id") == dest.get("id"))
+            thumb = map_atlas.portrait(dest.get("id") or "", 46)
+            map_atlas.draw_place_card(
+                self.screen, fonts, crect, dest, thumb, here=here, hover=hover,
+            )
+            self.world_map_card_rects.append((crect, dest))
+            if hover:
+                hover_pin = dest
+            card_top += card_h
+
+        self.world_map_hover_dest = hover_pin
         if hover_pin is not None:
             tip = f"Click to walk to {hover_pin['label']}"
-            t = self.font_tiny.render(tip, True, (255, 240, 200))
-            tw = t.get_width() + 14
-            tbox = pygame.Rect(mouse[0] + 12, mouse[1] + 14, tw, t.get_height() + 8)
+            blurb = (hover_pin.get("blurb") or "").strip()
+            lines = [tip] + ([blurb] if blurb else [])
+            # Big preview card under the cursor / near the side rail
+            prev = map_atlas.portrait(hover_pin.get("id") or "", 72)
+            tw = max(self.font_tiny.size(line)[0] for line in lines) + 20
+            th = sum(self.font_tiny.size(line)[1] for line in lines) + 12
+            if prev:
+                tw = max(tw, 72 + 24)
+                th += 80
+            tbox = pygame.Rect(mouse[0] + 14, mouse[1] + 16, tw, th)
             tbox.clamp_ip(box)
             bg = pygame.Surface(tbox.size, pygame.SRCALPHA)
-            bg.fill((16, 20, 28, 220))
+            bg.fill((14, 12, 10, 230))
             self.screen.blit(bg, tbox.topleft)
-            pygame.draw.rect(self.screen, (120, 170, 220), tbox, 1, border_radius=4)
-            self.screen.blit(t, (tbox.x + 7, tbox.y + 4))
-
-        # Recenter-on-player button
-        self.world_map_recenter_rect = pygame.Rect(box.right - 108, box.y + 8, 92, 26)
-        rb = self.world_map_recenter_rect
-        pygame.draw.rect(self.screen, (40, 60, 90), rb, border_radius=6)
-        pygame.draw.rect(self.screen, (120, 170, 220), rb, 1, border_radius=6)
-        rt = self.font_tiny.render("Center on me", True, WHITE)
-        self.screen.blit(rt, (rb.centerx - rt.get_width() // 2, rb.centery - rt.get_height() // 2))
+            pygame.draw.rect(self.screen, (200, 170, 90), tbox, 1, border_radius=6)
+            yy = tbox.y + 8
+            if prev:
+                self.screen.blit(prev, (tbox.centerx - 36, yy))
+                pygame.draw.rect(self.screen, (40, 30, 20), (tbox.centerx - 36, yy, 72, 72), 1)
+                yy += 80
+            for line in lines:
+                s = self.font_tiny.render(line, True, (255, 240, 200))
+                self.screen.blit(s, (tbox.x + 10, yy))
+                yy += s.get_height() + 2
 
         foot = self.font_tiny.render(
-            "Click a named pin to walk there  ·  Scroll / drag to pan  ·  Esc closes  ·  Press M for Travel list",
-            True, (140, 138, 120),
+            "Portrait pins mark destinations  ·  Side cards show where you can go  ·  Press M for the Travel list",
+            True, (140, 130, 110),
         )
-        self.screen.blit(foot, (box.x + 20, box.bottom - 28))
+        self.screen.blit(foot, (box.x + 20, box.bottom - 26))
 
     def _map_edge_arrow(self, canvas, dx, dy, color, label):
         """Arrow at the canvas edge pointing toward an off-screen map point."""
@@ -1345,12 +1423,25 @@ class ScreensMixin:
                     border = (255, 214, 90)
                 pygame.draw.rect(self.screen, border, row, 1, border_radius=6)
                 self.travel_btn_rects.append((row, dest))
+                try:
+                    import map_atlas
+                    thumb = map_atlas.portrait(dest.get("id") or "", 36)
+                except Exception:
+                    thumb = None
+                text_x = row.x + 12
+                if thumb is not None:
+                    self.screen.blit(thumb, (row.x + 8, row.y + (row.h - 36) // 2))
+                    pygame.draw.rect(
+                        self.screen, (30, 24, 16),
+                        (row.x + 8, row.y + (row.h - 36) // 2, 36, 36), 1,
+                    )
+                    text_x = row.x + 52
                 label = dest["label"]
                 if lvl is not None:
                     label = f"{label}  ·  Lv {lvl}"
-                self.screen.blit(self.font_small.render(label, True, WHITE), (row.x + 12, row.y + 6))
+                self.screen.blit(self.font_small.render(label, True, WHITE), (text_x, row.y + 6))
                 blurb = dest.get("blurb") or ""
-                self.screen.blit(self.font_tiny.render(blurb, True, GREY), (row.x + 12, row.y + 24))
+                self.screen.blit(self.font_tiny.render(blurb, True, GREY), (text_x, row.y + 24))
 
         draw_btns(places, left_x)
         if right_x is not None:
@@ -1369,7 +1460,7 @@ class ScreensMixin:
             self.travel_scroll_meta["thumb"] = None
 
         foot = self.font_tiny.render(
-            f"{len(places)} places · {len(monsters)} camps  ·  Wheel / ↑↓ / drag bar  ·  Right-click minimap for free walk",
+            f"{len(places)} places · {len(monsters)} camps  ·  Wheel / Up-Down / drag bar  ·  Right-click minimap for free walk",
             True, (140, 138, 120),
         )
         self.screen.blit(foot, (box.x + 20, box.bottom - 26))
@@ -1574,7 +1665,7 @@ class ScreensMixin:
                     continue
                 base = int(levels.get(skill, 1))
                 line = self.font_small.render(
-                    f"{skill.title()} {base} → {base + amt}", True, (110, 255, 140),
+                    f"{skill.title()} {base} -> {base + amt}", True, (110, 255, 140),
                 )
                 self.screen.blit(line, (x0, y))
                 timer = self.font_tiny.render(f"+{amt}  ·  {left}s", True, (255, 200, 110))
@@ -2152,8 +2243,16 @@ class ScreensMixin:
         if self.shop.get("buys", True) and self.player:
             if not sell_slots:
                 empty_msg = "Nothing to sell in your inventory."
-                if self.shop.get("buys_types") or self.shop.get("buys_slots"):
-                    empty_msg = "No jewelry or gems to sell."
+                if self.shop.get("buys_types") or self.shop.get("buys_slots") or self.shop.get("buys_ids"):
+                    sid = self.shop.get("shop_id") or ""
+                    if sid == "blacksmith_shop":
+                        empty_msg = "This smithy only buys weapons and armour."
+                    elif sid == "fletcher_shop":
+                        empty_msg = "This shop only buys bows, arrows, and fletching parts."
+                    elif sid == "jewelry_shop":
+                        empty_msg = "No jewelry or gems to sell."
+                    else:
+                        empty_msg = "This shop isn't interested in what you're carrying."
                 self.screen.blit(
                     self.font_small.render(empty_msg, True, GREY),
                     (mid_x + 14, box.y + 110),
@@ -2271,7 +2370,7 @@ class ScreensMixin:
 
         # --- Inventory (deposit) — scrollable list ---
         self.screen.blit(self.font.render("Your inventory", True, GREEN), (box.x + 18, box.y + 112))
-        self.screen.blit(self.font_small.render("Click deposit · Scroll / ↑↓", True, GREY), (box.x + 160, box.y + 116))
+        self.screen.blit(self.font_small.render("Click deposit · Scroll / Up-Down", True, GREY), (box.x + 160, box.y + 116))
         self.bank_inv_rects = []
         inv = (self.bank.get("inventory") if self.bank else None) or (self.player or {}).get("inventory") or {}
         inv_items = [(int(k), v) for k, v in inv.items() if v]
@@ -2319,7 +2418,7 @@ class ScreensMixin:
         # --- Bank vault — paged grid of all slots ---
         self.screen.blit(self.font.render("Bank vault", True, (180, 210, 255)), (mid_x + 14, box.y + 112))
         page_lbl = self.font_small.render(
-            f"Page {self.bank_page + 1}/{max_page + 1}  ·  click=all  shift=1  ·  ←→",
+            f"Page {self.bank_page + 1}/{max_page + 1}  ·  click=all  shift=1  ·  Left/Right",
             True, GREY,
         )
         self.screen.blit(page_lbl, (mid_x + 130, box.y + 116))
@@ -2365,8 +2464,8 @@ class ScreensMixin:
         self.bank_btn_rects["page_prev"] = pygame.Rect(mid_x + 16, box.bottom - 58, 70, 24)
         self.bank_btn_rects["page_next"] = pygame.Rect(box.right - 90, box.bottom - 58, 70, 24)
         for key, label, enabled in (
-            ("page_prev", "◀ Prev", self.bank_page > 0),
-            ("page_next", "Next ▶", self.bank_page < max_page),
+            ("page_prev", "< Prev", self.bank_page > 0),
+            ("page_next", "Next >", self.bank_page < max_page),
         ):
             r = self.bank_btn_rects[key]
             pygame.draw.rect(self.screen, (40, 55, 70) if enabled else (28, 30, 36), r, border_radius=4)
@@ -2607,7 +2706,7 @@ class ScreensMixin:
         )
         self.screen.blit(
             self.font_small.render(
-                "Knife required. Carve logs → shafts/bows, tip arrows, string bows.",
+                "Knife required. Carve logs -> shafts/bows, tip arrows, string bows.",
                 True, GREY,
             ),
             (box.x + 16, box.y + 44),
@@ -2656,7 +2755,7 @@ class ScreensMixin:
             self.screen.blit(self.font.render(recipe["name"], True, color), (row.x + 50, row.y + 4))
             self.screen.blit(
                 self.font_small.render(
-                    f"{need}  →  {out_qty}x {ITEMS[out_id]['name']}  |  lvl {recipe['level_req']}  +{recipe['xp']} xp",
+                    f"{need}  ->  {out_qty}x {ITEMS[out_id]['name']}  |  lvl {recipe['level_req']}  +{recipe['xp']} xp",
                     True, (200, 120, 120) if locked else GREY,
                 ),
                 (row.x + 50, row.y + 24),
@@ -2716,7 +2815,7 @@ class ScreensMixin:
             self.screen.blit(ksurf, kpos)
             self._kingdom_rect = pygame.Rect(kpos, ksurf.get_size())
         hint = self.font_tiny.render(
-            "Scroll wheel / ↑↓ / drag bar  ·  Esc / Tab closes",
+            "Scroll wheel / Up-Down / drag bar  ·  Esc / Tab closes",
             True, GREY,
         )
         self.screen.blit(hint, (box.x + 20, box.y + 74))
@@ -2848,7 +2947,7 @@ class ScreensMixin:
         self.screen.blit(title, (box.x + 18, box.y + 14))
         self.screen.blit(
             self.font_small.render(
-                "Click to switch  ·  scroll / ↑↓  ·  Esc closes", True, GREY,
+                "Click to switch  ·  scroll / Up-Down  ·  Esc closes", True, GREY,
             ),
             (box.x + 18, box.y + 48),
         )
@@ -2957,7 +3056,7 @@ class ScreensMixin:
         title = self.font_big.render("Controls", True, WHITE)
         self.screen.blit(title, (box.x + 16, box.y + 14))
         hint = self.font_tiny.render(
-            "Scroll wheel / ↑↓ / drag bar  ·  H or Esc closes",
+            "Scroll wheel / Up-Down / drag bar  ·  H or Esc closes",
             True, GREY,
         )
         self.screen.blit(hint, (box.x + 16, box.y + 44))
@@ -2971,6 +3070,18 @@ class ScreensMixin:
             True, (232, 226, 210),
         )
         self.screen.blit(follow, (self.ember_follow_rect.x + 12, self.ember_follow_rect.y + 5))
+        # replay the intro film (first shown at the account's first login)
+        self.throne_vision_replay_rect = pygame.Rect(box.x + 338, box.y + 66, 220, 28)
+        pygame.draw.rect(self.screen, (32, 42, 68), self.throne_vision_replay_rect, border_radius=14)
+        pygame.draw.rect(self.screen, (212, 175, 90), self.throne_vision_replay_rect, 1, border_radius=14)
+        self.screen.blit(self.font_small.render("Replay throne vision", True, (232, 226, 210)),
+                         (self.throne_vision_replay_rect.x + 12, self.throne_vision_replay_rect.y + 5))
+        # Settings > Help > Tour with Seraphine (replays the first-5-minutes tour)
+        self.guide_tour_replay_rect = pygame.Rect(box.x + 16, box.y + 134, 260, 28)
+        pygame.draw.rect(self.screen, (32, 42, 68), self.guide_tour_replay_rect, border_radius=14)
+        pygame.draw.rect(self.screen, (212, 175, 90), self.guide_tour_replay_rect, 1, border_radius=14)
+        self.screen.blit(self.font_small.render("Tour with Seraphine", True, (232, 226, 210)),
+                         (self.guide_tour_replay_rect.x + 12, self.guide_tour_replay_rect.y + 5))
         import outfit_fx
         st = outfit_fx.state
         self.outfit_fx_rect = pygame.Rect(box.x + 16, box.y + 100, 260, 28)
@@ -2998,7 +3109,7 @@ class ScreensMixin:
                 ("Att/Str/Def/HP/Arch", "Combat XP style (sidebar or keys 1-5)"),
             ]),
             ("World", [
-                ("Click ore / tree", "Walk over and gather (oak→willow→maple→yew→magic)"),
+                ("Click ore / tree", "Walk over and gather (oak->willow->maple->yew->magic)"),
                 ("Click shoreline water", "Walk beside it and fish"),
                 ("Click door / entrance", "Walk through into the building or dungeon"),
                 ("Click furnace", "Smelt ores into bars"),
@@ -3056,7 +3167,7 @@ class ScreensMixin:
                 ("Load arrows", "Click arrows or use the quiver to pack them from inventory"),
                 ("Range", "Shoot from up to 4+ tiles; keep firing as the monster closes in"),
                 ("Archery XP", "Damage & XP scale with Archery level (not Strength)"),
-                ("Fletching", "Knife + N: logs→shafts/bows · shafts+feathers→headless · +tips→arrows"),
+                ("Fletching", "Knife + N: logs->shafts/bows · shafts+feathers->headless · +tips->arrows"),
             ]),
             ("Crypt (early)", [
                 ("Entrance", "Graveyard behind the bank — The Depths"),
@@ -3070,7 +3181,7 @@ class ScreensMixin:
             ]),
             ("Emberdeep", [
                 ("Volcano mouth", "East of Stonehaven — private 8-floor lava dungeon"),
-                ("Travel", "Open Travel (T) → Emberdeep Volcano, or walk the east road"),
+                ("Travel", "Open Travel (T) -> Emberdeep Volcano, or walk the east road"),
                 ("Clear floor", "New magma beasts; floor 8 = Emberdeep Medal"),
             ]),
             ("Jewelry", [
@@ -3100,9 +3211,13 @@ class ScreensMixin:
                 ("Shop sell", "Click = sell 1 · Shift+click = sell whole stack"),
                 ("Esc", "Closes bank, shops, and most popups"),
             ]),
+            ("Credits", [
+                ("Throne vision", "Replay it with the button at the top of this window"),
+                ("Music", "Five Armies by Kevin MacLeod (incompetech.com), CC BY 4.0 - throne vision film"),
+            ]),
         ]
 
-        list_top = box.y + 136
+        list_top = box.y + 170
         list_bottom = box.bottom - 36
         view_h = max(40, list_bottom - list_top)
         key_w = 150

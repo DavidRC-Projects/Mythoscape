@@ -51,13 +51,22 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 log = logging.getLogger("server")
 
 # Private instance dungeons keyed by id (interactable dungeon_id / session.dungeon["id"])
+import sewer_tutorial
 DUNGEON_MODS = {
     "tidehollow": tidehollow,
     "emberdeep": emberdeep,
     "depths": explore_dungeons,
     "sanctum": explore_dungeons,
+    "sewer": sewer_tutorial,
 }
 DUNGEON_META = {
+    "sewer": {
+        "name": "the Village Sewer",
+        "chat_from": "Seraphine",
+        "medal_id": None,
+        "entrance_kinds": ("sewer_grate",),
+        "floors_attr": None,
+    },
     "tidehollow": {
         "name": "Tidehollow Cave",
         "chat_from": "Tidehollow",
@@ -280,6 +289,10 @@ class PlayerSession:
         self.last_move_tick = 0
         self.last_equip_regen_at = 0.0  # passive HP from worn gear (e.g. Tidehollow Medal)
         self.auto_pickup_items = bool(row["auto_pickup_items"]) if "auto_pickup_items" in row.keys() else False
+        self.throne_vision_seen = bool(row["throne_vision_seen"]) if "throne_vision_seen" in row.keys() else True
+        self.guide_tour = int(row["guide_tour"]) if "guide_tour" in row.keys() else 100
+        self.guide_bronze = bool(row["guide_bronze"]) if "guide_bronze" in row.keys() else True
+        self.sewer_choice = (row["sewer_choice"] if "sewer_choice" in row.keys() else "") or ""
         raw_ignore = row["pickup_ignore"] if "pickup_ignore" in row.keys() else "[]"
         try:
             self.pickup_ignore = set(json.loads(raw_ignore or "[]"))
@@ -823,6 +836,58 @@ class PlayerSession:
                 break  # no room for this item — try others
         return moved, self._bag_total(bag)
 
+    def _withdraw_one_from_bag(self, bag, save_col, item_id, qty):
+        """Move up to qty of one item from bag → inventory. Returns moved count.
+
+        Same debit-first persist pattern as _withdraw_bag_to_inventory.
+        """
+        want = max(1, int(qty or 1))
+        have = int(bag.get(item_id) or 0)
+        if have <= 0:
+            return 0
+        want = min(want, have)
+        item = ITEMS.get(item_id) or {}
+        moved = 0
+
+        def _persist():
+            WORLD.db.save_player_stats(self.player_id, **{save_col: json.dumps(bag)})
+
+        remaining = want
+        while remaining > 0:
+            chunk = remaining if item.get("stackable") else 1
+            cur = int(bag.get(item_id) or 0)
+            if cur <= 0:
+                break
+            chunk = min(chunk, cur)
+            left = cur - chunk
+            if left <= 0:
+                bag.pop(item_id, None)
+            else:
+                bag[item_id] = left
+            _persist()
+            if WORLD.add_item_to_inventory(self, item_id, chunk):
+                moved += chunk
+                remaining -= chunk
+                continue
+            # Restore debit — no inventory room
+            bag[item_id] = cur
+            _persist()
+            if chunk > 1:
+                left = cur - 1
+                if left <= 0:
+                    bag.pop(item_id, None)
+                else:
+                    bag[item_id] = left
+                _persist()
+                if WORLD.add_item_to_inventory(self, item_id, 1):
+                    moved += 1
+                    remaining -= 1
+                    continue
+                bag[item_id] = cur
+                _persist()
+            break
+        return moved
+
     def has_mining_bag(self):
         return self._has_bag_item("mining_bag")
 
@@ -1077,6 +1142,7 @@ class PlayerSession:
                                                  getattr(self, "royal_title", None)),
             "royal_title": getattr(self, "royal_title", None),
             "house_suffix": getattr(self, "house_suffix", ""),
+            "title_line": sewer_tutorial.title_for(self),
             "personal_house": getattr(self, "personal_house", None),
             "player_killer": bool(self.player_killer),
             "pk_kills": int(self.pk_kills or 0),
@@ -1116,6 +1182,7 @@ class PlayerSession:
             "noble_rank_name": nobility.rank_name(getattr(self, "noble_rank", 0), self.gender),
             "royal_title": getattr(self, "royal_title", None),
             "house_suffix": getattr(self, "house_suffix", ""),
+            "title_line": sewer_tutorial.title_for(self),
             "personal_house": getattr(self, "personal_house", None),
             "kingdom": politics.hud_line(WORLD.db.conn),
             "levels": levels,
@@ -1126,6 +1193,10 @@ class PlayerSession:
             "inventory": self.inventory,
             "combat_style": self.combat_style,
             "auto_pickup_items": self.auto_pickup_items,
+            "throne_vision_seen": bool(getattr(self, "throne_vision_seen", True)),
+            "guide_tour": int(getattr(self, "guide_tour", 100)),
+            "guide_bronze": bool(getattr(self, "guide_bronze", True)),
+            "sewer_choice": getattr(self, "sewer_choice", "") or "",
             "pickup_ignore": sorted(self.pickup_ignore),
             "stats_allocated": self.stats_allocated,
             "max_purse_coins": MAX_PURSE_COINS,
@@ -1395,7 +1466,7 @@ class MonsterInstance:
         name = mdef.get("name") or MONSTERS.get(self.type, {}).get("name", "Monster")
         frozen = self.is_frozen()
         state = {
-            "id": self.id, "type": self.type, "name": name,
+            "id": self.id, "type": mdef.get("display_type") or self.type, "name": name,
             "level": combat.monster_combat_level(mdef, self.type),
             "x": self.x, "y": self.y, "hp": self.hp, "max_hp": self.max_hp, "alive": self.alive,
             "frozen": frozen,
@@ -1699,6 +1770,9 @@ class World:
             return session.level(skill) if skill in session.xp else 1, session.level(skill) if skill in session.xp else 1
         before_pool = session.max_hp() if skill in ("attack", "strength", "defence", "archery") else None
         before = session.level(skill)
+        boost = sewer_tutorial.xp_mult(session, skill)
+        if boost != 1.0 and amount > 0:
+            amount = int(round(amount * boost))
         session.xp[skill] += amount
         after = session.level(skill)
         if before_pool is not None:
@@ -1786,6 +1860,8 @@ def quest_status_for(session, quest_id):
     if quest_id == "fairy_oath":
         import fairy_village
         info["objective"] = fairy_village.objective_text(session)
+    elif quest_id == sewer_tutorial.QUEST_ID and info.get("status") != "not_started":
+        info["objective"] = sewer_tutorial.objective(session)
     return info
 
 
@@ -2014,6 +2090,8 @@ def _bounty_hook(session, monster_type):
 
 def check_quest_progress_on_kill(session, monster_type):
     _bounty_hook(session, monster_type)
+    # Sewer / village rats count as Giant Rats for Rat Problem.
+    monster_type = (MONSTERS.get(monster_type) or {}).get("quest_as") or monster_type
     changed = False
     for qid, qdef in QUESTS.items():
         if qdef["type"] != "kill" or qdef["target"] != monster_type:
@@ -2305,6 +2383,14 @@ BAG_CONTENTS_ATTR = {
     "fletch_pouch": "fletch_pouch", "potion_pouch": "potion_pouch",
     "gem_bag": "gem_bag",
 }
+# Matching DB column names for bag content dicts (persist after withdraw).
+BAG_SAVE_COL = {
+    "arrow_quiver": "quiver_contents", "arrowtip_box": "tip_box_contents",
+    "food_bag": "food_bag_contents", "raw_food_bag": "raw_bag_contents",
+    "mining_bag": "mining_bag_contents", "log_bag": "log_bag_contents",
+    "fletch_pouch": "fletch_pouch_contents", "potion_pouch": "potion_pouch_contents",
+    "gem_bag": "gem_bag_contents",
+}
 
 
 def item_is_sellable(item_id):
@@ -2345,14 +2431,35 @@ def shop_will_buy(shop, item_id):
     item = ITEMS.get(item_id) or {}
     buy_types = shop.get("buys_types")
     buy_slots = shop.get("buys_slots")
-    if not buy_types and not buy_slots:
+    buy_ids = shop.get("buys_ids") or ()
+    ranged = bool(item.get("ranged_att") or item.get("ranged_str"))
+    # Explicit allow-list (fletching mats, etc.) always counts.
+    if item_id in buy_ids:
+        return True
+    if shop.get("buys_ranged_weapons") and item.get("type") == "weapon" and ranged:
+        return True
+    if not buy_types and not buy_slots and not shop.get("buys_ranged_weapons"):
         return True  # unrestricted buyer
     ok = False
     if buy_types and item.get("type") in buy_types:
         ok = True
     if buy_slots and item.get("equip_slot") in buy_slots:
         ok = True
-    return ok
+    if not ok:
+        return False
+    # Smithy: melee gear only — bows go to the fletcher.
+    if shop.get("buys_exclude_ranged") and ranged:
+        return False
+    return True
+
+
+def shop_sell_rate(shop):
+    """Fraction of item value paid when the player sells (default 40%)."""
+    try:
+        rate = float(shop.get("sell_rate", 0.4))
+    except (TypeError, ValueError):
+        rate = 0.4
+    return max(0.05, min(1.0, rate))
 
 
 def item_is_tradeable(item_id):
@@ -2666,9 +2773,15 @@ async def _handle_move_body(session, msg):
             and hasattr(mod, "apply_seals")
         ):
             await _refresh_tidehollow_seals(session)
+        if session.dungeon.get("id") == sewer_tutorial.SEWER_ID:
+            if await sewer_tutorial.on_step(session):
+                return
         ex = session.dungeon.get("exit_x")
         ey = session.dungeon.get("exit_y")
         if ex is not None and (session.x, session.y) == (int(ex), int(ey)):
+            if session.dungeon.get("id") == sewer_tutorial.SEWER_ID:
+                await sewer_tutorial.leave(session)
+                return
             await handle_leave_dungeon(session)
             return
         _save_dungeon_resume(session)
@@ -3032,6 +3145,8 @@ def _dungeon_payload(session):
         "props": d.get("props") or [],
     }
     payload.update(_dungeon_room_hud(session))
+    if d.get("sewer") is not None:
+        payload["sewer"] = sewer_tutorial.client_extra(session)
     if d.get("v2") == "depths":
         import depths_v2
         payload.update(depths_v2.client_extra(session))
@@ -3142,6 +3257,8 @@ async def _finish_dungeon_kill(session, monster=None):
             if d.get("v2") == "depths" and monster.type == "morvath":
                 import depths_v2
                 await depths_v2.announce_first_kill(session)
+            if d.get("id") == sewer_tutorial.SEWER_ID:
+                await sewer_tutorial.on_kill(session, monster)
         return
     await _grant_dungeon_kill_loot(session)
     if d.get("rooms"):
@@ -3396,6 +3513,8 @@ def _resume_payload(session):
     d = session.dungeon
     if not d:
         return None
+    if d.get("id") == sewer_tutorial.SEWER_ID:
+        return None   # the sewer keeps its own progress in the quest row
     if d.get("id") == "castle_realm":
         return {
             "id": "castle_realm",
@@ -3608,6 +3727,9 @@ async def handle_enter_dungeon(session, msg):
     if missing:
         await send(session.ws, "ERROR", message=gear_rules.gate_message(missing))
         return
+    if dungeon_id == sewer_tutorial.SEWER_ID:
+        await sewer_tutorial.enter(session)
+        return
     mod = DUNGEON_MODS.get(dungeon_id, tidehollow)
     meta = _dungeon_meta(dungeon_id)
     # Step back off the mouth so leaving doesn't drop you straight back inside.
@@ -3619,6 +3741,7 @@ async def handle_enter_dungeon(session, msg):
         else:
             # South of a 3-wide door + apron enter zone.
             rx, ry = spot["x"], spot["y"] + 3
+    rx, ry = _leave_stand_away_from_entrance(rx, ry, dungeon_id)
     session._dungeon_return = (rx, ry)
     # Keep the overworld tile. A later logout must not store the dungeon coordinates.
     WORLD.db.save_player_position(session.player_id, rx, ry)
@@ -3677,6 +3800,59 @@ async def handle_enter_dungeon(session, msg):
         )
 
 
+def _entrance_spot_for_dungeon(dungeon_id):
+    """Overworld mouth interactable for a dungeon id, if any."""
+    if not dungeon_id:
+        return None
+    for spot in INTERACTABLES:
+        if spot.get("dungeon_id") == dungeon_id:
+            return spot
+    meta = DUNGEON_META.get(dungeon_id) or {}
+    kinds = set(meta.get("entrance_kinds") or ())
+    for spot in INTERACTABLES:
+        if spot.get("kind") in kinds:
+            return spot
+    return None
+
+
+def _leave_stand_away_from_entrance(rx, ry, dungeon_id):
+    """Prefer a walkable tile 1–2 steps off the mouth so leave doesn't re-enter.
+
+    Tries distance 2 first, then 1. Prefers south of the entrance, then other
+    compass / diagonal offsets. Falls back to (rx, ry) if nothing else works.
+    """
+    try:
+        ox, oy = int(rx), int(ry)
+    except (TypeError, ValueError):
+        return rx, ry
+    spot = _entrance_spot_for_dungeon(dungeon_id)
+    if not spot:
+        return ox, oy
+    ex, ey = int(spot["x"]), int(spot["y"])
+    mouth = entrance_mouth_tiles(ex, ey, spot.get("kind"))
+    prefs = []
+    for dist in (2, 1):
+        prefs.extend([
+            (ex, ey + dist),
+            (ex, ey - dist),
+            (ex + dist, ey),
+            (ex - dist, ey),
+            (ex + 1, ey + dist),
+            (ex - 1, ey + dist),
+            (ex + 1, ey - dist),
+            (ex - 1, ey - dist),
+        ])
+    for nx, ny in prefs:
+        if (nx, ny) in mouth:
+            continue
+        if not is_walkable(WORLD.grid, nx, ny):
+            continue
+        return nx, ny
+    if (ox, oy) not in mouth and is_walkable(WORLD.grid, ox, oy):
+        return ox, oy
+    return ox, oy
+
+
 async def handle_leave_dungeon(session, msg=None, silent=False):
     if not session.dungeon:
         return
@@ -3687,6 +3863,9 @@ async def handle_leave_dungeon(session, msg=None, silent=False):
     if session.dungeon.get("id") == "castle_realm":
         import castle_realm
         castle_realm.leave(session)
+        session.x, session.y = _leave_stand_away_from_entrance(
+            session.x, session.y, "castle_realm",
+        )
         WORLD.db.save_player_position(session.player_id, session.x, session.y)
         _clear_dungeon_resume(session)
         _bring_pet(session)
@@ -3714,6 +3893,7 @@ async def handle_leave_dungeon(session, msg=None, silent=False):
     session.pet_target_id = None
     session.x = rx if rx is not None else (cave[0] if cave else session.x)
     session.y = ry if ry is not None else (cave[1] if cave else session.y)
+    session.x, session.y = _leave_stand_away_from_entrance(session.x, session.y, dungeon_id)
     WORLD.db.save_player_position(session.player_id, session.x, session.y)
     _bring_pet(session)
     await send(session.ws, "DUNGEON_EXIT", x=session.x, y=session.y)
@@ -3962,6 +4142,191 @@ async def handle_set_option(session, msg):
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
 
 
+THRONE_VISION_SEEN_FIELDS = frozenset({"type"})
+
+
+async def handle_throne_vision_seen(session, msg):
+    """The client finished (or skipped) the intro film: keep the played flag on the account.
+    Validated: a logged-in session only, no other fields, one-way (never cleared from the
+    client), and written once (repeats are ignored, so it can't be used to spam the db)."""
+    if not isinstance(msg, dict) or set(msg.keys()) - THRONE_VISION_SEEN_FIELDS:
+        return False
+    if not getattr(session, "player_id", None):
+        return False
+    if getattr(session, "throne_vision_seen", False):
+        return False
+    session.throne_vision_seen = True
+    WORLD.db.save_player_stats(session.player_id, throne_vision_seen=1)
+    return True
+
+
+# ---------------------------------------------------------------- Seraphine's first-5-minutes tour
+# Server owns tour progress (per account, survives disconnects) and the one-time bronze gift.
+GUIDE_TOUR_STEPS = 11
+GUIDE_DONE, GUIDE_SKIPPED, GUIDE_PLAYED_BEFORE = 100, 101, 102
+GUIDE_FINISHED = (GUIDE_DONE, GUIDE_SKIPPED, GUIDE_PLAYED_BEFORE)
+GUIDE_GIFT_STEP = 5          # the bronze set drops in as the inventory step starts
+GUIDE_EAT_STEP = 9           # HP is set to 80% so the bread visibly heals
+# Full bronze set. The game has no boots or gloves items yet, so the set is the five
+# wearable bronze pieces, plus bread for the eating step.
+GUIDE_BRONZE_SET = ("bronze_helmet", "bronze_body", "bronze_legs", "bronze_sword", "bronze_shield")
+GUIDE_GIFT_FOOD = ("bread", 3)
+GUIDE_TOUR_FIELDS = frozenset({"type", "action", "step", "choice"})
+GUIDE_SEWER_CHOICES = ("go", "later")
+
+
+async def sewer_offer_hook(session, choice):
+    """'go' starts "Below the Village" (to the grate, Seraphine coaches the 2 rats outside);
+    'later' puts the optional quest in the log. Both are idempotent."""
+    log.info("%s sewer offer: %s", getattr(session, "char_name", "?"), choice)
+    if not hasattr(session, "quests") or not hasattr(session, "ws"):
+        return   # not a live game session (choice is still saved above)
+    await sewer_tutorial.offer_choice(session, choice)
+
+
+def _guide_save(session, **fields):
+    WORLD.db.save_player_stats(session.player_id, **fields)
+
+
+def guide_give_bronze(session):
+    """The bronze set + bread, once per account. Returns True if given now."""
+    if getattr(session, "guide_bronze", True):
+        return False
+    from content import INVENTORY_SIZE, INVENTORY_TAB_SIZE
+    free = sum(1 for i in range(INVENTORY_SIZE - INVENTORY_TAB_SIZE) if not session.inventory.get(i))
+    needed = len(GUIDE_BRONZE_SET) + (0 if any((e or {}).get("item_id") == GUIDE_GIFT_FOOD[0]
+                                               for e in session.inventory.values()) else 1)
+    if free < needed:
+        return None   # no room yet: try again on the next tour message
+    for item_id in GUIDE_BRONZE_SET:
+        WORLD.add_item_to_inventory(session, item_id, 1)
+    WORLD.add_item_to_inventory(session, GUIDE_GIFT_FOOD[0], GUIDE_GIFT_FOOD[1])
+    session.guide_bronze = True
+    _guide_save(session, guide_bronze=1)
+    return True
+
+
+def _guide_step_done(session, step):
+    """Steps whose result the server can see are checked here; the rest are UI-only."""
+    eq = session.equipment or {}
+    if step == 7:
+        return eq.get("body") == "bronze_body"
+    if step == 8:
+        return all(eq.get(s) for s in ("helmet", "body", "legs", "weapon", "shield"))
+    return True
+
+
+async def _guide_send(session, gift=False, note=None):
+    await send(session.ws, "GUIDE_TOUR_STATE", step=session.guide_tour,
+               bronze=bool(session.guide_bronze), sewer_choice=session.sewer_choice,
+               gift=bool(gift), note=note)
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+
+
+async def handle_guide_tour(session, msg):
+    """GUIDE_TOUR {action, step?, choice?}. Validated: logged-in only, known fields and
+    actions, steps advance one at a time from the server's own step (never jump), the
+    gift is once per account, and replay only restarts a finished tour."""
+    if not isinstance(msg, dict) or set(msg.keys()) - GUIDE_TOUR_FIELDS:
+        return False
+    if not getattr(session, "player_id", None):
+        return False
+    action = msg.get("action")
+    if not isinstance(action, str):
+        return False
+    cur = int(getattr(session, "guide_tour", 100))
+    gift = False
+    if action == "start":
+        if cur != 0:
+            return False
+        session.guide_tour = 1
+    elif action == "advance":
+        step = msg.get("step")
+        if isinstance(step, bool) or not isinstance(step, int):
+            return False
+        if step != cur or not (1 <= cur < GUIDE_TOUR_STEPS):
+            return False
+        if not _guide_step_done(session, cur):
+            await _guide_send(session, note="not_done")
+            return False
+        session.guide_tour = cur + 1
+    elif action == "skip":
+        if cur in GUIDE_FINISHED:
+            return False
+        session.guide_tour = GUIDE_SKIPPED
+    elif action == "played_before":
+        if cur not in (0, 1):
+            return False
+        session.guide_tour = GUIDE_PLAYED_BEFORE
+    elif action == "replay":
+        if cur not in GUIDE_FINISHED:
+            return False
+        session.guide_tour = 1
+    elif action == "sewer":
+        choice = msg.get("choice")
+        if cur != GUIDE_TOUR_STEPS or choice not in GUIDE_SEWER_CHOICES:
+            return False
+        session.sewer_choice = choice
+        session.guide_tour = GUIDE_DONE
+        _guide_save(session, sewer_choice=choice)
+        await sewer_offer_hook(session, choice)
+    else:
+        return False
+    new = session.guide_tour
+    # Everyone gets the bronze set: on reaching the gift step, or when skipping past it.
+    if new >= GUIDE_GIFT_STEP:
+        gift = bool(guide_give_bronze(session))
+    if new == GUIDE_EAT_STEP and cur != new:
+        target = max(1, int(session.max_hp() * 0.8))
+        if session.hp > target:
+            session.hp = target
+            _guide_save(session, hp=session.hp)
+    _guide_save(session, guide_tour=new)
+    await _guide_send(session, gift=gift)
+    return True
+
+
+EQUIP_ALL_ORDER = ("helmet", "body", "legs", "weapon", "shield", "amulet", "ring")
+EQUIP_ALL_FIELDS = frozenset({"type"})
+
+
+def _equip_score(item):
+    return (int(item.get("def_bonus") or 0) + int(item.get("att_bonus") or 0)
+            + int(item.get("str_bonus") or 0) + int(item.get("value") or 0) / 1000.0)
+
+
+async def handle_equip_all(session, msg):
+    """'Equip all' on the equipment screen: fill every EMPTY slot with the best wearable item
+    in the bag. Each piece goes through handle_equip, so every normal equip check applies."""
+    if not isinstance(msg, dict) or set(msg.keys()) - EQUIP_ALL_FIELDS:
+        return 0
+    if not getattr(session, "player_id", None):
+        return 0
+    done = 0
+    for slot in EQUIP_ALL_ORDER:
+        if (session.equipment or {}).get(slot):
+            continue
+        best, best_score = None, None
+        for idx, entry in sorted(session.inventory.items(), key=lambda kv: str(kv[0])):
+            item = ITEMS.get((entry or {}).get("item_id"))
+            if not item or item.get("equip_slot") != slot or item.get("ammo_type"):
+                continue
+            owner = (item.get("bound_username") or "").lower()
+            if owner and session.username.lower() != owner:
+                continue
+            sc = _equip_score(item)
+            if best_score is None or sc > best_score:
+                best, best_score = idx, sc
+        if best is None or isinstance(best, bool) or not isinstance(best, int):
+            continue
+        await handle_equip(session, {"type": "EQUIP", "slot_index": best})
+        if (session.equipment or {}).get(slot):
+            done += 1
+    if not done:
+        await send(session.ws, "ERROR", message="Nothing in your bag fits an empty slot.")
+    return done
+
+
 async def _send_guild_chat(session, text):
     """Guild channel only — no world speech bubble."""
     import clans
@@ -4168,7 +4533,7 @@ WISH_WELL_POS = _wish_well_pos()
 WISH_GEAR_POOL = [
     # Common / uncommon armour & weapons
     "leather_body", "leather_chaps", "leather_cowl",
-    "bronze_sword", "bronze_battleaxe",
+    "bronze_battleaxe",   # no Bronze Sword: Seraphine's set is the only free one (30 Oct 2026)
     "bronze_helmet", "bronze_sq_shield", "bronze_body", "bronze_legs",
     "bronze_chainbody", "bronze_chainlegs",
     "iron_sword", "iron_battleaxe",
@@ -5957,9 +6322,8 @@ def _gear_coach_steps(worn):
 async def welcome_on_join(session):
     st = _welcome_status(session)
     await send_welcome_state(session, st)
-    if st["show_path"]:
-        text = "Over here, by the crossroads! Follow the golden trail. I've a Bronze kit for you."
-    elif st["owed"]:
+    # Tamsin's kit is gone (Seraphine's tour gives bronze): no "follow the trail to me" greeting.
+    if st["owed"]:
         text = "I'm still holding part of your kit. Come and see me when you've room in your bag."
     else:
         return
@@ -5971,6 +6335,13 @@ async def welcome_talk(session, npc, tour=False, note=None):
     pages = welcome_kit.pages(st, session.char_name, tour=tour, note=note)
     await send(session.ws, "DIALOGUE", npc_id=npc["id"], npc_name=npc["name"], lines=pages[0],
                pages=pages if len(pages) > 1 else None, options=welcome_kit.options(st))
+    if st.get("first_visit") and not tour and note is None:
+        # First talk = welcome done (no kit any more). Flip the trail to stage 2 (Sarah -> Miriam).
+        if welcome_kit.take_claim(WORLD.db.conn, session.player_id):
+            session.arrival_guide = True
+            st = _welcome_status(session)
+            st["show_path"] = not st["skipped"]
+            await send_welcome_state(session, st)
 
 
 def _welcome_put(session, item_id):
@@ -6079,8 +6450,7 @@ async def welcome_option(session, npc, opt):
             note = ["Your bag and bank are both full. Make some room and ask me again."]
     elif opt == welcome_kit.OPT_SKIP:
         welcome_kit.set_skipped(conn, pid)
-        note = ["Right you are. I'll be here by the crossroads if you change your mind, "
-                "and the kit's still yours to claim."]
+        note = ["Right you are. I'll be here by the crossroads if you change your mind."]
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     if getattr(session, "arrival_guide", False) and opt in (welcome_kit.OPT_WEAR, welcome_kit.OPT_TAKE):
         # Kit just claimed: flip the trail to stage 2 (Elder Miriam) in the same breath.
@@ -6281,6 +6651,12 @@ async def handle_barracks(session, msg):
         return
     if action == "arena_begin":
         await begin_arena_fight(session)
+        return
+    if action == "duel_move":
+        # Boss duel input (light / heavy / parry / dodge / back / forward / finish).
+        ok, text = merc.duel_action(session, msg.get("move"))
+        if not ok and text:
+            await send(session.ws, "ERROR", message=text)
         return
     await send(session.ws, "ERROR", message="Unknown barracks action.")
 
@@ -6932,6 +7308,10 @@ async def send_shop_state(session, shop_id):
         your_coins=session.coins, buys=bool(shop.get("buys")),
         buys_types=list(shop.get("buys_types") or []),
         buys_slots=list(shop.get("buys_slots") or []),
+        buys_ids=list(shop.get("buys_ids") or []),
+        buys_ranged_weapons=bool(shop.get("buys_ranged_weapons")),
+        buys_exclude_ranged=bool(shop.get("buys_exclude_ranged")),
+        sell_rate=shop_sell_rate(shop),
         tax_rate=royal_treasury.sales_tax_rate(),
         rep_tier=reputation.tier(score), rep_mult=reputation.price_mult(score),
         sell_mult=reputation.sell_mult(score),
@@ -7474,7 +7854,7 @@ async def handle_shop_sell(session, msg):
     qty = min(qty, have)
     if qty <= 0:
         return
-    each = int(ITEMS[item_id]["value"] * 0.4)
+    each = int(ITEMS[item_id]["value"] * shop_sell_rate(shop))
     value = (reputation.sell_value(each, session.reputation) if each > 0 else 0) * qty
     tax = royal_treasury.sell_tax(value)
     WORLD.remove_item_qty(session, item_id, qty)
@@ -7486,13 +7866,26 @@ async def handle_shop_sell(session, msg):
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
 
 
+# Equipment slots the server stores (one db column each, tools in equip_tools). Every EQUIP / UNEQUIP is
+# checked against these, so a client can never name an arbitrary slot or column.
+EQUIP_SLOTS = ("helmet", "amulet", "ring", "weapon", "ammo", "shield", "body", "legs")
+TOOL_EQUIP_SLOTS = ("tool", "tool_woodcutting", "tool_mining", "tool_fishing")
+
+
 async def handle_equip(session, msg):
     slot_index = msg.get("slot_index")
+    if isinstance(slot_index, bool) or not isinstance(slot_index, int):
+        return
     entry = session.inventory.get(slot_index)
     if not entry:
         return
-    item = ITEMS[entry["item_id"]]
+    item = ITEMS.get(entry.get("item_id"))
+    if not item:
+        return
     eq_slot = item.get("equip_slot")
+    if eq_slot and eq_slot not in EQUIP_SLOTS and eq_slot != "tool":
+        await send(session.ws, "ERROR", message="You can't wear that yet.")
+        return
     if not eq_slot:
         await send(session.ws, "ERROR", message="You can't wear that.")
         return
@@ -7568,22 +7961,8 @@ async def handle_equip(session, msg):
         return
     # David, 23 Oct 2026: equipping armour no longer takes the outfit off. Partial armour keeps the outfit's
     # painted figure (stats apply, the gear isn't drawn); a full matching tier set shows its painted armour.
-    # David, 23 Oct 2026: body and legs go on together and both are needed (gear_rules pair rule).
-    if eq_slot in gear_rules.PAIR_SLOTS:
-        found = gear_rules.find_partner_in_bag(entry["item_id"], session.inventory, ITEMS)
-        if found is None:
-            await send(session.ws, "ERROR", message=gear_rules.pair_need_message(entry["item_id"], ITEMS))
-            return
-        if found[0] != "solo":
-            p_slot = gear_rules.pair_slot(eq_slot)
-            p_id = found[1]
-            p_old = session.equipment.get(p_slot)
-            session.equipment[p_slot] = p_id
-            WORLD.db.set_equipment(session.player_id, p_slot, p_id)
-            WORLD.remove_item_qty(session, p_id, 1)
-            if p_old:
-                WORLD.add_item_to_inventory(session, p_old, 1)
-            item = dict(item, name=f"{item['name']} and {ITEMS.get(p_id, {}).get('name', p_id)}")
+    # David, 29 Oct 2026: body and legs are separate again (no pair rule). Only one of them worn shows the
+    # plain default body + legs figure; the outfit comes back by itself when the armour comes off.
     old = session.equipment.get(eq_slot)
     session.equipment[eq_slot] = entry["item_id"]
     WORLD.db.set_equipment(session.player_id, eq_slot, entry["item_id"])
@@ -7671,6 +8050,8 @@ async def _outfit_gear_check(session, appearance):
 
 async def handle_unequip(session, msg):
     slot_name = msg.get("equip_slot")
+    if not isinstance(slot_name, str) or slot_name not in EQUIP_SLOTS + TOOL_EQUIP_SLOTS:
+        return
     # Per-skill tool slots (and legacy "tool") return the item to the bag.
     if slot_name == "tool" or (isinstance(slot_name, str) and slot_name.startswith("tool_")):
         if slot_name == "tool":
@@ -7717,25 +8098,12 @@ async def handle_unequip(session, msg):
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
         await send(session.ws, "CHAT_MSG", **{"from": "You", "text": "You put your ammo away."})
         return
-    p_slot = gear_rules.pair_slot(slot_name)
-    p_id = session.equipment.get(p_slot) if p_slot else None
-    if p_id:
-        # Body and legs come off together: check room for both before moving either.
-        free = sum(1 for i in range(int(INVENTORY_SIZE))
-                   if i // INVENTORY_TAB_SIZE != 3 and i not in session.inventory)   # Bags tab holds bags only
-        if free < 2:
-            await send(session.ws, "ERROR", message=gear_rules.PAIR_ROOM_MSG)
-            return
     if not WORLD.add_item_to_inventory(session, item_id, 1):
         await send(session.ws, "ERROR", message="Your inventory is full.")
         return
     name = ITEMS.get(item_id, {}).get("name", "item")
     session.equipment[slot_name] = None
     WORLD.db.set_equipment(session.player_id, slot_name, None)
-    if p_id and WORLD.add_item_to_inventory(session, p_id, 1):
-        session.equipment[p_slot] = None
-        WORLD.db.set_equipment(session.player_id, p_slot, None)
-        name = f"{name} and {ITEMS.get(p_id, {}).get('name', p_id)}"
     if slot_name == "weapon" and session.combat_style == "archery":
         session.combat_style = getattr(session, "melee_style", None) or "attack"
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
@@ -7784,6 +8152,224 @@ async def _use_key_on_nearby_door(session, item_id):
     return True
 
 
+async def handle_bag_opened(session, msg):
+    """First-time pointer guide when the player looks inside a bag or quiver."""
+    await send_ui_coach(
+        session,
+        welcome_kit.COACH_BAGS,
+        steps=[
+            {
+                "target": "bag_panel",
+                "text": "This lists everything packed inside — qty of each kind. Bags free inventory space.",
+            },
+            {
+                "target": "bag_row",
+                "text": "Click Take for 1, All for the stack, or … to pick a number. Shift+click also takes all.",
+            },
+            {
+                "target": "bag_pack",
+                "text": "Pack all scoops matching items from your pack. Unpack all empties everything that fits.",
+            },
+        ],
+    )
+
+
+def _bag_owned(session, bag_id):
+    """True when the player can inspect/withdraw this container."""
+    if bag_id == "arrow_quiver":
+        return (
+            owns_unique_item(session, "arrow_quiver")
+            or session.equipment.get("ammo") == "arrow_quiver"
+            or session.quiver_total() > 0
+        )
+    return owns_unique_item(session, bag_id)
+
+
+async def _pack_all_into_bag(session, bag_id):
+    """Scoop matching inventory stacks into the given container. Returns (deposited, chat)."""
+    deposited = 0
+    if bag_id == "arrow_quiver":
+        for aid, it in list(ITEMS.items()):
+            if it.get("ammo_type") != "arrow":
+                continue
+            have = WORLD.count_item(session, aid)
+            if have > 0:
+                deposited += session.deposit_arrows_to_quiver(aid, have)
+        tot = session.quiver_total()
+        chat = (
+            f"You pack {deposited} arrows into the quiver ({tot} total). Equip it to shoot."
+            if deposited else f"Your quiver holds {tot} arrows. Equip it in the Ammo slot to fire them."
+        )
+        return deposited, chat
+    if bag_id == "arrowtip_box":
+        for tid, it in list(ITEMS.items()):
+            if not is_arrowtip(tid):
+                continue
+            have = WORLD.count_item(session, tid)
+            if have > 0:
+                deposited += session.deposit_tips_to_box(tid, have)
+        tot = session.tip_box_total()
+        chat = (
+            f"You pack {deposited} tips into the box ({tot} total)."
+            if deposited else f"Your tip box holds {tot} tips. Fletching uses them automatically."
+        )
+        return deposited, chat
+    if bag_id == "food_bag":
+        for fid in list(COOKED_FISH_IDS):
+            have = WORLD.count_item(session, fid)
+            if have > 0:
+                deposited += session.deposit_cooked_to_food_bag(fid, have)
+        tot = session.food_bag_total()
+        chat = (
+            f"You pack {deposited} cooked fish into the bag ({tot} total)."
+            if deposited else f"Your food bag holds {tot} fish. Use Eat to snack from it."
+        )
+        return deposited, chat
+    if bag_id == "raw_food_bag":
+        for fid in list(RAW_FISH_IDS):
+            have = WORLD.count_item(session, fid)
+            if have > 0:
+                deposited += session.deposit_raw_to_raw_bag(fid, have)
+        tot = session.raw_bag_total()
+        chat = (
+            f"You pack {deposited} raw fish into the bag ({tot} total)."
+            if deposited else f"Your raw bag holds {tot} fish. Cooking uses them automatically."
+        )
+        return deposited, chat
+    if bag_id == "mining_bag":
+        for iid in list(ITEMS):
+            if is_mining_bag_item(iid) and WORLD.count_item(session, iid) > 0:
+                deposited += session.deposit_mining_bag(iid, WORLD.count_item(session, iid))
+        tot = session._bag_total(session.mining_bag)
+        chat = (
+            f"You pack {deposited} ores/bars into the mining bag ({tot} total)."
+            if deposited else f"Your mining bag holds {tot} items. Smelting/smithing use them first."
+        )
+        return deposited, chat
+    if bag_id == "log_bag":
+        for iid in FIRE_LOGS:
+            have = WORLD.count_item(session, iid)
+            if have > 0:
+                deposited += session.deposit_log_bag(iid, have)
+        tot = session._bag_total(session.log_bag)
+        chat = (
+            f"You pack {deposited} logs into the bag ({tot} total)."
+            if deposited else f"Your log bag holds {tot} logs. Firemaking/fletching use them first."
+        )
+        return deposited, chat
+    if bag_id == "fletch_pouch":
+        for iid in FLETCH_POUCH_IDS:
+            have = WORLD.count_item(session, iid)
+            if have > 0:
+                deposited += session.deposit_fletch_pouch(iid, have)
+        tot = session._bag_total(session.fletch_pouch)
+        chat = (
+            f"You pack {deposited} fletching supplies ({tot} total)."
+            if deposited else f"Your fletching pouch holds {tot} items. Fletching uses them first."
+        )
+        return deposited, chat
+    if bag_id == "potion_pouch":
+        for iid, it in ITEMS.items():
+            if is_potion_item(iid) and WORLD.count_item(session, iid) > 0:
+                deposited += session.deposit_potion_pouch(iid, WORLD.count_item(session, iid))
+        tot = session._bag_total(session.potion_pouch)
+        chat = (
+            f"You pack {deposited} potions ({tot} total)."
+            if deposited else f"Your potion pouch holds {tot} potions."
+        )
+        return deposited, chat
+    if bag_id == "gem_bag":
+        for iid, it in ITEMS.items():
+            if is_gem_item(iid) and WORLD.count_item(session, iid) > 0:
+                deposited += session.deposit_gem_bag(iid, WORLD.count_item(session, iid))
+        tot = session._bag_total(session.gem_bag)
+        chat = (
+            f"You pack {deposited} gems into the bag ({tot} total)."
+            if deposited else f"Your gem bag holds {tot} gems. Anvil jewelry crafting uses them first."
+        )
+        return deposited, chat
+    return 0, "You can't pack that."
+
+
+async def handle_bag_action(session, msg):
+    """Inspect-panel actions by bag_id (works even when the quiver is equipped)."""
+    bag_id = msg.get("bag_id")
+    action = (msg.get("action") or "").lower()
+    if bag_id not in BAG_CONTENTS_ATTR or not action:
+        return
+    if not _bag_owned(session, bag_id):
+        name = (ITEMS.get(bag_id) or {}).get("name", "bag")
+        await send(session.ws, "ERROR", message=f"You don't have a {name}.")
+        return
+    attr = BAG_CONTENTS_ATTR[bag_id]
+    save_col = BAG_SAVE_COL[bag_id]
+    bag = getattr(session, attr, None)
+    if not isinstance(bag, dict):
+        return
+    bag_name = (ITEMS.get(bag_id) or {}).get("name", "bag")
+
+    if action == "withdraw":
+        withdraw_id = msg.get("withdraw_id")
+        qty = max(1, int(msg.get("qty") or 1))
+        if not withdraw_id or not isinstance(withdraw_id, str):
+            return
+        have = int(bag.get(withdraw_id) or 0)
+        if have <= 0:
+            await send(session.ws, "ERROR", message="That isn't in the bag.")
+            return
+        moved = session._withdraw_one_from_bag(bag, save_col, withdraw_id, qty)
+        await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        name = (ITEMS.get(withdraw_id) or {}).get("name", withdraw_id)
+        if moved <= 0:
+            await send(session.ws, "ERROR", message="No free inventory space.")
+        else:
+            left = int(bag.get(withdraw_id) or 0)
+            await send(session.ws, "CHAT_MSG", **{
+                "from": "You",
+                "text": f"You take {moved} {name} ({left} left in the {bag_name}).",
+            })
+        return
+
+    if action == "unpack":
+        moved, left = session._withdraw_bag_to_inventory(bag, save_col)
+        await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        msg_txt = (
+            f"You unpack {moved} items ({left} still in the {bag_name})."
+            if moved else (f"Your {bag_name} is empty." if left <= 0 else "No free inventory space.")
+        )
+        await send(session.ws, "CHAT_MSG", **{"from": "You", "text": msg_txt})
+        return
+
+    if action == "eat":
+        if bag_id != "food_bag":
+            return
+        ok, name, heal = session.eat_one_from_food_bag()
+        await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        if not ok:
+            await send(session.ws, "ERROR", message="Your food bag is empty.")
+        elif heal <= 0:
+            await send(session.ws, "CHAT_MSG", **{"from": "You", "text": f"You eat the {name}. It tastes awful."})
+        else:
+            await send(session.ws, "CHAT_MSG", **{
+                "from": "You",
+                "text": f"You eat a {name} from your bag and restore {heal} Hitpoints.",
+            })
+        return
+
+    if action == "pack":
+        # Deposit helpers require the bag item in inventory (except quiver, which is character-bound).
+        if bag_id != "arrow_quiver" and WORLD.count_item(session, bag_id) <= 0:
+            await send(
+                session.ws, "ERROR",
+                message=f"Put your {bag_name} in your inventory to pack into it.",
+            )
+            return
+        _deposited, chat = await _pack_all_into_bag(session, bag_id)
+        await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        await send(session.ws, "CHAT_MSG", **{"from": "You", "text": chat})
+        return
+
+
 async def handle_use_item(session, msg):
     slot_index = msg.get("slot_index")
     entry = session.inventory.get(slot_index)
@@ -7792,6 +8378,40 @@ async def handle_use_item(session, msg):
     item_id = entry["item_id"]
     item = ITEMS[item_id]
     action = (msg.get("action") or "use").lower()
+
+    # Per-item withdraw from bag/quiver contents → inventory
+    if action == "withdraw" and item_id in BAG_CONTENTS_ATTR:
+        withdraw_id = msg.get("withdraw_id")
+        qty = max(1, int(msg.get("qty") or 1))
+        if not withdraw_id or not isinstance(withdraw_id, str):
+            return
+        if item.get("unique") and not owns_unique_item(session, item_id):
+            await send(session.ws, "ERROR", message=f"You have no {item.get('name', 'bag')} to unpack from.")
+            return
+        attr = BAG_CONTENTS_ATTR[item_id]
+        save_col = BAG_SAVE_COL[item_id]
+        bag = getattr(session, attr, None)
+        if not isinstance(bag, dict):
+            return
+        have = int(bag.get(withdraw_id) or 0)
+        if have <= 0:
+            await send(session.ws, "ERROR", message="That isn't in the bag.")
+            return
+        moved = session._withdraw_one_from_bag(bag, save_col, withdraw_id, qty)
+        await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        name = (ITEMS.get(withdraw_id) or {}).get("name", withdraw_id)
+        if moved <= 0:
+            await send(session.ws, "ERROR", message="No free inventory space.")
+        else:
+            left = int(bag.get(withdraw_id) or 0)
+            await send(session.ws, "CHAT_MSG", **{
+                "from": "You",
+                "text": (
+                    f"You take {moved} {name}{'s' if moved != 1 else ''} "
+                    f"({left} left in the {item.get('name', 'bag')})."
+                ),
+            })
+        return
 
     if action == "use" and item.get("type") == "key":
         if await _use_key_on_nearby_door(session, item_id):
@@ -8978,10 +9598,19 @@ async def handler(ws):
                     await handle_set_pk(session, msg)
                 elif mtype == "STOP_ATTACK":
                     await handle_stop_attack(session, msg)
+                elif (mtype or "").startswith("BAR_"):
+                    import resting_ox_inn
+                    await resting_ox_inn.handle(session, mtype, msg, send)
+                    if mtype == "BAR_LEAVE":
+                        WORLD.db.save_player_position(session.player_id, session.x, session.y)
                 elif mtype == "ENTER_DUNGEON":
                     await handle_enter_dungeon(session, msg)
                 elif mtype == "LEAVE_DUNGEON":
                     await handle_leave_dungeon(session, msg)
+                elif mtype == "SEWER_START":
+                    await sewer_tutorial.start_from_log(session)
+                elif mtype == "DUNGEON_INTERACT" and sewer_tutorial.here(session):
+                    await sewer_tutorial.handle_interact(session, msg)
                 elif mtype == "DUNGEON_INTERACT":
                     if session.dungeon and session.dungeon.get("v2") == "depths":
                         import depths_v2
@@ -9051,6 +9680,10 @@ async def handler(ws):
                     await handle_unequip(session, msg)
                 elif mtype == "USE_ITEM":
                     await handle_use_item(session, msg)
+                elif mtype == "BAG_OPENED":
+                    await handle_bag_opened(session, msg)
+                elif mtype == "BAG_ACTION":
+                    await handle_bag_action(session, msg)
                 elif mtype == "QUICK_CONSUME":
                     await handle_quick_consume(session, msg)
                 elif mtype == "DROP":
@@ -9061,6 +9694,12 @@ async def handler(ws):
                     await handle_pickup(session, msg)
                 elif mtype == "SET_OPTION":
                     await handle_set_option(session, msg)
+                elif mtype == "GUIDE_TOUR":
+                    await handle_guide_tour(session, msg)
+                elif mtype == "EQUIP_ALL":
+                    await handle_equip_all(session, msg)
+                elif mtype == "THRONE_VISION_SEEN":
+                    await handle_throne_vision_seen(session, msg)
                 elif mtype == "BANK_OPEN":
                     await handle_bank_open(session, msg)
                 elif mtype == "BANK_DEPOSIT":
@@ -9526,7 +10165,8 @@ async def process_combat(events):
         if session.in_combat_with and session.in_combat_with[0] == "monster":
             engaged_id = session.in_combat_with[1]
         attackers.sort(key=lambda m: (0 if m.id == engaged_id else 1, m.id))
-        attackers = attackers[:MAX_ATTACKERS]
+        in_sewer = bool(session.dungeon) and session.dungeon.get("id") == sewer_tutorial.SEWER_ID
+        attackers = attackers[:(2 if in_sewer else MAX_ATTACKERS)]
         for m in pool:
             if getattr(m, "_cone_strike", False) and m not in attackers and m.can_strike(session.x, session.y):
                 attackers.append(m)
@@ -9601,6 +10241,8 @@ async def process_combat(events):
                 if not skip_player_swing:
                     wstats = None if ranged else weapon_stats(session.equipment.get("weapon"))
                     interval = 1.2 if not wstats else SWING_SECONDS_PER_SPEED * float(wstats["attack_speed"])
+                    if in_sewer:
+                        interval *= sewer_tutorial.swing_mult(session)
                     now_ = time.time()
                     prev_ = float(getattr(session, "next_swing_at", 0) or 0)
                     # Chained swings keep the exact average pace (an axe's 1.5s alternates 1.2/1.8 ticks)
@@ -9742,6 +10384,8 @@ async def process_combat(events):
                     ward = int(session.jewelry_ability_total("void_ward"))
                     if ward:
                         dmg2 = max(0, dmg2 - ward)
+            if in_sewer:
+                dmg2 = sewer_tutorial.scale_damage(session, monster, dmg2)
             session.hp = max(0, session.hp - dmg2)
             # Thorns reflect a portion of damage taken back to the monster
             thorns_dmg = 0
@@ -9793,7 +10437,11 @@ async def process_combat(events):
                 died = True
                 break
 
-        if died:
+        if in_sewer and not died and attackers:
+            await sewer_tutorial.after_hits(session)
+        if died and in_sewer:
+            await sewer_tutorial.on_death(session, events, dungeon_tag)
+        elif died:
             # A quarter, not everything. Losing the entire purse to one bad
             # fight is the harshest possible outcome, and it hit hardest on a
             # good run (the 65k purse cap means a long session has the most to
@@ -10457,6 +11105,8 @@ def process_dungeon_ai():
             continue
         tiles = session.dungeon["tiles"]
         mod = _dungeon_mod(session)
+        # The sewer's first room teaches "two at once".
+        max_pursuers = 2 if session.dungeon.get("id") == sewer_tutorial.SEWER_ID else 1
         if session.dungeon.get("v2"):
             import void_v2
             void_v2.process_ai(session)

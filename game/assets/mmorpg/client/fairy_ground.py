@@ -325,6 +325,12 @@ def draw_tile(client, rect, tile_id, wx, wy):
     """Paint one glade tile. False means the caller should draw it the old way."""
     if client.dungeon:
         return False
+    try:   # Crownfall Vale south rim: dungeon-maze flagstones beside the farm read as dirt tracks
+        import vale_ring_client
+        if vale_ring_client.draw_rim_floor(client, rect, tile_id, wx, wy):
+            return True
+    except Exception as exc:
+        print("[vale_ring] rim floor", exc)
     x0, y0, x1, y1 = _zone()
     if not (x0 <= wx <= x1 and y0 <= wy <= y1):
         return False

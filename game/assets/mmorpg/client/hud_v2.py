@@ -69,14 +69,15 @@ CHANNEL_COLOR = {
 }
 QUICK = ("Hello", "Group up", "Thanks", "Need help", "Good fight")
 BAG_ROWS = (
-    ("Food Bag", "has_food_bag", "food_bag_total", 200),
-    ("Raw Food", "has_raw_bag", "raw_bag_total", 200),
-    ("Mining Bag", "has_mining_bag", "mining_bag_total", 200),
-    ("Log Bag", "has_log_bag", "log_bag_total", 200),
-    ("Gem Bag", "has_gem_bag", "gem_bag_total", 200),
-    ("Potion Pouch", "has_potion_pouch", "potion_pouch_total", 200),
-    ("Fletching Pouch", "has_fletch_pouch", "fletch_pouch_total", 5000),
-    ("Tip Box", "has_tip_box", "tip_box_total", 200),
+    # label, owned flag, total key, cap display, item_id for contents browser
+    ("Food Bag", "has_food_bag", "food_bag_total", 200, "food_bag"),
+    ("Raw Food", "has_raw_bag", "raw_bag_total", 200, "raw_food_bag"),
+    ("Mining Bag", "has_mining_bag", "mining_bag_total", 200, "mining_bag"),
+    ("Log Bag", "has_log_bag", "log_bag_total", 200, "log_bag"),
+    ("Gem Bag", "has_gem_bag", "gem_bag_total", 200, "gem_bag"),
+    ("Potion Pouch", "has_potion_pouch", "potion_pouch_total", 200, "potion_pouch"),
+    ("Fletching Pouch", "has_fletch_pouch", "fletch_pouch_total", 5000, "fletch_pouch"),
+    ("Tip Box", "has_tip_box", "tip_box_total", 200, "arrowtip_box"),
 )
 
 
@@ -349,6 +350,8 @@ def _tracked_quest_id(client):
     tracked = getattr(client, "tracked_quest_id", None)
     if tracked in active:
         return tracked
+    # The optional sewer quest never hides a quest the player just took (playtest: Rat Problem was hidden).
+    active = sorted(active, key=lambda q: q == "below_the_village")
     ready = [qid for qid in active if (quests.get(qid) or {}).get("status") == "ready"]
     return (ready or active or [None])[0]
 
@@ -771,6 +774,7 @@ def _draw_hitpoints(client, y):
     col, pct = client.hp_tone(hp, max_hp)
     x0 = sidebar_x + 12
     row = pygame.Rect(x0, y, screen_w - sidebar_x - 22, 32)
+    client.hud_hp_rect = row   # Seraphine's tour rings the health bar
     _panel(client.screen, row, NAVY_CARD, GOLD_DIM, radius=7, width=1)
     _blit(client, client.font_tiny, "Hitpoints", (row.x + 10, row.y + 3), GOLD)
     value = _text(client, client.font_tiny, f"{hp} / {max_hp}", col)
@@ -849,28 +853,55 @@ _GUILD_PROMPTS = {
         "max_len": 12,
         "numeric": True,
     },
+    "leave": {
+        "title": "Leave this guild?",
+        "hint": "Are you sure you want to leave your clan? You will lose "
+                "guild bank access, ranks, and castle claims tied to membership. "
+                "If you are the leader, leadership passes to another member "
+                "(or the guild disbands if you are alone).",
+        "cmd": "/guild leave",
+        "confirm_only": True,
+        "ok_label": "Leave guild",
+        "cancel_label": "Stay",
+    },
 }
 
 
 def open_guild_prompt(client, kind):
-    """Centered modal for create / invite / deposit / withdraw."""
+    """Centered modal for create / invite / deposit / withdraw / leave confirm."""
     spec = _GUILD_PROMPTS.get(kind)
     if not spec:
         return
     if getattr(client, "chat_typing", False) and hasattr(client, "_end_chat_typing"):
         client._end_chat_typing()
+    # Leave confirm: personalise with the live guild name.
+    title = spec["title"]
+    hint = spec["hint"]
+    if kind == "leave":
+        gname = str((_clan(client).get("name") or "")).strip() or "your guild"
+        title = f"Leave {gname}?"
+        hint = (
+            f"Are you sure you want to leave {gname}? "
+            "You will lose guild bank access, ranks, and castle claims tied to membership. "
+            "If you are the leader, leadership passes to another member "
+            "(or the guild disbands if you are alone)."
+        )
     client.guild_prompt = {
         "kind": kind,
-        "title": spec["title"],
-        "hint": spec["hint"],
-        "placeholder": spec["placeholder"],
+        "title": title,
+        "hint": hint,
+        "placeholder": spec.get("placeholder") or "",
         "cmd": spec["cmd"],
         "max_len": int(spec.get("max_len") or 24),
         "numeric": bool(spec.get("numeric")),
+        "confirm_only": bool(spec.get("confirm_only")),
+        "ok_label": spec.get("ok_label") or "Confirm",
+        "cancel_label": spec.get("cancel_label") or "Cancel",
         "value": "",
     }
     client.guild_prompt_rects = {}
-    pygame.key.start_text_input()
+    if not client.guild_prompt["confirm_only"]:
+        pygame.key.start_text_input()
 
 
 def close_guild_prompt(client):
@@ -882,6 +913,15 @@ def close_guild_prompt(client):
 
 def submit_guild_prompt(client):
     prompt = getattr(client, "guild_prompt", None) or {}
+    if prompt.get("confirm_only"):
+        cmd = str(prompt.get("cmd") or "").strip()
+        close_guild_prompt(client)
+        if cmd:
+            _guild_send(client, cmd)
+            if prompt.get("kind") == "leave":
+                client.guild_selected = None
+                client.guild_tab = "home"
+        return
     raw = str(prompt.get("value") or "").strip()
     if not raw:
         return
@@ -906,6 +946,8 @@ def handle_guild_prompt_key(client, event):
         return True
     if event.key == pygame.K_RETURN:
         submit_guild_prompt(client)
+        return True
+    if prompt.get("confirm_only"):
         return True
     if event.key == pygame.K_BACKSPACE:
         prompt["value"] = str(prompt.get("value") or "")[:-1]
@@ -947,31 +989,59 @@ def draw_guild_prompt(client):
     veil = pygame.Surface((screen_w, screen_h), pygame.SRCALPHA)
     veil.fill((6, 8, 14, 160))
     client.screen.blit(veil, (0, 0))
-    box = pygame.Rect(0, 0, 420, 210)
+    confirm_only = bool(prompt.get("confirm_only"))
+    box = pygame.Rect(0, 0, 440, 200 if confirm_only else 210)
+    if confirm_only:
+        # Extra height for the wrapped warning.
+        box = pygame.Rect(0, 0, 460, 230)
     box.center = (screen_w // 2, screen_h // 2)
-    _panel(client.screen, box, NAVY_CARD, GOLD, radius=10, width=2, ornate=True)
-    _blit(client, client.font_small, prompt.get("title") or "Guild", (box.x + 20, box.y + 18), GOLD)
-    _blit(client, client.font_tiny,
-          _fit_text(client.font_tiny, prompt.get("hint") or "", box.w - 40),
-          (box.x + 20, box.y + 48), MUTED)
-    field = pygame.Rect(box.x + 20, box.y + 78, box.w - 40, 36)
-    _panel(client.screen, field, NAVY, GOLD, radius=6, width=2)
-    shown = str(prompt.get("value") or "")
-    if shown:
-        _blit(client, client.font_small, shown, (field.x + 10, field.y + 8), INK)
+    _panel(client.screen, box, NAVY_CARD, GOLD if not confirm_only else DANGER_RED,
+           radius=10, width=2, ornate=True)
+    title_col = DANGER_RED if confirm_only else GOLD
+    _blit(client, client.font_small, prompt.get("title") or "Guild", (box.x + 20, box.y + 18), title_col)
+    # Wrap hint lines for leave confirm.
+    hint = str(prompt.get("hint") or "")
+    hy = box.y + 52
+    max_w = box.w - 40
+    words = hint.split()
+    line = ""
+    for word in words:
+        trial = (line + " " + word).strip()
+        if client.font_tiny.size(trial)[0] <= max_w:
+            line = trial
+        else:
+            if line:
+                _blit(client, client.font_tiny, line, (box.x + 20, hy), MUTED)
+                hy += client.font_tiny.get_height() + 2
+            line = word
+    if line:
+        _blit(client, client.font_tiny, line, (box.x + 20, hy), MUTED)
+        hy += client.font_tiny.get_height() + 2
+    field = None
+    if not confirm_only:
+        field = pygame.Rect(box.x + 20, box.y + 78, box.w - 40, 36)
+        _panel(client.screen, field, NAVY, GOLD, radius=6, width=2)
+        shown = str(prompt.get("value") or "")
+        if shown:
+            _blit(client, client.font_small, shown, (field.x + 10, field.y + 8), INK)
+        else:
+            _blit(client, client.font_small, prompt.get("placeholder") or "",
+                  (field.x + 10, field.y + 8), MUTED)
+        # Caret
+        if int(pygame.time.get_ticks() / 400) % 2 == 0:
+            caret_x = field.x + 10 + client.font_small.size(shown)[0]
+            pygame.draw.line(client.screen, GOLD, (caret_x, field.y + 8), (caret_x, field.bottom - 8), 2)
+    ok = pygame.Rect(box.x + 20, box.bottom - 52, 150 if confirm_only else 120, 34)
+    cancel = pygame.Rect(box.right - 160 if confirm_only else box.right - 140, box.bottom - 52,
+                         140 if confirm_only else 120, 34)
+    if confirm_only:
+        _panel(client.screen, ok, (70, 40, 40), DANGER_RED, radius=6, width=2)
+        _panel(client.screen, cancel, (36, 70, 48), SAFE_GREEN, radius=6, width=2)
     else:
-        _blit(client, client.font_small, prompt.get("placeholder") or "",
-              (field.x + 10, field.y + 8), MUTED)
-    # Caret
-    if int(pygame.time.get_ticks() / 400) % 2 == 0:
-        caret_x = field.x + 10 + client.font_small.size(shown)[0]
-        pygame.draw.line(client.screen, GOLD, (caret_x, field.y + 8), (caret_x, field.bottom - 8), 2)
-    ok = pygame.Rect(box.x + 20, box.bottom - 52, 120, 34)
-    cancel = pygame.Rect(box.right - 140, box.bottom - 52, 120, 34)
-    _panel(client.screen, ok, (36, 70, 48), SAFE_GREEN, radius=6, width=2)
-    _panel(client.screen, cancel, (70, 40, 40), DANGER_RED, radius=6, width=2)
-    ok_l = _text(client, client.font_small, "Confirm", INK)
-    cancel_l = _text(client, client.font_small, "Cancel", INK)
+        _panel(client.screen, ok, (36, 70, 48), SAFE_GREEN, radius=6, width=2)
+        _panel(client.screen, cancel, (70, 40, 40), DANGER_RED, radius=6, width=2)
+    ok_l = _text(client, client.font_small, prompt.get("ok_label") or "Confirm", INK)
+    cancel_l = _text(client, client.font_small, prompt.get("cancel_label") or "Cancel", INK)
     client.screen.blit(ok_l, (ok.centerx - ok_l.get_width() // 2, ok.centery - ok_l.get_height() // 2))
     client.screen.blit(cancel_l, (cancel.centerx - cancel_l.get_width() // 2,
                                   cancel.centery - cancel_l.get_height() // 2))
@@ -1339,9 +1409,7 @@ def _guild_click(client, key):
         open_guild_prompt(client, "withdraw")
         return
     if key == "leave":
-        _guild_send(client, "/guild leave")
-        client.guild_selected = None
-        client.guild_tab = "home"
+        open_guild_prompt(client, "leave")
         return
     if key == "help":
         _guild_send(client, "/guild help")
@@ -1383,6 +1451,8 @@ def _next_open_quest_step(client):
         status = (quests.get(qid) or {}).get("status") or "not_started"
         if status == "complete":
             continue
+        if qdef.get("optional") and status == "not_started":
+            continue
         giver = qdef.get("giver")
         npc = next((n for n in NPCS if n.get("id") == giver), None)
         where = (npc.get("name") if npc else None) or "the quest giver"
@@ -1397,6 +1467,37 @@ def _next_open_quest_step(client):
     return None
 
 
+def _bag_weapon(client):
+    """Display name of a wieldable weapon sitting in the bag (skipped-tour players keep the kit unequipped)."""
+    inv = (getattr(client, "player", None) or {}).get("inventory") or {}
+    for e in (inv.values() if isinstance(inv, dict) else inv):
+        iid = (e or {}).get("item_id") or ""
+        if iid.endswith(("_sword", "_scimitar", "_dagger", "_mace", "_longsword")):
+            return iid.replace("_", " ")
+    return None
+
+
+def _veteran_step(client):
+    """Finished-tour players: never a starter step. Only a quest they already began, or the endgame."""
+    player = client.player or {}
+    if not (player.get("equipment") or {}).get("weapon") and _bag_weapon(client):
+        return {"title": "Equip your weapon", "detail": f"Click the {_bag_weapon(client)} in your bag",
+                "hint": "Or open Equipment and press Equip all", "npc": None}
+    quests = client.quests or {}
+    for qid, q in quests.items():
+        st = (q or {}).get("status") or "not_started"
+        if qid != "fairy_oath" and st not in ("not_started", "complete"):
+            qdef = QUESTS.get(qid) or {}
+            return {"title": qdef.get("name") or qid, "detail": _quest_finish_hint(client, qid, st),
+                    "hint": "Press Q for the quest journal", "npc": qdef.get("giver")}
+    if all_other_quests_complete(client):
+        nxt = _next_open_quest_step(client)
+        if nxt:
+            return nxt
+    return {"title": "Free to roam", "detail": "Pick any quest in your journal (Q)",
+            "hint": "Press Q for the quest journal · H for controls", "npc": None}
+
+
 def _no_quest_step(client):
     """One concrete next step for a player with no active quest.
 
@@ -1405,20 +1506,33 @@ def _no_quest_step(client):
     quest. The Royal Challenge is only suggested after every other quest.
     """
     welcome = getattr(client, "welcome", None) or {}
-    # One spine: Tamsin → Sarah (eat) → Miriam. Don't keep saying "get kit" after claim.
-    if welcome.get("show_path") and not welcome.get("claimed"):
-        return {"title": "Get your starter kit", "detail": "Warden Tamsin, by the crossroads",
-                "hint": "Follow the gold trail — she explains the basics", "npc": "warden_tamsin"}
+    am = getattr(client, "arena_match", None) or {}
+    if am.get("active"):
+        if am.get("duel"):
+            _bow = (am.get("duel") or {}).get("style") == "bow"
+            return {"title": "Arena duel in progress",
+                    "detail": "Win the duel — R for the finishing " + ("shot" if _bow else "move"),
+                    "hint": "Q/E shoot · Space dodge · stand still" if _bow else "Q/E strike · F parry · Space dodge",
+                    "npc": None}
+        return {"title": "Arena battle in progress", "detail": "Command your army to victory",
+                "hint": "Watch the crowd meter — Leave ends the fight", "npc": None}
+    # One spine: Sarah (eat) → Miriam. Tamsin's kit is gone; finished-tour players skip the welcome steps.
+    import new_player_guide
+    if new_player_guide.tour_finished(client):
+        return _veteran_step(client)
+    if new_player_guide.tour_in_progress(client):
+        return {"title": "Follow Seraphine's tour", "detail": "She hands you a bronze kit on the way",
+                "hint": "Skip any time - replay it from Settings", "npc": None}
     player = client.player or {}
     weapon = (player.get("equipment") or {}).get("weapon")
     if not weapon:
         return {"title": "You're fighting bare-handed", "detail": "Equip a weapon from your bag (E)",
                 "hint": "An axe or pick works too — click it to wield", "npc": None}
-    if welcome.get("show_path") and welcome.get("claimed") and not welcome.get("eat_done"):
+    if welcome.get("show_path") and not welcome.get("eat_done"):
         return {"title": "Learn food & HP", "detail": "Innkeeper Sarah, south of the square",
                 "hint": "Press R / Eat — food keeps you alive in fights", "npc": "innkeeper_sarah"}
     starter = (client.quests or {}).get("rat_problem") or {}
-    if (starter.get("status") or "not_started") != "complete":
+    if (starter.get("status") or "not_started") != "complete" and not new_player_guide.tour_finished(client):
         # A fresh client has quests == {} (no QUEST_LOG yet), which reads as
         # not_started — the right advice for a brand-new character. Completing
         # some other quest does not satisfy this specific milestone.
@@ -1573,7 +1687,7 @@ def _draw_system_tabs(client, y, rects):
         }.get(client.hud_focus, "Panel")
         back = pygame.Rect(x0, y, w, 30)
         _panel(client.screen, back, NAVY_HI, GOLD, radius=7, width=2, ornate=True)
-        surf = _text(client, client.font_tiny, f"← Inventory   ·   {label}", GOLD_BRIGHT)
+        surf = _text(client, client.font_tiny, f"< Inventory   ·   {label}", GOLD_BRIGHT)
         client.screen.blit(surf, (back.centerx - surf.get_width() // 2,
                                   back.centery - surf.get_height() // 2))
         # Click maps to inventory system handler, which clears focus.
@@ -1683,29 +1797,40 @@ def _draw_inventory(client, y, bottom, rects):
         rects["inv_filters"] = pygame.Rect(min(xs), min(ys), max(rights) - min(xs), max(bottoms) - min(ys))
     y += 2 * (chip_h + chip_gap) + 4
     rows = _filtered_entries(client)
-    cols = 4
+    cols = 5
     gap = 3
-    scroll_w = 20
-    grid_w = _body_w() - scroll_w - 4
-    # Prefer fitting an extra visible row over oversized icons when height is tight.
-    size_w = max(48, (grid_w - gap * (cols - 1)) // cols)
+    scroll_w_thin = 12  # slim gutter so a 5th item column still fits
     slot_bottom = bottom - 34
-    avail_h = max(size_w, slot_bottom - y)
-    size = size_w
-    for candidate in range(size_w, 47, -1):
-        if avail_h // (candidate + gap) > avail_h // (size_w + gap):
-            size = candidate
-            break
-    row_h = size + gap
-    slots = {}
-    hover = None
-    import procedural_sprites_finished as sprites
-    visible_rows = max(1, (slot_bottom - y) // row_h)
+    body_w = _body_w()
+
+    def _grid_metrics(scroll_w):
+        grid_w = body_w - (scroll_w + 4 if scroll_w else 0)
+        size_w = max(42, (grid_w - gap * (cols - 1)) // cols)
+        avail_h = max(size_w, slot_bottom - y)
+        size = size_w
+        for candidate in range(size_w, 41, -1):
+            if avail_h // (candidate + gap) > avail_h // (size_w + gap):
+                size = candidate
+                break
+        row_h = size + gap
+        visible_rows = max(1, (slot_bottom - y) // row_h)
+        return size, row_h, visible_rows, grid_w
+
+    # Lay out full-width first; only carve a thin scroll gutter when needed.
+    size, row_h, visible_rows, grid_w = _grid_metrics(0)
     total_rows = (len(rows) + cols - 1) // cols if rows else 0
+    need_scroll = total_rows > visible_rows
+    scroll_w = scroll_w_thin if need_scroll else 0
+    if need_scroll:
+        size, row_h, visible_rows, grid_w = _grid_metrics(scroll_w)
+        total_rows = (len(rows) + cols - 1) // cols if rows else 0
     max_scroll = max(0, total_rows - visible_rows)
     scroll = max(0, min(max_scroll, int(getattr(client, "hud_inv_scroll", 0) or 0)))
     client.hud_inv_scroll = scroll
     client.hud_inv_max_scroll = max_scroll
+    slots = {}
+    hover = None
+    import procedural_sprites_finished as sprites
     start = scroll * cols
     for i, (slot, entry) in enumerate(rows[start:start + visible_rows * cols]):
         col, row = i % cols, i // cols
@@ -1715,7 +1840,8 @@ def _draw_inventory(client, y, bottom, rects):
         selected = slot == client.hud_selected
         pygame.draw.rect(client.screen, NAVY_HI if entry else NAVY, rect, border_radius=6)
         pygame.draw.rect(client.screen, GOLD if selected else GOLD_DIM, rect, 2 if selected else 1, border_radius=6)
-        sprites.draw_item_icon(client.screen, rect.inflate(-8, -8), entry["item_id"], ITEMS)
+        pad = 6 if size >= 48 else 4
+        sprites.draw_item_icon(client.screen, rect.inflate(-pad, -pad), entry["item_id"], ITEMS)
         if int(entry.get("qty") or 1) > 1:
             qty = _text(client, client.font_tiny, str(entry["qty"]), GOLD)
             client.screen.blit(qty, (rect.right - qty.get_width() - 4, rect.bottom - qty.get_height() - 2))
@@ -1740,32 +1866,33 @@ def _draw_inventory(client, y, bottom, rects):
     rects["inv_scroll_down"] = None
     rects["inv_scroll_track"] = None
     rects["inv_scroll_thumb"] = None
-    # Always reserve the bar column when content can overflow (or already does).
-    if max_scroll or total_rows > visible_rows:
-        bar_x = x0 + grid_w + 6
-        up = pygame.Rect(bar_x, y, scroll_w, 22)
-        down = pygame.Rect(bar_x, slot_bottom - 22, scroll_w, 22)
+    if need_scroll:
+        bar_x = x0 + grid_w + 4
+        up = pygame.Rect(bar_x, y, scroll_w, 20)
+        down = pygame.Rect(bar_x, slot_bottom - 20, scroll_w, 20)
         track = pygame.Rect(bar_x, up.bottom + 2, scroll_w, max(24, down.y - up.bottom - 4))
-        _panel(client.screen, up, NAVY_HI if scroll > 0 else NAVY, GOLD, radius=4, width=2)
-        _panel(client.screen, down, NAVY_HI if scroll < max_scroll else NAVY, GOLD, radius=4, width=2)
-        _blit(client, client.font_small, "▲", (up.centerx - 5, up.y + 1), INK if scroll > 0 else MUTED)
-        _blit(client, client.font_small, "▼", (down.centerx - 5, down.y + 1), INK if scroll < max_scroll else MUTED)
-        pygame.draw.rect(client.screen, (22, 28, 40), track, border_radius=5)
-        pygame.draw.rect(client.screen, GOLD, track, 2, border_radius=5)
+        _panel(client.screen, up, NAVY_HI if scroll > 0 else NAVY, GOLD, radius=3, width=1)
+        _panel(client.screen, down, NAVY_HI if scroll < max_scroll else NAVY, GOLD, radius=3, width=1)
+        up_lbl = _text(client, client.font_tiny, "▲", INK if scroll > 0 else MUTED)
+        dn_lbl = _text(client, client.font_tiny, "▼", INK if scroll < max_scroll else MUTED)
+        client.screen.blit(up_lbl, (up.centerx - up_lbl.get_width() // 2, up.centery - up_lbl.get_height() // 2))
+        client.screen.blit(dn_lbl, (down.centerx - dn_lbl.get_width() // 2, down.centery - dn_lbl.get_height() // 2))
+        pygame.draw.rect(client.screen, (22, 28, 40), track, border_radius=4)
+        pygame.draw.rect(client.screen, GOLD, track, 1, border_radius=4)
         thumb = None
         if max_scroll > 0 and track.h > 16:
-            thumb_h = max(28, int(track.h * visible_rows / max(1, total_rows)))
+            thumb_h = max(22, int(track.h * visible_rows / max(1, total_rows)))
             thumb_h = min(track.h - 4, thumb_h)
             travel = max(1, track.h - thumb_h - 4)
             thumb_y = track.y + 2 + int(travel * (scroll / max_scroll))
-            thumb = pygame.Rect(track.x + 3, thumb_y, track.w - 6, thumb_h)
-            pygame.draw.rect(client.screen, (90, 120, 70), thumb, border_radius=4)
-            pygame.draw.rect(client.screen, (200, 220, 120), thumb, 2, border_radius=4)
+            thumb = pygame.Rect(track.x + 2, thumb_y, max(6, track.w - 4), thumb_h)
+            pygame.draw.rect(client.screen, (90, 120, 70), thumb, border_radius=3)
+            pygame.draw.rect(client.screen, (200, 220, 120), thumb, 1, border_radius=3)
             # Grip lines so it reads as a draggable handle.
-            for gy in (thumb.centery - 4, thumb.centery, thumb.centery + 4):
+            for gy in (thumb.centery - 3, thumb.centery, thumb.centery + 3):
                 pygame.draw.line(
                     client.screen, (230, 240, 180),
-                    (thumb.x + 4, gy), (thumb.right - 4, gy), 1,
+                    (thumb.x + 2, gy), (thumb.right - 2, gy), 1,
                 )
         page = f"{scroll + 1}/{max_scroll + 1}"
         page_s = _text(client, client.font_tiny, page, GOLD)
@@ -1923,8 +2050,15 @@ def _nearest_node(client):
 def _draw_bags(client, y, bottom, rects):
     x0 = _body_x()
     _blit(client, client.font_tiny, "Bulk storage and ammo containers", (x0, y), MUTED)
+    y += 16
+    _blit(
+        client, client.font_tiny,
+        "Click a bag to look inside · smithing/cooking use bag items automatically",
+        (x0, y), GOLD_DIM,
+    )
     y += 18
     boxes = {}
+    bag_ids = {}
     player = client.player or {}
 
     # A quiver is both a container and worn ammunition. Keeping it out of the
@@ -1939,13 +2073,13 @@ def _draw_bags(client, y, bottom, rects):
     quiver_equipped = ammo_id == "arrow_quiver"
     quiver_total = int(player.get("quiver_total") or 0)
     quiver = pygame.Rect(x0, y, _body_w(), 42)
-    owned = quiver_equipped or quiver_slot is not None
+    owned = quiver_equipped or quiver_slot is not None or quiver_total > 0
     _panel(client.screen, quiver, NAVY_CARD, GOLD if owned else GOLD_DIM, radius=5)
     _blit(client, client.font_tiny, "Arrow Quiver", (quiver.x + 8, quiver.y + 5), INK if owned else MUTED)
     if quiver_equipped:
-        detail, detail_col = f"Equipped · {quiver_total} arrows", SAFE_GREEN
+        detail, detail_col = f"Equipped · {quiver_total} arrows · click to open", SAFE_GREEN
     elif quiver_slot is not None:
-        detail, detail_col = f"{quiver_total} stored · equip to fire", GOLD
+        detail, detail_col = f"{quiver_total} stored · click to open", GOLD
     elif quiver_total:
         detail, detail_col = f"{quiver_total} stored · quiver missing", DANGER_RED
     else:
@@ -1958,8 +2092,9 @@ def _draw_bags(client, y, bottom, rects):
         client.screen.blit(label, (equip.centerx - label.get_width() // 2, equip.centery - label.get_height() // 2))
         rects["quiver_equip"] = {"rect": equip, "slot": quiver_slot}
     boxes["Arrow Quiver"] = quiver
+    bag_ids["Arrow Quiver"] = "arrow_quiver"
     y += 44
-    for label, flag, total_key, cap in BAG_ROWS:
+    for label, flag, total_key, cap, item_id in BAG_ROWS:
         if y + 28 > bottom:
             break
         owned = bool(player.get(flag))
@@ -1967,12 +2102,14 @@ def _draw_bags(client, y, bottom, rects):
         rect = pygame.Rect(x0, y, _body_w(), 26)
         _panel(client.screen, rect, NAVY_CARD, GOLD if owned else GOLD_DIM, radius=5)
         _blit(client, client.font_tiny, label, (rect.x + 8, rect.y + 5), INK if owned else MUTED)
-        detail = f"{total} / {cap}" if owned else "Not owned"
+        detail = f"{total} packed" if owned else "Not owned"
         surf = _text(client, client.font_tiny, detail, GOLD if owned else MUTED)
         client.screen.blit(surf, (rect.right - surf.get_width() - 8, rect.y + 5))
         boxes[label] = rect
+        bag_ids[label] = item_id
         y += 28
     rects["bags"] = boxes
+    rects["bag_ids"] = bag_ids
 
 
 def _draw_lore(client, y, bottom):
@@ -2010,6 +2147,8 @@ def _draw_quests(client, y, bottom, rects):
         info = (client.quests or {}).get(qid) or {"status": "not_started", "progress": 0}
         status = info.get("status") or "not_started"
         req = spec.get("requires")
+        if status == "not_started" and spec.get("hidden_until_offered"):
+            continue  # optional sewer quest shows once Seraphine offers it
         if status == "not_started" and req:
             needed = req if isinstance(req, (list, tuple)) else [req]
             if any(((client.quests or {}).get(r) or {}).get("status") != "complete" for r in needed):
@@ -2380,6 +2519,54 @@ def handle_sidebar_click(client, mx, my, button):
         client.net.send("EQUIP", slot_index=quiver_equip["slot"])
         client.add_chat("Equipping Arrow Quiver.")
         return
+    # Bags panel — open contents browser (take 1 / all / custom qty).
+    if client.hud_system == "bags":
+        bag_ids = rects.get("bag_ids") or {}
+        flag_for = {
+            "food_bag": "has_food_bag",
+            "raw_food_bag": "has_raw_bag",
+            "mining_bag": "has_mining_bag",
+            "log_bag": "has_log_bag",
+            "gem_bag": "has_gem_bag",
+            "potion_pouch": "has_potion_pouch",
+            "fletch_pouch": "has_fletch_pouch",
+            "arrowtip_box": "has_tip_box",
+        }
+        for label, rect in (rects.get("bags") or {}).items():
+            if not rect.collidepoint(mx, my):
+                continue
+            # Don't steal the Equip button on the quiver row.
+            if label == "Arrow Quiver" and quiver_equip.get("rect") and quiver_equip["rect"].collidepoint(mx, my):
+                continue
+            item_id = bag_ids.get(label)
+            if not item_id:
+                continue
+            player = client.player or {}
+            if item_id == "arrow_quiver":
+                owned = (
+                    player.get("equipment", {}).get("ammo") == "arrow_quiver"
+                    or int(player.get("quiver_total") or 0) > 0
+                    or any(
+                        e and e.get("item_id") == "arrow_quiver"
+                        for e in (player.get("inventory") or {}).values()
+                    )
+                )
+            else:
+                owned = bool(player.get(flag_for.get(item_id) or ""))
+            if not owned:
+                client.add_chat(f"You don't own a {label} yet.")
+                return True
+            slot = next(
+                (
+                    int(s) if str(s).isdigit() else s
+                    for s, e in (player.get("inventory") or {}).items()
+                    if e and e.get("item_id") == item_id
+                ),
+                None,
+            )
+            if hasattr(client, "open_bag_browser"):
+                client.open_bag_browser(item_id, slot=slot)
+            return True
     quest_track = rects.get("quest_track") or {}
     if quest_track.get("rect") and quest_track["rect"].collidepoint(mx, my):
         npc = next((row for row in NPCS if row.get("id") == quest_track.get("npc_id")), None)
@@ -2411,6 +2598,11 @@ def handle_sidebar_click(client, mx, my, button):
     if client.hud_focus == "quests":
         for qid, rect in (rects.get("quest_rows") or {}).items():
             if rect.collidepoint(mx, my):
+                if qid == "below_the_village" and ((client.quests or {}).get(qid) or {}).get("status") == "active":
+                    import sewer_client
+                    client.tracked_quest_id = qid
+                    sewer_client.start_from_log(client)
+                    return True
                 if hasattr(client, "track_quest"):
                     client.track_quest(qid)
                 else:

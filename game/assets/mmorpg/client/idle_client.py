@@ -31,11 +31,28 @@ def note_event(client, event):
     st["warn_until"] = 0.0          # the banner goes the moment you touch anything
 
 
+_READING_ATTRS = ("dialogue", "bank", "show_shop_panel", "housing_open", "monster_drops_panel", "royal_panel")
+
+
+def reading(client):
+    """True while a dialogue, menu or tutorial panel is open: reading counts as activity."""
+    if any(getattr(client, a, None) for a in _READING_ATTRS):
+        return True
+    try:
+        import guide_tour
+        return bool(guide_tour.visible(client))
+    except Exception:
+        return False
+
+
 def tick(client, now=None):
     if getattr(client, "state", None) != "GAME":
         return
     st = _state(client)
     now = time.time() if now is None else now
+    if reading(client):             # never idle-kick someone reading dialogue or a menu
+        st["last_input"] = now
+        st["input_since_ping"] = True
     if not st["input_since_ping"] or now - st["last_ping"] < PING_INTERVAL_S:
         return
     st["last_ping"] = now

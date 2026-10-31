@@ -793,6 +793,10 @@ def generate_world():
     restore_city_and_void_paving(grid)
     # Wayfinder / trim can pave over the cave floor — restamp last.
     stamp_tidehollow_mouth(grid)
+    # Crownfall Vale mountain ring around the starter village (ZONES_SPEC.md section 2).
+    # Collision only on the band's cliff bases; every lane, door, NPC and spawn stays clear.
+    import vale_ring
+    vale_ring.apply(grid, _BUILDING_FOOTPRINTS, WALL)
     return grid
 
 
@@ -1186,7 +1190,8 @@ def lay_fairy_glade_approach(grid):
     """
     import fairy_glade
 
-    # Three-wide bridge: Aldric pad (27-29) → mouth lane (30-33) → east road.
+    # Three-wide bridge: west apron (27-29) → mouth lane (30-33) → east road.
+    # Guard Aldric stands on the village south road at (32,40), clear of glade canopies.
     _stamp_road(grid, 27, 50, 36, 50)
     _stamp_road(grid, 27, 51, 36, 51)
     # Mouth under the arch (posts are restored to WALL after trim).

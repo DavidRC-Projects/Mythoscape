@@ -52,6 +52,7 @@ from content import (
 )  # noqa: E402
 import world_map as wm  # noqa: E402
 import wolf_pass_client  # noqa: E402
+import sewer_client  # noqa: E402
 import stonehaven_walls_client  # noqa: E402
 import emberdeep_volcano_client  # noqa: E402
 import graveyard_art  # noqa: E402 — scary crypt perimeter walls + headstones
@@ -435,7 +436,10 @@ class GameClient(ScreensMixin, CameraYaw):
         self.show_world_map = False  # scrollable click-to-walk map (minimap icon)
         self.world_map_scroll = [0, 0]  # top-left world tile of the map viewport
         self.world_map_drag = None  # (mx, my, scroll_x, scroll_y) while dragging
-        self.world_map_scale = 5  # pixels per world tile in the scrollable map
+        self.world_map_scale = 6  # pixels per world tile in the scrollable map
+        self.world_map_hover_dest = None
+        self.world_map_card_rects = []
+        self.world_map_zoom_rects = {}
         self.minimap_rect = None
         self.minimap_collapsed = False  # also collapses the Crownfall clock HUD
         self._minimap_base = None
@@ -465,6 +469,8 @@ class GameClient(ScreensMixin, CameraYaw):
         self.food_bag_prompt_rects = {}
         self.storage_bag_prompt = None  # generic bag: pack all / unpack all
         self.storage_bag_prompt_rects = {}
+        self.bag_take_prompt = None  # qty chooser: take N from bag → inventory
+        self.bag_take_prompt_rects = {}
         self.pack_prompt = None  # generic pack/drop for ores, fletch mats, etc.
         self.pack_prompt_rects = {}
         self.log_prompt = None
@@ -530,6 +536,8 @@ class GameClient(ScreensMixin, CameraYaw):
 
         from cosmetics_ui import Outfitters
         self.outfitters = Outfitters(self)
+        import resting_ox_bar
+        self.resting_ox = resting_ox_bar.RestingOxBar(self)
         self.needs_appearance = False
 
         self.running = True
@@ -574,6 +582,10 @@ class GameClient(ScreensMixin, CameraYaw):
         if t == "WELCOME_STATE":
             new_player_guide.on_state(self, msg)
             return
+        if t == "GUIDE_TOUR_STATE":
+            import guide_tour
+            guide_tour.on_state(self, msg)
+            return
         if t == "UI_COACH":
             ui_coach.on_message(self, msg)
             return
@@ -589,7 +601,10 @@ class GameClient(ScreensMixin, CameraYaw):
                 self._logging_out = False
                 self.net.reconnect()
                 return
-            if self.state in ("GAME", "STAT_ALLOC", "OPENING_COMIC"):
+            if self.state == "THRONE_VISION":
+                import throne_vision
+                throne_vision.abort()
+            if self.state in ("GAME", "STAT_ALLOC", "OPENING_COMIC", "THRONE_VISION"):
                 self.login_error = "Disconnected from server."
                 self.opening_comic_pending = False
                 self.state = "LOGIN"
@@ -661,11 +676,11 @@ class GameClient(ScreensMixin, CameraYaw):
             self.craft_recipes = msg.get("craft_recipes") or {}
             self.buildings = msg.get("buildings") or []
             self.env = msg.get("env") or {}
-            import feature_flags
-            if self.opening_comic_pending and feature_flags.USE_OPENING_COMIC:
-                self.state = "OPENING_COMIC"
-                import opening_comic
-                opening_comic.begin(self)
+            # David, 30 Oct 2026: the opening comic is retired; a new game goes straight to the throne vision
+            if self._throne_vision_due():
+                # new account, first login: the throne vision film, then the world
+                import throne_vision
+                throne_vision.begin(self)
             else:
                 self.state = "GAME"
                 self._offer_appearance()
@@ -734,6 +749,10 @@ class GameClient(ScreensMixin, CameraYaw):
                 self.player["hp"] = live["hp"]
                 self.player["max_hp"] = live["max_hp"]
                 self.player["gathering"] = live.get("gathering")
+        elif t.startswith("SEWER_"):
+            sewer_client.on_message(self, t, msg)
+        elif t.startswith("BAR_"):
+            self.resting_ox.on_message(t, msg)
         elif t == "DUNGEON_ENTER":
             self._enter_dungeon_view(msg)
         elif t == "DUNGEON_TILES":
@@ -979,6 +998,7 @@ class GameClient(ScreensMixin, CameraYaw):
                     "village": "You wake in the village.",
                     "entrance": "You wake outside.",
                     "checkpoint": "You wake at the checkpoint.",
+                    "sewer": "Seraphine pulls you out at the ladder. Nothing lost.",
                 }.get(where, "You wake in the village.")
                 text = f"{place} You lost {lost} coins." if lost else place
                 self.add_chat(f"*** {text} ***", color=(255, 120, 100), highlight=True)
@@ -986,7 +1006,7 @@ class GameClient(ScreensMixin, CameraYaw):
                 self.death_banner_text = text
                 self.death_where = where
                 self._clear_combat_presentation()
-                if self.player:
+                if self.player and where != "sewer":
                     self.player["coins"] = 0
         elif t == "LOOT_DROPPED":
             # Brief kill-loot feedback at the corpse (vacuum may already take it)
@@ -1138,8 +1158,10 @@ class GameClient(ScreensMixin, CameraYaw):
             daily = msg.get("daily") or {}
             left = daily.get("remaining")
             extra = f" · {left} fights left today" if left is not None else ""
+            _duel = bool(msg.get("duel") or (msg.get("hud") or {}).get("duel"))
             self.add_chat(
-                f"Arena: {msg.get('foe_name')} — line up ready. Press Start Battle when set.{extra}",
+                (f"Arena duel vs {msg.get('foe_name')} — press Start Duel.{extra}" if _duel else
+                 f"Arena: {msg.get('foe_name')} — line up ready. Press Start Battle when set.{extra}"),
                 color=(255, 220, 90),
             )
         elif t == "ARENA_MATCH_UPDATE":
@@ -1157,6 +1179,8 @@ class GameClient(ScreensMixin, CameraYaw):
                     merged[uid] = u
                 self.arena_match["units"] = merged
                 self.arena_match["hud"] = msg.get("hud") or {}
+                if "reserves_released" in (msg.get("hud") or {}):
+                    self.arena_match["reserves_released"] = bool(msg["hud"]["reserves_released"])
                 if msg.get("phase"):
                     self.arena_match["phase"] = msg.get("phase")
                 elif (msg.get("hud") or {}).get("phase"):
@@ -1167,6 +1191,17 @@ class GameClient(ScreensMixin, CameraYaw):
                         self.monsters[uid] = u
                     else:
                         self.monsters.pop(uid, None)
+        elif t == "ARENA_DUEL":
+            import arena_duel_ui
+            arena_duel_ui.on_message(self, msg)
+        elif t == "ARENA_RESERVES":
+            match = getattr(self, "arena_match", None)
+            if match:
+                match["reserves_released"] = bool(msg.get("released", True))
+                hud = dict(match.get("hud") or {})
+                hud["reserves_released"] = True
+                match["hud"] = hud
+                self.add_chat("Reserves join the battle — gates open!", color=(255, 220, 90))
         elif t == "ARENA_MATCH_END":
             summary = msg.get("summary") or {}
             verb = "Victory" if summary.get("won") else "Defeat"
@@ -1185,6 +1220,14 @@ class GameClient(ScreensMixin, CameraYaw):
                 "units": prev.get("units") or {},
             }
             mercenaries_ui.close(self)
+            # Won by a finishing move: play the cinematic, then the result card.
+            fin, boss_id = summary.get("finisher"), summary.get("boss_id")
+            if summary.get("won") and fin and boss_id:
+                import arena_cinematic
+                if arena_cinematic.has(boss_id, fin):
+                    def _cin_done(c=self):
+                        c.arena_cinematic = None
+                    self.arena_cinematic = arena_cinematic.Player(boss_id, fin, on_done=_cin_done)
         elif t == "HOUSING_LIST":
             self.housing_lots = msg.get("lots") or []
             self.housing_bank = int(msg.get("bank_coins") or 0)
@@ -1563,6 +1606,9 @@ class GameClient(ScreensMixin, CameraYaw):
             elif self.state == "OPENING_COMIC":
                 import opening_comic
                 opening_comic.handle_event(self, event)
+            elif self.state == "THRONE_VISION":
+                import throne_vision
+                throne_vision.handle_event(self, event)
             elif self.state == "GAME":
                 self.handle_game_event(event)
 
@@ -1574,7 +1620,7 @@ class GameClient(ScreensMixin, CameraYaw):
         inv = self.player.get("inventory")
         if not isinstance(inv, dict):
             return
-        if self.show_bank or self.show_forge or self.show_cook or self.show_equipment or self.show_help or self.show_shop_panel or self.show_skills or self.show_pets or self.show_travel or self.fire_prompt or self.drop_prompt or self.arrow_prompt or self.tip_prompt or self.food_prompt or self.raw_prompt or self.food_bag_prompt or self.pack_prompt or self.log_prompt or self.potion_prompt or self.cook_prompt or self.combat_style_prompt:
+        if self.show_bank or self.show_forge or self.show_cook or self.show_equipment or self.show_help or self.show_shop_panel or self.show_skills or self.show_pets or self.show_travel or self.fire_prompt or self.drop_prompt or self.arrow_prompt or self.tip_prompt or self.food_prompt or self.raw_prompt or self.food_bag_prompt or self.storage_bag_prompt or self.pack_prompt or self.log_prompt or self.potion_prompt or self.cook_prompt or self.combat_style_prompt:
             return
         mx, my = pygame.mouse.get_pos()
         for slot, rect in self.inventory_slot_rects().items():
@@ -1590,10 +1636,24 @@ class GameClient(ScreensMixin, CameraYaw):
         if getattr(self, "outfitters", None) and self.outfitters.active:
             self.outfitters.handle_event(event)
             return
+        if getattr(self, "resting_ox", None) and self.resting_ox.active:
+            self.resting_ox.handle_event(event)
+            return
+        # Finisher cinematic owns the screen; Space / Esc / click skips it.
+        if getattr(self, "arena_cinematic", None):
+            self.arena_cinematic.handle_event(event)
+            return
+        # Boss duel moves (Q/E/F/Space/A/D/R) before the match HUD swallows input.
+        import arena_duel_ui
+        if arena_duel_ui.handle_event(self, event):
+            return
         # Arena result / barracks eat input first (result blocks the world).
         if mercenaries_ui.handle_event(self, event):
             return
-        if ui_coach.handle_event(self, event):
+        import guide_tour
+        if event.type == pygame.MOUSEBUTTONDOWN and guide_tour.handle_click(self, event):
+            return
+        if not guide_tour.active(self) and ui_coach.handle_event(self, event):
             return
         if new_player_guide.handle_event(self, event):
             return
@@ -1632,8 +1692,8 @@ class GameClient(ScreensMixin, CameraYaw):
                 or self.show_bank or self.show_shop_panel or self.show_skills
                 or self.show_pets or self.show_travel or self.show_world_map or self.show_cook
                 or self.fire_prompt or self.drop_prompt or self.arrow_prompt or self.tip_prompt
-                or self.food_prompt or self.raw_prompt or self.food_bag_prompt or self.pack_prompt
-                or self.log_prompt or self.potion_prompt or self.cook_prompt
+                or self.food_prompt or self.raw_prompt or self.food_bag_prompt or self.storage_bag_prompt
+                or self.pack_prompt or self.log_prompt or self.potion_prompt or self.cook_prompt
                 or self.dungeon_prompt or self.combat_style_prompt or self.show_wish
                 or self.wish_stat_choice
             ):
@@ -1703,7 +1763,16 @@ class GameClient(ScreensMixin, CameraYaw):
                 if event.key == pygame.K_ESCAPE:
                     mercenaries_ui.close(self)
                 return
-            if self.show_forge or self.show_cook or self.show_fletch or self.show_equipment or self.show_help or self.show_skills or self.show_pets or self.show_travel or self.show_world_map or self.fire_prompt or self.drop_prompt or self.loot_prompt or self.floor_loot_prompt or self.bone_prompt or self.monster_drops_panel or self.arrow_prompt or self.tip_prompt or self.food_prompt or self.raw_prompt or self.food_bag_prompt or self.pack_prompt or self.log_prompt or self.potion_prompt or self.cook_prompt or self.dungeon_prompt or self.show_wish or self.wish_stat_choice or self.combat_style_prompt or getattr(self, "guild_prompt", None):
+            if self.show_world_map and event.key in (
+                pygame.K_EQUALS, pygame.K_PLUS, pygame.K_KP_PLUS,
+                pygame.K_MINUS, pygame.K_KP_MINUS,
+            ):
+                if event.key in (pygame.K_EQUALS, pygame.K_PLUS, pygame.K_KP_PLUS):
+                    self.adjust_world_map_zoom(1)
+                else:
+                    self.adjust_world_map_zoom(-1)
+                return
+            if self.show_forge or self.show_cook or self.show_fletch or self.show_equipment or self.show_help or self.show_skills or self.show_pets or self.show_travel or self.show_world_map or self.fire_prompt or self.drop_prompt or self.loot_prompt or self.floor_loot_prompt or self.bone_prompt or self.monster_drops_panel or self.arrow_prompt or self.tip_prompt or self.food_prompt or self.raw_prompt or self.food_bag_prompt or self.storage_bag_prompt or self.pack_prompt or self.log_prompt or self.potion_prompt or self.cook_prompt or self.dungeon_prompt or self.show_wish or self.wish_stat_choice or self.combat_style_prompt or getattr(self, "guild_prompt", None):
                 if event.key == pygame.K_ESCAPE:
                     self.show_forge = False
                     self.show_cook = False
@@ -1726,6 +1795,7 @@ class GameClient(ScreensMixin, CameraYaw):
                     self.raw_prompt = None
                     self.food_bag_prompt = None
                     self.storage_bag_prompt = None
+                    self.bag_take_prompt = None
                     self.pack_prompt = None
                     self.log_prompt = None
                     self.potion_prompt = None
@@ -2045,6 +2115,7 @@ class GameClient(ScreensMixin, CameraYaw):
                 self.raw_prompt = None
                 self.food_bag_prompt = None
                 self.storage_bag_prompt = None
+                self.bag_take_prompt = None
                 self.pack_prompt = None
                 self.log_prompt = None
                 self.potion_prompt = None
@@ -2052,7 +2123,19 @@ class GameClient(ScreensMixin, CameraYaw):
                 self.dungeon_prompt = None
                 self.clear_walk()
         elif event.type == pygame.MOUSEWHEEL:
-            if self.state == "GAME" and self.show_pets:
+            if self.state == "GAME" and self.show_equipment:
+                import equipment_ui_v2
+                equipment_ui_v2.handle_wheel(self, float(getattr(event, "precise_y", event.y)))
+            elif self.state == "GAME" and (self.storage_bag_prompt or self.food_bag_prompt):
+                prompt = self.storage_bag_prompt or self.food_bag_prompt
+                dy = getattr(event, "precise_y", None)
+                if dy is None:
+                    dy = float(event.y)
+                if dy > 0:
+                    prompt["scroll"] = max(0, int(prompt.get("scroll") or 0) - 1)
+                elif dy < 0:
+                    prompt["scroll"] = int(prompt.get("scroll") or 0) + 1
+            elif self.state == "GAME" and self.show_pets:
                 dy = getattr(event, "precise_y", None)
                 if dy is None:
                     dy = float(event.y)
@@ -2119,14 +2202,20 @@ class GameClient(ScreensMixin, CameraYaw):
                         max_s = float((meta.get("sell") or {}).get("max_scroll", 9999))
                         self.shop_sell_scroll = max(0, min(max_s, self.shop_sell_scroll - dy * 40))
             elif self.state == "GAME" and self.show_world_map:
-                # Pan the scrollable world map
-                step = 4
                 mods = pygame.key.get_mods()
-                if mods & pygame.KMOD_SHIFT:
-                    self.world_map_scroll[0] -= event.y * step
+                # Ctrl / Cmd + wheel zooms the atlas; otherwise pan.
+                if mods & (pygame.KMOD_CTRL | pygame.KMOD_META):
+                    if event.y > 0:
+                        self.adjust_world_map_zoom(1)
+                    elif event.y < 0:
+                        self.adjust_world_map_zoom(-1)
                 else:
-                    self.world_map_scroll[1] -= event.y * step
-                self.clamp_world_map_scroll()
+                    step = 4
+                    if mods & pygame.KMOD_SHIFT:
+                        self.world_map_scroll[0] -= event.y * step
+                    else:
+                        self.world_map_scroll[1] -= event.y * step
+                    self.clamp_world_map_scroll()
             elif self.state == "GAME" and self.show_bank:
                 mx, my = pygame.mouse.get_pos()
                 box = pygame.Rect(120, 50, 780, 560)
@@ -2500,7 +2589,7 @@ class GameClient(ScreensMixin, CameraYaw):
             px, py = self.player_xy()
         for spot in self.interactables:
             kind = spot.get("kind")
-            if kind not in ("cave_entrance", "volcano_entrance", "dungeon_entrance"):
+            if kind not in ("cave_entrance", "volcano_entrance", "dungeon_entrance", "sewer_grate"):
                 continue
             if not spot.get("dungeon_id") and kind == "dungeon_entrance":
                 continue
@@ -2749,6 +2838,62 @@ class GameClient(ScreensMixin, CameraYaw):
         goals |= set(self.attack_range_goals(monster["x"], monster["y"]) or ())
         goals |= self.adjacent_goals(monster["x"], monster["y"])
         return goals
+
+    ATTACK_CHASE_TIMEOUT = 12.0  # seconds of chasing a foe before giving up
+
+    def attack_stand_goals(self, monster):
+        """Fallback stand tiles we can actually swing from right now.
+
+        melee_flank_goals offers 3-4 tile stand-offs; those satisfy the path
+        goal but not can_do_action, so arriving there used to stall the chase
+        (no ATTACK, target kept, idle logout). Keep only tiles in reach.
+        """
+        goals = self.attack_goals_with_fallback(monster)
+        if not monster:
+            return goals
+        act = {"type": "ATTACK", "target_id": monster.get("id")}
+        ok = {g for g in goals if self.can_do_action(act, g[0], g[1])}
+        return ok or goals
+
+    def _maybe_rechase_combat_target(self, px, py):
+        tid = self.combat_target_id
+        arena = (getattr(self, "arena_match", None) or {}).get("active")
+        if tid is None or self.pending_action or self.fleeing_combat or arena:
+            self._rechase_out_since = 0.0
+            return
+        m = self.monsters.get(tid) or self._monster_by_id(tid)
+        act = {"type": "ATTACK", "target_id": tid}
+        if not m or not m.get("alive") or self.can_do_action(act, px, py):
+            self._rechase_out_since = 0.0
+            self._rechase_first = None
+            return
+        now = time.time()
+        first = getattr(self, "_rechase_first", None)
+        if not first or first[0] != tid:
+            self._rechase_first = first = (tid, now)
+        if now - first[1] > self.ATTACK_CHASE_TIMEOUT:
+            self._rechase_first = None
+            self._give_up_chase("Couldn't catch that target.")
+            return
+        since = getattr(self, "_rechase_out_since", 0.0) or 0.0
+        if not since:
+            self._rechase_out_since = now
+            return
+        if now - since < 0.6:   # brief gap (side-step / lag): don't twitch
+            return
+        self._rechase_out_since = 0.0
+        started = getattr(self, "_rechase_first", None)
+        self.walk_and_act(self.attack_stand_goals(m), act)
+        self._rechase_first = started
+        if not self.pending_action and not self.walk_path:
+            self._rechase_out_since = now + 2.4   # unreachable right now: retry slower
+
+    def _give_up_chase(self, why="Lost track of that target."):
+        self.clear_walk()
+        self.combat_target_id = None
+        self._attack_intent_id = None
+        self._chase_started_at = 0.0
+        self.add_chat(f"[!] {why}", color=(255, 140, 100))
 
     def is_side_by_side_monster(self, mtype) -> bool:
         """True when combat snaps foe beside you on the same row (content flag)."""
@@ -3164,6 +3309,10 @@ class GameClient(ScreensMixin, CameraYaw):
         self.add_chat(f"Tracking {name}.")
 
     def _walk_to_quest_giver(self, qid):
+        if qid == "below_the_village":
+            if (self.quests.get(qid) or {}).get("status") == "active":
+                sewer_client.start_from_log(self)
+            return
         qdef = QUESTS.get(qid) or {}
         giver_id = qdef.get("giver")
         if not giver_id:
@@ -3463,6 +3612,8 @@ class GameClient(ScreensMixin, CameraYaw):
             "rooms_total": msg.get("rooms_total"),
             "rooms_cleared": msg.get("rooms_cleared"),
         }
+        if msg.get("sewer"):
+            self.dungeon["sewer"] = dict(msg["sewer"])
         self.monsters = {m["id"]: m for m in (msg.get("monsters") or [])}
         self.resources = {}
         self.ground_items = {}
@@ -3529,6 +3680,7 @@ class GameClient(ScreensMixin, CameraYaw):
         return px, py
 
     def clear_walk(self):
+        self._chase_started_at = 0.0
         self.walk_path = []
         self.walk_goal = None
         self.pending_action = None
@@ -3746,6 +3898,9 @@ class GameClient(ScreensMixin, CameraYaw):
             if (px, py) == (ax, ay):
                 return True
             return max(abs(ax - px), abs(ay - py)) <= 1 and not self.tile_walkable(ax, ay)
+        if kind == "BAR_ENTER":
+            bx, by = action.get("door", (9, 47))
+            return max(abs(px - bx), abs(py - by)) <= 2     # at the Resting Ox arched door (live pin)
         return False
 
     def fire_action(self, action):
@@ -3755,8 +3910,17 @@ class GameClient(ScreensMixin, CameraYaw):
         if kind == "DUNGEON_INTERACT":
             self.net.send("DUNGEON_INTERACT", x=action["x"], y=action["y"])
             return
+        if kind == "BAR_ENTER":
+            self.resting_ox.request_enter()
+            return
         if kind == "ATTACK":
-            self.begin_attack(action["target_id"])
+            # Send directly — do not call begin_attack here. walk_and_act reaches
+            # this when already on a goal tile; begin_attack → walk_and_act →
+            # fire_action would recurse until RecursionError.
+            tid = action.get("target_id")
+            if tid is not None:
+                self._attack_intent_id = tid
+                self.net.send("ATTACK", target_id=tid)
         elif kind == "TALK":
             self.net.send("TALK", npc_id=action["npc_id"])
         elif kind == "TRADE":
@@ -3845,8 +4009,8 @@ class GameClient(ScreensMixin, CameraYaw):
         if action and action.get("type") == "ATTACK" and action.get("target_id") is not None:
             m = self.monsters.get(action["target_id"]) or self._monster_by_id(action.get("target_id"))
             if m and m.get("alive"):
-                if not goal_set:
-                    goal_set = self.attack_goals_with_fallback(m)
+                goal_set = self.attack_stand_goals(m)
+                self._chase_started_at = time.time()
                 path = self.find_path(px, py, goal_set)
                 if path is None:
                     wider = self.attack_range_goals(m["x"], m["y"]) | self.adjacent_goals(m["x"], m["y"])
@@ -3880,13 +4044,45 @@ class GameClient(ScreensMixin, CameraYaw):
             self.fire_action(action)
             self.clear_walk()
 
+    def _maybe_walk_into_resting_ox(self, px, py):
+        ox = getattr(self, "resting_ox", None)
+        if ox is None or ox.active or self.dungeon:
+            self._ox_in_door = False
+            return
+        spot = None
+        for e in (getattr(self, "interactables", None) or []):
+            if e.get("id") == "resting_ox_arch":
+                spot = e
+                break
+        if not spot:
+            return
+        dx, dy = int(spot["x"]), int(spot["y"])
+        ex, ey = int(spot.get("enter_x", dx)), int(spot.get("enter_y", dy - 1))
+        tiles = {(dx, dy), (ex, ey)}
+        for yy in range(min(dy, ey), max(dy, ey) + 1):
+            tiles.add((dx, yy))
+        inside = (int(px), int(py)) in tiles
+        if inside and not getattr(self, "_ox_in_door", False):
+            if time.time() - getattr(self, "_ox_enter_sent", 0) > 1.5:
+                self._ox_enter_sent = time.time()
+                self.clear_walk()
+                ox.request_enter()
+        self._ox_in_door = inside
+
     def update_walk(self):
         if self.state != "GAME" or not self.player:
             return
         px, py = self.player_xy()
 
+        # The Resting Ox: stepping into the arched doorway (by click or keys) opens the bar scene.
+        self._maybe_walk_into_resting_ox(px, py)
+
         # While melee-fighting directly N/S of a foe, step beside them
         self._maybe_flank_combat_target()
+
+        # Engaged foe wandered out of reach: the server keeps the fight open but
+        # never swings, so re-chase it (was: stood still until idle logout).
+        self._maybe_rechase_combat_target(px, py)
 
         # Chase / complete pending action when in range
         if self.pending_action:
@@ -3903,9 +4099,15 @@ class GameClient(ScreensMixin, CameraYaw):
                         self.fire_action(act)
                         self.clear_walk()
                         return
-                    # Re-path if the foe moved off our goal; union of stand tiles
-                    # means we still reach them when preferred flanks are blocked.
-                    goals = self.attack_goals_with_fallback(m)
+                    started = getattr(self, "_chase_started_at", 0.0) or 0.0
+                    if not started:
+                        self._chase_started_at = started = time.time()
+                    if time.time() - started > self.ATTACK_CHASE_TIMEOUT:
+                        self._give_up_chase("Couldn't catch that target.")
+                        return
+                    # Re-path while the foe moves; only stand tiles we can
+                    # swing from count, so we never park out of reach.
+                    goals = self.attack_stand_goals(m)
                     need = True
                     if self.walk_path and self.walk_path[-1] in goals:
                         need = False
@@ -3946,7 +4148,7 @@ class GameClient(ScreensMixin, CameraYaw):
         if abs(dx) + abs(dy) != 1:
             if self.pending_action and self.pending_action["type"] == "ATTACK":
                 m = self.monsters.get(self.pending_action["target_id"])
-                goals = self.approach_goals_for(m) if m else set()
+                goals = self.attack_stand_goals(m) if m else set()
             else:
                 goals = {self.walk_path[-1]} if self.walk_path else set()
             path = self.find_path(px, py, goals) if goals else None
@@ -4540,6 +4742,17 @@ class GameClient(ScreensMixin, CameraYaw):
             option_rects.append(rect)
         menu["option_rects"] = option_rects
 
+    def _throne_vision_due(self):
+        """The intro film plays once per account: until the server's played flag is set."""
+        import throne_vision
+        return bool(self.player) and not self.player.get("throne_vision_seen") and throne_vision.available()
+
+    def _after_throne_vision(self):
+        """First viewing over (watched or skipped): carry on into the world as usual."""
+        self._offer_appearance()
+        if self.arrival_guide:
+            new_player_guide.start(self)
+
     def handle_mouse_click(self, event):
         mx, my = event.pos
         ofx = getattr(self, "outfit_fx_rect", None)
@@ -4551,6 +4764,17 @@ class GameClient(ScreensMixin, CameraYaw):
         if self.show_help and ofo and ofo.collidepoint(mx, my):
             import outfit_fx
             outfit_fx.toggle_others()
+            return
+        tour = getattr(self, "guide_tour_replay_rect", None)
+        if self.show_help and tour and tour.collidepoint(mx, my):
+            import guide_tour
+            guide_tour.replay(self)
+            return
+        replay = getattr(self, "throne_vision_replay_rect", None)
+        if self.show_help and replay and replay.collidepoint(mx, my):
+            import throne_vision
+            self.show_help = False
+            throne_vision.begin(self, replay=True)
             return
         follow = getattr(self, "ember_follow_rect", None)
         if self.show_help and follow and follow.collidepoint(mx, my):
@@ -4657,11 +4881,14 @@ class GameClient(ScreensMixin, CameraYaw):
         if self.raw_prompt:
             self.handle_raw_prompt_click(mx, my)
             return
+        if self.bag_take_prompt:
+            self.handle_bag_take_prompt_click(mx, my)
+            return
         if self.food_bag_prompt:
-            self.handle_food_bag_prompt_click(mx, my)
+            self.handle_food_bag_prompt_click(mx, my, button=getattr(event, "button", 1))
             return
         if self.storage_bag_prompt:
-            self.handle_storage_bag_prompt_click(mx, my)
+            self.handle_storage_bag_prompt_click(mx, my, button=getattr(event, "button", 1))
             return
         if self.pack_prompt:
             self.handle_pack_prompt_click(mx, my)
@@ -4811,14 +5038,18 @@ class GameClient(ScreensMixin, CameraYaw):
                         goals.add(pad)
                         self.walk_and_act(goals, {"type": "STAIR", "x": pad[0], "y": pad[1]})
                     return
-            # Exit mouth on the south wall — click to leave
+            # Exit mouth / sewer ladder — click nearby to leave (sewer gets a
+            # wider pad so the tall ladder sprite is easy to hit).
             ex = int((self.dungeon or {}).get("exit_x", self.world_w // 2))
             ey = int((self.dungeon or {}).get("exit_y", self.world_h - 1))
-            if max(abs(tx - ex), abs(ty - ey)) <= 1:
+            exit_pad = 3 if self.dungeon.get("id") == "sewer" else 1
+            if max(abs(tx - ex), abs(ty - ey)) <= exit_pad:
                 goals = self.adjacent_goals(ex, ey)
                 if self.tile_walkable(ex, ey):
                     goals = set(goals) | {(ex, ey)}
                 self.walk_and_act(goals, {"type": "LEAVE_DUNGEON"})
+                return
+            if self.dungeon.get("id") == "sewer" and sewer_client.handle_click(self, tx, ty):
                 return
             if self.dungeon.get("v2") == "depths":
                 import depths_v2_client
@@ -4842,7 +5073,7 @@ class GameClient(ScreensMixin, CameraYaw):
                         goals = set(goals) | {(lx, ly)}
                     self.walk_and_act(goals, {"type": "WISH", "x": lx, "y": ly})
                     return
-                if kind in ("cave_entrance", "volcano_entrance"):
+                if kind in ("cave_entrance", "volcano_entrance", "sewer_grate"):
                     goals = set()
                     for mx2, my2 in entrance_mouth_tiles(lx, ly, kind):
                         if self.tile_walkable(mx2, my2):
@@ -5153,6 +5384,8 @@ class GameClient(ScreensMixin, CameraYaw):
                 radius = 2
             elif kind in ("cave_entrance", "volcano_entrance"):
                 radius = 2
+            elif kind == "sewer_grate":
+                radius = 1
             else:
                 continue
             d = max(abs(spot["x"] - tx), abs(spot["y"] - ty))
@@ -5358,6 +5591,14 @@ class GameClient(ScreensMixin, CameraYaw):
             if not self.can_do_action(act, px, py):
                 m = self.monsters.get(target_id) or self._monster_by_id(target_id)
                 if m and m.get("alive"):
+                    # Guard against re-entrant begin_attack while already pathing here.
+                    pending = getattr(self, "pending_action", None) or {}
+                    if (
+                        pending.get("type") == "ATTACK"
+                        and pending.get("target_id") == target_id
+                        and getattr(self, "walk_path", None)
+                    ):
+                        return
                     self.walk_and_act(self.attack_goals_with_fallback(m), act)
                     return
         self.net.send("ATTACK", target_id=target_id)
@@ -5623,9 +5864,25 @@ class GameClient(ScreensMixin, CameraYaw):
         self.cook_prompt = None
         self.fire_prompt = None
 
-    def open_food_bag_prompt(self, slot, entry):
-        self.food_bag_prompt = {"slot": slot, "item_id": "food_bag"}
-        self.storage_bag_prompt = None
+    def open_bag_browser(self, bag_item_id, slot=None):
+        """Open the contents browser for a bag/quiver (inventory click or Bags panel)."""
+        labels = {
+            "arrow_quiver": ("Quiver", "quiver_total"),
+            "arrowtip_box": ("Tip Box", "tip_box_total"),
+            "food_bag": ("Food Bag", "food_bag_total"),
+            "raw_food_bag": ("Raw Food Bag", "raw_bag_total"),
+            "mining_bag": ("Mining Bag", "mining_bag_total"),
+            "log_bag": ("Log Bag", "log_bag_total"),
+            "fletch_pouch": ("Fletching Pouch", "fletch_pouch_total"),
+            "potion_pouch": ("Potion Pouch", "potion_pouch_total"),
+            "gem_bag": ("Gem Bag", "gem_bag_total"),
+        }
+        label, tot_key = labels.get(bag_item_id, ("Bag", None))
+        tot = int((self.player or {}).get(tot_key) or 0) if tot_key else 0
+        prompt = {
+            "slot": slot, "item_id": bag_item_id, "label": label, "total": tot, "scroll": 0,
+        }
+        self.bag_take_prompt = None
         self.drop_prompt = None
         self.arrow_prompt = None
         self.tip_prompt = None
@@ -5636,34 +5893,57 @@ class GameClient(ScreensMixin, CameraYaw):
         self.potion_prompt = None
         self.cook_prompt = None
         self.fire_prompt = None
+        if bag_item_id == "food_bag":
+            self.food_bag_prompt = prompt
+            self.storage_bag_prompt = None
+        else:
+            self.storage_bag_prompt = prompt
+            self.food_bag_prompt = None
+        try:
+            self.net.send("BAG_OPENED", bag_id=bag_item_id)
+        except Exception:
+            pass
+
+    def open_food_bag_prompt(self, slot, entry):
+        self.open_bag_browser("food_bag", slot=slot)
 
     def open_storage_bag_prompt(self, slot, entry):
-        item_id = entry["item_id"]
-        labels = {
-            "arrowtip_box": ("Tip Box", "tip_box_total", "has_tip_box"),
-            "raw_food_bag": ("Raw Food Bag", "raw_bag_total", "has_raw_bag"),
-            "mining_bag": ("Mining Bag", "mining_bag_total", "has_mining_bag"),
-            "log_bag": ("Log Bag", "log_bag_total", "has_log_bag"),
-            "fletch_pouch": ("Fletching Pouch", "fletch_pouch_total", "has_fletch_pouch"),
-            "potion_pouch": ("Potion Pouch", "potion_pouch_total", "has_potion_pouch"),
-            "gem_bag": ("Gem Bag", "gem_bag_total", "has_gem_bag"),
+        self.open_bag_browser(entry["item_id"], slot=slot)
+
+    def _send_bag_action(self, bag_item_id, action, **extra):
+        """BAG_ACTION works even when the quiver is equipped (no inventory slot)."""
+        self.net.send("BAG_ACTION", bag_id=bag_item_id, action=action, **extra)
+
+    def open_bag_take_prompt(self, bag_item_id, withdraw_id, qty, name):
+        self.bag_take_prompt = {
+            "bag_id": bag_item_id,
+            "withdraw_id": withdraw_id,
+            "qty": max(1, int(qty or 1)),
+            "name": name or withdraw_id,
         }
-        label, tot_key, flag = labels.get(item_id, ("Bag", None, None))
-        tot = int((self.player or {}).get(tot_key) or 0) if tot_key else 0
-        self.storage_bag_prompt = {
-            "slot": slot, "item_id": item_id, "label": label, "total": tot,
+
+    def _bag_contents_rows(self, bag_item_id):
+        """Sorted (item_id, qty, display_name) list for a bag/quiver from live player state."""
+        key_map = {
+            "arrow_quiver": "quiver",
+            "arrowtip_box": "tip_box",
+            "food_bag": "food_bag",
+            "raw_food_bag": "raw_bag",
+            "mining_bag": "mining_bag",
+            "log_bag": "log_bag",
+            "fletch_pouch": "fletch_pouch",
+            "potion_pouch": "potion_pouch",
+            "gem_bag": "gem_bag",
         }
-        self.food_bag_prompt = None
-        self.drop_prompt = None
-        self.arrow_prompt = None
-        self.tip_prompt = None
-        self.food_prompt = None
-        self.raw_prompt = None
-        self.pack_prompt = None
-        self.log_prompt = None
-        self.potion_prompt = None
-        self.cook_prompt = None
-        self.fire_prompt = None
+        contents = (self.player or {}).get(key_map.get(bag_item_id) or "") or {}
+        rows = []
+        for iid, qty in contents.items():
+            q = int(qty or 0)
+            if q <= 0:
+                continue
+            rows.append((iid, q, (ITEMS.get(iid) or {}).get("name", iid)))
+        rows.sort(key=lambda r: (-r[1], r[2].lower()))
+        return rows
 
     def open_pack_prompt(self, slot, entry):
         item_id = entry["item_id"]
@@ -5961,62 +6241,104 @@ class GameClient(ScreensMixin, CameraYaw):
         if box and not box.collidepoint(mx, my):
             self.raw_prompt = None
 
-    def handle_food_bag_prompt_click(self, mx, my):
-        rects = self.food_bag_prompt_rects
+    def _handle_bag_browser_click(self, mx, my, prompt, rects, *, button=1):
+        """Shared click logic for food/storage bag contents browsers."""
+        if not prompt or not rects:
+            return False
+        bag_id = prompt.get("item_id")
         box = rects.get("box")
-        prompt = self.food_bag_prompt
-        if not prompt:
-            return
         if rects.get("eat") and rects["eat"].collidepoint(mx, my):
-            self.net.send("USE_ITEM", slot_index=prompt["slot"], action="eat")
-            self.food_bag_prompt = None
-            self.pack_prompt = None
-            self.log_prompt = None
-            self.potion_prompt = None
-            return
+            self._send_bag_action(bag_id, "eat")
+            return True
         if rects.get("pack") and rects["pack"].collidepoint(mx, my):
-            self.net.send("USE_ITEM", slot_index=prompt["slot"])
-            self.food_bag_prompt = None
-            self.storage_bag_prompt = None
-            self.pack_prompt = None
-            self.log_prompt = None
-            self.potion_prompt = None
-            return
+            self._send_bag_action(bag_id, "pack")
+            return True
         if rects.get("unpack") and rects["unpack"].collidepoint(mx, my):
-            self.net.send("USE_ITEM", slot_index=prompt["slot"], action="unpack")
-            self.food_bag_prompt = None
-            return
+            self._send_bag_action(bag_id, "unpack")
+            return True
+        if rects.get("scroll_up") and rects["scroll_up"].collidepoint(mx, my):
+            prompt["scroll"] = max(0, int(prompt.get("scroll") or 0) - 1)
+            return True
+        if rects.get("scroll_dn") and rects["scroll_dn"].collidepoint(mx, my):
+            prompt["scroll"] = int(prompt.get("scroll") or 0) + 1
+            return True
+        take_btns = rects.get("take") or {}
+        all_btns = rects.get("take_all") or {}
+        more_btns = rects.get("take_more") or {}
+        for iid, r in take_btns.items():
+            if r.collidepoint(mx, my):
+                self._send_bag_action(bag_id, "withdraw", withdraw_id=iid, qty=1)
+                return True
+        for iid, r in all_btns.items():
+            if r.collidepoint(mx, my):
+                self._send_bag_action(bag_id, "withdraw", withdraw_id=iid, qty=99999)
+                return True
+        for iid, r in more_btns.items():
+            if r.collidepoint(mx, my):
+                rows = {row[0]: row for row in self._bag_contents_rows(bag_id)}
+                meta = rows.get(iid)
+                qty = int(meta[1]) if meta else 1
+                name = meta[2] if meta else iid
+                self.open_bag_take_prompt(bag_id, iid, qty, name)
+                return True
+        rows = rects.get("rows") or {}
+        for iid, row_rect in rows.items():
+            if row_rect.collidepoint(mx, my):
+                if button == 3:
+                    meta_rows = {row[0]: row for row in self._bag_contents_rows(bag_id)}
+                    meta = meta_rows.get(iid)
+                    qty = int(meta[1]) if meta else 1
+                    name = meta[2] if meta else iid
+                    self.open_bag_take_prompt(bag_id, iid, qty, name)
+                    return True
+                shift = bool(pygame.key.get_mods() & pygame.KMOD_SHIFT)
+                qty = 99999 if shift else 1
+                self._send_bag_action(bag_id, "withdraw", withdraw_id=iid, qty=qty)
+                return True
         if rects.get("cancel") and rects["cancel"].collidepoint(mx, my):
-            self.food_bag_prompt = None
-            self.pack_prompt = None
-            self.log_prompt = None
-            self.potion_prompt = None
-            return
+            return "close"
         if box and not box.collidepoint(mx, my):
-            self.food_bag_prompt = None
-            self.pack_prompt = None
-            self.log_prompt = None
-            self.potion_prompt = None
+            return "close"
+        return True
 
-    def handle_storage_bag_prompt_click(self, mx, my):
-        rects = self.storage_bag_prompt_rects
-        box = rects.get("box")
-        prompt = self.storage_bag_prompt
+    def handle_food_bag_prompt_click(self, mx, my, button=1):
+        result = self._handle_bag_browser_click(
+            mx, my, self.food_bag_prompt, self.food_bag_prompt_rects, button=button,
+        )
+        if result == "close":
+            self.food_bag_prompt = None
+            self.bag_take_prompt = None
+
+    def handle_storage_bag_prompt_click(self, mx, my, button=1):
+        result = self._handle_bag_browser_click(
+            mx, my, self.storage_bag_prompt, self.storage_bag_prompt_rects, button=button,
+        )
+        if result == "close":
+            self.storage_bag_prompt = None
+            self.bag_take_prompt = None
+
+    def handle_bag_take_prompt_click(self, mx, my):
+        rects = self.bag_take_prompt_rects
+        prompt = self.bag_take_prompt
         if not prompt:
             return
-        if rects.get("pack") and rects["pack"].collidepoint(mx, my):
-            self.net.send("USE_ITEM", slot_index=prompt["slot"], action="pack")
-            self.storage_bag_prompt = None
-            return
-        if rects.get("unpack") and rects["unpack"].collidepoint(mx, my):
-            self.net.send("USE_ITEM", slot_index=prompt["slot"], action="unpack")
-            self.storage_bag_prompt = None
-            return
+        box = rects.get("box")
+        for key in ("one", "five", "ten", "all"):
+            r = rects.get(key)
+            if r and r.collidepoint(mx, my):
+                have = max(1, int(prompt.get("qty") or 1))
+                qty = {"one": 1, "five": 5, "ten": 10, "all": have}[key]
+                self._send_bag_action(
+                    prompt["bag_id"], "withdraw",
+                    withdraw_id=prompt["withdraw_id"], qty=min(qty, have),
+                )
+                self.bag_take_prompt = None
+                return
         if rects.get("cancel") and rects["cancel"].collidepoint(mx, my):
-            self.storage_bag_prompt = None
+            self.bag_take_prompt = None
             return
         if box and not box.collidepoint(mx, my):
-            self.storage_bag_prompt = None
+            self.bag_take_prompt = None
 
     def handle_pack_prompt_click(self, mx, my):
         rects = self.pack_prompt_rects
@@ -6211,12 +6533,13 @@ class GameClient(ScreensMixin, CameraYaw):
             self.cook_prompt = None
 
     def sell_price(self, item_id):
-        base = int(ITEMS.get(item_id, {}).get("value", 0) * 0.4)
+        rate = float((self.shop or {}).get("sell_rate") or 0.4)
+        base = int(ITEMS.get(item_id, {}).get("value", 0) * rate)
         mult = float((self.shop or {}).get("sell_mult") or 1.0)
         return max(1, int(round(base * mult)) if base > 0 else 0)
 
     def shop_will_buy_item(self, item_id):
-        """Match server shop buy filters (types / equip slots)."""
+        """Match server shop buy filters (types / equip slots / specialty lists)."""
         if not self.shop or not self.shop.get("buys", True):
             return False
         item = ITEMS.get(item_id) or {}
@@ -6224,13 +6547,24 @@ class GameClient(ScreensMixin, CameraYaw):
             return False
         buy_types = self.shop.get("buys_types") or []
         buy_slots = self.shop.get("buys_slots") or []
-        if not buy_types and not buy_slots:
+        buy_ids = self.shop.get("buys_ids") or []
+        ranged = bool(item.get("ranged_att") or item.get("ranged_str"))
+        if item_id in buy_ids:
             return True
+        if self.shop.get("buys_ranged_weapons") and item.get("type") == "weapon" and ranged:
+            return True
+        if not buy_types and not buy_slots and not self.shop.get("buys_ranged_weapons"):
+            return True
+        ok = False
         if buy_types and item.get("type") in buy_types:
-            return True
+            ok = True
         if buy_slots and item.get("equip_slot") in buy_slots:
-            return True
-        return False
+            ok = True
+        if not ok:
+            return False
+        if self.shop.get("buys_exclude_ranged") and ranged:
+            return False
+        return True
 
     def owns_shop_item(self, item_id):
         """True when a one-per-character item (bag, pouch, quiver) is already yours.
@@ -6301,10 +6635,17 @@ class GameClient(ScreensMixin, CameraYaw):
         elif self.state == "OPENING_COMIC":
             import opening_comic
             opening_comic.draw(self)
+        elif self.state == "THRONE_VISION":
+            import throne_vision
+            throne_vision.draw(self)
         else:
             self.draw_game()
             idle_client.draw(self)
+            if getattr(self, "arena_cinematic", None):
+                self.arena_cinematic.draw(self.screen)
 
+        if getattr(self, "resting_ox", None) and self.resting_ox.active and self.state == "GAME":
+            self.resting_ox.render(self.screen)
         if self.outfitters.active:
             self.outfitters.render(self.screen)
 
@@ -6541,11 +6882,14 @@ class GameClient(ScreensMixin, CameraYaw):
                     void_v2_client.draw_overlay(self, now)
         if self.dungeon_victory:
             self.draw_dungeon_victory()
+        sewer_client.draw_overlay(self, MAP_W, MAP_H)
         self.draw_teleport_button()
         if self.dialogue:
             self.draw_dialogue()
         # Pointers must draw above the talk box — they used to paint inside draw_map and vanish under dialogue.
-        ui_coach.draw(self)
+        import guide_tour
+        if not guide_tour.active(self):
+            ui_coach.draw(self)
         if self.housing_open:
             import housing_sprites
             housing_sprites.draw_panel(self)
@@ -6556,7 +6900,10 @@ class GameClient(ScreensMixin, CameraYaw):
         match = getattr(self, "arena_match", None)
         if match:
             if match.get("active"):
+                import arena_duel_ui
+                arena_duel_ui.draw_stage(self)
                 mercenaries_ui.draw_match_hud(self)
+                arena_duel_ui.draw(self)
             elif match.get("result"):
                 mercenaries_ui.draw_match_result(self, match)
         if getattr(self, "royal_panel", None):
@@ -6607,6 +6954,8 @@ class GameClient(ScreensMixin, CameraYaw):
             self.draw_food_bag_prompt()
         if self.storage_bag_prompt:
             self.draw_storage_bag_prompt()
+        if self.bag_take_prompt:
+            self.draw_bag_take_prompt()
         if self.pack_prompt:
             self.draw_pack_prompt()
         if self.log_prompt:
@@ -6631,6 +6980,10 @@ class GameClient(ScreensMixin, CameraYaw):
             self.draw_examine_panel()
         self.draw_context_menu()
         self.draw_teleport_fx()
+        # Seraphine's tour sits above every panel (it dims them and rings one target).
+        import guide_tour
+        guide_tour.tick(self)
+        guide_tour.draw(self)
 
     def draw_map(self):
         import emberdeep_v2_client
@@ -6894,7 +7247,7 @@ class GameClient(ScreensMixin, CameraYaw):
             outdoor_kinds = {
                 "door", "dungeon_entrance", "cave_entrance", "volcano_entrance", "wishing_well",
                 "warning_sign", "signpost",
-                "fountain", "market_stall",
+                "fountain", "market_stall", "sewer_grate",
             }
             for spot in self.interactables:
                 kind = spot.get("kind")
@@ -7004,6 +7357,9 @@ class GameClient(ScreensMixin, CameraYaw):
                                 self.blit_nameplate("CASTLE REALM", cx, entrance_top - 22, (255, 220, 120))
                             else:
                                 self.blit_nameplate("DUNGEON", cx, entrance_top - 4, (210, 170, 255))
+                        elif kind == "sewer_grate":
+                            top = sewer_client.draw_grate(self, cx, cy, TILE, t)
+                            self.blit_nameplate(spot.get("name", "Sewer grate"), cx, top - 8, (200, 230, 160))
                         elif kind == "warning_sign":
                             sprites.draw_warning_sign(self.screen, cx, cy, TILE, t)
                             self.blit_nameplate(spot.get("name", "⚠ DANGER"), cx, cy - TILE // 2 - 8, (255, 140, 90))
@@ -7295,7 +7651,8 @@ class GameClient(ScreensMixin, CameraYaw):
                         elif m.get("side") == "you":
                             face_h = 1
                         feet = cy + TILE // 2
-                        if m.get("arena_soldier"):
+                        _boss_top = None
+                        if m.get("arena_soldier") and not m.get("boss"):
                             self._draw_arena_team_mark(cx, feet, m.get("side"))
                         drawn_hd = False
                         use_art = m.get("player_art") or _mdef.get("player_art") or m.get("arena_soldier")
@@ -7312,7 +7669,21 @@ class GameClient(ScreensMixin, CameraYaw):
                             tile_px = int(round(TILE * 1.1))
                             gender = str(m.get("gender") or _mdef.get("gender") or "male")
                             # Arena: skip gear sparkles + reuse a look template (20 HD dolls is heavy).
-                            if m.get("arena_soldier"):
+                            if m.get("arena_soldier") and m.get("boss"):
+                                # Arena champion boss: its own HD sheet; soldier doll only if the sheet fails.
+                                try:
+                                    import arena_battles_ui
+                                    _boss_top = arena_battles_ui.draw_boss(
+                                        self.screen, m, cx, feet, tile_px, t, anim, atk, swing, hd_face,
+                                    )
+                                except Exception:
+                                    _boss_top = None
+                                drawn_hd = _boss_top is not None
+                                if not drawn_hd:
+                                    drawn_hd = self._draw_arena_soldier_hd(
+                                        m, cx, feet, tile_px, t, anim, atk, swing, hd_face, eq, gender,
+                                    )
+                            elif m.get("arena_soldier"):
                                 drawn_hd = self._draw_arena_soldier_hd(
                                     m, cx, feet, tile_px, t, anim, atk, swing, hd_face, eq, gender,
                                 )
@@ -7345,8 +7716,17 @@ class GameClient(ScreensMixin, CameraYaw):
                                 moving=False, t=t, facing=face_h,
                                 equipment=eq, attacking=atk, gender="male",
                             )
-                        if m.get("arena_soldier"):
+                        if m.get("arena_soldier") and _boss_top is not None:
+                            m["_boss_top"] = _boss_top
+                            import arena_battles_ui
+                            arena_battles_ui.draw_boss_plate(self, m, cx, _boss_top)
+                            self._duel_boss_screen = (cx, _boss_top - 30)
+                        elif m.get("arena_soldier"):
+                            m.pop("_boss_top", None)
                             self._draw_arena_team_rim(cx, feet, m.get("side"))
+                            # Match HP bars always-on so the fight stays readable.
+                            if (getattr(self, "arena_match", None) or {}).get("active"):
+                                self.draw_hp_bar(cx, feet - int(TILE * 1.55), m["hp"], m["max_hp"])
                     elif (
                         lowpoly
                         and lowpoly_dragon_sprites.draw_lowpoly_dragon(
@@ -7389,14 +7769,22 @@ class GameClient(ScreensMixin, CameraYaw):
                         ny = hy
                     lvl = int(m.get("level") or 1)
                     lvl_color = self.monster_threat_color(lvl)
-                    if wounded or near or targeted or m.get("frozen") or _is_humanoid:
+                    if m.get("arena_soldier") and m.get("_boss_top") is not None:
+                        pass  # boss plate (name, level, HP) already drawn above its head
+                    elif wounded or near or targeted or m.get("frozen") or _is_humanoid:
                         if _is_humanoid:
+                            arena_live = bool(
+                                m.get("arena_soldier")
+                                and (getattr(self, "arena_match", None) or {}).get("active")
+                            )
                             show_hp = (
-                                wounded
+                                arena_live
+                                or wounded
                                 or float(m.get("attacking") or 0) > 0.15
                                 or int(m.get("hp") or 0) < int(m.get("max_hp") or 1)
                             )
-                            if show_hp or not m.get("arena_soldier"):
+                            # Arena match already drew an always-on bar above the sprite.
+                            if (show_hp or not m.get("arena_soldier")) and not arena_live:
                                 self.draw_hp_bar(cx, ny - 36, m["hp"], m["max_hp"])
                             # Deployed field squad — no floating names (team mark is enough).
                             # Also hide if owner_id is set (older clients / partial payloads).
@@ -7412,7 +7800,13 @@ class GameClient(ScreensMixin, CameraYaw):
                                     if om.get("arena_soldier") and om.get("alive")
                                     and not om.get("field_soldier")
                                 )
-                                show_name = (
+                                near_boss = (not m.get("boss")) and any(
+                                    om.get("boss") and om.get("alive", True)
+                                    and abs(float(om.get("x", 0)) - float(m.get("x", 0))) < 2.5
+                                    and abs(float(om.get("y", 0)) - float(m.get("y", 0))) < 3.5
+                                    for om in (self.monsters or {}).values()
+                                )
+                                show_name = (not near_boss or targeted) and (
                                     alive_arena <= 8
                                     or wounded
                                     or float(m.get("attacking") or 0) > 0.15
@@ -7692,6 +8086,9 @@ class GameClient(ScreensMixin, CameraYaw):
                         cmb = self.player_combat_level()
                     title = p.get("noble_title") or ((self.player or {}).get("noble_title") if is_self else "")
                     shown = f"{title} {p['name']}" if title else p["name"]
+                    tline = p.get("title_line") or ((self.player or {}).get("title_line") if is_self else "")
+                    if tline:
+                        shown = f"{shown} the {tline}"
                     house = p.get("personal_house") or (
                         (self.player or {}).get("personal_house") if is_self else None
                     )
@@ -7857,7 +8254,10 @@ class GameClient(ScreensMixin, CameraYaw):
         # Zoom level toast
         if time.time() < getattr(self, "_zoom_toast_until", 0):
             ztxt = self.font_small.render(self.zoom_label(), True, WHITE)
-            zr = pygame.Rect(10, 38, ztxt.get_width() + 16, 22)
+            # Sit beside the zone chip (top-left) instead of on top of it.
+            _zc = (getattr(self, "hud_world_rects", None) or {}).get("zone")
+            zx = (_zc.right + 8) if _zc else 10
+            zr = pygame.Rect(zx, 15, ztxt.get_width() + 16, 22)
             pygame.draw.rect(self.screen, (28, 26, 36), zr, border_radius=6)
             pygame.draw.rect(self.screen, ACCENT, zr, 1, border_radius=6)
             self.screen.blit(ztxt, (zr.x + 8, zr.y + 3))
@@ -8236,6 +8636,9 @@ class GameClient(ScreensMixin, CameraYaw):
                 castle_interiors_v2.queue_walls(self, draw_list, cam_x, cam_y, TILE)
                 castle_interiors_v2.queue_props(self, draw_list, cam_x, cam_y, TILE)
             return
+        if self.dungeon and self.dungeon.get("id") == "sewer":
+            sewer_client.queue_props(self, draw_list, cam_x, cam_y, TILE, t)
+            return
         if self.dungeon and self.dungeon.get("v2") == "depths":
             import depths_v2_client
             depths_v2_client.queue_wall_faces(self, draw_list, cam_x, cam_y, vis_w, vis_h, t)
@@ -8354,6 +8757,10 @@ class GameClient(ScreensMixin, CameraYaw):
             self.chat_log.append("[!] Can't use that door.")
             self.chat_log = self.chat_log[-8:]
             return
+        if spot.get("id") == "resting_ox_arch" and target == enter:
+            # The Resting Ox: through the arched door into the bar scene (client/resting_ox_bar.py)
+            self.walk_and_act(goals, {"type": "BAR_ENTER", "door": (int(spot["x"]), int(spot["y"]))})
+            return
         self.walk_and_act(goals, None)
 
     def _paint_meadow(self, rect, wx, wy, zone):
@@ -8442,6 +8849,9 @@ class GameClient(ScreensMixin, CameraYaw):
         if self.dungeon and self.dungeon.get("id") == "castle_realm":
             import castle_realm_renderer
             if castle_realm_renderer.draw_terrain_tile(self, rect, tile_id, wx, wy, t):
+                return
+        if self.dungeon and self.dungeon.get("id") == "sewer":
+            if sewer_client.draw_tile(self, rect, tile_id, wx, wy, t):
                 return
         if self.dungeon and self.dungeon.get("v2") == "depths":
             import depths_v2_client
@@ -9758,20 +10168,20 @@ class GameClient(ScreensMixin, CameraYaw):
         return True
 
     def _draw_arena_team_mark(self, cx, feet_y, side):
-        """Soft coloured pool under the soldier so teams read at a glance."""
+        """Bold team-colour ring under the soldier so sides read at a glance."""
         fill, rim = self._arena_team_colors(side)
-        w = max(18, int(TILE * 0.78))
-        h = max(8, int(TILE * 0.28))
-        pool = pygame.Surface((w + 8, h + 6), pygame.SRCALPHA)
-        pygame.draw.ellipse(pool, (*fill, 110), pool.get_rect().inflate(-2, -2))
-        pygame.draw.ellipse(pool, (*rim, 180), pool.get_rect().inflate(-2, -2), 2)
+        w = max(22, int(TILE * 0.92))
+        h = max(10, int(TILE * 0.34))
+        pool = pygame.Surface((w + 10, h + 8), pygame.SRCALPHA)
+        pygame.draw.ellipse(pool, (*fill, 150), pool.get_rect().inflate(-2, -2))
+        pygame.draw.ellipse(pool, (*rim, 220), pool.get_rect().inflate(-2, -2), 3)
         self.screen.blit(pool, (cx - pool.get_width() // 2, feet_y - h // 2 - 1))
 
     def _draw_arena_team_rim(self, cx, feet_y, side):
-        """Thin team-coloured outline near the boots after the sprite draws."""
+        """Team-coloured outline near the boots after the sprite draws."""
         _fill, rim = self._arena_team_colors(side)
-        rx = max(10, int(TILE * 0.42))
-        ry = max(5, int(TILE * 0.16))
+        rx = max(12, int(TILE * 0.48))
+        ry = max(6, int(TILE * 0.18))
         rect = pygame.Rect(cx - rx, feet_y - ry - 2, rx * 2, ry * 2)
         pygame.draw.ellipse(self.screen, rim, rect, 2)
 
@@ -10222,11 +10632,17 @@ class GameClient(ScreensMixin, CameraYaw):
         self.screen.blit(cover, rect.topleft)
 
     def world_map_view_rect(self):
-        return pygame.Rect(110, 40, 780, 560)
+        return pygame.Rect(70, 28, 860, 600)
 
     def world_map_canvas_rect(self):
         box = self.world_map_view_rect()
-        return pygame.Rect(box.x + 20, box.y + 70, 700, 430)
+        # Leave a right rail for place portrait cards.
+        return pygame.Rect(box.x + 18, box.y + 64, 560, 470)
+
+    def world_map_side_rect(self):
+        box = self.world_map_view_rect()
+        canvas = self.world_map_canvas_rect()
+        return pygame.Rect(canvas.right + 14, canvas.y, box.right - canvas.right - 32, canvas.h)
 
     def clamp_world_map_scroll(self):
         scale = self.world_map_scale
@@ -10238,6 +10654,56 @@ class GameClient(ScreensMixin, CameraYaw):
         self.world_map_scroll[0] = max(0, min(max_x, int(self.world_map_scroll[0])))
         self.world_map_scroll[1] = max(0, min(max_y, int(self.world_map_scroll[1])))
 
+    def adjust_world_map_zoom(self, delta):
+        """Zoom atlas in/out while keeping the viewport centre fixed."""
+        import map_atlas
+        old = int(self.world_map_scale)
+        new = max(
+            map_atlas.WORLD_MAP_SCALE_MIN,
+            min(map_atlas.WORLD_MAP_SCALE_MAX, old + int(delta)),
+        )
+        if new == old:
+            return
+        canvas = self.world_map_canvas_rect()
+        ox, oy = self.world_map_scroll
+        cx = ox + (canvas.w // old) // 2
+        cy = oy + (canvas.h // old) // 2
+        self.world_map_scale = new
+        try:
+            map_atlas.clear_soft_cache()
+        except Exception:
+            pass
+        view_w = max(1, canvas.w // new)
+        view_h = max(1, canvas.h // new)
+        self.world_map_scroll = [cx - view_w // 2, cy - view_h // 2]
+        self.clamp_world_map_scroll()
+
+    def _walk_to_world_map_tile(self, wx, wy, label=None):
+        goals = set()
+        if self.tile_walkable(wx, wy):
+            goals.add((wx, wy))
+        goals |= self.adjacent_goals(wx, wy)
+        if not goals:
+            for r in range(1, 8):
+                for dx in range(-r, r + 1):
+                    for dy in (-r, r):
+                        if self.tile_walkable(wx + dx, wy + dy):
+                            goals.add((wx + dx, wy + dy))
+                    for dy in range(-r + 1, r):
+                        for dx in (-r, r):
+                            if self.tile_walkable(wx + dx, wy + dy):
+                                goals.add((wx + dx, wy + dy))
+                if goals:
+                    break
+        if not goals:
+            return False
+        self.show_world_map = False
+        self.world_map_drag = None
+        msg = f"Walking to {label}..." if label else "Walking toward map marker..."
+        self.chat_log.append(msg)
+        self.chat_log = self.chat_log[-8:]
+        self.walk_and_act(goals, None)
+        return True
 
     def handle_world_map_click(self, mx, my, button=1):
         box = self.world_map_view_rect()
@@ -10246,8 +10712,34 @@ class GameClient(ScreensMixin, CameraYaw):
             self.show_world_map = False
             self.world_map_drag = None
             return
-        if button == 1 and canvas.collidepoint(mx, my):
-            # Start drag; short clicks still walk (mouseup not tracked — walk on click)
+        if button != 1:
+            return
+        # Zoom buttons
+        for key, rect in (getattr(self, "world_map_zoom_rects", None) or {}).items():
+            if rect.collidepoint(mx, my):
+                if key == "in":
+                    self.adjust_world_map_zoom(1)
+                elif key == "out":
+                    self.adjust_world_map_zoom(-1)
+                return
+        # Recenter
+        rb = getattr(self, "world_map_recenter_rect", None)
+        if rb and rb.collidepoint(mx, my) and self.player:
+            scale = self.world_map_scale
+            view_w = max(1, canvas.w // scale)
+            view_h = max(1, canvas.h // scale)
+            px, py = self.player_xy()
+            self.world_map_scroll = [px - view_w // 2, py - view_h // 2]
+            self.clamp_world_map_scroll()
+            return
+        # Side place cards / named pins
+        for rect, dest in list(getattr(self, "world_map_card_rects", None) or []) + list(
+            getattr(self, "world_map_pin_rects", None) or []
+        ):
+            if rect.collidepoint(mx, my):
+                self._walk_to_world_map_tile(int(dest["x"]), int(dest["y"]), dest.get("label"))
+                return
+        if canvas.collidepoint(mx, my):
             self.world_map_drag = (mx, my, self.world_map_scroll[0], self.world_map_scroll[1])
             scale = self.world_map_scale
             ox, oy = self.world_map_scroll
@@ -10255,28 +10747,7 @@ class GameClient(ScreensMixin, CameraYaw):
             wy = oy + (my - canvas.y) // scale
             wx = max(0, min(self.world_w - 1, wx))
             wy = max(0, min(self.world_h - 1, wy))
-            goals = set()
-            if self.tile_walkable(wx, wy):
-                goals.add((wx, wy))
-            goals |= self.adjacent_goals(wx, wy)
-            if not goals:
-                for r in range(1, 8):
-                    for dx in range(-r, r + 1):
-                        for dy in (-r, r):
-                            if self.tile_walkable(wx + dx, wy + dy):
-                                goals.add((wx + dx, wy + dy))
-                        for dy in range(-r + 1, r):
-                            for dx in (-r, r):
-                                if self.tile_walkable(wx + dx, wy + dy):
-                                    goals.add((wx + dx, wy + dy))
-                    if goals:
-                        break
-            if goals:
-                self.show_world_map = False
-                self.world_map_drag = None
-                self.chat_log.append("Walking toward map marker...")
-                self.chat_log = self.chat_log[-8:]
-                self.walk_and_act(goals, None)
+            self._walk_to_world_map_tile(wx, wy)
 
     def draw_dungeon_victory(self):
         """Full-map banner: dungeon cleared, countdown until auto-leave."""
@@ -11126,57 +11597,159 @@ class GameClient(ScreensMixin, CameraYaw):
         ct = self.font.render("Cancel", True, WHITE)
         self.screen.blit(ct, (cancel.centerx - ct.get_width() // 2, cancel.centery - ct.get_height() // 2))
 
-    def draw_food_bag_prompt(self):
-        tot = int((self.player or {}).get("food_bag_total") or 0)
-        box = pygame.Rect(320, 210, 460, 240)
-        self.food_bag_prompt_rects = {"box": box}
+    def _draw_bag_contents_panel(self, *, title, accent, tot, cap, tip, rows, scroll,
+                                 rects_attr, show_eat=False):
+        """Shared bag/quiver browser: list qty per item, click row to take."""
+        visible = 7
+        row_h = 28
+        list_h = visible * row_h + 8
+        box_h = 118 + list_h + 70
+        box = pygame.Rect(280, 150, 520, box_h)
+        rects = {"box": box, "rows": {}}
+        setattr(self, rects_attr, rects)
         pygame.draw.rect(self.screen, (18, 22, 30), box, border_radius=8)
-        pygame.draw.rect(self.screen, (220, 160, 90), box, 2, border_radius=8)
-        title = self.font_big.render("Food Bag", True, WHITE)
-        self.screen.blit(title, (box.x + 24, box.y + 22))
-        body = self.font.render(f"Packed fish: {tot}", True, (220, 210, 190))
-        self.screen.blit(body, (box.x + 24, box.y + 70))
-        tip = self.font_tiny.render(
-            "Eat uses highest-heal first. Pack scoops cooked fish; Unpack empties the bag.",
-            True, GREY,
-        )
-        self.screen.blit(tip, (box.x + 24, box.y + 100))
+        pygame.draw.rect(self.screen, accent, box, 2, border_radius=8)
 
-        eat = pygame.Rect(box.x + 24, box.bottom - 58, 100, 36)
-        self.food_bag_prompt_rects["eat"] = eat
-        pygame.draw.rect(self.screen, (50, 110, 60), eat, border_radius=6)
-        pygame.draw.rect(self.screen, GREEN, eat, 1, border_radius=6)
-        et = self.font.render("Eat 1", True, WHITE)
-        self.screen.blit(et, (eat.centerx - et.get_width() // 2, eat.centery - et.get_height() // 2))
+        title_s = self.font_big.render(title, True, WHITE)
+        self.screen.blit(title_s, (box.x + 20, box.y + 16))
+        cap_bit = f" · {cap}/type" if cap else ""
+        body = self.font.render(f"Stored: {tot}{cap_bit}", True, (220, 210, 190))
+        self.screen.blit(body, (box.x + 20, box.y + 52))
+        tip_s = self.font_tiny.render(tip, True, GREY)
+        self.screen.blit(tip_s, (box.x + 20, box.y + 78))
 
-        pack = pygame.Rect(box.x + 136, box.bottom - 58, 100, 36)
-        self.food_bag_prompt_rects["pack"] = pack
-        pygame.draw.rect(self.screen, (90, 80, 40), pack, border_radius=6)
-        pygame.draw.rect(self.screen, (220, 190, 100), pack, 1, border_radius=6)
-        pt = self.font.render("Pack", True, WHITE)
+        list_top = box.y + 108
+        list_rect = pygame.Rect(box.x + 16, list_top, box.width - 32, list_h)
+        pygame.draw.rect(self.screen, (12, 16, 22), list_rect, border_radius=6)
+        pygame.draw.rect(self.screen, (55, 65, 80), list_rect, 1, border_radius=6)
+        rects["list"] = list_rect
+
+        scroll = max(0, int(scroll or 0))
+        max_scroll = max(0, len(rows) - visible)
+        scroll = min(scroll, max_scroll)
+        # Write clamped scroll back onto the open prompt
+        prompt = self.food_bag_prompt if show_eat else self.storage_bag_prompt
+        if prompt is not None:
+            prompt["scroll"] = scroll
+
+        if not rows:
+            empty = self.font.render("Empty — Pack all to store matching items.", True, GREY)
+            self.screen.blit(empty, (list_rect.x + 12, list_rect.y + 12))
+        else:
+            y = list_rect.y + 4
+            for iid, qty, name in rows[scroll:scroll + visible]:
+                row = pygame.Rect(list_rect.x + 4, y, list_rect.width - 8, row_h - 2)
+                rects["rows"][iid] = row
+                if not rects.get("first_row"):
+                    rects["first_row"] = row
+                hover = row.collidepoint(pygame.mouse.get_pos())
+                pygame.draw.rect(
+                    self.screen,
+                    (40, 55, 70) if hover else (28, 34, 44),
+                    row, border_radius=4,
+                )
+                # Take 1 | All | … (qty picker) — right-click row also opens …
+                more = pygame.Rect(row.right - 28, row.y + 3, 24, row.height - 6)
+                allb = pygame.Rect(more.x - 40, row.y + 3, 36, row.height - 6)
+                take = pygame.Rect(allb.x - 40, row.y + 3, 36, row.height - 6)
+                rects.setdefault("take", {})[iid] = take
+                rects.setdefault("take_all", {})[iid] = allb
+                rects.setdefault("take_more", {})[iid] = more
+                for btn, label_txt, hot in (
+                    (take, "1", take.collidepoint(pygame.mouse.get_pos())),
+                    (allb, "All", allb.collidepoint(pygame.mouse.get_pos())),
+                    (more, "…", more.collidepoint(pygame.mouse.get_pos())),
+                ):
+                    pygame.draw.rect(
+                        self.screen,
+                        (55, 85, 120) if hot else (45, 55, 70),
+                        btn, border_radius=4,
+                    )
+                    bl = self.font_tiny.render(label_txt, True, WHITE)
+                    self.screen.blit(
+                        bl,
+                        (btn.centerx - bl.get_width() // 2, btn.centery - bl.get_height() // 2),
+                    )
+                qty_s = self.font.render(f"×{qty}", True, (255, 214, 110))
+                self.screen.blit(
+                    qty_s,
+                    (take.x - 8 - qty_s.get_width(), row.centery - qty_s.get_height() // 2),
+                )
+                label = self.font.render(f"{name}", True, WHITE if hover else (220, 210, 190))
+                max_w = take.x - 16 - qty_s.get_width() - (row.x + 10)
+                if label.get_width() > max_w > 40:
+                    while label.get_width() > max_w and len(name) > 4:
+                        name = name[:-1]
+                        label = self.font.render(f"{name}…", True, WHITE if hover else (220, 210, 190))
+                self.screen.blit(label, (row.x + 10, row.centery - label.get_height() // 2))
+                y += row_h
+
+        if max_scroll > 0:
+            up = pygame.Rect(list_rect.right - 22, list_rect.y + 4, 18, 18)
+            dn = pygame.Rect(list_rect.right - 22, list_rect.bottom - 22, 18, 18)
+            rects["scroll_up"] = up
+            rects["scroll_dn"] = dn
+            for r, ch, en in ((up, "▲", scroll > 0), (dn, "▼", scroll < max_scroll)):
+                pygame.draw.rect(self.screen, (50, 60, 75) if en else (35, 40, 48), r, border_radius=3)
+                t = self.font_tiny.render(ch, True, WHITE if en else GREY)
+                self.screen.blit(t, (r.centerx - t.get_width() // 2, r.centery - t.get_height() // 2))
+
+        btn_y = box.bottom - 52
+        x = box.x + 16
+        if show_eat:
+            eat = pygame.Rect(x, btn_y, 88, 34)
+            rects["eat"] = eat
+            pygame.draw.rect(self.screen, (50, 110, 60), eat, border_radius=6)
+            pygame.draw.rect(self.screen, GREEN, eat, 1, border_radius=6)
+            et = self.font.render("Eat 1", True, WHITE)
+            self.screen.blit(et, (eat.centerx - et.get_width() // 2, eat.centery - et.get_height() // 2))
+            x = eat.right + 10
+
+        pack = pygame.Rect(x, btn_y, 110, 34)
+        rects["pack"] = pack
+        pygame.draw.rect(self.screen, (50, 90, 70), pack, border_radius=6)
+        pygame.draw.rect(self.screen, (100, 200, 140), pack, 1, border_radius=6)
+        pt = self.font.render("Pack all", True, WHITE)
         self.screen.blit(pt, (pack.centerx - pt.get_width() // 2, pack.centery - pt.get_height() // 2))
 
-        unpack = pygame.Rect(box.x + 248, box.bottom - 58, 100, 36)
-        self.food_bag_prompt_rects["unpack"] = unpack
+        unpack = pygame.Rect(pack.right + 10, btn_y, 120, 34)
+        rects["unpack"] = unpack
         can = tot > 0
         pygame.draw.rect(self.screen, (70, 80, 110) if can else (50, 50, 55), unpack, border_radius=6)
         pygame.draw.rect(self.screen, (140, 170, 220) if can else (90, 90, 100), unpack, 1, border_radius=6)
-        ut = self.font.render("Unpack", True, WHITE if can else GREY)
+        ut = self.font.render("Unpack all", True, WHITE if can else GREY)
         self.screen.blit(ut, (unpack.centerx - ut.get_width() // 2, unpack.centery - ut.get_height() // 2))
 
-        cancel = pygame.Rect(box.right - 118, box.bottom - 58, 94, 36)
-        self.food_bag_prompt_rects["cancel"] = cancel
+        cancel = pygame.Rect(box.right - 110, btn_y, 94, 34)
+        rects["cancel"] = cancel
         pygame.draw.rect(self.screen, (70, 45, 40), cancel, border_radius=6)
         pygame.draw.rect(self.screen, (180, 90, 70), cancel, 1, border_radius=6)
-        ct = self.font.render("Cancel", True, WHITE)
+        ct = self.font.render("Close", True, WHITE)
         self.screen.blit(ct, (cancel.centerx - ct.get_width() // 2, cancel.centery - ct.get_height() // 2))
+
+    def draw_food_bag_prompt(self):
+        tot = int((self.player or {}).get("food_bag_total") or 0)
+        cap = int((self.player or {}).get("food_bag_capacity") or 200)
+        rows = self._bag_contents_rows("food_bag")
+        scroll = int((self.food_bag_prompt or {}).get("scroll") or 0)
+        self._draw_bag_contents_panel(
+            title="Food Bag",
+            accent=(220, 160, 90),
+            tot=tot,
+            cap=cap,
+            tip="1 / All / … take into inventory. Eat uses highest-heal first. Crafting uses bag fish automatically.",
+            rows=rows,
+            scroll=scroll,
+            rects_attr="food_bag_prompt_rects",
+            show_eat=True,
+        )
 
     def draw_storage_bag_prompt(self):
         prompt = self.storage_bag_prompt or {}
+        item_id = prompt.get("item_id")
         label = prompt.get("label") or "Bag"
-        tot = int(prompt.get("total") or 0)
-        # Refresh total from live player state
-        key_map = {
+        tot_keys = {
+            "arrow_quiver": "quiver_total",
             "arrowtip_box": "tip_box_total",
             "raw_food_bag": "raw_bag_total",
             "mining_bag": "mining_bag_total",
@@ -11185,40 +11758,65 @@ class GameClient(ScreensMixin, CameraYaw):
             "potion_pouch": "potion_pouch_total",
             "gem_bag": "gem_bag_total",
         }
-        tot_key = key_map.get(prompt.get("item_id"))
-        if tot_key:
-            tot = int((self.player or {}).get(tot_key) or 0)
-        box = pygame.Rect(320, 210, 460, 240)
-        self.storage_bag_prompt_rects = {"box": box}
-        pygame.draw.rect(self.screen, (18, 22, 30), box, border_radius=8)
-        pygame.draw.rect(self.screen, (140, 170, 210), box, 2, border_radius=8)
-        title = self.font_big.render(label, True, WHITE)
-        self.screen.blit(title, (box.x + 24, box.y + 22))
-        body = self.font.render(f"Stored: {tot}", True, (220, 210, 190))
-        self.screen.blit(body, (box.x + 24, box.y + 70))
-        tip = self.font_tiny.render(
-            "Pack scoops matching items from inventory. Unpack empties the bag into free slots.",
-            True, GREY,
+        cap_keys = {
+            "arrow_quiver": "quiver_capacity",
+            "arrowtip_box": "tip_box_capacity",
+            "raw_food_bag": "raw_bag_capacity",
+            "mining_bag": "resource_bag_capacity",
+            "log_bag": "resource_bag_capacity",
+            "fletch_pouch": "resource_bag_capacity",
+            "potion_pouch": "resource_bag_capacity",
+            "gem_bag": "resource_bag_capacity",
+        }
+        tot = int((self.player or {}).get(tot_keys.get(item_id) or "") or prompt.get("total") or 0)
+        cap = int((self.player or {}).get(cap_keys.get(item_id) or "") or 0)
+        rows = self._bag_contents_rows(item_id)
+        scroll = int(prompt.get("scroll") or 0)
+        accent = (220, 180, 100) if item_id == "arrow_quiver" else (140, 170, 210)
+        self._draw_bag_contents_panel(
+            title=label,
+            accent=accent,
+            tot=tot,
+            cap=cap,
+            tip="1 / All / … take into inventory. Smithing, cooking & fletching use bag contents automatically.",
+            rows=rows,
+            scroll=scroll,
+            rects_attr="storage_bag_prompt_rects",
+            show_eat=False,
         )
-        self.screen.blit(tip, (box.x + 24, box.y + 100))
 
-        pack = pygame.Rect(box.x + 24, box.bottom - 58, 140, 36)
-        self.storage_bag_prompt_rects["pack"] = pack
-        pygame.draw.rect(self.screen, (50, 90, 70), pack, border_radius=6)
-        pygame.draw.rect(self.screen, (100, 200, 140), pack, 1, border_radius=6)
-        pt = self.font.render("Pack all", True, WHITE)
-        self.screen.blit(pt, (pack.centerx - pt.get_width() // 2, pack.centery - pt.get_height() // 2))
-
-        unpack = pygame.Rect(box.x + 180, box.bottom - 58, 150, 36)
-        self.storage_bag_prompt_rects["unpack"] = unpack
-        can = tot > 0
-        pygame.draw.rect(self.screen, (70, 80, 110) if can else (50, 50, 55), unpack, border_radius=6)
-        pygame.draw.rect(self.screen, (140, 170, 220) if can else (90, 90, 100), unpack, 1, border_radius=6)
-        ut = self.font.render("Unpack all", True, WHITE if can else GREY)
-        self.screen.blit(ut, (unpack.centerx - ut.get_width() // 2, unpack.centery - ut.get_height() // 2))
-
-        cancel = pygame.Rect(box.right - 118, box.bottom - 58, 94, 36)
-        self.storage_bag_prompt_rects["cancel"] = cancel
+    def draw_bag_take_prompt(self):
+        prompt = self.bag_take_prompt or {}
+        name = prompt.get("name", "item")
+        qty = max(1, int(prompt.get("qty") or 1))
+        box = pygame.Rect(360, 240, 400, 200)
+        self.bag_take_prompt_rects = {"box": box}
+        pygame.draw.rect(self.screen, (18, 22, 30), box, border_radius=8)
+        pygame.draw.rect(self.screen, (180, 170, 100), box, 2, border_radius=8)
+        title = self.font_big.render("Take to inventory", True, WHITE)
+        self.screen.blit(title, (box.x + 20, box.y + 18))
+        body = self.font.render(f"{name}  ×{qty} in bag", True, (220, 210, 190))
+        self.screen.blit(body, (box.x + 20, box.y + 60))
+        tip = self.font_tiny.render("Choose how many to move into free inventory slots.", True, GREY)
+        self.screen.blit(tip, (box.x + 20, box.y + 92))
+        btn_y = box.bottom - 54
+        x = box.x + 16
+        choices = [("one", "1", 56)]
+        if qty >= 5:
+            choices.append(("five", "5", 56))
+        if qty >= 10:
+            choices.append(("ten", "10", 56))
+        choices.append(("all", f"All ({qty})", 100))
+        for key, label, w in choices:
+            r = pygame.Rect(x, btn_y, w, 34)
+            self.bag_take_prompt_rects[key] = r
+            pygame.draw.rect(self.screen, (50, 90, 120), r, border_radius=6)
+            pygame.draw.rect(self.screen, (120, 170, 210), r, 1, border_radius=6)
+            t = self.font.render(label, True, WHITE)
+            self.screen.blit(t, (r.centerx - t.get_width() // 2, r.centery - t.get_height() // 2))
+            x = r.right + 8
+        cancel = pygame.Rect(box.right - 100, btn_y, 84, 34)
+        self.bag_take_prompt_rects["cancel"] = cancel
         pygame.draw.rect(self.screen, (70, 45, 40), cancel, border_radius=6)
         pygame.draw.rect(self.screen, (180, 90, 70), cancel, 1, border_radius=6)
         ct = self.font.render("Cancel", True, WHITE)
@@ -12169,6 +12767,8 @@ class GameClient(ScreensMixin, CameraYaw):
             info = self.quests.get(qid) or {"status": "not_started", "progress": 0}
             status = info.get("status") or "not_started"
             req = (QUESTS.get(qid) or {}).get("requires")
+            if status == "not_started" and (QUESTS.get(qid) or {}).get("hidden_until_offered"):
+                continue  # optional sewer quest appears once Seraphine offers it
             if status == "not_started" and req:
                 needed = req if isinstance(req, (list, tuple)) else [req]
                 if any((self.quests.get(r) or {}).get("status") != "complete" for r in needed):
@@ -12543,7 +13143,7 @@ class GameClient(ScreensMixin, CameraYaw):
             self.screen.blit(surf, (10, y))
             y += 17
         if self.chat_scroll > 0:
-            hint = self.font_tiny.render(f"↑ {self.chat_scroll} older  ·  scroll chat", True, (140, 150, 170))
+            hint = self.font_tiny.render(f"^ {self.chat_scroll} older  ·  scroll chat", True, (140, 150, 170))
             self.screen.blit(hint, (MAP_W - hint.get_width() - 10, MAP_H + 4))
         input_rect = pygame.Rect(6, SCREEN_H - 28, MAP_W - 12, 22)
         pygame.draw.rect(self.screen, (36, 38, 50), input_rect, border_radius=5)
@@ -12751,13 +13351,9 @@ class GameClient(ScreensMixin, CameraYaw):
 
 
     def handle_equipment_click(self, mx, my):
-        for slot, rect in getattr(self, "equip_slot_rects", {}).items():
-            if rect.collidepoint(mx, my) and (self.player.get("equipment") or {}).get(slot):
-                self.net.send("UNEQUIP", equip_slot=slot)
-                return
-        # click outside closes
-        box = pygame.Rect(90, 36, 760, 560)
-        if not box.collidepoint(mx, my):
+        # One click: a bag item equips (server swaps a full slot), a filled slot unequips. No drag.
+        import equipment_ui_v2
+        if equipment_ui_v2.handle_click(self, mx, my, ITEMS) == "outside":
             self.show_equipment = False
 
 

@@ -49,7 +49,7 @@ def draw(client):
         pct = key == "sales_tax"
         val = f"{round(s['value'] * 100)}%" if pct else f"{int(s['value']):,}"
         pend = s.get("pending")
-        ptxt = f" → {round(pend * 100)}%" if pend is not None and pct else (f" → {int(pend):,}" if pend is not None else "")
+        ptxt = f" -> {round(pend * 100)}%" if pend is not None and pct else (f" -> {int(pend):,}" if pend is not None else "")
         cd = s.get("cooldown") or 0
         bounds = f"{round(s['min'] * 100)}–{round(s['max'] * 100)}%" if pct else f"{int(s['min'])}–{int(s['max'])}"
         _text(client, f"{s['label'].capitalize()}: {val}{ptxt}  ({bounds})" + (f"  cooldown {cd // 3600}h" if cd else ""),
