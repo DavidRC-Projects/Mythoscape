@@ -32,6 +32,9 @@ _TARGETS = (
     "equip_weapon",
     "inv_sword",
     "auto_pickup",
+    "bag_panel",
+    "bag_row",
+    "bag_pack",
 )
 
 _DIALOGUE_TARGETS = frozenset({"dialogue_accept", "dialogue_turnin"})
@@ -311,6 +314,17 @@ def _resolve_rect(client, target):
         if world.get("auto_pickup"):
             return world["auto_pickup"]
         return getattr(client, "auto_pickup_btn_rect", None)
+    if target in ("bag_panel", "bag_row", "bag_pack"):
+        bag_rects = getattr(client, "storage_bag_prompt_rects", None) or {}
+        food_rects = getattr(client, "food_bag_prompt_rects", None) or {}
+        rects = bag_rects if bag_rects.get("box") else food_rects
+        if target == "bag_panel":
+            return rects.get("box") or rects.get("list")
+        if target == "bag_row":
+            return rects.get("first_row") or rects.get("list") or rects.get("box")
+        if target == "bag_pack":
+            return rects.get("pack") or rects.get("box")
+        return None
     return None
 
 
@@ -399,7 +413,7 @@ def draw(client):
     pygame.draw.rect(surf, (255, 255, 200), rect.inflate(6, 6), 2, border_radius=6)
 
     font = client.font_small
-    header = "→ CLICK HERE"
+    header = "CLICK HERE"   # arrow is drawn, not a font glyph (Arial on macOS shows a box)
     body_lines = _wrap(cur["text"], font, 300)
     pad_x, pad_y = 12, 10
     line_h = font.get_height() + 2
@@ -414,7 +428,11 @@ def draw(client):
     pygame.draw.rect(surf, PANEL, box, border_radius=8)
     pygame.draw.rect(surf, GOLD, box, 2, border_radius=8)
     y = box.y + pad_y
-    surf.blit(font.render(header, True, GOLD), (box.x + pad_x, y))
+    ah = font.get_height()
+    ax, ay = box.x + pad_x, y + ah // 2
+    pygame.draw.polygon(surf, GOLD, [(ax, ay - 2), (ax + 8, ay - 2), (ax + 8, ay - 6), (ax + 15, ay),
+                                     (ax + 8, ay + 6), (ax + 8, ay + 2), (ax, ay + 2)])
+    surf.blit(font.render(header, True, GOLD), (ax + 21, y))
     y += line_h + 2
     for line in body_lines:
         surf.blit(font.render(line, True, (230, 230, 235)), (box.x + pad_x, y))

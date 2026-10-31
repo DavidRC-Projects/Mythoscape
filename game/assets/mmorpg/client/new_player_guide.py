@@ -1,6 +1,6 @@
 """Golden trail + edge arrow for new-player welcome and every active quest objective.
 
-Welcome stages (Tamsin → Miriam) use WELCOME_STATE.show_path. Once a quest is
+Welcome stages (Sarah → Miriam; Tamsin's kit was removed, Seraphine's tour gives bronze) use WELCOME_STATE.show_path. Once a quest is
 active, the same trail leads to that quest's destination (kill camp, collect
 spot, find-NPC, or hand-in). Players should never wonder where to go.
 """
@@ -72,7 +72,8 @@ MONSTER_ALIASES = {
 }
 LINES = (
     "Click the ground to walk. Arrow keys / number pad step one tile.",
-    "Follow the gold trail to Warden Tamsin for your Bronze kit.",
+    # (playtest: "Follow the gold trail to your next stop." removed - Seraphine's tour owns the trail,
+    #  and after a skip there is no trail, so the line contradicted the screen.)
     "H = controls. Space = attack nearest monster.",
 )
 LINES_STAGE2 = (
@@ -83,7 +84,7 @@ LINES_DONE = (
 )
 GOLD = (255, 214, 110)
 GOLD_DEEP = (205, 140, 40)
-SKIP_TEXT = "Tutorial skipped. Warden Tamsin stays by the crossroads if you still want your kit."
+SKIP_TEXT = "Tutorial skipped. Elder Miriam is in the north-west cottage if you want a quest."
 SKIP_TEXT_SARAH = "Tutorial skipped. Innkeeper Sarah (south) still teaches food/HP; Miriam has your first quest."
 SKIP_TEXT2 = "Tutorial skipped. Elder Miriam is still in the north-west cottage if you want a quest."
 DONE_TEXT = "Kit equipped! Check the sidebar for your stats — press H any time for controls."
@@ -141,12 +142,27 @@ def _quest_underway(client):
     return False
 
 
+def tour_finished(client):
+    """Seraphine's tour done/skipped (guide_tour >= 100): veterans and finished players get no welcome guide."""
+    try:
+        return int((getattr(client, "player", None) or {}).get("guide_tour", 0) or 0) >= 100
+    except (TypeError, ValueError):
+        return False
+
+
+def tour_in_progress(client):
+    """Seraphine's tour is on screen or mid-way (guide_tour 0..11): she owns the objective, nothing else."""
+    try:
+        v = (getattr(client, "player", None) or {}).get("guide_tour")
+        return v is not None and 0 <= int(v) < 100
+    except (TypeError, ValueError):
+        return False
+
+
 def _stage(client):
-    """tamsin → sarah (eat) → miriam until a quest is underway."""
+    """sarah (eat) → miriam until a quest is underway. (The old Tamsin kit stage is gone.)"""
     w = getattr(client, "welcome", None) or {}
-    if not w.get("claimed"):
-        return "tamsin", _guide_xy(client)
-    if _quest_underway(client):
+    if tour_finished(client) or _quest_underway(client):
         return None, None
     if not w.get("eat_done"):
         return "sarah", _npc_xy(client, SARAH_NPC_ID)
@@ -158,8 +174,6 @@ def guide_target_npc_id(client):
     if not visible(client):
         return None
     kind, _xy = _stage(client)
-    if kind == "tamsin":
-        return GUIDE_ID
     if kind == "sarah":
         return SARAH_NPC_ID
     if kind == "miriam":
@@ -214,6 +228,8 @@ def draw_talk_prompt(client, npc, cx, head_y):
 
 def visible(client):
     w = getattr(client, "welcome", None)
+    if tour_finished(client) or tour_in_progress(client):
+        return False     # one voice at a time: no "Next: Sarah" banner over Seraphine's tour
     if not (w and w.get("show_path") and getattr(client, "state", None) == "GAME"
             and getattr(client, "player", None) and not getattr(client, "dungeon", None)):
         return False
@@ -490,7 +506,7 @@ def active_trail_target(client):
             name = {
                 "miriam": NEXT_NPC_NAME,
                 "sarah": SARAH_NPC_NAME,
-            }.get(kind, "Warden Tamsin")
+            }.get(kind, NEXT_NPC_NAME)
             return xy[0], xy[1], name
     # Live quest objective every frame (circles the spider / ore, not a stale pin).
     live = quest_objective_dest(client)
@@ -604,7 +620,7 @@ def _banner_line(client):
         return f"Next: {SARAH_NPC_NAME} — learn how food restores HP"
     if kind == "miriam":
         return f"Next: {NEXT_NPC_NAME} — accept your first quest"
-    return "Follow the golden trail to Warden Tamsin for your Bronze kit"
+    return f"Next: {NEXT_NPC_NAME} — accept your first quest"
 
 
 def draw(client):
@@ -619,7 +635,7 @@ def draw(client):
         _edge_arrow(client, seen[0], seen[1], seen[3], {
             "miriam": NEXT_NPC_NAME,
             "sarah": SARAH_NPC_NAME,
-        }.get(kind, "Warden Tamsin"))
+        }.get(kind, NEXT_NPC_NAME))
     area = seen[3] if seen else client.screen.get_rect()
     text = client.font_small.render(_banner_line(client), True, GOLD)
     skip = client.font_tiny.render("Skip tutorial  X", True, (236, 224, 196))

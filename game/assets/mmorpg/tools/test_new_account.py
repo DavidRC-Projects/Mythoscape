@@ -74,8 +74,10 @@ def main():
                 clicked = True
             if clicked and not sent and g.remaining_stat_points() == 0:
                 g.submit_stat_alloc(); sent = True
-        elif g.state == "OPENING_COMIC" and i % 15 == 0:
+        elif g.state == "THRONE_VISION" and i % 15 == 0:
+            # the first-login intro film (tools/test_throne_vision.py covers it): skip it
             pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE, mod=0, unicode="", scancode=0))
+        assert g.state != "OPENING_COMIC", "opening comic is retired"
         if g.state == "GAME" and seen.count("GAME") and i > 120 and sent:
             break
         time.sleep(1 / 120)

@@ -69,6 +69,12 @@ def advance(client):
 def finish(client):
     _stop()
     client.opening_comic_pending = False
+    due = getattr(client, "_throne_vision_due", None)
+    if callable(due) and due():
+        # a new account's first login: the throne vision film follows the comic
+        import throne_vision
+        throne_vision.begin(client)
+        return
     client.state = "GAME"
     if hasattr(client, "_offer_appearance"):
         client._offer_appearance()
@@ -210,7 +216,7 @@ def _voice_path(number):
 
 def _play(number):
     _stop()
-    if not feature_flags.USE_OPENING_COMIC:
+    if not getattr(feature_flags, "USE_OPENING_COMIC", False):  # retired 30 Oct 2026
         return
     path = _voice_path(number)
     if path is None:

@@ -1,4 +1,4 @@
-"""Warden Tamsin's welcome kit, tutorial talk and trail flag. Run: python3 tools/test_welcome_kit.py"""
+"""Warden Tamsin's welcome talk and trail (kit retired 30 Oct 2026: only Seraphine gives bronze). Run: python3 tools/test_welcome_kit.py"""
 import asyncio
 import json
 import os
@@ -89,7 +89,7 @@ def test_kit_items_bound_and_worthless():
         assert server.item_is_bankable(item_id)
         assert not any(server.shop_will_buy(shop, item_id) for shop in SHOPS.values())
     s = _player()
-    _opt(s, wk.OPT_TAKE)
+    W.add_item_to_inventory(s, wk.SWORD, 1)          # old claimants still hold these
     slot = next(k for k, e in s.inventory.items() if e["item_id"] == wk.SWORD)
     asyncio.run(server.handle_drop(s, {"slot_index": slot}))
     assert _count(s, wk.SWORD) == 1 and "can't drop" in s.ws.last("ERROR")["message"]
@@ -132,243 +132,120 @@ def test_guide_tile_clear_and_reachable():
     assert found
 
 
-def test_claim_once():
+BRONZE = ("bronze_helmet", "bronze_body", "bronze_legs", "bronze_sword", "bronze_shield")
+
+
+def _bronze_counts(s):
+    return {i: _count(s, i) for i in BRONZE + wk.KIT_IDS}
+
+
+def _tour(s, **msg):
+    asyncio.run(server.handle_guide_tour(s, {"type": "GUIDE_TOUR", **msg}))
+
+
+def test_tamsin_offers_no_kit():
     s = _player()
-    _opt(s, wk.OPT_TAKE)
-    assert all(_count(s, i) == 1 for i in wk.KIT_IDS)
-    assert wk.record(W.db.conn, s.player_id)["claimed_at"] is not None
-    assert set(wk.KIT_IDS) <= set(_db_inventory_ids(s))            # committed, not just in memory
-    for opt in (wk.OPT_TAKE, wk.OPT_WEAR):
-        _opt(s, opt)
-    assert _kit_total(s) == 4
-    assert not wk.take_claim(W.db.conn, s.player_id)
-    W.db.conn.rollback()
-    st = wk.status(W.db.conn, s, ITEMS)
-    assert st["claimed"] and not st["can_claim"] and not st["show_path"]
+    asyncio.run(server.handle_talk(s, {"npc_id": wk.GUIDE_ID}))
+    d = s.ws.last("DIALOGUE")
+    ids = [o["id"] for o in d["options"]]
+    assert wk.OPT_WEAR not in ids and wk.OPT_TAKE not in ids and wk.OPT_REMIND in ids
+    text = " ".join(" ".join(p) for p in d["pages"]).lower()
+    assert "kit" not in text and "seraphine" in text
+    for word in ("walk", "click the ground", "zoom", "mouse wheel", "travel", "press m", "axe", "pickaxe"):
+        assert word in text, word
+    for word in ("reputation", "throne", "tribute"):
+        assert word not in text, word
+    for opt in (wk.OPT_WEAR, wk.OPT_TAKE, wk.OPT_COLLECT, wk.OPT_EQUIP, wk.OPT_SWORD):
+        _opt(s, opt)                                     # forged / stale requests: server refuses
+    assert _kit_total(s) == 0 and all(v == 0 for v in _bronze_counts(s).values()), _bronze_counts(s)
+    # the first talk completes the welcome: trail moves on to Sarah -> Miriam
+    st = s.ws.last("WELCOME_STATE")
+    assert st["claimed"] and st["show_path"], st
+    assert not wk.status(W.db.conn, s, ITEMS)["first_visit"]
+    # Remind still works, and the second talk is a single page
+    _opt(s, wk.OPT_REMIND)
+    remind = " ".join(" ".join(p) for p in s.ws.last("DIALOGUE")["pages"]).lower()
+    for word in ("walk", "zoom", "travel", "bank", "miriam", "crypt"):
+        assert word in remind, word
+    asyncio.run(server.handle_talk(s, {"npc_id": wk.GUIDE_ID}))
+    assert s.ws.last("DIALOGUE").get("pages") in (None, []) or len(s.ws.last("DIALOGUE")["pages"]) == 1
 
 
-def test_double_request_and_second_client():
-    s = _player()
-
-    async def spam():
-        await asyncio.gather(*[server.handle_npc_option(s, {"npc_id": wk.GUIDE_ID, "option": o})
-                               for o in (wk.OPT_WEAR, wk.OPT_TAKE, wk.OPT_WEAR, wk.OPT_TAKE)])
-    asyncio.run(spam())
-    assert _kit_total(s) == 4
-    # a second session object for the same account (another client) can't claim again
-    twin = server.PlayerSession(_WS(), W.db.get_player_by_id(s.player_id))
-    twin.inventory, twin.bank = W.db.get_inventory(s.player_id), {}
-    twin.inventory = {k: v for k, v in twin.inventory.items() if v["item_id"] not in wk.KIT_IDS}
-    twin.equipment = {k: None for k in twin.equipment}
-    twin.x, twin.y = s.x, s.y
-    _opt(twin, wk.OPT_TAKE)
-    assert _kit_total(twin) == 0 and twin.ws.last("DIALOGUE") is not None
-
-
-def test_full_bag_goes_to_bank_then_owed():
-    s = _player()
-    _fill_bag(s)
-    _opt(s, wk.OPT_TAKE)
-    assert all(any(e["item_id"] == i for e in s.bank.values()) for i in wk.KIT_IDS)
-    assert any("sent your" in line for line in s.ws.last("DIALOGUE")["lines"])
-    # bag and bank both full: everything owed, nothing lost, collect later
-    s2 = _player()
-    _fill_bag(s2)
-    _fill_bank(s2)
-    _opt(s2, wk.OPT_TAKE)
-    assert _kit_total(s2) == 0 and wk.record(W.db.conn, s2.player_id)["owed"] == list(wk.KIT_IDS)
-    assert any("keep your" in line for line in s2.ws.last("DIALOGUE")["lines"])
-    assert any(o["id"] == wk.OPT_COLLECT for o in s2.ws.last("DIALOGUE")["options"])
-    st = wk.public_state(wk.status(W.db.conn, s2, ITEMS), GUIDE)
-    assert st["owed"] == 4 and not st["show_path"]
-    knives = [k for k, e in s2.inventory.items() if e["item_id"] == "knife"][:2]
-    for k in knives:
-        del s2.inventory[k]
-        W.db.clear_slot(s2.player_id, k)
-    _opt(s2, wk.OPT_COLLECT)
-    assert _kit_total(s2) == 2 and len(wk.record(W.db.conn, s2.player_id)["owed"]) == 2
-    _opt(s2, wk.OPT_TAKE)                                            # still can't re-claim
-    assert _kit_total(s2) == 2
-
-
-def test_grant_is_atomic():
-    s = _player()
-    _fill_bag(s)
-    before_mem = json.dumps(s.inventory, sort_keys=True, default=str)
-    before_db = _db_inventory_ids(s)
-    real = server._bank_put
-    calls = [0]
-
-    def flaky(session, item_id, qty=1):
-        calls[0] += 1
-        if calls[0] == 3:
-            raise RuntimeError("server died mid-grant")
-        return real(session, item_id, qty)
-    server._bank_put = flaky
-    try:
-        _opt(s, wk.OPT_TAKE)
-        raise AssertionError("expected the crash")
-    except RuntimeError:
-        pass
-    finally:
-        server._bank_put = real
-    assert wk.record(W.db.conn, s.player_id)["claimed_at"] is None            # no claim recorded
-    assert _db_inventory_ids(s) == before_db and not W.db.get_bank(s.player_id)
-    assert json.dumps(s.inventory, sort_keys=True, default=str) == before_mem and not s.bank
-    _opt(s, wk.OPT_TAKE)                                                     # and they can still claim
-    assert _kit_total(s) == 4
-
-
-def test_veteran_eligibility():
-    vet = _player()
-    vet.equipment["weapon"], vet.equipment["helmet"] = "iron_sword", "bronze_helmet"
-    st = wk.status(W.db.conn, vet, ITEMS)
-    assert st["veteran"] and not st["can_claim"] and not st["show_path"]
-    _opt(vet, wk.OPT_TAKE)
-    assert _kit_total(vet) == 0
-    assert not any(o["id"] in (wk.OPT_TAKE, wk.OPT_WEAR) for o in wk.options(st))
-    # a veteran whose armour is in the bank still counts as geared
-    vet2 = _player()
-    vet2.equipment["weapon"] = "bronze_battleaxe"
-    vet2.bank[0] = {"item_id": "iron_legs", "qty": 1}
-    assert wk.geared(vet2, ITEMS)
-    # sword but no armour, or armour but no weapon: may claim once
-    a = _player()
-    a.inventory[50] = {"item_id": "bronze_sword", "qty": 1}
-    b = _player()
-    b.equipment["body"] = "leather_body"
-    assert wk.status(W.db.conn, a, ITEMS)["can_claim"] and wk.status(W.db.conn, b, ITEMS)["can_claim"]
-
-
-def test_softlock_replacement_sword():
-    s = _player()
-    _opt(s, wk.OPT_WEAR)
-    assert s.equipment["weapon"] == wk.SWORD
-    # loses every weapon-slot item (e.g. a dungeon death)
-    s.equipment["weapon"] = None
-    s.inventory = {k: e for k, e in s.inventory.items() if ITEMS[e["item_id"]].get("equip_slot") != "weapon"}
-    st = wk.status(W.db.conn, s, ITEMS)
-    assert st["sword_offer"] and st["sword_wait"] == 0 and not st["can_claim"]
-    assert any("Gareth" in line for line in wk.greeting(st, "X"))
-    _opt(s, wk.OPT_SWORD)
-    assert _count(s, wk.SWORD) == 1
-    _opt(s, wk.OPT_SWORD)                                     # has a weapon again: not offered
-    assert _count(s, wk.SWORD) == 1
-    s.inventory = {k: e for k, e in s.inventory.items() if e["item_id"] != wk.SWORD}
-    st = wk.status(W.db.conn, s, ITEMS)
-    opt = next(o for o in wk.options(st) if o["id"] == wk.OPT_SWORD)
-    assert opt.get("ok") is False and "min" in opt["why"]
-    _opt(s, wk.OPT_SWORD)
-    assert _count(s, wk.SWORD) == 0                            # cooldown holds on the server
-    W.db.conn.execute("UPDATE welcome_kit SET sword_at = ? WHERE player_id = ?",
-                      (time.time() - wk.SWORD_COOLDOWN_S - 1, s.player_id))
-    W.db.conn.commit()
-    _opt(s, wk.OPT_SWORD)
-    assert _count(s, wk.SWORD) == 1
-    # a woodcutting hatchet is a tool, not a fighting axe (23 Oct rules): still offered the sword
-    t = _player()
-    _opt(t, wk.OPT_TAKE)
-    t.inventory = {k: e for k, e in t.inventory.items() if e["item_id"] != wk.SWORD}
-    # Starter gather tools begin equipped (not sitting in the bag).
-    assert t.equipment.get("tool_woodcutting") == "bronze_axe" or any(
-        e["item_id"] == "bronze_axe" for e in t.inventory.values()
-    )
-    assert not wk.has_weapon_slot_item(t, ITEMS) and wk.status(W.db.conn, t, ITEMS)["sword_offer"]
-    # a battleaxe is enough to fight with, so no free sword
-    server.WORLD.add_item_to_inventory(t, "bronze_battleaxe", 1)
-    assert wk.has_weapon_slot_item(t, ITEMS) and not wk.status(W.db.conn, t, ITEMS)["sword_offer"]
-
-
-def test_equip_for_me_keeps_outfit():   # David, 23 Oct 2026: armour no longer takes the outfit off
-    s = _player()
-    look = {"skin": "skin_base", "hair": "hair_side_part", "top": "top_linen_shirt",
-            "bottom": "bottom_work_trousers", "outfit": "set_kings_champion"}
-    W.db.save_player_stats(s.player_id, appearance=json.dumps(look))
-    s.row = W.db.get_player_by_id(s.player_id)
-    assert gear_rules.wearing_outfit(gear_rules.saved_look(s)) and not gear_rules.can_fight(s)
-    _opt(s, wk.OPT_WEAR)
-    assert [s.equipment[slot] for _i, slot in wk.KIT] == list(wk.KIT_IDS)
-    assert gear_rules.saved_look(s).get("outfit") == "set_kings_champion"
-    assert gear_rules.can_fight(s) and gear_rules.gate_missing(s) == []
-    # take-only, then Equip it for me later
-    t = _player()
-    _opt(t, wk.OPT_TAKE)
-    assert any(o["id"] == wk.OPT_EQUIP for o in t.ws.last("DIALOGUE")["options"])
-    _opt(t, wk.OPT_EQUIP)
-    assert gear_rules.gate_missing(t) == []
-    _opt(t, wk.OPT_EQUIP)                                       # spam: nothing more to do
-    assert _kit_total(t) == 4
-
-
-def test_path_visibility_flag():
+def test_banner_and_chat_promise_no_kit():
     s = _player()
     asyncio.run(server.welcome_on_join(s))
+    assert "kit" not in ((s.ws.last("CHAT_MSG") or {}).get("text") or "").lower()   # Tamsin greeting removed 30 Oct
     st = s.ws.last("WELCOME_STATE")
     assert st["show_path"] and st["guide"] == {"id": wk.GUIDE_ID, "name": wk.GUIDE_NAME,
                                                "x": GUIDE["x"], "y": GUIDE["y"]}
-    assert s.ws.last("CHAT_MSG")["from"] == wk.GUIDE_NAME
     asyncio.run(server.welcome_skip(s))
     assert not s.ws.last("WELCOME_STATE")["show_path"]
-    assert wk.status(W.db.conn, s, ITEMS)["can_claim"]           # skipping keeps the kit claimable
-    t = _player()
-    _opt(t, wk.OPT_TAKE)
-    # Since 21 Oct a claim keeps the trail on for stage 2 (to Elder Miriam): show_path stays, claimed flips.
-    after = t.ws.last("WELCOME_STATE")
-    assert after["show_path"] and after["claimed"], after
-    # client side: only in the overworld, only while the server says so
     import types
     import new_player_guide as g
-    c = types.SimpleNamespace(state="GAME", player={"x": 28, "y": 24}, dungeon=None, welcome=None)
+    assert all("kit" not in line.lower() for line in g.__dict__.get("TRAIL_HINTS", ()) if isinstance(line, str))
+    src = open(g.__file__).read()
+    assert "for your Bronze kit" not in src
+    c = types.SimpleNamespace(state="GAME", player={"x": 28, "y": 24}, dungeon=None, welcome=None, quests={},
+                              npcs=[{"id": "innkeeper_sarah", "x": 20, "y": 40}])   # Tamsin stage removed: trail starts at Sarah
     g.on_state(c, {"show_path": True, "guide": {"x": GUIDE["x"], "y": GUIDE["y"]}})
     assert g.visible(c)
     c.dungeon = {"id": "tidehollow"}
     assert not g.visible(c)
-    c.dungeon = None
-    g.on_state(c, {"show_path": False, "guide": {"x": GUIDE["x"], "y": GUIDE["y"]}})
-    assert not g.visible(c)
+    lines = [n for n in NPCS if n["id"] == wk.GUIDE_ID][0].get("lines") or []
+    assert all("kit" not in l.lower() for l in lines), lines
 
 
-def test_dialogue_flow():
+def test_well_never_gives_bronze_sword():
+    assert "bronze_sword" not in server.WISH_GEAR_POOL and "bronze_sword" not in server.WISH_GEAR_BETTER
+    assert "bronze_sword" not in getattr(server, "WISH_MYTHOS_POOL", [])
+
+
+def test_new_account_gets_exactly_one_bronze_set():
     s = _player()
-    asyncio.run(server.handle_talk(s, {"npc_id": wk.GUIDE_ID}))
-    d = s.ws.last("DIALOGUE")
-    assert d["npc_name"] == wk.GUIDE_NAME and d["lines"] == d["pages"][0]
-    assert len(d["pages"]) == 1 + len(wk.FIRST_VISIT)
-    ids = [o["id"] for o in d["options"]]
-    assert ids[:2] == [wk.OPT_WEAR, wk.OPT_TAKE] and wk.OPT_REMIND in ids and wk.OPT_SKIP in ids
-    text = " ".join(" ".join(p) for p in d["pages"]).lower()
-    for word in ("walk", "click the ground", "zoom", "mouse wheel", "travel", "press m",
-                 "arrow keys", "number pad", "axe", "pickaxe"):
-        assert word in text, word
-    # First visit must NOT dump bank / reputation / throne — those are Remind-only.
-    for word in ("reputation", "throne", "tribute"):
-        assert word not in text, word
+    s.guide_tour, s.guide_bronze = 0, False
+    asyncio.run(server.handle_talk(s, {"npc_id": wk.GUIDE_ID}))          # Tamsin: no kit
     _opt(s, wk.OPT_WEAR)
-    d = s.ws.last("DIALOGUE")
-    assert d.get("pages") in (None, []) or len(d["pages"]) == 1
-    assert "Recruit's Bronze kit" in d["lines"][0]
-    assert any("Elder Miriam" in line for line in d["lines"])
-    ids = [o["id"] for o in d["options"]]
-    assert wk.OPT_WEAR not in ids and wk.OPT_SKIP not in ids and wk.OPT_REMIND in ids
-    coach = s.ws.last("UI_COACH")
-    assert coach and coach["id"] == wk.COACH_EQUIP
-    steps = coach.get("steps") or []
-    assert steps and steps[0]["target"] == "equipment" and steps[0].get("wait") == "open_equipment"
-    targets = [st["target"] for st in steps]
-    assert "equip_weapon" in targets and "inv_sword" in targets
-    _opt(s, wk.OPT_REMIND)
-    remind = s.ws.last("DIALOGUE")
-    assert len(remind["pages"]) == 1 + len(wk.TOUR)
-    remind_text = " ".join(" ".join(p) for p in remind["pages"]).lower()
-    for word in ("walk", "zoom", "travel", "bank", "miriam", "crypt"):
-        assert word in remind_text, word
+    _opt(s, wk.OPT_SWORD)                                                # no spare sword before the gift
+    assert all(v == 0 for v in _bronze_counts(s).values()), _bronze_counts(s)
+    _tour(s, action="start")
+    for step in range(1, 5):
+        _tour(s, action="advance", step=step)
+    assert s.guide_bronze
+    counts = _bronze_counts(s)
+    assert all(counts[i] == 1 for i in BRONZE) and _kit_total(s) == 0, counts
+    # replay + skip + forged messages never add a second set
+    _tour(s, action="skip")
+    _tour(s, action="replay")
+    for step in range(1, 6):
+        _tour(s, action="advance", step=step)
+    _opt(s, wk.OPT_WEAR)
+    _opt(s, wk.OPT_TAKE)
     asyncio.run(server.handle_talk(s, {"npc_id": wk.GUIDE_ID}))
-    assert s.ws.last("DIALOGUE").get("pages") in (None, []) or len(s.ws.last("DIALOGUE")["pages"]) == 1
-    far = _player(near=False)
-    far.x, far.y = GUIDE["x"] + 6, GUIDE["y"]
-    _opt(far, wk.OPT_TAKE)
-    assert _kit_total(far) == 0 and "too far" in far.ws.last("ERROR")["message"]
+    assert _bronze_counts(s) == counts, (_bronze_counts(s), counts)
 
+
+def test_softlock_replacement_sword_after_gift():
+    s = _player()
+    s.guide_bronze = True
+    asyncio.run(server.handle_talk(s, {"npc_id": wk.GUIDE_ID}))          # welcome done
+    s.equipment["weapon"] = None
+    s.inventory = {k: e for k, e in s.inventory.items() if ITEMS[e["item_id"]].get("equip_slot") != "weapon"}
+    st = wk.status(W.db.conn, s, ITEMS)
+    assert st["sword_offer"] and st["sword_wait"] == 0
+    _opt(s, wk.OPT_SWORD)
+    assert _count(s, wk.SWORD) == 1
+    _opt(s, wk.OPT_SWORD)
+    assert _count(s, wk.SWORD) == 1                                      # has a weapon again
+
+
+
+def test_next_step_panel_promises_no_kit():
+    import types
+    import hud_v2
+    c = types.SimpleNamespace(welcome={"show_path": True, "claimed": False}, player={"equipment": {}, "inventory": {}})
+    step = hud_v2._no_quest_step(c)
+    assert step["npc"] != "warden_tamsin"   # Tamsin step removed 30 Oct
+    assert all("kit" not in str(step.get(k, "")).lower() for k in ("title", "detail", "hint")), step
 
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]

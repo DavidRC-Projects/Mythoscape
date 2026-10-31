@@ -35,7 +35,7 @@ FIRST_VISIT = (
      "Zoom: mouse wheel over the map (or - and =)."),
     ("Travel: press M, pick a place — you still walk there.",
      "Minimap shows the way. H = every control."),
-    ("Take the Recruit's Bronze kit below — prefer \"Take the kit and put it on\".",
+    ("Seraphine brings your bronze armour and shows you how to wear it.",
      "Axe, pickaxe and net are already on — click trees, rocks or fish spots. Sword is for fighting."),
 )
 
@@ -204,15 +204,21 @@ def status(conn, session, items, now=None):
     rec = record(conn, session.player_id)
     claimed = rec["claimed_at"] is not None
     vet = geared(session, items)
-    can_claim = not claimed and not vet
+    # 30 Oct 2026 (David): only Seraphine's tour gives the starting bronze set. Tamsin no longer hands out
+    # a kit; her first talk just marks the welcome as done (claimed_at), so the trail moves on to Sarah/Miriam.
+    can_claim = False
+    first_visit = not claimed
     no_weapon = not has_weapon_slot_item(session, items)
     sword_wait = max(0, int(rec["sword_at"] + SWORD_COOLDOWN_S - now))
     return {
         "claimed": claimed, "skipped": rec["skipped"], "owed": rec["owed"], "veteran": vet,
         "can_claim": can_claim,
-        "show_path": can_claim and not rec["skipped"],
+        "first_visit": first_visit,
+        "show_path": first_visit and not rec["skipped"],
         "equippable": [i for i, _s in equippable_kit(session, items)],
-        "sword_offer": no_weapon and not can_claim and not rec["owed"],
+        # spare sword only once the player has had a starting set (old kit or Seraphine's gift)
+        "sword_offer": no_weapon and not rec["owed"] and claimed
+                       and bool(getattr(session, "guide_bronze", 1)),
         "sword_wait": sword_wait,
     }
 
@@ -267,15 +273,15 @@ def allowed(st):
 
 
 def greeting(st, name):
-    if st["can_claim"]:
+    if st.get("first_visit"):
         return [f"Well met, {name}! I'm Warden Tamsin.",
-                "Click Next for walk, zoom and Travel — then take your Bronze kit."]
+                "Click Next for walk, zoom and Travel."]
     if st["owed"]:
         return ["Still holding part of your kit. Free bag space and talk again."]
     if st["sword_offer"]:
         return ["Empty-handed? Gareth sells bronze, or take one spare sword from me."]
     if st["claimed"]:
-        return [f"Good to see you, {name}. Kit's one-time — Gareth sells bronze if you need more."]
+        return [f"Good to see you, {name}. Gareth's smithy sells bronze if you need more."]
     return [f"Good to see you, {name}. You're set. Pick Remind me if you want a refresher."]
 
 
@@ -287,7 +293,7 @@ def pages(st, name, tour=False, note=None):
         return out
     if tour:
         out += [list(p) for p in TOUR]
-    elif st["can_claim"]:
+    elif st.get("first_visit"):
         out += [list(p) for p in FIRST_VISIT]
     return out
 
@@ -303,6 +309,7 @@ COACH_AUTO_PICKUP = "auto_pickup_coins_bones"  # Coins+bones toggle (off by defa
 COACH_FIRST_FIGHT = "first_fight"  # first attack: click/Space + R
 COACH_FIRST_KILL = "first_kill"    # first quest kill — confidence beat
 COACH_DEATH = "first_death"        # post-death recovery once
+COACH_BAGS = "bag_inspect"         # look inside bags/quiver + take items back
 
 
 def ensure_coaches_col(conn):
