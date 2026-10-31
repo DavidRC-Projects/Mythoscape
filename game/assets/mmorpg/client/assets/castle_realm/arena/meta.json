@@ -1,9 +1,41 @@
 {
   "id": "crownfall_arena",
   "name": "Crownfall Arena",
-  "art": "sprites/1x/arena_campus.jpg",
-  "pit_floor": "sprites/1x/arena_pit_floor.png",
-  "note": "Campus landmark plus a dedicated pit-floor overlay (worn sand oval, mid-line, team gate stains) so live fights read on marked sand instead of flat ochre tiles. Campus stretches to the stamped footprint (~61×53 tiles) east of the King's road.",
-  "footprint_tiles": [166, 102, 226, 154],
-  "center": [196, 128]
+  "layers": {
+    "ground": "sprites/1x/arena_ground.png",
+    "back": "sprites/1x/arena_back.png",
+    "front": "sprites/1x/arena_front.png",
+    "gate_closed": "sprites/1x/arena_gate_closed.png",
+    "gate_open": "sprites/1x/arena_gate_open.png"
+  },
+  "art_legacy": "sprites/1x/arena_campus.jpg",
+  "note": "Castle-style layers: soft-edged ground sand, back wall (north seating), front lip (south seating/yards). Soldiers y-sort between back and front. East/west reserve gates replace the old sports mid-line / oval pit overlay. Bake with tools/make_arena_layers.py.",
+  "footprint_tiles": [
+    166,
+    102,
+    226,
+    154
+  ],
+  "center": [
+    196,
+    128
+  ],
+  "hd": {
+    "layers": {
+      "ground": "sprites/{res}/arena_ground_hd.png",
+      "back": "sprites/{res}/arena_back_hd.png",
+      "front": "sprites/{res}/arena_front_hd.png",
+      "gate_closed": "sprites/{res}/arena_gate_closed_hd.png",
+      "gate_open": "sprites/{res}/arena_gate_open_hd.png"
+    },
+    "art_tiles": [
+      168.231,
+      87.573,
+      225.349,
+      165.355
+    ],
+    "sand_tile": "sprites/{res}/arena_sand_tile_hd.png",
+    "ring_tile": "sprites/{res}/arena_ring_tile_hd.png",
+    "note": "Painted HD arena (v3). art_tiles = world-tile rect [x0,y0,x1,y1] the layers cover; the sand maps onto the pit tiles. Old layers = error fallback only. Bake: /workspace/crownfall/ARENA/build/make3.py"
+  }
 }
