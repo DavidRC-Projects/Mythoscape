@@ -6,6 +6,7 @@ import os
 import pygame
 
 _DIR = os.path.join(os.path.dirname(__file__), "..", "assets", "items", "realistic")
+_LEGACY = os.path.join(_DIR, "legacy")
 _RAW = {}
 _SCALED = {}
 # Items whose pack icon hasn't been painted yet: (source icon, RGB multiply). Real files win.
@@ -16,11 +17,22 @@ _STAND_IN = {
 }
 
 
+def _load(path):
+    if not os.path.isfile(path):
+        return None
+    try:
+        return pygame.image.load(path).convert_alpha()
+    except Exception:
+        return None
+
+
 def _raw(item_id):
     if item_id in _RAW:
         return _RAW[item_id]
-    path = os.path.join(_DIR, f"{item_id}.png")
-    image = pygame.image.load(path).convert_alpha() if os.path.isfile(path) else None
+    image = _load(os.path.join(_DIR, f"{item_id}.png"))
+    if image is None:
+        # Old pre-Eclipse-style icon, kept only for when the new file is missing or broken.
+        image = _load(os.path.join(_LEGACY, f"{item_id}.png"))
     if image is None and item_id in _STAND_IN:
         src_id, rgb = _STAND_IN[item_id]
         src = _raw(src_id)
