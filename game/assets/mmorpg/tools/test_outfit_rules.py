@@ -180,9 +180,10 @@ def test_equipping_armour_keeps_outfit():   # David, 23 Oct 2026 (was: armour ta
         run(server.handle_update_appearance(s, {"appearance": look}))
         assert s.appearance_state()["outfit"], errors(s)
         W.add_item_to_inventory(s, "mythos_body", 1)
-        W.add_item_to_inventory(s, "mythos_legs", 1)      # body and legs are a pair (23 Oct 2026)
-        idx = next(i for i, e in s.inventory.items() if e["item_id"] == "mythos_body")
-        run(server.handle_equip(s, {"slot_index": idx}))
+        W.add_item_to_inventory(s, "mythos_legs", 1)      # body and legs equip one at a time (29 Oct 2026)
+        for piece in ("mythos_body", "mythos_legs"):
+            idx = next(i for i, e in s.inventory.items() if e["item_id"] == piece)
+            run(server.handle_equip(s, {"slot_index": idx}))
         a = s.appearance_state()
         assert s.equipment["body"] == "mythos_body" and s.equipment["legs"] == "mythos_legs", errors(s)
         assert a["outfit"] == look["outfit"], a
@@ -253,7 +254,7 @@ def test_tick_no_swing_no_retaliate():
     assert s.in_combat_with is None
 
 
-# ---- 5. body + legs are a pair (David, 23 Oct 2026) -----------------------------------------------
+# ---- 5. body and legs are separate (David, 29 Oct 2026: pair rule retired) ---------------------------
 def _bag(s, *ids):
     for i in ids:
         W.add_item_to_inventory(s, i, 1)
@@ -263,69 +264,69 @@ def _idx(s, item_id):
     return next(i for i, e in s.inventory.items() if e and e["item_id"] == item_id)
 
 
-def test_pair_body_needs_legs():
-    s = make()
-    _bag(s, "bronze_body")
-    run(server.handle_equip(s, {"slot_index": _idx(s, "bronze_body")}))
-    assert s.equipment["body"] is None and s.equipment["legs"] is None
-    assert errors(s)[-1] == gear_rules.pair_need_message("bronze_body", server.ITEMS), errors(s)
-    assert "Bronze" in errors(s)[-1] or "legs" in errors(s)[-1].lower()
-
-
-def test_pair_equip_puts_both_on():
-    for body, legs, click in (("bronze_body", "bronze_legs", "bronze_body"), ("iron_chainbody", "iron_chainlegs", "iron_chainlegs"),
-                              ("recruit_bronze_body", "recruit_bronze_legs", "recruit_bronze_legs"),
-                              ("leather_body", "leather_chaps", "leather_body")):
+def test_body_alone_equips():
+    for piece, slot in (("bronze_body", "body"), ("iron_chainlegs", "legs"), ("leather_chaps", "legs")):
         s = make()
-        _bag(s, body, legs)
-        run(server.handle_equip(s, {"slot_index": _idx(s, click)}))
-        assert s.equipment["body"] == body and s.equipment["legs"] == legs, (body, errors(s))
-        assert not any(e["item_id"] in (body, legs) for e in s.inventory.values() if e)
+        _bag(s, piece)
+        run(server.handle_equip(s, {"slot_index": _idx(s, piece)}))
+        assert s.equipment[slot] == piece, (piece, errors(s))
+        other = "legs" if slot == "body" else "body"
+        assert s.equipment[other] is None, (piece, s.equipment[other])
 
 
-def test_pair_swap_returns_old_pair():
+def test_equip_one_leaves_partner_in_bag():
+    s = make()
+    _bag(s, "bronze_body", "bronze_legs")
+    run(server.handle_equip(s, {"slot_index": _idx(s, "bronze_body")}))
+    assert s.equipment["body"] == "bronze_body" and s.equipment["legs"] is None, errors(s)
+    assert any(e and e["item_id"] == "bronze_legs" for e in s.inventory.values())
+
+
+def test_swap_one_returns_only_that_piece():
     s = make()
     wear_kit(s, {"body": "bronze_body", "legs": "bronze_legs"})
-    _bag(s, "steel_body", "steel_legs")
+    _bag(s, "steel_legs")
     run(server.handle_equip(s, {"slot_index": _idx(s, "steel_legs")}))
-    assert (s.equipment["body"], s.equipment["legs"]) == ("steel_body", "steel_legs"), errors(s)
+    assert (s.equipment["body"], s.equipment["legs"]) == ("bronze_body", "steel_legs"), errors(s)
     bag = sorted(e["item_id"] for e in s.inventory.values() if e)
-    assert bag == ["bronze_body", "bronze_legs"], bag
+    assert bag == ["bronze_legs"], bag
 
 
-def test_pair_unequip_takes_both_off():
-    for slot in ("body", "legs"):
+def test_unequip_takes_one_off():
+    for slot, other in (("body", "legs"), ("legs", "body")):
         s = make()
         wear_kit(s, {"body": "mithril_body", "legs": "mithril_legs"})
         run(server.handle_unequip(s, {"equip_slot": slot}))
-        assert s.equipment["body"] is None and s.equipment["legs"] is None, (slot, errors(s))
+        assert s.equipment[slot] is None and s.equipment[other] == f"mithril_{other}", (slot, errors(s))
         bag = sorted(e["item_id"] for e in s.inventory.values() if e)
-        assert bag == ["mithril_body", "mithril_legs"], bag
+        assert bag == [f"mithril_{slot}"], bag
 
 
-def test_pair_unequip_needs_two_spaces():
+def test_unequip_needs_one_space():
     s = make()
     wear_kit(s, {"body": "mithril_body", "legs": "mithril_legs"})
     while W.add_item_to_inventory(s, "bronze_sword", 1):
         pass
-    s.inventory.pop(_idx(s, "bronze_sword"))          # exactly one free space
+    s.inventory.pop(_idx(s, "bronze_sword"))          # exactly one free space is enough now
     run(server.handle_unequip(s, {"equip_slot": "body"}))
-    assert errors(s)[-1] == gear_rules.PAIR_ROOM_MSG
-    assert s.equipment["body"] == "mithril_body" and s.equipment["legs"] == "mithril_legs"
+    assert s.equipment["body"] is None and s.equipment["legs"] == "mithril_legs", errors(s)
 
 
-def test_pair_solo_piece_works_alone():
+def test_pair_rule_retired():
+    assert tuple(gear_rules.PAIR_SLOTS) == ()
+
+
+def test_solo_piece_works_alone():
     s = make()
     _bag(s, "bronze_helmet")
-    # Helmet has no body/legs partner — equips alone.
     run(server.handle_equip(s, {"slot_index": _idx(s, "bronze_helmet")}))
     assert s.equipment[server.ITEMS["bronze_helmet"]["equip_slot"]] == "bronze_helmet", errors(s)
 
 
-def test_pair_ui_hint():
+def test_slot_hint_no_pair():
     sys.path.insert(0, os.path.join(ROOT, "client"))
     import equipment_ui_v2
-    assert "pair" in equipment_ui_v2._slot_hint("body") and "pair" in equipment_ui_v2._slot_hint("legs")
+    assert "pair" not in equipment_ui_v2._slot_hint("body") and "pair" not in equipment_ui_v2._slot_hint("legs")
     assert equipment_ui_v2._slot_hint("helmet").startswith("Helmet slot")
 
 

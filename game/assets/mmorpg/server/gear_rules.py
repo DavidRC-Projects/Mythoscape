@@ -102,10 +102,10 @@ def base_look(look, sex, set_items=None):
     return out
 
 
-# ---- body + legs pair (David, 23 Oct 2026) -------------------------------------------------------------
-# Body and legs are equipped and removed together, and both are needed: equipping one puts on its matching
-# partner from the bag; taking one off takes both off. Pieces with no partner (e.g. helmets) work alone.
-PAIR_SLOTS = ("body", "legs")
+# ---- body + legs pair: retired (David, 29 Oct 2026) ------------------------------------------------------
+# Body and legs equip and unequip on their own again. PAIR_SLOTS is empty so nothing enforces a pair; the
+# partner helpers below stay for tools that look up a tier's matching piece.
+PAIR_SLOTS = ()
 PAIR_NEED_MSG = "Body and legs are worn as a pair. You need the matching {partner} in your bag as well."
 PAIR_ROOM_MSG = "You need two free bag spaces to take off your body and legs together."
 _PAIR_SUFFIX = {"body": "legs", "chainbody": "chainlegs", "legs": "body", "chainlegs": "chainbody"}

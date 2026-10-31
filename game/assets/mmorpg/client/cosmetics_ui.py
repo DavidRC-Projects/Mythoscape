@@ -28,7 +28,7 @@ _CAT_MTIME = None
 _FACINGS = (("s", "Front"), ("e", "Side"), ("n", "Back"))
 # Everyone starts in the free Villager / Village Lady outfit (worn over the base clothes), so the
 # creator only picks what shows: skin tone, hair and hair colour. Mae sells the rest.
-_CREATOR_TABS = (("body", "Body"), ("hair", "Hair"), ("hair_colour", "Hair colour"))
+_CREATOR_TABS = (("body", "Body"), ("hair", "Hair"), ("hair_colour", "Hair colour"), ("outfits", "Outfits"))
 _CROPS = {
     "hair": (0.15, 0.0, 0.7, 0.38), "top": (0.18, 0.22, 0.64, 0.38), "bottom": (0.22, 0.48, 0.56, 0.32),
     "shoes": (0.25, 0.72, 0.5, 0.26), "outfit": (0.08, 0.04, 0.84, 0.94), "skin": (0.2, 0.12, 0.6, 0.7),
@@ -144,6 +144,7 @@ class Outfitters:
         self.toast = None
         self._pending_wear = None
         self._sil = {}
+        self.creator_peek = None
 
     # ---- open / close ------------------------------------------------------------------------
     def open(self, mode="shop", greeting=None):
@@ -158,6 +159,7 @@ class Outfitters:
         self.compare = False
         self._pending_wear = None
         self.greeting = greeting or ""
+        self.creator_peek = None
         import player_hd_client
         base = player.get("appearance") or player_hd_client.get_default_appearance(self.sex)
         self.look = self._full_look(base)
@@ -324,11 +326,17 @@ class Outfitters:
             return
         self.sex = "female" if self.sex == "male" else "male"
         import player_hd_client
-        fresh = player_hd_client.get_default_appearance(self.sex)
-        for key in ("hair", "top", "bottom", "shoes"):
-            item = _by_id(self.look.get(key))
-            if item and item.get("sex") not in (None, self.sex):
-                self.look[key] = fresh.get(key)
+        # Rebuild from the new body's own starter look (Villager <-> Village Lady HD figure). Keeping the
+        # old body's outfit/set ids made the female preview miss her HD art and fall back to the old doll.
+        tone, colour, hair = self.look.get("skin_tone"), self.look.get("hair_colour"), _by_id(self.look.get("hair"))
+        self.look = self._full_look(player_hd_client.get_default_appearance(self.sex))
+        if tone:
+            self.look["skin_tone"] = tone
+        if colour:
+            self.look["hair_colour"] = colour
+        if hair and hair.get("sex") in (None, self.sex):
+            self.look["hair"] = hair["id"]
+        self.creator_peek = None
         self.client.net.send("SET_GENDER", gender=self.sex)
         self._thumbs.clear()
 
@@ -356,6 +364,8 @@ class Outfitters:
             self.look["hair_colour"] = payload
         elif kind == "tone":
             self.look["skin_tone"] = payload
+        elif kind == "creator_set":
+            self._creator_pick_set(payload)
         elif kind in ("set_card", "wear_set"):
             self._try_set(payload)
         elif kind == "coll_card":
@@ -920,7 +930,7 @@ class Outfitters:
         pad = 300
         canvas = pygame.Surface((pad * 2, pad * 2), pygame.SRCALPHA)
         player_hd_client.draw_player(
-            canvas, self.sex, self._preview_look() if self.mode != "creator" else self.look,
+            canvas, self.sex, self._preview_look() if self.mode != "creator" else self._creator_stage_look(),
             pad, pad + 80, 160, pygame.time.get_ticks() / 1000.0, anim="idle", facing=facing, equipment=None,
             fx_ctx={"preview": True},
         )
@@ -1737,7 +1747,9 @@ class Outfitters:
         grid = pygame.Rect(650, 136, 490, 554)
         pygame.draw.rect(surf, NAVY_CARD, grid, border_radius=12)
         pygame.draw.rect(surf, GOLD_DIM, grid, 1, border_radius=12)
-        if self.tab == "body":
+        if self.tab == "outfits":
+            self._draw_creator_outfits(surf, grid)
+        elif self.tab == "body":
             self._draw_body_tab(surf, grid)
         elif self.tab == "hair_colour":
             self._text(surf, "Hair colour", (grid.x + 16, grid.y + 12), GOLD, 18, bold=True)
@@ -1764,7 +1776,7 @@ class Outfitters:
                            SAFE_GREEN if starter else MUTED, 13, centre=True)
                 self.hit.append(("item", rect, item))
         pygame.draw.line(surf, GOLD_DIM, (60, 702), (1140, 702), 1)
-        self._text(surf, "Everything here is free. More styles at Mythos Outfitters in the village.", (60, 716), MUTED, 14)
+        self._text(surf, "Starter looks are free. Locked outfits are earned and bought at Mythos Outfitters.", (60, 716), MUTED, 14)
         self._text(surf, "Skip uses the basic look for your body type.", (60, 736), MUTED, 14)
         x = 616
         for kind, label, primary in (("random", "Randomise", False), ("reset", "Reset", False), ("skip", "Skip", False),
@@ -1772,6 +1784,80 @@ class Outfitters:
             width = 150 if primary else 110
             self._button(surf, pygame.Rect(x, 718, width, 36), label, kind, primary=primary)
             x += width + 10
+
+    # ---- creator outfits: every set a player can get, shown with the shop's own data + thumbs ----------
+    def _starter_set(self):
+        return (_catalogue().get("starter_sets") or {}).get(self.sex)
+
+    def _creator_stage_look(self):
+        return self._set_look(self.creator_peek) if self.creator_peek else self.look
+
+    def _creator_hint(self, set_id):
+        """Short how-to-get line for a creator card (shop wording via _short_hint)."""
+        entry = self._sets().get(set_id) or {}
+        if set_id == self._starter_set():
+            return "Free starter"
+        coll = self._coll(set_id)
+        if coll:
+            return "Sold separately" if self._coll_live(coll) else "Coming soon"
+        price = int(entry.get("price") or 0)
+        if not entry.get("unlock"):
+            return f"Mae's shop · {price:,}"
+        return self._short_hint(set_id, {"hint": "Locked"})
+
+    def _creator_pick_set(self, set_id):
+        if set_id == self._starter_set():
+            self.look = self._set_look(set_id)
+            self.creator_peek = None
+            return
+        self.creator_peek = None if self.creator_peek == set_id else set_id
+        name = (self._sets().get(set_id) or self._coll(set_id) or {}).get("name") or "This outfit"
+        if self.creator_peek:
+            self._say(f"{name}: {self._creator_hint(set_id)}. Preview only")
+
+    def _draw_creator_outfits(self, surf, grid):
+        self._text(surf, "Outfits", (grid.x + 16, grid.y + 12), GOLD, 18, bold=True)
+        self._text(surf, "Every look you can earn. Click a locked one to preview it.", (grid.x + 100, grid.y + 16),
+                   MUTED, 13)
+        order = list(self._set_order()) + [c["id"] for c in self._collection()]
+        starter = self._starter_set()
+        cols, card_w, card_h, gx, gy = 7, 64, 190, 4, 8
+        x0 = grid.x + (grid.w - (cols * card_w + (cols - 1) * gx)) // 2
+        for i, sid in enumerate(order):
+            rect = pygame.Rect(x0 + (i % cols) * (card_w + gx), grid.y + 44 + (i // cols) * (card_h + gy), card_w, card_h)
+            if rect.bottom > grid.bottom - 4:
+                break
+            coll = self._coll(sid)
+            entry = coll or self._sets().get(sid) or {}
+            free = sid == starter
+            worn = free and self.creator_peek is None
+            peek = self.creator_peek == sid
+            pygame.draw.rect(surf, NAVY, rect, border_radius=8)
+            tier = entry.get("tier")
+            if tier:
+                tier_col = tuple((_catalogue().get("tier_colours") or {}).get(str(tier), GOLD))
+                pygame.draw.rect(surf, tier_col, (rect.x + 6, rect.y + 5, rect.w - 12, 4), border_radius=2)
+                self._text(surf, f"T{tier}", (rect.right - 5, rect.y + 10), tier_col, 11, bold=True, right=True)
+            if coll:
+                thumb = self._silhouette(coll, (54, 104))
+            else:
+                thumb = self._set_thumb(sid, "s", (58, 108))
+                if thumb is not None and not free:
+                    thumb = thumb.copy()
+                    thumb.fill((130, 130, 130, 255), special_flags=pygame.BLEND_RGBA_MULT)
+            if thumb:
+                surf.blit(thumb, (rect.centerx - thumb.get_width() // 2, rect.y + 118 - thumb.get_height()))
+            if not free:
+                self._padlock(surf, (rect.centerx, rect.y + 70), 0.9, INK if peek else LOCK_GREY)
+            for k, row in enumerate(self._wrap(entry.get("name") or sid, rect.w - 4, 12)[:2]):
+                self._text(surf, row, (rect.centerx, rect.y + 120 + k * 13), INK if free or peek else MUTED, 12,
+                           centre=True)
+            for k, row in enumerate(self._wrap(self._creator_hint(sid), rect.w - 4, 11)[:3]):
+                self._text(surf, row, (rect.centerx, rect.y + 147 + k * 12), SAFE_GREEN if free else GOLD_DIM, 11,
+                           centre=True)
+            pygame.draw.rect(surf, GOLD_HI if (worn or peek) else (GOLD_DIM if free else LOCK_GREY), rect,
+                             3 if (worn or peek) else 1, border_radius=8)
+            self.hit.append(("creator_set", rect, sid))
 
     def _draw_creator_stage(self, surf):
         stage = pygame.Rect(60, 136, 400, 554)
@@ -1782,6 +1868,14 @@ class Outfitters:
         pygame.draw.ellipse(surf, (32, 26, 22), ped)
         self._blit_stage_player(surf, stage.centerx, feet, _FACINGS[self.facing_i][0])
         pygame.draw.ellipse(surf, GOLD, ped, 2)
+        if self.creator_peek:
+            name = (self._sets().get(self.creator_peek) or self._coll(self.creator_peek) or {}).get("name") or ""
+            band = pygame.Rect(stage.x + 16, stage.y + 58, stage.w - 32, 46)
+            pygame.draw.rect(surf, NAVY, band, border_radius=8)
+            pygame.draw.rect(surf, GOLD_DIM, band, 1, border_radius=8)
+            self._padlock(surf, (band.x + 20, band.centery), 0.8, GOLD)
+            self._text(surf, f"Preview: {name}", (band.x + 38, band.y + 5), INK, 14, bold=True)
+            self._text(surf, self._creator_hint(self.creator_peek), (band.x + 38, band.y + 25), GOLD_DIM, 12)
         pill = pygame.Rect(stage.centerx - 78, stage.y + 16, 156, 32)
         pygame.draw.rect(surf, NAVY, pill, border_radius=16)
         pygame.draw.rect(surf, GOLD_DIM, pill, 1, border_radius=16)
