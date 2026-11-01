@@ -1,6 +1,6 @@
 {
  "key": "castle_realm_portal",
- "name": "Castle Realm Portal",
+ "name": "King's Realm Portal",
  "flag": "USE_NEW_CASTLE_PORTAL",
  "also_gate": "USE_CASTLE_REALM",
  "camera": {
@@ -42,7 +42,7 @@
   "overworld": {
    "x": 9,
    "y": 19,
-   "name": "Castle Realm portal"
+   "name": "King's Realm portal"
   },
   "realm_return": {
    "x": 150,

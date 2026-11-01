@@ -397,3 +397,106 @@ def draw_ladder(client, surf, font, small, body, data, rects, scroll):
         surf.blit(small.render(f"#{e['rank']:>2}  {e['name'][:22]:<22}  {e['rating']}   {e['wins']}-{e['losses']}",
                                True, col), (body.x + 26, y))
         y += 22
+
+
+# ---- Pit gladiators: regular arena soldiers drawn as painted gladiator sheets ----
+# Same painted style/proportions as the HD player (about 7.5 heads), sized to the
+# player doll's on-screen height. The soldier doll stays as the fallback.
+_GLAD_DIR = os.path.join(os.path.dirname(__file__), "assets", "castle_realm", "arena", "gladiators")
+GLADIATOR_TYPES = {
+    "levy": "tiro", "man_at_arms": "murmillo", "veteran": "thraex", "skirmisher": "retiarius",
+    "bulwark": "secutor", "zealot": "dimachaerus", "duelist": "provocator", "medic": "hoplomachus",
+}
+_GLADIATRIX = {
+    "levy": "gladiatrix_retiaria", "skirmisher": "gladiatrix_retiaria", "zealot": "gladiatrix_retiaria",
+    "medic": "gladiatrix_retiaria",
+}
+# Head-top-to-sole height in tiles; matches player_hd_client.draw_player (1.955 / 1.75).
+GLAD_HEIGHT_TILES = {"male": 1.96, "female": 1.76}
+_GLAD_FEET = {"1x": (64, 156), "2x": (128, 312)}
+_GLAD_BODY = {"1x": 112, "2x": 224}
+_GLAD_SOLE_DROP = 0.08   # the doll's soles sit ~0.08 tile below the feet anchor
+_GIMG = {}
+_GSCALED = {}
+_GFRAMES = {}
+
+
+def gladiator_type(m, gender="male"):
+    """Sheet id for a pit soldier, or None (champions, duels, field battles, guards keep their art)."""
+    if m.get("boss") or m.get("duel_player") or m.get("field_soldier"):
+        return None
+    tid = m.get("template_id") or "levy"
+    if tid not in GLADIATOR_TYPES:
+        return None
+    if str(gender or "male") == "female":
+        return _GLADIATRIX.get(tid, "gladiatrix_murmillo")
+    return GLADIATOR_TYPES[tid]
+
+
+def gladiator_surface(gid, face, tile_px, gender="male"):
+    face = face if face in ("n", "e", "s", "w") else "s"
+    tag = "1x" if tile_px <= 44 else "2x"
+    k = (gid, tag, face, int(tile_px))
+    if k in _GSCALED:
+        return _GSCALED[k]
+    if (gid, tag, face) not in _GIMG:
+        path = os.path.join(_GLAD_DIR, gid, tag, f"{face}.png")
+        try:
+            _GIMG[(gid, tag, face)] = pygame.image.load(path).convert_alpha() if os.path.isfile(path) else None
+        except Exception:
+            _GIMG[(gid, tag, face)] = None
+    img = _GIMG[(gid, tag, face)]
+    if img is None:
+        return None
+    ht = GLAD_HEIGHT_TILES["female" if gid.startswith("gladiatrix") else "male"]
+    s = (ht * tile_px) / float(_GLAD_BODY[tag])
+    w, h = max(1, int(img.get_width() * s)), max(1, int(img.get_height() * s))
+    fx, fy = _GLAD_FEET[tag]
+    _GSCALED[k] = (pygame.transform.smoothscale(img, (w, h)), fx * s, fy * s - _GLAD_SOLE_DROP * tile_px)
+    if len(_GSCALED) > 160:
+        _GSCALED.clear()
+    return _GSCALED[k]
+
+
+def draw_gladiator(screen, m, cx, feet, tile_px, t, anim, atk, swing, face, gender="male"):
+    """Draw a pit soldier as a gladiator. Returns True when drawn, False to fall back."""
+    gid = gladiator_type(m, gender)
+    if gid is None:
+        return False
+    face = face if face in ("n", "e", "s", "w") else ("e" if m.get("facing") == "e" else "w")
+    got = gladiator_surface(gid, face, tile_px, gender)
+    if got is None:
+        return False
+    img, fx, fy = got
+    p = max(float(atk or 0), float(swing or 0))
+    if anim == "walk":
+        frame = int(t * 8.0) % WALK_FRAMES
+    elif anim == "melee":
+        frame = 0 if p < 0.35 else (1 if p < 0.75 else 2)
+    else:
+        frame = -1
+    if frame >= 0:
+        k = (gid, face, int(tile_px), anim, frame)
+        if k not in _GFRAMES:
+            _GFRAMES[k] = (_walk_frame if anim == "walk" else _attack_frame)(img, fx, fy, face, frame)
+            if len(_GFRAMES) > 320:
+                _GFRAMES.clear()
+        img = _GFRAMES[k]
+    dx = dy = 0.0
+    if anim == "melee":
+        lunge = math.sin(min(1.0, p) * math.pi) * tile_px * 0.10
+        dx = {"e": lunge, "w": -lunge}.get(face, 0.0)
+        dy = {"s": lunge * 0.4, "n": -lunge * 0.4}.get(face, 0.0)
+    elif anim != "walk":
+        dy = math.sin(t * 2.0 + (hash(m.get("id")) % 7)) * tile_px * 0.01
+    sw, sh = max(8, int(tile_px * 0.9)), max(4, int(tile_px * 0.26))
+    sk = ("shadow", sw, sh)
+    if sk not in _GFRAMES:
+        sd = pygame.Surface((sw, sh), pygame.SRCALPHA)
+        for i in range(4):
+            pygame.draw.ellipse(sd, (0, 0, 0, 26), (i * sw // 10, i * sh // 10, sw - i * sw // 5, sh - i * sh // 5))
+        _GFRAMES[sk] = sd
+    sole = feet + _GLAD_SOLE_DROP * tile_px
+    screen.blit(_GFRAMES[sk], (int(cx + dx - sw / 2), int(sole - sh * 0.6)))
+    screen.blit(img, (int(cx - fx + dx), int(feet - fy + dy)))
+    return True

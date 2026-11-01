@@ -52,12 +52,14 @@ log = logging.getLogger("server")
 
 # Private instance dungeons keyed by id (interactable dungeon_id / session.dungeon["id"])
 import sewer_tutorial
+import deepdelve
 DUNGEON_MODS = {
     "tidehollow": tidehollow,
     "emberdeep": emberdeep,
     "depths": explore_dungeons,
     "sanctum": explore_dungeons,
     "sewer": sewer_tutorial,
+    "deepdelve": deepdelve,
 }
 DUNGEON_META = {
     "sewer": {
@@ -456,10 +458,12 @@ class PlayerSession:
     def max_hp(self):
         """Hitpoints is the sum of the three highest combat skills, not its own XP."""
         arch = self.level("archery") if "archery" in self.xp else 1
-        return combat.combat_level(
+        base = combat.combat_level(
             self.level("attack"), self.level("strength"),
             self.level("defence"), archery=arch,
         )
+        import tavern
+        return base + tavern.hp_bonus(self, base)   # Resting Ox stout / Reserve: +% max HP for 10 min
 
     def combat_stats(self, attack_bonus=0, strength_bonus=0, defence_bonus=0):
         wb = self.weapon_bonuses()
@@ -1771,6 +1775,8 @@ class World:
         before_pool = session.max_hp() if skill in ("attack", "strength", "defence", "archery") else None
         before = session.level(skill)
         boost = sewer_tutorial.xp_mult(session, skill)
+        import tavern
+        boost *= tavern.xp_mult(session, skill)       # Resting Ox drink + table toast buffs
         if boost != 1.0 and amount > 0:
             amount = int(round(amount * boost))
         session.xp[skill] += amount
@@ -2088,8 +2094,21 @@ def _bounty_hook(session, monster_type):
                               "text": f"{session.char_name} claims the royal bounty on a {name}: {paid:,} coins!"}))
 
 
+def _tavern_kill_hook(session, monster_type):
+    """Resting Ox: Cellar Rats, notice-board bounties and the trophy wall's great kills."""
+    try:
+        import tavern
+        lines = tavern.on_kill(session, WORLD.db.conn, monster_type, MONSTERS)
+    except Exception:
+        log.exception("tavern kill hook failed")
+        return
+    for line in lines:
+        asyncio.ensure_future(send(session.ws, "CHAT_MSG", **{"from": "Resting Ox", "text": line}))
+
+
 def check_quest_progress_on_kill(session, monster_type):
     _bounty_hook(session, monster_type)
+    _tavern_kill_hook(session, monster_type)
     # Sewer / village rats count as Giant Rats for Rat Problem.
     monster_type = (MONSTERS.get(monster_type) or {}).get("quest_as") or monster_type
     changed = False
@@ -2776,6 +2795,9 @@ async def _handle_move_body(session, msg):
         if session.dungeon.get("id") == sewer_tutorial.SEWER_ID:
             if await sewer_tutorial.on_step(session):
                 return
+        if session.dungeon.get("id") == deepdelve.DEEPDELVE_ID:
+            if await deepdelve.on_step(session):
+                return
         ex = session.dungeon.get("exit_x")
         ey = session.dungeon.get("exit_y")
         if ex is not None and (session.x, session.y) == (int(ex), int(ey)):
@@ -2805,6 +2827,9 @@ async def _handle_move_body(session, msg):
     _pet_keep_up(session, dx, dy)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     await _notify_teleport_marks(session, _discover_teleport_marks(session))
+    # Deepdelve Mine lift pads and the Heart door.
+    if await deepdelve.on_overworld_step(session):
+        return
     # Walking into a dungeon mouth enters it — same as clicking the entrance.
     spot, dungeon_id = _find_dungeon_entrance(session)
     if dungeon_id and (session.x, session.y) in entrance_mouth_tiles(
@@ -3147,6 +3172,8 @@ def _dungeon_payload(session):
     payload.update(_dungeon_room_hud(session))
     if d.get("sewer") is not None:
         payload["sewer"] = sewer_tutorial.client_extra(session)
+    if d.get("deepdelve") is not None:
+        payload["deepdelve"] = deepdelve.client_extra(session)
     if d.get("v2") == "depths":
         import depths_v2
         payload.update(depths_v2.client_extra(session))
@@ -3259,6 +3286,8 @@ async def _finish_dungeon_kill(session, monster=None):
                 await depths_v2.announce_first_kill(session)
             if d.get("id") == sewer_tutorial.SEWER_ID:
                 await sewer_tutorial.on_kill(session, monster)
+            if d.get("id") == deepdelve.DEEPDELVE_ID:
+                await deepdelve.on_kill(session, monster)
         return
     await _grant_dungeon_kill_loot(session)
     if d.get("rooms"):
@@ -3515,6 +3544,8 @@ def _resume_payload(session):
         return None
     if d.get("id") == sewer_tutorial.SEWER_ID:
         return None   # the sewer keeps its own progress in the quest row
+    if d.get("id") == deepdelve.DEEPDELVE_ID:
+        return None   # mine gauntlets rebuild on each lift ride; unlocks live in the deepdelve table
     if d.get("id") == "castle_realm":
         return {
             "id": "castle_realm",
@@ -3645,8 +3676,16 @@ async def _resume_castle_realm(session, resume):
             # Unknown / removed interior — stay on the outdoor spawn.
             plane = "realm"
     if plane == "realm":
+        import mercenaries as merc
+        # Never wake on the sand — logouts park outside the gate.
+        if merc.inside_arena_campus(x, y):
+            x, y = merc.outside_arena_tile()
         if castle_realm.walkable("realm", x, y):
             session.x, session.y = x, y
+        else:
+            ox, oy = merc.outside_arena_tile()
+            if castle_realm.walkable("realm", ox, oy):
+                session.x, session.y = ox, oy
         if getattr(session, "pet_id", None):
             session.pet_x, session.pet_y = session.x, session.y
     _bring_pet(session)
@@ -3655,8 +3694,8 @@ async def _resume_castle_realm(session, resume):
     await castle_owners.send_state(session)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     await send(session.ws, "CHAT_MSG", **{
-        "from": "Castle Realm",
-        "text": "You return to the Castle Realm where you left off.",
+        "from": "King's Realm",
+        "text": "You return to the King's Realm where you left off.",
     })
 
 
@@ -3701,7 +3740,7 @@ async def handle_enter_dungeon(session, msg):
     if preferred == "castle_realm" and feature_flags.USE_CASTLE_REALM:
         spot, dungeon_id = _find_dungeon_entrance(session, preferred_id=preferred)
         if dungeon_id != "castle_realm":
-            await send(session.ws, "ERROR", message="Stand at the Castle Realm portal.")
+            await send(session.ws, "ERROR", message="Stand at the King's Realm portal.")
             return
         import castle_realm
         castle_realm.enter(session)
@@ -3715,8 +3754,8 @@ async def handle_enter_dungeon(session, msg):
         await castle_owners.send_state(session)
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
         await send(session.ws, "CHAT_MSG", **{
-            "from": "Castle Realm",
-            "text": "You step through the portal into the Castle Realm. The return portal stands south of the plaza.",
+            "from": "King's Realm",
+            "text": "You step through the portal into the King's Realm. The return portal stands south of the plaza.",
         })
         return
     spot, dungeon_id = _find_dungeon_entrance(session, preferred_id=preferred)
@@ -3873,7 +3912,7 @@ async def handle_leave_dungeon(session, msg=None, silent=False):
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
         if not silent:
             await send(session.ws, "CHAT_MSG", **{
-                "from": "Castle Realm", "text": "You return beside the Castle Realm portal.",
+                "from": "King's Realm", "text": "You return beside the King's Realm portal.",
             })
         return
     if session.dungeon.get("v2"):
@@ -5151,6 +5190,10 @@ async def handle_gather(session, msg):
     if session.level(yield_def["skill"]) < yield_def["level_req"]:
         await send(session.ws, "ERROR", message=f"You need {yield_def['skill']} level {yield_def['level_req']} for this.")
         return
+    refuse = deepdelve.can_gather(session, node["type"])
+    if refuse:
+        await send(session.ws, "ERROR", message=refuse)
+        return
     skill = yield_def["skill"]
     allowed = yield_def.get("tools")
     if skill in ("woodcutting", "mining", "fishing"):
@@ -5522,7 +5565,7 @@ async def handle_teleport(session, msg):
     was_inside = bool(session.dungeon)
     if dest["where"] == "castle":
         if not feature_flags.USE_CASTLE_REALM:
-            await send(session.ws, "ERROR", message="The Castle Realm is closed.")
+            await send(session.ws, "ERROR", message="The King's Realm is closed.")
             return
         import castle_realm
         if not castle_realm.walkable("realm", tx, ty):
@@ -5773,7 +5816,7 @@ async def handle_talk(session, msg):
     ):
         npc_lines = [
             "Coins and bones drop when you fight — they stay on the ground unless you pick them up.",
-            "Turn on Coins+bones above ATK/STR (or press P). Then coins and bones scoop themselves.",
+            "Turn on Coins+bones above ATK/STR (or press L). Then coins and bones scoop themselves.",
         ]
     await send(
         session.ws, "DIALOGUE", npc_id=npc_id, npc_name=npc["name"],
@@ -5814,7 +5857,7 @@ async def handle_talk(session, msg):
     ):
         await send_ui_coach(
             session, welcome_kit.COACH_AUTO_PICKUP, "auto_pickup",
-            "Coins+bones above ATK/STR (or press P). Off by default — turn it on to auto-grab coins & bones.",
+            "Coins+bones above ATK/STR (or press L). Off by default — turn it on to auto-grab coins & bones.",
             dismiss_key="p",
         )
     if session.quest_log_dirty:
@@ -6652,6 +6695,18 @@ async def handle_barracks(session, msg):
     if action == "arena_begin":
         await begin_arena_fight(session)
         return
+    if action == "duel_style":
+        ok, text = merc.duel_set_style(session, msg.get("style"))
+        if not ok:
+            await send(session.ws, "ERROR", message=text)
+            return
+        match = session.arena_match
+        await send(session.ws, "ARENA_MATCH_UPDATE", units=[merc.unit_public(u) for u in match["units"]],
+                   hud=merc.match_hud(match), phase="preview")
+        return
+    if action == "duel_ready":
+        merc.duel_ready(session)
+        return
     if action == "duel_move":
         # Boss duel input (light / heavy / parry / dodge / back / forward / finish).
         ok, text = merc.duel_action(session, msg.get("move"))
@@ -6667,7 +6722,7 @@ async def start_arena_practice(session, foe_id):
     import castle_realm
     conn = WORLD.db.conn
     if not session.dungeon or session.dungeon.get("id") != "castle_realm":
-        await send(session.ws, "ERROR", message="Enter the Castle Realm and stand at the Crownfall Arena.")
+        await send(session.ws, "ERROR", message="Enter the King's Realm and stand at the Crownfall Arena.")
         return
     # Field squad can't share the sand with a practice line-up.
     if merc.deployed_list(session):
@@ -6750,12 +6805,41 @@ async def settle_arena_match(session):
     )
 
 
+_DUEL_LOOP = {}
+
+
+async def duel_loop():
+    """Boss duels step every 200 ms (one duel step) so input and tells feel immediate;
+    the 0.6 s world tick would batch three steps and lag every press."""
+    import mercenaries as merc
+    while True:
+        await asyncio.sleep(0.2)
+        try:
+            for session in list(WORLD.sessions.values()):
+                match = getattr(session, "arena_match", None)
+                if not match or match.get("phase") != "fight" or match.get("mode") != "duel":
+                    continue
+                for ev in merc.tick_live_match(match, steps=1):
+                    ev_type = ev.pop("type", "COMBAT_EVENT")
+                    await send(session.ws, ev_type, **ev)
+                if match.get("phase") == "done":
+                    await settle_arena_match(session)
+                elif (match.get("tick") or 0) % 3 == 0:
+                    await send(session.ws, "ARENA_MATCH_UPDATE",
+                               units=[merc.unit_public(u) for u in match["units"]], hud=merc.match_hud(match))
+        except Exception:
+            logging.getLogger(__name__).exception("duel loop")
+
+
 async def process_arena_matches(events):
     """Tick live practice fights and emit combat splat events to the commander."""
     import mercenaries as merc
+    t = _DUEL_LOOP.get("task")
+    if t is None or t.done():
+        _DUEL_LOOP["task"] = asyncio.get_running_loop().create_task(duel_loop())
     for session in list(WORLD.sessions.values()):
         match = getattr(session, "arena_match", None)
-        if not match or match.get("phase") != "fight":
+        if not match or match.get("phase") != "fight" or match.get("mode") == "duel":
             continue
         for ev in merc.tick_live_match(match):
             ev_type = ev.pop("type", "COMBAT_EVENT")
@@ -6850,7 +6934,7 @@ async def handle_npc_option(session, msg):
         lines = [
             f"Your Command is level {cmd}.",
             "Fight practice houses (and later the arena) to raise it.",
-            "Mythos ore smelts at Smithing 60 + Command 60; Mythos Guards and kits at Command 80.",
+            "Mythos ore smelts at Smithing 60 + Command 60; Crown Guards and Crownforged kits at Command 80.",
         ]
         if nxt:
             lines.append(f"Next unlock at {nxt['level']}: {nxt['text']}")
@@ -9728,6 +9812,8 @@ async def handler(ws):
                     import fairy_village
                     await fairy_village.act(session, msg.get("id"))
                 elif mtype == "LOGOUT":
+                    # Intentional logout: no combat linger; clear arena and save outside the gate.
+                    await logout_session(session, "logout")
                     break
             except Exception:
                 log.exception("handler error type=%s ip=%s", mtype, peer)
@@ -9747,12 +9833,29 @@ async def handler(ws):
                 await logout_session(session, "disconnect")
 
 
+def _park_outside_arena_if_needed(session):
+    """If leaving mid-arena (or standing on the sand), resume outside the gate."""
+    import mercenaries as merc
+    had_match = merc.abort_arena_match(session)
+    if not (session.dungeon and session.dungeon.get("id") == "castle_realm"):
+        return had_match
+    if session.dungeon.get("plane") not in (None, "", "realm"):
+        return had_match
+    if had_match or merc.inside_arena_campus(session.x, session.y):
+        ox, oy = merc.outside_arena_tile()
+        session.x, session.y = ox, oy
+        if getattr(session, "pet_id", None):
+            session.pet_x, session.pet_y = ox, oy
+    return had_match
+
+
 async def logout_session(session, reason="logout"):
     """The one logout path (LOGOUT, socket close, idle kick, end of a combat linger): save and remove."""
     if WORLD.sessions.get(session.player_id) is not session:
         return
     if getattr(session, "trade_partner_id", None):
         await handle_trade_cancel(session, {})
+    _park_outside_arena_if_needed(session)
     if session.dungeon and session.dungeon.get("id") == "castle_realm":
         # Persist realm plane/tile; keep overworld portal coords as the safe login fallback.
         _save_dungeon_resume(session)
@@ -9767,6 +9870,11 @@ async def logout_session(session, reason="logout"):
         WORLD.db.save_player_position(session.player_id, session.x, session.y)
         _clear_dungeon_resume(session)
     WORLD.db.save_player_stats(session.player_id, hp=session.hp)
+    try:
+        import tavern
+        tavern.drop_session(session)      # free their table seat and bard request
+    except Exception:
+        pass
     del WORLD.sessions[session.player_id]
     log.info("%s disconnected (%s)", session.char_name, reason)
 
@@ -9952,6 +10060,7 @@ async def game_loop():
             await _flush_pk_notices()
             await process_stat_boosts()
             await process_equip_regen()
+            await process_tavern_regen()
             await flush_quest_logs()
             if feature_flags.USE_PLAYER_HOUSING and WORLD.tick_count % 500 == 0:
                 await _housing.tick_leases()
@@ -10106,6 +10215,27 @@ async def process_stat_boosts():
                     "text": f"Your {skill} boost (+{amount}) has worn off.",
                 },
             )
+
+
+async def process_tavern_regen():
+    """Resting Ox cider / stew: +regen HP every 5 s out of combat while the buff lasts; resolves table toasts."""
+    import tavern
+    import resting_ox_inn
+    now = time.time()
+    for session in list(WORLD.sessions.values()):
+        if session.hp <= 0 or now - float(getattr(session, "last_tavern_regen_at", 0) or 0) < 5.0:
+            continue
+        n = tavern.regen_amount(session, now)
+        if n <= 0:
+            continue
+        session.last_tavern_regen_at = now
+        max_hp = session.max_hp()
+        if session.hp >= max_hp:
+            continue
+        session.hp = min(max_hp, session.hp + n)
+        WORLD.db.save_player_stats(session.player_id, hp=session.hp)
+        await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    await resting_ox_inn.tick(send)
 
 
 async def process_equip_regen():
@@ -10476,7 +10606,7 @@ async def process_combat(events):
                     elif v2_death:
                         fall = "You fall in the sanctum and wake outside. The dark keeps what you carried."
                     elif realm_death:
-                        fall = "You wake outside the Castle Realm portal."
+                        fall = "You wake outside the King's Realm portal."
                     else:
                         fall = "You fall in the cave and wake outside — the depths reclaim their silence."
                     await send(session.ws, "CHAT_MSG", **{"from": "Tidehollow", "text": fall})
@@ -10829,7 +10959,11 @@ async def process_gathering(events):
             await send(session.ws, "ERROR", message=f"You can't carry more than {MAX_ORES} ores. Bank some first.")
             session.gathering_node = None
             continue
-        if not WORLD.add_item_to_inventory(session, ydef["item"], 1):
+        if deepdelve.can_gather(session, node["type"]):
+            session.gathering_node = None
+            continue
+        got_item = deepdelve.gather_item(node["type"], ydef)
+        if not WORLD.add_item_to_inventory(session, got_item, 1):
             await send(session.ws, "ERROR", message="Your inventory is full.")
             session.gathering_node = None
             continue

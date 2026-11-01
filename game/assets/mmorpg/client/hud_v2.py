@@ -14,17 +14,21 @@ from content import (
     COOKED_FISH_IDS, TRAVEL_DESTINATIONS, is_gem_item, is_storage_bag, is_food,
 )
 
-NAVY = (12, 18, 34)
-NAVY_CARD = (20, 28, 48)
-NAVY_HI = (32, 42, 68)
-NAVY_DEEP = (8, 12, 24)
-GOLD = (212, 175, 90)
-GOLD_BRIGHT = (242, 210, 120)
-GOLD_DIM = (120, 96, 52)
-INK = (232, 226, 210)
-MUTED = (150, 160, 180)
+# Sidebars v2: warm carved-wood palette (names kept so callers don't change).
+NAVY = (26, 20, 14)
+NAVY_CARD = (42, 30, 20)
+NAVY_HI = (78, 60, 36)
+NAVY_DEEP = (14, 10, 6)
+GOLD = (206, 174, 115)
+GOLD_BRIGHT = (242, 214, 150)
+GOLD_DIM = (122, 96, 60)
+INK = (255, 241, 207)
+MUTED = (176, 160, 128)
 SAFE_GREEN = (72, 180, 110)
 DANGER_RED = (210, 70, 70)
+INK_Q = (43, 33, 24)        # quest parchment ink
+GOLD_Q = (92, 58, 22)       # parchment objective (warm sepia)
+MUTED_Q = (104, 84, 60)
 
 _HUD_DIR = os.path.join(os.path.dirname(__file__), "assets", "hud")
 _ART = {}  # path -> Surface
@@ -136,7 +140,40 @@ def reload_hud_art():
     _ART.clear()
 
 
-def _panel(surf, rect, fill=NAVY_CARD, border=GOLD_DIM, radius=8, width=1, ornate=False):
+def _panel(surf, rect, fill=NAVY_CARD, border=GOLD_DIM, radius=8, width=1, ornate=False, role=None):
+    """Sidebars v2 material: carved wood card or 3D raised / inset button (old look on error)."""
+    try:
+        import hud_skin
+        if rect.w < 4 or rect.h < 4:
+            return
+        f = tuple(fill)[:3]
+        b = tuple(border)[:3]
+        kind = None
+        if f[0] > f[1] + 20 and f[0] > f[2] + 15 or b == DANGER_RED:
+            kind = "danger"
+        elif f[2] > f[1] + 15 and f[0] > f[1] + 5:
+            kind = "arcane"
+        elif f[1] > f[0] + 15 or b == SAFE_GREEN:
+            kind = "safe"
+        if role is None:
+            role = "button" if (kind or (rect.h <= 40 and rect.w <= 200)) else "card"
+        active = f == NAVY_HI or b == GOLD_BRIGHT
+        if role == "card":
+            hud_skin.card(surf, rect, min(radius + 2, 10), ornate=ornate, highlight=active)
+        elif role == "well":
+            hud_skin.well(surf, rect, radius)
+        else:
+            hud_skin.button(surf, rect, kind or ("active" if active else "idle"), inset=active and not kind,
+                            r=min(radius, 7))
+        return
+    except Exception as e:  # pragma: no cover - fallback keeps the HUD up
+        if not getattr(_panel, "_err", None):
+            _panel._err = str(e)
+            print("[hud_skin] panel fallback:", e)
+    _panel_legacy(surf, rect, fill, border, radius, width, ornate)
+
+
+def _panel_legacy(surf, rect, fill=NAVY_CARD, border=GOLD_DIM, radius=8, width=1, ornate=False):
     """Card with soft depth: shadow, gradient body, inner rim, gold edge, optional corners."""
     if rect.w < 4 or rect.h < 4:
         return
@@ -190,7 +227,25 @@ def _draw_corner_flourishes(surf, rect):
         pygame.draw.circle(surf, GOLD, (cx, cy), 2)
 
 
-def _fill_bar(surf, rect, pct, color, radius=4):
+def _fill_bar(surf, rect, pct, color, radius=4, kind=None, low=False):
+    """Sidebars v2 glossy bar (trough, liquid fill, 10% ticks, gem caps); old meter on error."""
+    try:
+        import hud_skin
+        c = tuple(color)[:3]
+        if kind is None:
+            kind = "hp" if (c[1] > c[0] or c[0] > c[1] + 80) else "xp"
+            low = low or (c[0] > c[1] + 80)
+        r = rect.inflate(0, 10 - rect.h) if rect.h < 10 else rect
+        hud_skin.bar(surf, r, pct, kind, low=low, t=pygame.time.get_ticks() / 1000.0)
+        return
+    except Exception as e:  # pragma: no cover
+        if not getattr(_fill_bar, "_err", None):
+            _fill_bar._err = str(e)
+            print("[hud_skin] bar fallback:", e)
+    _fill_bar_legacy(surf, rect, pct, color, radius)
+
+
+def _fill_bar_legacy(surf, rect, pct, color, radius=4):
     """Ornate meter: deep trough, fill, top gloss."""
     pygame.draw.rect(surf, NAVY_DEEP, rect, border_radius=radius)
     pygame.draw.rect(surf, GOLD_DIM, rect, 1, border_radius=radius)
@@ -201,6 +256,21 @@ def _fill_bar(surf, rect, pct, color, radius=4):
         gloss = pygame.Surface((fill.w, max(1, fill.h // 2)), pygame.SRCALPHA)
         gloss.fill((255, 255, 255, 55))
         surf.blit(gloss, fill.topleft)
+
+
+def _title_font(size):
+    """Cinzel for titles / buttons (spec 1); None if the font can't load."""
+    try:
+        import hud_skin
+        return hud_skin.font("title", size)
+    except Exception:
+        return None
+
+
+# Real keys only (sidebars v2 keybind check): nav keycaps never show a fake letter.
+NAV_KEYS = {"quests": "Q", "party": "P", "pvp": "K"}
+NAV_ICONS = {"quests": "scroll", "events": "pennant", "party": "party", "guild": "guild",
+             "map": "map", "pvp": "swords"}
 
 
 def _text(client, font, text, color):
@@ -471,6 +541,17 @@ def _draw_zone_chip(client):
     label = "Safe Zone" if safe else "PvP Danger"
     title = _text(client, client.font_small, name, INK)
     sub = _text(client, client.font_tiny, label, SAFE_GREEN if safe else DANGER_RED)
+    try:
+        import hud_skin
+        kind = "dungeon" if zone in ("emberdeep", "crypt", "mine") else ("safe" if safe else "pvp")
+        tf = hud_skin.font("title", 13)
+        width = max(100, tf.size(name)[0] + 22)
+        rect = pygame.Rect(8, 4, width, 54)
+        hud_skin.shield_badge(client.screen, rect, kind, name, label)
+        client.hud_world_rects["zone"] = rect
+        return
+    except Exception as e:  # pragma: no cover
+        print("[hud_skin] zone fallback:", e)
     width = max(title.get_width(), sub.get_width()) + 36
     rect = pygame.Rect(8, 8, width, 36)
     _panel(client.screen, rect, NAVY, SAFE_GREEN if safe else DANGER_RED, radius=8, width=2)
@@ -481,6 +562,46 @@ def _draw_zone_chip(client):
 
 
 def _draw_left_nav(client):
+    try:
+        return _draw_left_nav_v2(client)
+    except Exception as e:  # pragma: no cover
+        if not getattr(_draw_left_nav, "_err", None):
+            _draw_left_nav._err = str(e)
+            print("[hud_skin] nav fallback:", e)
+    _draw_left_nav_legacy(client)
+
+
+def _draw_left_nav_v2(client):
+    """Sidebars v2 left nav: 3D wood buttons, medallion icon, Cinzel label, real-key keycap."""
+    import hud_skin
+    labels = ("Quests", "Events", "Party", "Guild", "Map", "PvP")
+    keys = ("quests", "events", "party", "guild", "map", "pvp")
+    top = 66
+    rects = {}
+    mouse = pygame.mouse.get_pos()
+    pk_on = bool((getattr(client, "player", None) or {}).get("player_killer"))
+    f = hud_skin.font("title", 12)
+    for i, (key, label) in enumerate(zip(keys, labels)):
+        rect = pygame.Rect(8, top + i * 42, 116, 37)
+        active = (key == "pvp" and pk_on) or (key != "pvp" and client.hud_focus == key)
+        kind = "danger" if (key == "pvp" and pk_on) else ("active" if active else "idle")
+        hover = rect.collidepoint(mouse)
+        hud_skin.button(client.screen, rect, kind, inset=active and kind != "danger", hover=hover)
+        cx, cy = rect.x + 19, rect.centery
+        hud_skin.medallion(client.screen, cx, cy, 13)
+        hud_skin.icon(client.screen, NAV_ICONS[key], cx, cy, 8)
+        hud_skin.text(client.screen, label, f, hud_skin.label_color(kind, active or hover),
+                      (rect.x + 37, rect.centery + 1), "midleft")
+        cap = NAV_KEYS.get(key)
+        if cap:
+            hud_skin.keycap(client.screen, (rect.right - 12, rect.centery), cap, small=True)
+        if key == "quests" and _current_quest(client):
+            hud_skin.notify_dot(client.screen, rect.right - 3, rect.y + 4)
+        rects[key] = rect
+    client.hud_world_rects["nav"] = rects
+
+
+def _draw_left_nav_legacy(client):
     labels = ("Quests", "Events", "Party", "Guild", "Map", "PvP")
     keys = ("quests", "events", "party", "guild", "map", "pvp")
     top = 52
@@ -544,6 +665,23 @@ def _draw_event_banner(client):
 
 
 def _draw_sidebar_backdrop(screen, panel):
+    try:
+        import hud_skin
+        screen.blit(hud_skin._grain(panel.w, panel.h, hud_skin.BASE, seed=21, strength=1.2), panel.topleft)
+        hud_skin._inner_shadow(screen, panel, 0, 10, 160)
+        rail = pygame.Rect(panel.x, panel.y, 6, panel.h)
+        screen.blit(hud_skin._grad(6, panel.h, hud_skin.GOLD, hud_skin._c("#5A4020")), rail.topleft)
+        pygame.draw.line(screen, hud_skin.GOLD_HI, (panel.x + 2, 0), (panel.x + 2, panel.bottom))
+        pygame.draw.line(screen, hud_skin.WOOD_DK, (panel.x + 6, 0), (panel.x + 6, panel.bottom), 2)
+        for yy in range(panel.y + 18, panel.bottom - 10, 56):
+            hud_skin.diamond(screen, panel.x + 3, yy, 3, hud_skin.GOLD_HI, hud_skin.WOOD_DK)
+        return
+    except Exception as e:  # pragma: no cover
+        print("[hud_skin] backdrop fallback:", e)
+    _draw_sidebar_backdrop_legacy(screen, panel)
+
+
+def _draw_sidebar_backdrop_legacy(screen, panel):
     """Leather-textured navy column with a gold binding rail."""
     leather = _hud_art("sidebar_leather.png")
     if leather is not None:
@@ -723,18 +861,32 @@ def _draw_header(client, y, rects):
     portrait_size = 64
     px = card.x + 10
     py = card.y + (card.h - portrait_size) // 2
+    try:
+        import hud_skin
+        cx, cy = px + portrait_size // 2, py + portrait_size // 2
+        hud_skin.medallion(client.screen, cx, cy, portrait_size // 2 + 5)
+    except Exception:
+        hud_skin = None
     client.screen.blit(_player_portrait(client, portrait_size), (px, py))
+    if hud_skin:
+        pygame.draw.circle(client.screen, hud_skin.GOLD_HI, (cx, cy), portrait_size // 2 + 1, 2)
+        for k in range(12):  # 12 gold studs around the medallion (spec 2.1)
+            a = k * math.pi / 6
+            sx_, sy_ = cx + math.cos(a) * (portrait_size // 2 + 4), cy + math.sin(a) * (portrait_size // 2 + 4)
+            pygame.draw.circle(client.screen, hud_skin.GOLD_HI, (int(sx_), int(sy_)), 2)
+            pygame.draw.circle(client.screen, hud_skin.WOOD_DK, (int(sx_), int(sy_)), 2, 1)
     text_x = px + portrait_size + 10
     name = (client.player or {}).get("name") or "Adventurer"
     level = client.player_combat_level()
-    _blit(client, client.font, _fit_text(client.font, name, card.right - text_x - 100), (text_x, card.y + 10), INK)
+    nfont = _title_font(15) or client.font
+    _blit(client, nfont, _fit_text(nfont, name, card.right - text_x - 100), (text_x, card.y + 8), INK)
     frac, _lvl = _xp_fraction(client)
     level_line = _text(client, client.font_tiny, f"Combat {level}  ·  {int(frac * 100)}%", GOLD)
     client.screen.blit(level_line, (text_x, card.y + 32))
     settings = pygame.Rect(SCREEN_W - 100, card.y + 8, 86, 24)
     _panel(client.screen, settings, NAVY_HI, GOLD, radius=6, width=2)
     _gear_mark(client.screen, settings.x + 12, settings.centery)
-    label = _text(client, client.font_tiny, "Settings", GOLD)
+    label = _text(client, client.font_tiny, "Settings", INK)
     client.screen.blit(label, (settings.x + 24, settings.centery - label.get_height() // 2))
     # Quick logout under Settings — Menu → Logout stays as the secondary path.
     logout = pygame.Rect(settings.x, settings.bottom + 4, settings.w, 24)
@@ -747,7 +899,7 @@ def _draw_header(client, y, rects):
     _fill_bar(client.screen, bar, frac, GOLD, radius=4)
     # Title / deed ribbon (guild name or best quest deed)
     ribbon = pygame.Rect(text_x, card.y + 64, max(40, settings.x - text_x - 8), 20)
-    _panel(client.screen, ribbon, (42, 32, 58), GOLD, radius=5, width=1)
+    _panel(client.screen, ribbon, NAVY, GOLD_DIM, radius=5, width=1, role="well")
     _blit(client, client.font_tiny, _fit_text(client.font_tiny, _title(client), ribbon.w - 12),
           (ribbon.x + 8, ribbon.y + 3), GOLD_BRIGHT)
     rects["settings"] = settings
@@ -773,14 +925,21 @@ def _draw_hitpoints(client, y):
     max_hp = max(1, int(player.get("max_hp") or 1))
     col, pct = client.hp_tone(hp, max_hp)
     x0 = sidebar_x + 12
-    row = pygame.Rect(x0, y, screen_w - sidebar_x - 22, 32)
+    row = pygame.Rect(x0, y, screen_w - sidebar_x - 22, 34)
     client.hud_hp_rect = row   # Seraphine's tour rings the health bar
-    _panel(client.screen, row, NAVY_CARD, GOLD_DIM, radius=7, width=1)
-    _blit(client, client.font_tiny, "Hitpoints", (row.x + 10, row.y + 3), GOLD)
+    _panel(client.screen, row, NAVY_CARD, GOLD_DIM, radius=7, width=1, role="card")
+    _blit(client, _title_font(11) or client.font_tiny, "HITPOINTS", (row.x + 10, row.y + 3), GOLD)
     value = _text(client, client.font_tiny, f"{hp} / {max_hp}", col)
     client.screen.blit(value, (row.right - value.get_width() - 10, row.y + 3))
-    bar = pygame.Rect(row.x + 10, row.y + 18, row.w - 20, 9)
-    _fill_bar(client.screen, bar, pct, col, radius=4)
+    bar = pygame.Rect(row.x + 8, row.y + 19, row.w - 16, 10)
+    _fill_bar(client.screen, bar, pct, col, radius=4, kind="hp", low=pct <= 0.25)
+    if pct <= 0.25:  # low-HP pulse: soft red glow around the row
+        try:
+            import hud_skin
+            a = int(60 + 60 * (0.5 + 0.5 * math.sin(pygame.time.get_ticks() / 160.0)))
+            hud_skin.glow(client.screen, row, (200, 40, 30), 7, a, 8)
+        except Exception:
+            pass
     return row.bottom + 5
 
 
@@ -789,11 +948,27 @@ def _draw_currencies(client, y, rects):
     x0 = SIDEBAR_X + 12
     w = SCREEN_W - SIDEBAR_X - 22
     row = pygame.Rect(x0, y, w, 28)
-    _panel(client.screen, row, NAVY_CARD, GOLD_DIM, radius=7)
+    _panel(client.screen, row, NAVY_CARD, GOLD_DIM, radius=7, role="card")
     coins = int((client.player or {}).get("coins") or 0)
     bank = int((client.player or {}).get("bank_coins") or 0)
     if not bank:
         bank = int((getattr(client, "bank", None) or {}).get("bank_coins") or 0)
+    try:
+        import hud_skin
+        cells = ((("coin"), f"{coins:,}", hud_skin.PULSE), ("gem", f"{_gem_count(client):,}", (170, 210, 255)),
+                 ("copper", f"{bank:,}", (232, 163, 106)))
+        cw = row.w // 3
+        f = client.font_tiny
+        for i, (ic, val, colr) in enumerate(cells):
+            cx0 = row.x + i * cw
+            if i:
+                pygame.draw.line(client.screen, hud_skin.WOOD_DK, (cx0, row.y + 6), (cx0, row.bottom - 6), 2)
+                pygame.draw.line(client.screen, hud_skin.BEVEL, (cx0 + 1, row.y + 6), (cx0 + 1, row.bottom - 6))
+            hud_skin.icon(client.screen, ic, cx0 + 16, row.centery, 7)
+            _blit(client, f, _fit_text(f, val, cw - 30), (cx0 + 28, row.centery - f.get_height() // 2), colr)
+        return row.bottom + 5
+    except Exception as e:  # pragma: no cover
+        print("[hud_skin] currencies fallback:", e)
     # Coin · gems · vault — guild already sits on the header ribbon.
     pygame.draw.circle(client.screen, GOLD_BRIGHT, (row.x + 14, row.centery), 4)
     pygame.draw.circle(client.screen, GOLD_DIM, (row.x + 14, row.centery), 4, 1)
@@ -1086,9 +1261,15 @@ def _guild_btn(client, rects, key, label, rect, style="secondary"):
     else:
         fill, border, ink, width = NAVY_HI, GOLD, INK, 1
     _panel(client.screen, rect, fill, border, radius=6, width=width, ornate=ornate)
-    surf = _text(client, client.font_tiny, label, ink)
-    client.screen.blit(surf, (rect.centerx - surf.get_width() // 2,
-                              rect.centery - surf.get_height() // 2))
+    if label in ("up", "down"):  # arrows as shapes (Mac font shows boxes)
+        cx, cy = rect.center
+        pts = [(cx - 5, cy + 3), (cx + 5, cy + 3), (cx, cy - 3)] if label == "up" else \
+              [(cx - 5, cy - 3), (cx + 5, cy - 3), (cx, cy + 3)]
+        pygame.draw.polygon(client.screen, ink, pts)
+    else:
+        surf = _text(client, client.font_tiny, label, ink)
+        client.screen.blit(surf, (rect.centerx - surf.get_width() // 2,
+                                  rect.centery - surf.get_height() // 2))
     rects.setdefault("guild_btns", {})[key] = rect
 
 
@@ -1221,10 +1402,10 @@ def _draw_guild_members(client, clan, x0, yy, w, bottom, rects):
               f"{scroll + 1}–{min(len(members), scroll + visible)} of {len(members)}",
               (x0, yy), MUTED)
         if scroll > 0:
-            _guild_btn(client, rects, "scroll_up", "▲",
+            _guild_btn(client, rects, "scroll_up", "up",
                        pygame.Rect(x0 + w - 76, yy - 2, 34, 20), "quiet")
         if scroll < max_scroll:
-            _guild_btn(client, rects, "scroll_down", "▼",
+            _guild_btn(client, rects, "scroll_down", "down",
                        pygame.Rect(x0 + w - 38, yy - 2, 34, 20), "quiet")
         yy += 22
     if selected and can_manage:
@@ -1320,10 +1501,10 @@ def _draw_guild_board(client, clan, x0, yy, w, bottom, rects):
         yy += row_h
     if len(board) > visible:
         if scroll > 0:
-            _guild_btn(client, rects, "scroll_up", "▲",
+            _guild_btn(client, rects, "scroll_up", "up",
                        pygame.Rect(x0 + w - 76, min(yy, bottom - 22), 34, 20), "quiet")
         if scroll + visible < len(board):
-            _guild_btn(client, rects, "scroll_down", "▼",
+            _guild_btn(client, rects, "scroll_down", "down",
                        pygame.Rect(x0 + w - 38, min(yy, bottom - 22), 34, 20), "quiet")
 
 
@@ -1579,9 +1760,9 @@ def _quest_finish_hint(client, qid, status):
 
 def _draw_go_button(client, card, rects, npc_id=None, dest=None):
     """Green Go control — NPC talk target and/or world destination."""
-    track = pygame.Rect(card.right - 58, card.bottom - 28, 50, 22)
-    _panel(client.screen, track, NAVY_HI, SAFE_GREEN, radius=4)
-    label = _text(client, client.font_tiny, "Go", INK)
+    track = pygame.Rect(card.right - 62, card.bottom - 34, 46, 22)
+    _panel(client.screen, track, NAVY_HI, SAFE_GREEN, radius=5)
+    label = _text(client, _title_font(12) or client.font_tiny, "Go", (210, 245, 190))
     client.screen.blit(label, (track.centerx - label.get_width() // 2,
                                track.centery - label.get_height() // 2))
     rects["quest_track"] = {"rect": track, "npc_id": npc_id}
@@ -1597,26 +1778,41 @@ def _draw_quest_card(client, y, rects):
     _mw, _mh, SIDEBAR_X, SCREEN_W, _sh = _layout()
     x0 = SIDEBAR_X + 12
     w = SCREEN_W - SIDEBAR_X - 22
-    card = pygame.Rect(x0, y, w, 108)
+    card = pygame.Rect(x0, y + 6, w, 108)
     quests_open = client.hud_focus == "quests"
-    _panel(client.screen, card, NAVY_HI if quests_open else NAVY_CARD,
-           GOLD_BRIGHT if quests_open else GOLD, radius=9, width=2, ornate=True)
-    text_w = w - 70  # leave room for Go
     quest = _current_quest(client)
+    INK, GOLD, MUTED = INK_Q, GOLD_Q, MUTED_Q  # dark ink on parchment
+    try:
+        import hud_skin
+        plaque = "NEXT STEP" if not quest else ("READY TO TURN IN" if quest[4] == "ready" else "CURRENT QUEST")
+        inner = hud_skin.parchment(client.screen, card, plaque)
+        if quests_open:
+            pygame.draw.rect(client.screen, hud_skin.GLOW, card.inflate(2, 0), 1, border_radius=4)
+        pad_x = inner.x - card.x
+        _hdr = False
+    except Exception as e:  # pragma: no cover
+        print("[hud_skin] quest card fallback:", e)
+        INK, GOLD, MUTED = globals()["INK"], globals()["GOLD"], globals()["MUTED"]
+        _panel_legacy(client.screen, card, NAVY_HI if quests_open else NAVY_CARD,
+                      GOLD_BRIGHT if quests_open else GOLD, radius=9, width=2, ornate=True)
+        pad_x = 8
+        _hdr = True
+    text_w = w - 64 - pad_x  # leave room for Go
     if not quest:
         # No active quest — name the next NPC/step so Go can set a path.
         step = _no_quest_step(client)
-        _blit(client, client.font_tiny, "NEXT STEP", (card.x + 8, card.y + 4), GOLD)
+        if _hdr:
+            _blit(client, client.font_tiny, "NEXT STEP", (card.x + 8, card.y + 4), GOLD)
         _blit(client, client.font_small,
               _fit_text(client.font_small, step["title"], text_w),
-              (card.x + 8, card.y + 18), INK)
-        yy = card.y + 38
+              (card.x + pad_x, card.y + 14), INK)
+        yy = card.y + 36
         for line in _wrap_text(client.font_tiny, step["detail"], text_w, max_lines=2):
-            _blit(client, client.font_tiny, line, (card.x + 8, yy), GOLD)
+            _blit(client, client.font_tiny, line, (card.x + pad_x, yy), GOLD)
             yy += 14
         _blit(client, client.font_tiny,
               _fit_text(client.font_tiny, step["hint"], text_w),
-              (card.x + 8, card.bottom - 22), MUTED)
+              (card.x + pad_x, card.bottom - 26), MUTED)
         if step.get("npc"):
             _draw_go_button(client, card, rects, npc_id=step["npc"])
     else:
@@ -1625,10 +1821,11 @@ def _draw_quest_card(client, y, rects):
         state = (client.quests or {}).get(qid) or {}
         qdef = QUESTS.get(qid) or {}
         header = "READY TO TURN IN" if status == "ready" else "CURRENT QUEST"
-        _blit(client, client.font_tiny, header, (card.x + 8, card.y + 4), GOLD)
+        if _hdr:
+            _blit(client, client.font_tiny, header, (card.x + 8, card.y + 4), GOLD)
         _blit(client, client.font_small,
               _fit_text(client.font_small, name, text_w),
-              (card.x + 8, card.y + 18), INK)
+              (card.x + pad_x, card.y + 14), INK)
 
         objective = client._quest_objective_text(qid, state) if qid else _desc
         if status == "ready":
@@ -1638,17 +1835,17 @@ def _draw_quest_card(client, y, rects):
         if not (objective or "").strip():
             objective = (qdef.get("description") or "").strip()
 
-        yy = card.y + 38
+        yy = card.y + 36
         obj_lines = _wrap_text(client.font_tiny, objective, text_w, max_lines=2)
         for line in obj_lines:
-            _blit(client, client.font_tiny, line, (card.x + 8, yy), GOLD)
+            _blit(client, client.font_tiny, line, (card.x + pad_x, yy), GOLD)
             yy += 14
         finish = _quest_finish_hint(client, qid, status) if qid else ""
         if need and status == "active":
             finish = f"{progress}/{need} · {finish}" if finish else f"Progress {progress}/{need}"
         _blit(client, client.font_tiny,
               _fit_text(client.font_tiny, finish, text_w),
-              (card.x + 8, card.bottom - 22), MUTED)
+              (card.x + pad_x, card.bottom - 26), MUTED)
 
         # Go → hand-in NPC, find-NPC target, or objective camp/travel spot.
         target_id = qdef.get("giver") if status == "ready" else None
@@ -1671,7 +1868,7 @@ def _draw_quest_card(client, y, rects):
         if target_id or dest:
             _draw_go_button(client, card, rects, npc_id=target_id, dest=dest)
     rects["quest_card"] = card
-    return card.bottom + 4
+    return card.bottom + 2
 
 
 def _draw_system_tabs(client, y, rects):
@@ -1686,10 +1883,15 @@ def _draw_system_tabs(client, y, rects):
             "quests": "Quests",
         }.get(client.hud_focus, "Panel")
         back = pygame.Rect(x0, y, w, 30)
-        _panel(client.screen, back, NAVY_HI, GOLD, radius=7, width=2, ornate=True)
-        surf = _text(client, client.font_tiny, f"< Inventory   ·   {label}", GOLD_BRIGHT)
-        client.screen.blit(surf, (back.centerx - surf.get_width() // 2,
-                                  back.centery - surf.get_height() // 2))
+        _panel(client.screen, back, NAVY_CARD, GOLD, radius=7, width=2, role="button")
+        surf = _text(client, _title_font(12) or client.font_tiny, f"Inventory   |   {label}", GOLD_BRIGHT)
+        sx_ = back.centerx - surf.get_width() // 2
+        client.screen.blit(surf, (sx_, back.centery - surf.get_height() // 2))
+        try:
+            import hud_skin
+            hud_skin.chevron_left(client.screen, (sx_ - 12, back.centery), 5)
+        except Exception:
+            pass
         # Click maps to inventory system handler, which clears focus.
         rects["systems"] = {"inventory": back}
         return y + 36
@@ -1702,11 +1904,19 @@ def _draw_system_tabs(client, y, rects):
                NAVY_HI if active else NAVY_CARD,
                GOLD if active else GOLD_DIM,
                radius=6, width=2 if active else 1, ornate=active)
-        surf = _text(client, client.font_tiny, label, INK if active else MUTED)
+        try:
+            import hud_skin
+            tf = hud_skin.font("label", 10)
+        except Exception:
+            tf = client.font_tiny
+        surf = _text(client, tf, _fit_text(tf, label, rect.w - 4), INK if active else MUTED)
         client.screen.blit(surf, (rect.centerx - surf.get_width() // 2, rect.centery - surf.get_height() // 2))
+        if active:  # notch under the active tab
+            pygame.draw.polygon(client.screen, GOLD_BRIGHT, [(rect.centerx - 5, rect.bottom + 1),
+                                (rect.centerx + 5, rect.bottom + 1), (rect.centerx, rect.bottom + 6)])
         boxes[key] = rect
     rects["systems"] = boxes
-    return y + 38
+    return y + 40
 
 
 def _draw_system_body(client, y, bottom, rects):
@@ -1782,7 +1992,7 @@ def _draw_inventory(client, y, bottom, rects):
         col, row = i % 3, i // 3
         rect = pygame.Rect(x0 + col * (chip_w + chip_gap), y + row * (chip_h + chip_gap), chip_w, chip_h)
         active = client.hud_filter == key
-        _panel(client.screen, rect, NAVY_HI if active else NAVY, GOLD if active else GOLD_DIM, radius=4)
+        _panel(client.screen, rect, NAVY_HI if active else NAVY, GOLD if active else GOLD_DIM, radius=9)
         label = chip_labels.get(key) or key.title()
         surf = _text(client, client.font_tiny, label, INK if active else MUTED)
         client.screen.blit(surf, (rect.centerx - surf.get_width() // 2,
@@ -1838,13 +2048,27 @@ def _draw_inventory(client, y, bottom, rects):
         if rect.bottom > slot_bottom:
             break
         selected = slot == client.hud_selected
-        pygame.draw.rect(client.screen, NAVY_HI if entry else NAVY, rect, border_radius=6)
-        pygame.draw.rect(client.screen, GOLD if selected else GOLD_DIM, rect, 2 if selected else 1, border_radius=6)
-        pad = 6 if size >= 48 else 4
-        sprites.draw_item_icon(client.screen, rect.inflate(-pad, -pad), entry["item_id"], ITEMS)
-        if int(entry.get("qty") or 1) > 1:
-            qty = _text(client, client.font_tiny, str(entry["qty"]), GOLD)
-            client.screen.blit(qty, (rect.right - qty.get_width() - 4, rect.bottom - qty.get_height() - 2))
+        try:
+            import hud_skin
+            hov = rect.collidepoint(pygame.mouse.get_pos())
+            hud_skin.slot(client.screen, rect, hud_skin.rarity_of(entry["item_id"], ITEMS.get(entry["item_id"])),
+                          bool(entry), selected, hov)
+            icon_r = pygame.Rect(0, 0, int(size * 0.8), int(size * 0.8))  # icon at 80% of the slot
+            icon_r.center = rect.center
+            sprites.draw_item_icon(client.screen, icon_r, entry["item_id"], ITEMS)
+            if int(entry.get("qty") or 1) > 1:
+                hud_skin.count_chip(client.screen, rect, int(entry["qty"]))
+        except Exception as e:  # pragma: no cover
+            if not getattr(_draw_inventory, "_err", None):
+                _draw_inventory._err = str(e)
+                print("[hud_skin] slot fallback:", e)
+            pygame.draw.rect(client.screen, NAVY_HI if entry else NAVY, rect, border_radius=6)
+            pygame.draw.rect(client.screen, GOLD if selected else GOLD_DIM, rect, 2 if selected else 1, border_radius=6)
+            pad = 6 if size >= 48 else 4
+            sprites.draw_item_icon(client.screen, rect.inflate(-pad, -pad), entry["item_id"], ITEMS)
+            if int(entry.get("qty") or 1) > 1:
+                qty = _text(client, client.font_tiny, str(entry["qty"]), GOLD)
+                client.screen.blit(qty, (rect.right - qty.get_width() - 4, rect.bottom - qty.get_height() - 2))
         slots[slot] = rect
         if rect.collidepoint(pygame.mouse.get_pos()) and not getattr(client, "inv_drag", None):
             hover = (entry, rect)
@@ -1873,11 +2097,14 @@ def _draw_inventory(client, y, bottom, rects):
         track = pygame.Rect(bar_x, up.bottom + 2, scroll_w, max(24, down.y - up.bottom - 4))
         _panel(client.screen, up, NAVY_HI if scroll > 0 else NAVY, GOLD, radius=3, width=1)
         _panel(client.screen, down, NAVY_HI if scroll < max_scroll else NAVY, GOLD, radius=3, width=1)
-        up_lbl = _text(client, client.font_tiny, "▲", INK if scroll > 0 else MUTED)
-        dn_lbl = _text(client, client.font_tiny, "▼", INK if scroll < max_scroll else MUTED)
-        client.screen.blit(up_lbl, (up.centerx - up_lbl.get_width() // 2, up.centery - up_lbl.get_height() // 2))
-        client.screen.blit(dn_lbl, (down.centerx - dn_lbl.get_width() // 2, down.centery - dn_lbl.get_height() // 2))
-        pygame.draw.rect(client.screen, (22, 28, 40), track, border_radius=4)
+        # Arrows drawn as triangles: the Mac font shows boxes for the glyphs.
+        for _r, _up, _on in ((up, True, scroll > 0), (down, False, scroll < max_scroll)):
+            _c = INK if _on else MUTED
+            _cx, _cy = _r.centerx, _r.centery
+            _pts = [(_cx - 4, _cy + 2), (_cx + 4, _cy + 2), (_cx, _cy - 3)] if _up else \
+                   [(_cx - 4, _cy - 2), (_cx + 4, _cy - 2), (_cx, _cy + 3)]
+            pygame.draw.polygon(client.screen, _c, _pts)
+        pygame.draw.rect(client.screen, NAVY_DEEP, track, border_radius=4)
         pygame.draw.rect(client.screen, GOLD, track, 1, border_radius=4)
         thumb = None
         if max_scroll > 0 and track.h > 16:
@@ -1886,12 +2113,12 @@ def _draw_inventory(client, y, bottom, rects):
             travel = max(1, track.h - thumb_h - 4)
             thumb_y = track.y + 2 + int(travel * (scroll / max_scroll))
             thumb = pygame.Rect(track.x + 2, thumb_y, max(6, track.w - 4), thumb_h)
-            pygame.draw.rect(client.screen, (90, 120, 70), thumb, border_radius=3)
-            pygame.draw.rect(client.screen, (200, 220, 120), thumb, 1, border_radius=3)
+            pygame.draw.rect(client.screen, (122, 92, 52), thumb, border_radius=3)
+            pygame.draw.rect(client.screen, GOLD_BRIGHT, thumb, 1, border_radius=3)
             # Grip lines so it reads as a draggable handle.
             for gy in (thumb.centery - 3, thumb.centery, thumb.centery + 3):
                 pygame.draw.line(
-                    client.screen, (230, 240, 180),
+                    client.screen, (60, 42, 22),
                     (thumb.x + 2, gy), (thumb.right - 2, gy), 1,
                 )
         page = f"{scroll + 1}/{max_scroll + 1}"
@@ -1910,8 +2137,9 @@ def _draw_inventory(client, y, bottom, rects):
     rects["actions"] = {}
     equip = pygame.Rect(x0, bottom - 28, _body_w(), 26)
     active = bool(getattr(client, "show_equipment", False))
-    _panel(client.screen, equip, NAVY_HI if active else NAVY_CARD, GOLD if active else GOLD_DIM, radius=6, width=2)
-    surf = _text(client, client.font_small, "Equipment", INK)
+    _panel(client.screen, equip, NAVY_HI if active else NAVY_CARD, GOLD if active else GOLD_DIM, radius=6, width=2,
+           role="button")
+    surf = _text(client, _title_font(13) or client.font_small, "Equipment", INK)
     client.screen.blit(surf, (equip.centerx - surf.get_width() // 2, equip.centery - surf.get_height() // 2))
     rects["equipment"] = equip
     if hover and not _panel_blocking_hover(client):
@@ -2211,10 +2439,10 @@ def _draw_skills_button(client, rects):
     rect = pygame.Rect(sidebar_x + 12, screen_h - 36, screen_w - sidebar_x - 22, 28)
     active = bool(getattr(client, "show_skills", False))
     _panel(client.screen, rect, NAVY_HI if active else NAVY_CARD, GOLD if active else GOLD_DIM,
-           radius=6, width=2 if active else 1, ornate=active)
+           radius=6, width=2 if active else 1, ornate=active, role="button")
     combat = client.player_combat_level()
     total = client.player_total_level()
-    label = _text(client, client.font_small, f"Skills   Combat {combat}   Total {total}", INK)
+    label = _text(client, _title_font(12) or client.font_small, f"Skills   Combat {combat}   Total {total}", INK)
     client.screen.blit(label, (rect.centerx - label.get_width() // 2, rect.centery - label.get_height() // 2))
     rects["skills"] = rect
     client.skills_btn_rect = rect

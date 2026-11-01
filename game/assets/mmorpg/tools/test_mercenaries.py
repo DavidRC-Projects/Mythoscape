@@ -91,7 +91,7 @@ def test_field_deploy_castle_realm_only(monkeypatch=None):
     s.x, s.y = 196, 140
     s.last_step = (0, -1)
     ok, msg = merc.deploy_soldiers(c, s)
-    assert not ok and "Castle Realm" in msg
+    assert not ok and "King's Realm" in msg
     s.dungeon = {"id": "castle_realm", "plane": "realm"}
     # Stub walkability so follow spots resolve in unit tests.
     import types as _types

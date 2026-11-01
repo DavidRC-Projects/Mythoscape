@@ -47,16 +47,50 @@ def style_for_weapon(item: dict | None) -> str:
 
 
 # --- State -------------------------------------------------------------------------------
+TIER_ORDER = ("arena", "bronze", "iron", "steel", "mithril", "adamant", "rune", "mythos", "eclipse")
+
+
+def armour_tier(equipment: dict | None) -> str:
+    """Full matching set (helmet + body + legs) of one tier, else the standard arena steel set."""
+    eq = equipment or {}
+    tiers = []
+    for slot in ("helmet", "body", "legs"):
+        w = str(eq.get(slot) or "").lower()
+        t = next((g for g in TIER_ORDER[1:][::-1] if g in w), None)
+        if t is None and "adamantite" in w:
+            t = "adamant"
+        tiers.append(t)
+    return tiers[0] if tiers[0] and all(t == tiers[0] for t in tiers) else "arena"
+
+
+def weapon_tier(weapon_id, style: str) -> str:
+    """Tier of the equipped weapon when it matches the picked class, else the arena issue weapon."""
+    w = str(weapon_id or "").lower()
+    if not w or style_for_weapon({"id": w}) != style:
+        return "arena"
+    for g in TIER_ORDER[1:][::-1]:
+        if g in w or (g == "adamant" and "adamantite" in w):
+            return g
+    return "arena"
+
+
 def new_duel(boss_id: str, style: str = "sword", level_ratio: float = 1.0, gear: str = "steel",
-             defence_ratio: float = 1.0, seed: int | None = None) -> dict:
+             defence_ratio: float = 1.0, seed: int | None = None, armour: str | None = None) -> dict:
+    """gear = weapon tier (damage, crit), armour = armour tier (damage taken, stamina, poise)."""
     T = tuning()
     lv = T["level"]
     mult = max(lv["min_mult"], min(lv["max_mult"], level_ratio)) * T["gear_mult"].get(gear, 1.0)
     cut = max(0.0, min(lv["defence_cut_max"], (defence_ratio - 1.0) * 0.5 + 0.1))
+    arm = armour if armour in T.get("armour_tiers", {}) else ("arena" if "arena" in T.get("armour_tiers", {}) else None)
+    AT = T.get("armour_tiers", {}).get(arm, {}) if arm else {}
+    cut = min(0.6, cut + float(AT.get("cut", 0.0)))
+    sta_max = float(T["stamina"]["max"]) + float(AT.get("sta", 0.0))
+    WT = T.get("weapon_tiers", {}).get(gear, {})
     return {
         "boss_id": boss_id, "style": style, "step": 0, "gap": float(T["start_gap"]),
-        "rng": random.Random(seed),
-        "p": {"hp": 1.0, "sta": float(T["stamina"]["max"]), "busy": 0, "parry": 0, "parry_age": 0,
+        "rng": random.Random(seed), "gear": gear, "armour": arm or "arena",
+        "crit_bonus": float(WT.get("crit", 0.0)), "poise": float(AT.get("poise", 0.0)),
+        "p": {"hp": 1.0, "sta": sta_max, "sta_max": sta_max, "busy": 0, "parry": 0, "parry_age": 0,
               "iframes": 0, "wind": None, "focus": 0.0, "counter": 0, "root": 0, "stun": 0,
               "since_spend": 99, "wall": float(T["arena_len"]) - float(T["start_gap"]), "dmg_mult": mult, "def_cut": cut, "queued": None},
         "b": {"hp": 1.0, "state": "think", "t": 3, "atk": None, "guard": 0, "second_wind_used": False,
@@ -108,6 +142,7 @@ def telegraph(d) -> dict | None:
 def _spend(d, cost):
     p = d["p"]
     if p["sta"] < cost:
+        _ev(d, "no_stamina")
         return False
     p["sta"] -= cost
     p["since_spend"] = 0
@@ -156,6 +191,11 @@ def _damage_boss(d, frac, tag):
             tag += "_guarded"
     if b["state"] == "stagger":
         frac *= 1.25
+    crit = float(S.get("crit", 0.0)) + float(d.get("crit_bonus", 0.0))
+    if crit > 0 and "counter" not in tag and d["rng"].random() < crit:
+        frac *= float(tuning().get("crit_mult", 1.5))
+        tag += "_crit"
+    frac *= 1.0 - float(B.get("armour_cut", 0.0))      # champions wear better gear up the ranks
     b["hp"] = max(0.0, b["hp"] - frac)
     d["stats"]["hits"] += 1
     ref = float(tuning()["momentum"].get("hit_ref_dmg", 0) or 0)
@@ -211,7 +251,7 @@ def _player_step(d):
         p["parry_age"] += 1
     p["since_spend"] += 1
     if p["since_spend"] > T["stamina"]["regen_delay_steps"]:
-        p["sta"] = min(T["stamina"]["max"], p["sta"] + T["stamina"]["regen_per_step"])
+        p["sta"] = min(p.get("sta_max", T["stamina"]["max"]), p["sta"] + T["stamina"]["regen_per_step"])
     if S.get("focus") and p["wind"] is None and p["busy"] == 0:
         p["focus"] = min(S["focus"]["max"], p["focus"] + S["focus"]["per_step"])
     if p["busy"] > 0:
@@ -322,10 +362,11 @@ def _land(d, a):
     p["hp"] = max(0.0, p["hp"] - dmg)
     d["stats"]["taken"] += 1
     _mom(d, "taken_hit")
+    poise = float(d.get("poise", 0.0))
     if a.get("root"):
-        p["root"] = a["root"]
+        p["root"] = max(1, int(round(a["root"] * (1 - poise))))
     if a.get("stun"):
-        p["stun"] = a["stun"]
+        p["stun"] = max(1, int(round(a["stun"] * (1 - poise))))
     _ev(d, "player_hit", atk=a["id"], dmg=round(dmg, 4))
     if a.get("double") and d["rng"].random() < a["double"] and p["hp"] > 0:
         p["hp"] = max(0.0, p["hp"] - dmg * 0.6)
@@ -410,10 +451,10 @@ def step(d):
         _end(d, d["b"]["hp"] < d["p"]["hp"], None)
 
 
-def tick(d):
-    """One server tick (0.6 s)."""
+def tick(d, steps=None):
+    """One server tick (0.6 s = steps_per_tick steps); the duel loop calls it with steps=1 every 200 ms."""
     d["events"] = []
-    for _ in range(tuning()["steps_per_tick"]):
+    for _ in range(tuning()["steps_per_tick"] if steps is None else int(steps)):
         step(d)
     return list(d["events"])
 
@@ -428,6 +469,11 @@ def public(d) -> dict:
         "boss_guard": b["guard"] > 0, "wall": round(p["wall"], 2), "telegraph": telegraph(d), "momentum": round(d["momentum"], 1),
         "finisher_ready": d["finisher_ready"], "done": d["done"], "won": d["won"], "finisher": d["finisher"],
         "second_wind_used": b["second_wind_used"],
+        "sta_max": round(p.get("sta_max", 100.0), 1), "armour": d.get("armour", "arena"),
+        "gear": d.get("gear", "arena"), "boss_tier": _boss(d).get("tier", "steel"),
+        "busy": p["busy"], "parry_on": p["parry"] > 0, "iframes": p["iframes"] > 0,
+        "boss_atk": (b["atk"] or {}).get("id") if b["state"] in ("windup", "land", "recover") else None,
+        "step": d["step"], "step_ms": tuning()["step_ms"],
     }
 
 
@@ -441,14 +487,16 @@ def stage(match, session, entry, player_unit, boss_unit):
         item = dict(ITEMS.get(w) or {}, id=w)
     except Exception:
         item = {"id": w}
-    style = style_for_weapon(item)
+    style = match.get("style_pick") or style_for_weapon(item)
     cl = 3
     try:
         cl = int(session.combat_level())
     except Exception:
         pass
     ratio = cl / max(1, int(entry.get("recommend_cl") or cl))
-    d = new_duel(entry["boss"]["id"], style, level_ratio=ratio, gear=_player_gear(session))
+    eq = getattr(session, "equipment", None) or {}
+    d = new_duel(entry["boss"]["id"], style, level_ratio=ratio, gear=weapon_tier(w, style),
+                 armour=armour_tier(eq))
     match.update(mode="duel", duel=d, units=[player_unit, boss_unit])
     _place(match)
     return d
@@ -500,13 +548,30 @@ def exchange_line(e: dict, foe: str = "The champion", you: str = "You") -> str |
             }.get(k)
 
 
-def tick_match(match) -> list[dict]:
-    """Called by mercenaries.tick_live_match for mode == 'duel'."""
+def set_style(match, session, style) -> bool:
+    """Weapon picker (preview only): re-stage the duel with Sword / Axe / Bow."""
+    if match.get("mode") != "duel" or match.get("phase") != "preview" or style not in ("sword", "axe", "bow"):
+        return False
+    match["style_pick"] = style
+    entry = match.get("entry") or {}
+    you, boss = match["units"][0], match["units"][1]
+    stage(match, session, entry, you, boss)
+    return True
+
+
+INTRO_HOLD_S = 10.0     # the pre-duel film; the client releases it early on skip/end (duel_ready)
+
+
+def tick_match(match, steps=None) -> list[dict]:
+    """Called by mercenaries.tick_live_match for mode == 'duel' (the server's 200 ms duel loop passes steps=1)."""
     if match.get("phase") != "fight":
+        return []
+    import time as _time
+    if _time.time() < float(match.get("hold_until") or 0):
         return []
     d = match["duel"]
     match["tick"] = int(match.get("tick") or 0) + 1
-    evs = tick(d)
+    evs = tick(d, steps)
     _place(match)
     you, boss = match["units"][0], match["units"][1]
     out = []

@@ -75,6 +75,7 @@ def close(client):
     client.barracks = None
     client.barracks_rects = {}
     client.barracks_selected = None
+    client.barracks_confirm = None
     client.barracks_drag = None
     client.barracks_scroll_meta = None
 
@@ -138,6 +139,9 @@ def handle_event(client, event) -> bool:
     if not active(client):
         return False
     if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_b):
+        if getattr(client, "barracks_confirm", None) is not None:
+            client.barracks_confirm = None
+            return True
         if getattr(client, "barracks_selected", None) is not None:
             client.barracks_selected = None
             return True
@@ -273,6 +277,20 @@ def click_result(client, mx, my) -> bool:
 
 def click(client, mx, my) -> bool:
     rects = getattr(client, "barracks_rects", {}) or {}
+    if getattr(client, "barracks_confirm", None) is not None:
+        # Dismiss confirmation: only Cancel / Dismiss respond; clicking outside cancels.
+        for key, rect in list(rects.items()):
+            if not key.startswith("confirm_") or not hasattr(rect, "collidepoint") or not rect.collidepoint(mx, my):
+                continue
+            if key.startswith("confirm_dismiss:"):
+                client.net.send("BARRACKS", action="dismiss", soldier_id=int(key.split(":", 1)[1]))
+                client.barracks_selected = None
+            client.barracks_confirm = None
+            return True
+        conf = rects.get("confirm")
+        if not (conf and conf.collidepoint(mx, my)):
+            client.barracks_confirm = None
+        return True
     detail = rects.get("detail")
     if detail and detail.collidepoint(mx, my):
         # Clicks inside the soldier modal — only modal controls
@@ -315,8 +333,8 @@ def click(client, mx, my) -> bool:
                 )
                 return True
             if key.startswith("dismiss:"):
-                client.net.send("BARRACKS", action="dismiss", soldier_id=int(key.split(":", 1)[1]))
-                client.barracks_selected = None
+                # Ask first: "Dismiss Yara? This can't be undone."
+                client.barracks_confirm = int(key.split(":", 1)[1])
                 return True
         return True
     # Click outside detail while open closes the modal only
@@ -351,6 +369,10 @@ def click(client, mx, my) -> bool:
             return True
         if key.startswith("practice:"):
             client.net.send("BARRACKS", action="practice", foe_id=key.split(":", 1)[1])
+            return True
+        if key.startswith("duel:"):
+            # Champions are fought one-on-one (arena_duel): commander alone vs the gladiator.
+            client.net.send("BARRACKS", action="practice", foe_id=key.split(":", 1)[1], mode="duel")
             return True
         if key.startswith("kit_all:"):
             client.net.send("BARRACKS", action="kit_all", tier=key.split(":", 1)[1])
@@ -837,8 +859,28 @@ def draw_match_result(client, match: dict):
 
 
 def draw(client):
+    """Painted barracks (arena_barracks_v2); the legacy board below is only the error fallback."""
     if not active(client):
         return
+    try:
+        import arena_barracks_v2
+        arena_barracks_v2.draw(client)
+        return
+    except Exception as e:  # noqa: BLE001 — never lose the barracks over a drawing bug
+        try:
+            import equipment_ui_v2
+            equipment_ui_v2._log_once("arena barracks v2", e)
+        except Exception:
+            pass
+    _draw_legacy(client)
+    try:
+        import arena_barracks_v2
+        arena_barracks_v2.draw_confirm(client, client.screen, client.barracks_rects, pygame.mouse.get_pos())
+    except Exception:
+        pass
+
+
+def _draw_legacy(client):
     data = client.barracks
     surf = client.screen
     font = client.font
@@ -872,9 +914,9 @@ def draw(client):
     if nxt:
         sub_bits.append(f"Next unlock · Cmd {nxt['level']}: {nxt['text']}")
     if data.get("mythos_soldier_ready"):
-        sub_bits.append("Mythos Guard unlocked")
+        sub_bits.append("Crown Guard unlocked")
     elif cmd < 80:
-        sub_bits.append(f"Mythos Guard at Command 80 ({80 - cmd} left)")
+        sub_bits.append(f"Crown Guard at Command 80 ({80 - cmd} left)")
     if sub_bits:
         surf.blit(small.render("  ·  ".join(sub_bits)[:110], True, (180, 200, 255)),
                   (panel.x + 22, panel.y + 62))
@@ -999,9 +1041,9 @@ def _draw_roster(client, surf, font, small, body, data, rects, scroll):
     pygame.draw.rect(surf, (24, 28, 40), deploy_row, border_radius=8)
     pygame.draw.rect(surf, _GOLD_DIM, deploy_row, 1, border_radius=8)
     hint = (
-        f"Field squad  ·  {deployed_n} deployed  ·  follow you in Castle Realm"
+        f"Field squad  ·  {deployed_n} deployed  ·  follow you in King's Realm"
         if in_realm else
-        "Field squad  ·  enter Castle Realm to deploy"
+        "Field squad  ·  enter King's Realm to deploy"
     )
     surf.blit(small.render(hint, True, _MUTED if not in_realm else _TEXT),
               (deploy_row.x + 12, deploy_row.y + 10))
@@ -1042,7 +1084,7 @@ def _draw_roster(client, surf, font, small, body, data, rects, scroll):
         surf.blit(stats, (row.x + 100, row.y + 38))
         up = s.get("upgrade")
         if s.get("deployed"):
-            blurb = small.render("Deployed — following you in the Castle Realm", True, _OK)
+            blurb = small.render("Deployed — following you in the King's Realm", True, _OK)
         elif up and not up.get("locked"):
             blurb = small.render(
                 f"Promote → {up.get('to_name')}  {int(up.get('cost') or 0):,}c  (keeps battle XP)",
@@ -1255,7 +1297,7 @@ def _draw_soldier_detail(client, surf, font, small, big, panel, data, rects):
             (40, 70, 45), _OK, _OK,
         )
     else:
-        surf.blit(small.render("Enter Castle Realm to deploy", True, _MUTED),
+        surf.blit(small.render("Enter King's Realm to deploy", True, _MUTED),
                   (card.x + 24, bottom_y + 8))
     _btn(surf, small, rects, f"dismiss:{soldier['id']}", "Dismiss",
          pygame.Rect(card.right - 140, bottom_y, 116, 32), (60, 28, 28), _TEXT, _BAD)

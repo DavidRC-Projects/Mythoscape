@@ -538,6 +538,8 @@ class GameClient(ScreensMixin, CameraYaw):
         self.outfitters = Outfitters(self)
         import resting_ox_bar
         self.resting_ox = resting_ox_bar.RestingOxBar(self)
+        import moon_petal_inn
+        self.moon_petal = moon_petal_inn.MoonPetalInn(self)
         self.needs_appearance = False
 
         self.running = True
@@ -1103,13 +1105,10 @@ class GameClient(ScreensMixin, CameraYaw):
         elif t == "TELEPORT":
             if msg.get("map") != "castle":
                 self._exit_dungeon_view()
-            if self.player:
-                self.player["x"] = msg.get("x", self.player["x"])
-                self.player["y"] = msg.get("y", self.player["y"])
-                live = self.players.get(self.player["id"])
-                if live:
-                    live["x"] = self.player["x"]
-                    live["y"] = self.player["y"]
+            self._snap_local_player(
+                msg.get("x", (self.player or {}).get("x", 0)),
+                msg.get("y", (self.player or {}).get("y", 0)),
+            )
             self.clear_walk()
             self._start_teleport_fx(msg.get("label") or "")
             self.show_shop_panel = False
@@ -1639,6 +1638,9 @@ class GameClient(ScreensMixin, CameraYaw):
         if getattr(self, "resting_ox", None) and self.resting_ox.active:
             self.resting_ox.handle_event(event)
             return
+        if getattr(self, "moon_petal", None) and self.moon_petal.active:
+            self.moon_petal.handle_event(event)
+            return
         # Finisher cinematic owns the screen; Space / Esc / click skips it.
         if getattr(self, "arena_cinematic", None):
             self.arena_cinematic.handle_event(event)
@@ -1658,6 +1660,8 @@ class GameClient(ScreensMixin, CameraYaw):
         if new_player_guide.handle_event(self, event):
             return
         if event.type == pygame.KEYDOWN:
+            if (self.bone_prompt or self.drop_prompt) and self._cm_key(event):
+                return
             if getattr(self, "guild_prompt", None):
                 import hud_v2
                 if hud_v2.handle_guild_prompt_key(self, event):
@@ -1973,7 +1977,19 @@ class GameClient(ScreensMixin, CameraYaw):
                     color=(180, 220, 255),
                 )
             elif event.key == pygame.K_p:
+                # Sidebars v2 hotkeys: P = Party (nav keycap), L = Coins+bones (B stays Bank).
+                import hud_v2
+                hud_v2.ensure(self)
+                hud_v2._nav_click(self, "party")
+            elif event.key == pygame.K_l:
                 self.toggle_auto_pickup()
+            elif event.key == pygame.K_v:
+                import nameplates
+                nameplates.toggle_mode(self)
+            elif event.key == pygame.K_k:
+                import hud_v2
+                hud_v2.ensure(self)
+                hud_v2._nav_click(self, "pvp")  # single tap: on and off (David)
             elif event.key == pygame.K_r:
                 try:
                     import castle_realm_renderer
@@ -2396,6 +2412,14 @@ class GameClient(ScreensMixin, CameraYaw):
         if self.state not in ("GAME", "STAT_ALLOC"):
             return
         self._logging_out = True
+        # Drop arena UI first so a mid-fight logout cannot keep drawing sand / soldiers.
+        self.arena_match = None
+        self._arena_cam = None
+        try:
+            import mercenaries_ui
+            mercenaries_ui.close(self)
+        except Exception:
+            pass
         try:
             self.net.send("LOGOUT")
         except Exception:
@@ -2426,6 +2450,9 @@ class GameClient(ScreensMixin, CameraYaw):
         self.guild_prompt_rects = {}
         self.hud_focus = None
         self.hud_menu = False
+        self.dungeon = None
+        self._overworld_tiles = None
+        self._home_tiles = None
         self.show_equipment = False
         self.show_forge = False
         self.show_cook = False
@@ -2733,11 +2760,11 @@ class GameClient(ScreensMixin, CameraYaw):
         if not self.player or not dest:
             return
         if self._in_castle_realm() and dest.get("where") not in (None, "castle") and dest.get("kind") == "monster":
-            self.chat_log.append("[!] Leave the Castle Realm to travel the overworld.")
+            self.chat_log.append("[!] Leave the King's Realm to travel the overworld.")
             self.chat_log = self.chat_log[-8:]
             return
         if self._in_castle_realm() and dest.get("where") == "overworld":
-            self.chat_log.append("[!] Leave the Castle Realm to travel the overworld.")
+            self.chat_log.append("[!] Leave the King's Realm to travel the overworld.")
             self.chat_log = self.chat_log[-8:]
             return
         tx, ty = int(dest["x"]), int(dest["y"])
@@ -3518,6 +3545,12 @@ class GameClient(ScreensMixin, CameraYaw):
         px, py = self.player_xy()
         nx, ny = int(px) + int(dx), int(py) + int(dy)
         if not self.tile_walkable(nx, ny):
+            mp = getattr(self, "moon_petal", None)
+            if mp is not None and mp.is_door(nx, ny):   # walking into the Moon Petal Inn door
+                mp.enter()
+            ox = getattr(self, "resting_ox", None)
+            if ox is not None:                           # walking into the Resting Ox arch = clicking it
+                ox.walk_in(nx, ny)
             return
         if self.combat_target_id is not None:
             self._clear_combat_target(notify_server=True)
@@ -3535,6 +3568,12 @@ class GameClient(ScreensMixin, CameraYaw):
             live["x"], live["y"] = nx, ny
         # A world snapshot can still be the tile we just left. Keep this step until it catches up.
         self._predicted_step = (nx, ny, now + 0.75)
+        mp = getattr(self, "moon_petal", None)
+        if mp is not None and mp.is_door(nx, ny):
+            mp.enter()
+        ox = getattr(self, "resting_ox", None)
+        if ox is not None:
+            ox.walk_in(nx, ny)
         import emberdeep_v2_client
         self._next_walk_at = now + (
             emberdeep_v2_client.STEP_SECONDS if emberdeep_v2_client.fp_active(self) else 0.16
@@ -3614,6 +3653,8 @@ class GameClient(ScreensMixin, CameraYaw):
         }
         if msg.get("sewer"):
             self.dungeon["sewer"] = dict(msg["sewer"])
+        if msg.get("deepdelve"):
+            self.dungeon["deepdelve"] = dict(msg["deepdelve"])
         self.monsters = {m["id"]: m for m in (msg.get("monsters") or [])}
         self.resources = {}
         self.ground_items = {}
@@ -3875,7 +3916,7 @@ class GameClient(ScreensMixin, CameraYaw):
             return self.near_range(px, py)
         if kind == "BANK":
             return self.near_bank(px, py)
-        if kind == "FAIRY_ACT":
+        if kind in ("FAIRY_ACT", "MOONPETAL_ENTER"):
             for spot in self.interactables:
                 if spot.get("id") == action.get("id"):
                     return max(abs(spot["x"] - px), abs(spot["y"] - py)) <= 1
@@ -3912,6 +3953,9 @@ class GameClient(ScreensMixin, CameraYaw):
             return
         if kind == "BAR_ENTER":
             self.resting_ox.request_enter()
+            return
+        if kind == "MOONPETAL_ENTER":
+            self.moon_petal.enter()
             return
         if kind == "ATTACK":
             # Send directly — do not call begin_attack here. walk_and_act reaches
@@ -4063,7 +4107,8 @@ class GameClient(ScreensMixin, CameraYaw):
             tiles.add((dx, yy))
         inside = (int(px), int(py)) in tiles
         if inside and not getattr(self, "_ox_in_door", False):
-            if time.time() - getattr(self, "_ox_enter_sent", 0) > 1.5:
+            if time.time() - getattr(self, "_ox_enter_sent", 0) > 1.5 \
+                    and time.time() - getattr(ox, "left_at", 0.0) >= ox.WALK_IN_COOLDOWN_S:
                 self._ox_enter_sent = time.time()
                 self.clear_walk()
                 ox.request_enter()
@@ -4439,6 +4484,14 @@ class GameClient(ScreensMixin, CameraYaw):
             emberdeep_v2_client.draw_zoom_controls(self)
             return
         panel, track = self.zoom_hud_rects()
+        try:
+            import hud_skin
+            hud_skin.zoom_controls(self, panel, track)
+            return
+        except Exception as e:
+            if not getattr(self, "_zoom_skin_err", None):
+                self._zoom_skin_err = str(e)
+                print("[hud_skin] zoom fallback:", e)
         pygame.draw.rect(self.screen, (22, 24, 32), panel, border_radius=6)
         pygame.draw.rect(self.screen, (120, 110, 80), panel, 1, border_radius=6)
         title = self.font_tiny.render("Zoom bar", True, (255, 230, 160))
@@ -4533,6 +4586,9 @@ class GameClient(ScreensMixin, CameraYaw):
         max_cam_y = max(0, vh - vis_h)
         cam_x = max(0, min(int(pvx - vis_w // 2), max_cam_x))
         cam_y = max(0, min(int(pvy - vis_h // 2), max_cam_y))
+        d = getattr(self, "dungeon", None) or {}
+        if d.get("id") == "deepdelve" and vh < vis_h:
+            cam_y = -((vis_h - vh) // 2)       # short mine gallery: keep it mid-screen (rock painted around it)
         return cam_x, cam_y
 
     def map_screen_pos(self, wx, wy, cam_x=None, cam_y=None):
@@ -5117,6 +5173,9 @@ class GameClient(ScreensMixin, CameraYaw):
                         stand = spot.get("stand") or []
                         if len(stand) == 2 and self.tile_walkable(int(stand[0]), int(stand[1])):
                             goals.add((int(stand[0]), int(stand[1])))
+                        if spot.get("id") == "moonpetal_inn_door":   # Moon Petal Inn scene (moon_petal_inn.py)
+                            self.walk_and_act(goals, {"type": "MOONPETAL_ENTER", "id": spot.get("id")})
+                            return
                         self.walk_and_act(goals, {"type": "FAIRY_ACT", "id": spot.get("id")})
                         return
                     if kind in ("door", "dungeon_entrance"):
@@ -5782,7 +5841,8 @@ class GameClient(ScreensMixin, CameraYaw):
         item_id = entry["item_id"]
         name = ITEMS.get(item_id, {}).get("name", "item")
         qty = max(1, int(entry.get("qty") or 1))
-        self.drop_prompt = {"slot": slot, "item_id": item_id, "name": name, "qty": qty}
+        self.drop_prompt = {"slot": slot, "item_id": item_id, "name": name, "qty": qty,
+                            "t0": pygame.time.get_ticks()}
         self.loot_prompt = None
         self.cook_prompt = None
         self.fire_prompt = None
@@ -6031,6 +6091,11 @@ class GameClient(ScreensMixin, CameraYaw):
         prompt = self.drop_prompt
         if not prompt:
             return
+        if "_spec" in prompt:           # restyled confirm modal
+            role = self._cm_click("drop", mx, my)
+            if role:
+                self._cm_do("drop", role)
+            return
         if rects.get("one") and rects["one"].collidepoint(mx, my):
             self.net.send("DROP", slot_index=prompt["slot"], qty=1)
             self.drop_prompt = None
@@ -6102,7 +6167,15 @@ class GameClient(ScreensMixin, CameraYaw):
         item_id = entry["item_id"]
         name = ITEMS.get(item_id, {}).get("name", "bones")
         qty = max(1, int(entry.get("qty") or 1))
-        self.bone_prompt = {"slot": slot, "item_id": item_id, "name": name, "qty": qty}
+        try:
+            import confirm_modal
+            if confirm_modal.skip("bones"):     # "Don't ask again for bones": bury 1 directly
+                self.net.send("USE_ITEM", slot_index=slot)
+                return
+        except Exception as e:
+            print("[confirm_modal] prefs:", e)
+        self.bone_prompt = {"slot": slot, "item_id": item_id, "name": name, "qty": qty,
+                            "t0": pygame.time.get_ticks()}
         self.drop_prompt = None
         self.floor_loot_prompt = None
 
@@ -6110,6 +6183,11 @@ class GameClient(ScreensMixin, CameraYaw):
         rects = self.bone_prompt_rects or {}
         prompt = self.bone_prompt
         if not prompt:
+            return
+        if "_spec" in prompt:           # restyled confirm modal
+            role = self._cm_click("bone", mx, my)
+            if role:
+                self._cm_do("bone", role)
             return
         if rects.get("one") and rects["one"].collidepoint(mx, my):
             self.net.send("USE_ITEM", slot_index=prompt["slot"])
@@ -6646,6 +6724,8 @@ class GameClient(ScreensMixin, CameraYaw):
 
         if getattr(self, "resting_ox", None) and self.resting_ox.active and self.state == "GAME":
             self.resting_ox.render(self.screen)
+        if getattr(self, "moon_petal", None) and self.moon_petal.active and self.state == "GAME":
+            self.moon_petal.render(self.screen)
         if self.outfitters.active:
             self.outfitters.render(self.screen)
 
@@ -7026,6 +7106,11 @@ class GameClient(ScreensMixin, CameraYaw):
 
         emberdeep_v2_client.blit_backdrop(self)
         emberdeep_v2_client.reveal_mine(self)
+        import deepdelve_client
+        try:
+            deepdelve_client.paint_ground(self, TILE)
+        except Exception:
+            pass
         fairy_ground.draw_overlays(self, cam_x, cam_y, vis_w, vis_h)
 
         # Click-walk destination + path crumbs
@@ -7041,6 +7126,10 @@ class GameClient(ScreensMixin, CameraYaw):
         stonehaven_walls_client.queue(self, draw_list, cam_x, cam_y, TILE)
         emberdeep_volcano_client.queue(self, draw_list, cam_x, cam_y, TILE)
         fairy_glade_client.queue(self, draw_list, cam_x, cam_y, TILE, t)
+        try:
+            deepdelve_client.queue(self, draw_list, cam_x, cam_y, TILE, t)
+        except Exception:
+            pass
 
         # Exit mouth inside private dungeons
         if self.dungeon:
@@ -7053,6 +7142,8 @@ class GameClient(ScreensMixin, CameraYaw):
 
                 def _draw_exit(cx=cx, cy=cy, did=did):
                     yaw = self.camera_yaw
+                    if did == "deepdelve" and deepdelve_client.draw_exit(self, cx, cy, TILE):
+                        return
                     if did == "emberdeep":
                         sprites.draw_volcano_entrance(self.screen, cx, cy, TILE, t, yaw=yaw)
                     else:
@@ -7236,7 +7327,8 @@ class GameClient(ScreensMixin, CameraYaw):
                                 tree_alpha = 170
 
                     def _draw_res(cx=cx, cy=cy, rtype=rtype, label=label, near=near, color=color, tree_alpha=tree_alpha, x=x, y=y):
-                        self.draw_resource_sprite(rtype, cx, cy, t, alpha=tree_alpha, wx=x, wy=y)
+                        if not deepdelve_client.draw_rock(self.screen, rtype, cx, cy, TILE, x, y):
+                            self.draw_resource_sprite(rtype, cx, cy, t, alpha=tree_alpha, wx=x, wy=y)
                         if label and near:
                             self.blit_nameplate(label, cx, cy - TILE // 2 - 2, color)
                     draw_list.append((cy + TILE // 3, 1, _draw_res))
@@ -7300,6 +7392,8 @@ class GameClient(ScreensMixin, CameraYaw):
                                     sprites.draw_door(self.screen, cx, cy, TILE, open_=near, t=t, gate=False)
                                 if near:
                                     self.blit_nameplate(spot.get("name", "Door"), cx, cy - TILE // 2 - 6)
+                        elif kind == "bank" and deepdelve_client.draw_chest(self.screen, spot, cx, cy, TILE):
+                            self.blit_nameplate(spot.get("name", "Bank"), cx, cy - TILE // 2 - 6)
                         elif kind == "bank":
                             prop_key = "vault_chest" if spot.get("variant") == "chest" else "bank_booth"
                             if not (USE_NEW_PROPS and prop_sprites.draw_prop(
@@ -7320,7 +7414,7 @@ class GameClient(ScreensMixin, CameraYaw):
                                 ring = int(TILE * (0.85 + 0.35 * pulse) * 2)
                                 pygame.draw.circle(self.screen, (90, 60, 16), (cx, cy - 2), ring + 2, 3)
                                 pygame.draw.circle(self.screen, (255, 214, 90), (cx, cy - 2), ring, 2)
-                            self.blit_nameplate("CASTLE REALM", cx, portal_top - 4, (255, 220, 120))
+                            self.blit_nameplate("KING'S REALM", cx, portal_top - 4, (255, 220, 120))
                         elif kind == "dungeon_entrance":
                             entrance_top = None
                             pack = spot.get("pack")
@@ -7354,7 +7448,7 @@ class GameClient(ScreensMixin, CameraYaw):
                                     self.screen, (255, 230, 140),
                                     (cx, cy), (cx, entrance_top - 22), 2,
                                 )
-                                self.blit_nameplate("CASTLE REALM", cx, entrance_top - 22, (255, 220, 120))
+                                self.blit_nameplate("KING'S REALM", cx, entrance_top - 22, (255, 220, 120))
                             else:
                                 self.blit_nameplate("DUNGEON", cx, entrance_top - 4, (210, 170, 255))
                         elif kind == "sewer_grate":
@@ -7449,6 +7543,16 @@ class GameClient(ScreensMixin, CameraYaw):
 
         # Ground items (hover_tile already resolved above for fishing labels)
         self._hover_hint = self._resolve_hover_hint(hover_tile)
+        mp = getattr(self, "moon_petal", None)
+        if mp is not None and not mp.active:   # Moon Petal Inn door: rim glow, tooltip, door cursor
+            import moon_petal_inn
+            if hover_tile is not None and mp.is_door(*hover_tile):
+                dsx, dsy = self.world_to_view_offset(hover_tile[0], hover_tile[1], cam_x, cam_y)
+                door_rect = pygame.Rect(dsx * TILE - TILE // 2, dsy * TILE - TILE, TILE * 2, TILE * 2)
+                draw_list.append((10 ** 6, 9, lambda r=door_rect: moon_petal_inn.draw_door_hover(self, r)))
+                moon_petal_inn.set_cursor("door")
+            else:
+                moon_petal_inn.set_cursor(None)
 
         for key, items in self.ground_items.items():
             if not items:
@@ -7532,7 +7636,12 @@ class GameClient(ScreensMixin, CameraYaw):
                           self.blit_action_hint(hint[2], cx, ny - 28, hint[3])
                       return
                   import npc_hd_client
-                  if npc_hd_client.draw_npc(self, n, cx, cy, int(round(TILE * 1.1)), t, face, mov):
+                  self._np_npc_ctx = (n, cy + TILE // 2)
+                  try:
+                      _drawn_hd = npc_hd_client.draw_npc(self, n, cx, cy, int(round(TILE * 1.1)), t, face, mov)
+                  finally:
+                      self._np_npc_ctx = None
+                  if _drawn_hd:
                       ny = getattr(npc_hd_client, "last_nameplate_y", None)
                       if ny is None:
                           ny, _ = self.entity_anchor(cx, cy, "character")
@@ -7548,7 +7657,11 @@ class GameClient(ScreensMixin, CameraYaw):
                       robe=n["id"] in ROBED_NPC_IDS, t=t, facing=face, moving=mov,
                   )
                   ny, _ = self.entity_anchor(cx, cy, "npc")
-                  self.blit_nameplate(n["name"], cx, ny, (255, 230, 160))
+                  self._np_npc_ctx = (n, cy + TILE // 2)
+                  try:
+                      self.blit_nameplate(n["name"], cx, ny, (255, 230, 160))
+                  finally:
+                      self._np_npc_ctx = None
                   self._blit_npc_role_badges(n, cx, ny - 16)
                   new_player_guide.draw_talk_prompt(self, n, cx, ny)
                   hint = self._hover_hint
@@ -7592,6 +7705,12 @@ class GameClient(ScreensMixin, CameraYaw):
                     if USE_NEW_CASTLE:
                         cy -= castle_sprites.lift_px(m["x"], m["y"], TILE)
                     targeted = self.combat_target_id == m["id"]
+                    if targeted and not m.get("arena_soldier"):
+                        try:
+                            import nameplates
+                            nameplates.target_ring(self, cx, cy + TILE // 2 - 2, TILE)
+                        except Exception:
+                            pass
                     lowpoly = (
                         USE_LOWPOLY_DRAGONS
                         and lowpoly_dragon_sprites.sheet_key_for_monster_type(m["type"])
@@ -7769,7 +7888,29 @@ class GameClient(ScreensMixin, CameraYaw):
                         ny = hy
                     lvl = int(m.get("level") or 1)
                     lvl_color = self.monster_threat_color(lvl)
-                    if m.get("arena_soldier") and m.get("_boss_top") is not None:
+                    _np_done = False
+                    if not m.get("arena_soldier") and not m.get("field_soldier"):
+                        # Nameplates v1: one plate (name row + bar) above the head top.
+                        try:
+                            import nameplates
+                            _hint = self._hover_hint
+                            _head = hy if knights_hd_client.handles(m["type"]) else hy + 28
+                            nameplates.submit(
+                                self, ("m", m["id"]), cx, _head, m["name"], level=lvl, rel="hostile",
+                                kind="mon", hp=m["hp"], max_hp=m["max_hp"], stars=m.get("stars"),
+                                targeted=targeted,
+                                hovered=bool(_hint and _hint[0] == "monster" and _hint[1] == m["id"]),
+                                in_combat=bool(targeted or atk > 0 or float(m.get("attacking") or 0) > 0.15),
+                                feet=cy + TILE // 2,
+                            )
+                            _np_done = True
+                        except Exception as _e:
+                            if not getattr(self, "_np_err", None):
+                                self._np_err = str(_e)
+                                print("[nameplates] monster fallback:", _e)
+                    if _np_done:
+                        pass
+                    elif m.get("arena_soldier") and m.get("_boss_top") is not None:
                         pass  # boss plate (name, level, HP) already drawn above its head
                     elif wounded or near or targeted or m.get("frozen") or _is_humanoid:
                         if _is_humanoid:
@@ -7815,7 +7956,7 @@ class GameClient(ScreensMixin, CameraYaw):
                                 )
                                 if show_name:
                                     ally = m.get("side") == "you"
-                                    tag = "◆ " if ally else "◇ "
+                                    tag = "\x00A" if ally else "\x00E"  # side diamond drawn as a shape
                                     col = (110, 200, 255) if ally else (255, 110, 95)
                                     self.blit_nameplate(tag + m["name"], cx, ny, color=col)
                             else:
@@ -7937,7 +8078,20 @@ class GameClient(ScreensMixin, CameraYaw):
                         if top is None:
                             top = cy - int(TILE * 1.7)
                     # Nameplate hangs a few pixels below the y we pass.
-                    if mine or hurt:
+                    try:
+                        import nameplates
+                        nameplates.submit(
+                            self, ("pet", pet.get("id") or id(pet)), cx, top, pet["name"], rel="pet", kind="pet",
+                            hp=pet["hp"] if (mine or hurt) else None, max_hp=pet["max_hp"],
+                            in_combat=bool(hurt), feet=cy + TILE // 3, show_name=True,
+                        )
+                        _pet_np = True
+                    except Exception as _e:
+                        print("[nameplates] pet fallback:", _e)
+                        _pet_np = False
+                    if _pet_np:
+                        pass
+                    elif mine or hurt:
                         self.draw_hp_bar(cx, top - 8, pet["hp"], pet["max_hp"])
                         self.blit_nameplate(pet["name"], cx, top - 22, (180, 220, 255))
                     else:
@@ -8117,10 +8271,38 @@ class GameClient(ScreensMixin, CameraYaw):
                     if royal:
                         plate = (255, 205, 60)
                     # HP closest to the head; name above it. PK is examine-only.
-                    self.draw_hp_bar(cx, hy, p["hp"], p["max_hp"], show_value=is_self)
-                    self.blit_nameplate(label, cx, ny, plate)
-                    if isinstance(house, dict) and house.get("banner"):
-                        self.queue_house_crest(house.get("banner"), cx, ny, label)
+                    _np_ok = False
+                    try:
+                        import nameplates
+                        if is_self:
+                            _rel = "self"
+                        elif p.get("in_party") or p.get("id") in (getattr(self, "party_member_ids", None) or ()):
+                            _rel = "party"
+                        elif p.get("player_killer") and (self.player or {}).get("player_killer"):
+                            _rel = "hostile"
+                        else:
+                            _rel = "neutral"
+                        _hint = self._hover_hint
+                        nameplates.submit(
+                            self, ("p", p["id"]), cx, hy + 28, shown, level=cmb or None, rel=_rel, kind="std",
+                            hp=p["hp"], max_hp=p["max_hp"],
+                            targeted=self.combat_target_id == p["id"],
+                            hovered=bool(_hint and _hint[0] == "player" and _hint[1] == p["id"]),
+                            in_combat=bool(is_self and self.player_in_fight()),
+                            feet=cy + TILE // 2,
+                            banner=house.get("banner") if isinstance(house, dict) else None,
+                            name_color=(255, 205, 60) if royal else None,
+                        )
+                        _np_ok = True
+                    except Exception as _e:
+                        if not getattr(self, "_np_err", None):
+                            self._np_err = str(_e)
+                            print("[nameplates] player fallback:", _e)
+                    if not _np_ok:
+                        self.draw_hp_bar(cx, hy, p["hp"], p["max_hp"], show_value=is_self)
+                        self.blit_nameplate(label, cx, ny, plate)
+                        if isinstance(house, dict) and house.get("banner"):
+                            self.queue_house_crest(house.get("banner"), cx, ny, label)
                     said = (self.speech or {}).get(p["id"])
                     if said and time.time() < said.get("until", 0):
                         self.draw_speech_bubble(cx, ny, said.get("text") or "")
@@ -8163,6 +8345,10 @@ class GameClient(ScreensMixin, CameraYaw):
         draw_list.sort(key=lambda item: (item[0], item[1]))
         for _, __, fn in draw_list:
             fn()
+        try:
+            deepdelve_client.light(self, TILE)
+        except Exception:
+            pass
 
         # Flying arrows (world space → screen)
         self._draw_projectiles(cam_x, cam_y, t)
@@ -8639,6 +8825,8 @@ class GameClient(ScreensMixin, CameraYaw):
         if self.dungeon and self.dungeon.get("id") == "sewer":
             sewer_client.queue_props(self, draw_list, cam_x, cam_y, TILE, t)
             return
+        if self.dungeon and self.dungeon.get("id") == "deepdelve":
+            return   # mine instances paint their own rock walls (deepdelve_client)
         if self.dungeon and self.dungeon.get("v2") == "depths":
             import depths_v2_client
             depths_v2_client.queue_wall_faces(self, draw_list, cam_x, cam_y, vis_w, vis_h, t)
@@ -8969,7 +9157,9 @@ class GameClient(ScreensMixin, CameraYaw):
                 else:
                     sprites.draw_dungeon_wall(self.screen, rect, wx, wy)
             elif zone == "mountains":
-                sprites.draw_mountain_rock(self.screen, rect, wx, wy)
+                import ground_sheet                 # rock outcrops sit in the meadow with rounded edges
+                if not ground_sheet.draw_soft_rock(self, rect, wx, wy, sprites.draw_mountain_rock):
+                    sprites.draw_mountain_rock(self.screen, rect, wx, wy)
             else:
                 sprites.draw_wall(self.screen, rect, zone, wx, wy, material=None)
         elif tile_id == wm.WATER:
@@ -10111,6 +10301,12 @@ class GameClient(ScreensMixin, CameraYaw):
 
     def _draw_arena_soldier_hd(self, m, cx, feet, tile_px, t, anim, atk, swing, hd_face, eq, gender):
         """Cached HD blit for arena/field dolls — full N/E/S/W walk, no eclipse FX."""
+        try:  # pit soldiers: painted gladiator sheet; this doll is the fallback
+            import arena_battles_ui
+            if arena_battles_ui.draw_gladiator(self.screen, m, cx, feet, tile_px, t, anim, atk, swing, hd_face, gender):
+                return True
+        except Exception:
+            pass
         import player_hd_client
         import mercenaries_ui
         cache = getattr(self, "_arena_hd_cache", None)
@@ -10188,9 +10384,23 @@ class GameClient(ScreensMixin, CameraYaw):
     def blit_nameplate(self, text, cx, top_y, color=WHITE):
         """Fantasy name tag. Queued during map draw so labels stay sharp and above cover."""
         cx_i, ty_i = int(round(cx)), int(round(top_y))
+        ctx = getattr(self, "_np_npc_ctx", None)
+        if ctx and getattr(self, "_defer_nameplates", False):
+            try:
+                import nameplates
+                n, feet = ctx
+                _hint = getattr(self, "_hover_hint", None)
+                # NPC name row sits where the old tag sat (badges / prompts keep their y).
+                nameplates.submit(self, ("npc", n.get("id")), cx_i, ty_i + 17, str(text), rel="npc", kind="std",
+                                  hovered=bool(_hint and _hint[0] == "npc" and _hint[1] == n.get("id")),
+                                  feet=feet)
+                return pygame.Rect(cx_i - 48, ty_i - 13, 96, 20)
+            except Exception as _e:
+                print("[nameplates] npc fallback:", _e)
         if getattr(self, "_defer_nameplates", False):
             self._nameplate_queue.append((str(text), cx_i, ty_i, color))
-            surf = self.font_label.render(str(text), True, color)
+            _t = str(text)
+            surf = self.font_label.render(("    " + _t[2:]) if _t[:1] == "\x00" else _t, True, color)
             pad_x, pad_y = 8, 3
             return pygame.Rect(
                 cx_i - surf.get_width() // 2 - pad_x,
@@ -10236,6 +10446,9 @@ class GameClient(ScreensMixin, CameraYaw):
 
     def _draw_nameplate_now(self, text, cx, top_y, color=WHITE):
         """Ink panel + crisp label (integer positions, no zoom scaling)."""
+        mark = None
+        if text[:1] == "\x00":  # arena side marker: "\x00A" ally (filled), "\x00E" enemy (hollow)
+            mark, text = text[1:2], "    " + text[2:]
         surf = self.font_label.render(text, True, color)
         pad_x, pad_y = 8, 3
         box = pygame.Rect(
@@ -10258,6 +10471,14 @@ class GameClient(ScreensMixin, CameraYaw):
         for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
             self.screen.blit(outline, (tx + ox, ty + oy))
         self.screen.blit(surf, (tx, ty))
+        if mark:
+            dcx, dcy, r = box.x + pad_x + 5, box.centery, 5
+            pts = [(dcx, dcy - r), (dcx + r, dcy), (dcx, dcy + r), (dcx - r, dcy)]
+            pygame.draw.polygon(self.screen, (0, 0, 0), [(x + 1, y + 1) for x, y in pts])
+            if mark == "A":
+                pygame.draw.polygon(self.screen, color, pts)
+            else:
+                pygame.draw.polygon(self.screen, color, pts, 2)
         return box
 
     def flush_nameplates(self, cam_x, cam_y):
@@ -10265,7 +10486,7 @@ class GameClient(ScreensMixin, CameraYaw):
         queue = getattr(self, "_nameplate_queue", None) or []
         crests = getattr(self, "_house_crest_queue", None) or []
         badges = getattr(self, "_badge_queue", None) or []
-        if not queue and not crests and not badges:
+        if not queue and not crests and not badges and not getattr(self, "_np_queue", None):
             return
         k = self._zoom_view_scale()
         dx = dy = 0.0
@@ -10284,6 +10505,15 @@ class GameClient(ScreensMixin, CameraYaw):
             y = int(round(top_y * k + dy))
             self._draw_house_crest_now(banner, x, y, label)
         self._house_crest_queue = []
+        # Unit plates last: building / floor labels stay below them.
+        try:
+            import nameplates
+            nameplates.flush(self, k, dx, dy)
+        except Exception as _e:
+            if not getattr(self, "_np_flush_err", None):
+                self._np_flush_err = str(_e)
+                print("[nameplates] flush failed:", _e)
+            self._np_queue = []
         for tags, cx, top_y in badges:
             x = int(round(cx * k + dx))
             y = int(round(top_y * k + dy))
@@ -10524,7 +10754,7 @@ class GameClient(ScreensMixin, CameraYaw):
         pygame.draw.circle(self.screen, (40, 28, 8), (int(x), int(y)), 8)
         pygame.draw.circle(self.screen, gold, (int(x), int(y)), 6)
         pygame.draw.circle(self.screen, (255, 248, 220), (int(x), int(y)), 2)
-        text = "Castle" if short else "Castle Realm"
+        text = "Castle" if short else "King's Realm"
         label = self.font_tiny.render(text, True, gold)
         lx = int(x) - label.get_width() - 8
         ly = int(y) - label.get_height() // 2
@@ -10588,6 +10818,14 @@ class GameClient(ScreensMixin, CameraYaw):
         pad = 10
         rect = pygame.Rect(MAP_W - panel_w - pad, pad, panel_w, panel_h)
         self.minimap_rect = rect
+        try:
+            import hud_skin
+            hud_skin.clock_widget(self, rect, phase, season, weather, date, weekday, phase_key)
+            return
+        except Exception as e:
+            if not getattr(self, "_clock_skin_err", None):
+                self._clock_skin_err = str(e)
+                print("[hud_skin] clock fallback:", e)
         frame = rect.inflate(6, 6)
         pygame.draw.rect(self.screen, (12, 14, 20), frame, border_radius=8)
         pygame.draw.rect(self.screen, accent, frame, 2, border_radius=8)
@@ -10863,6 +11101,12 @@ class GameClient(ScreensMixin, CameraYaw):
             self.show_pets = False
 
     def _start_teleport_fx(self, label):
+        try:
+            import teleport_ui
+            teleport_ui.start_arrive(self, label)
+            return
+        except Exception as e:
+            print("[teleport_ui] arrive fx fallback:", e)
         now = time.time()
         self.teleport_fx = {"start": now, "until": now + 0.95, "label": label or ""}
 
@@ -10904,6 +11148,12 @@ class GameClient(ScreensMixin, CameraYaw):
                     break
         self.show_teleport = False
         self.clear_walk()
+        try:
+            import teleport_ui
+            teleport_ui.start_cast(self, dest_id, label)   # sends TELEPORT after the 0.8s rune cast
+            return
+        except Exception as e:
+            print("[teleport_ui] cast fallback:", e)
         self._start_teleport_fx(label)
         self.net.send("TELEPORT", dest=dest_id)
 
@@ -10916,11 +11166,15 @@ class GameClient(ScreensMixin, CameraYaw):
             elif kind == "walk":
                 self.show_teleport = False
                 self.walk_and_act({WIZARD_TILE})
-            elif kind == "dest":
+            elif kind in ("dest", "locked", "here"):
                 clip = (self.teleport_scroll_meta or {}).get("clip")
                 if clip is not None and not clip.collidepoint(mx, my):
                     return
-                self.cast_teleport(payload)
+                if kind == "dest":
+                    self.cast_teleport(payload)
+                else:
+                    import teleport_ui
+                    teleport_ui.toast(self, "Walk there first to unlock it." if kind == "locked" else "You are here.")
             return
         box = getattr(self, "teleport_box", None)
         if box and not box.collidepoint(mx, my):
@@ -10994,6 +11248,14 @@ class GameClient(ScreensMixin, CameraYaw):
         self.stair_choice_rects = rects
 
     def draw_teleport_button(self):
+        try:
+            import hud_skin
+            self.teleport_btn_rect = hud_skin.teleport_button(self)
+            return
+        except Exception as e:
+            if not getattr(self, "_tele_skin_err", None):
+                self._tele_skin_err = str(e)
+                print("[hud_skin] teleport fallback:", e)
         rect = pygame.Rect(8, 332, 112, 28)
         self.teleport_btn_rect = rect
         pygame.draw.rect(self.screen, (36, 18, 62), rect, border_radius=6)
@@ -11002,6 +11264,17 @@ class GameClient(ScreensMixin, CameraYaw):
         self.screen.blit(label, (rect.centerx - label.get_width() // 2, rect.y + 6))
 
     def draw_teleport_modal(self):
+        try:
+            import teleport_ui
+            teleport_ui.draw(self, TELEPORT_DESTINATIONS, bool((self.player or {}).get("knows_teleport")))
+            return
+        except Exception as e:
+            if not getattr(self, "_teleport_ui_err", None):
+                self._teleport_ui_err = str(e)
+                print("[teleport_ui] window fallback:", e)
+        self._draw_teleport_modal_legacy()
+
+    def _draw_teleport_modal_legacy(self):
         box = pygame.Rect(250, 50, 420, 560)
         self.teleport_box = box
         self.teleport_row_rects = []
@@ -11022,7 +11295,7 @@ class GameClient(ScreensMixin, CameraYaw):
                 "Wizard Elowen can teach you this spell.",
                 "She stands on the grass just northwest",
                 "of the village crossroads.",
-                "Talk to her for Village and Castle Realm,",
+                "Talk to her for Village and King's Realm,",
                 "then walk the map to unlock more places.",
             ]
             y = box.y + 64
@@ -11045,7 +11318,7 @@ class GameClient(ScreensMixin, CameraYaw):
         unlocked = self._unlocked_teleport_destinations()
         kingdom = [d for d in unlocked if d.get("where") == "overworld"]
         realm = [d for d in unlocked if d.get("where") == "castle"]
-        groups = (("The Kingdom", kingdom), ("Castle Realm", realm))
+        groups = (("The Kingdom", kingdom), ("King's Realm", realm))
 
         list_top = box.y + 72
         list_bottom = box.bottom - 52
@@ -11115,6 +11388,22 @@ class GameClient(ScreensMixin, CameraYaw):
     def draw_teleport_fx(self):
         fx = self.teleport_fx
         if not fx:
+            return
+        try:
+            import teleport_ui
+            teleport_ui.draw_fx(self)
+            return
+        except Exception as e:
+            if not getattr(self, "_teleport_fx_err", None):
+                self._teleport_fx_err = str(e)
+                print("[teleport_ui] fx fallback:", e)
+            if fx.get("phase") == "cast":
+                self.teleport_fx = None
+                self.net.send("TELEPORT", dest=fx["dest"])
+                self._start_teleport_fx(fx.get("label"))
+                return
+        fx = self.teleport_fx
+        if not fx or "until" not in fx:
             return
         now = time.time()
         if now >= fx["until"]:
@@ -11278,6 +11567,16 @@ class GameClient(ScreensMixin, CameraYaw):
             self.combat_style_prompt = None
 
     def draw_drop_prompt(self):
+        try:
+            import confirm_modal
+            self.drop_prompt_rects = confirm_modal.draw(self, self._cm_spec("drop"))
+            return
+        except Exception as e:
+            print("[confirm_modal] drop fallback:", e)
+            (self.drop_prompt or {}).pop("_spec", None)
+        self._draw_drop_prompt_legacy()
+
+    def _draw_drop_prompt_legacy(self):
         prompt = self.drop_prompt or {}
         name = prompt.get("name", "item")
         qty = max(1, int(prompt.get("qty") or 1))
@@ -11357,6 +11656,82 @@ class GameClient(ScreensMixin, CameraYaw):
         self.screen.blit(ct, (cancel.centerx - ct.get_width() // 2, cancel.centery - ct.get_height() // 2))
 
     def draw_bone_prompt(self):
+        try:
+            import confirm_modal
+            self.bone_prompt_rects = confirm_modal.draw(self, self._cm_spec("bone"))
+            return
+        except Exception as e:
+            print("[confirm_modal] bury fallback:", e)
+            (self.bone_prompt or {}).pop("_spec", None)
+        self._draw_bone_prompt_legacy()
+
+    def _cm_spec(self, kind):
+        import confirm_modal
+        prompt = self.bone_prompt if kind == "bone" else self.drop_prompt
+        spec = (confirm_modal.bury_spec if kind == "bone" else confirm_modal.drop_spec)(prompt or {}, ITEMS)
+        prompt["_spec"] = spec
+        return spec
+
+    def _cm_click(self, kind, mx, my):
+        """Shared confirm-modal click rules. Returns a role, or None when the click is swallowed."""
+        import confirm_modal
+        prompt = self.bone_prompt if kind == "bone" else self.drop_prompt
+        rects = (self.bone_prompt_rects if kind == "bone" else self.drop_prompt_rects) or {}
+        spec = prompt.get("_spec") or {"t0": prompt.get("t0") or 0}
+        if not confirm_modal.ready(spec):
+            return None
+        if rects.get("close") and rects["close"].collidepoint(mx, my):
+            return "cancel"
+        if rects.get("dont_ask") and rects["dont_ask"].collidepoint(mx, my):
+            prompt["dont_ask_on"] = not prompt.get("dont_ask_on")
+            return None
+        for role in ("primary", "secondary", "cancel"):
+            if rects.get(role) and rects[role].collidepoint(mx, my):
+                return role
+        box = rects.get("box")
+        if box and not box.collidepoint(mx, my) and not spec.get("destructive"):
+            return "cancel"
+        return None
+
+    def _cm_key(self, event):
+        """Enter/Esc/Tab/1 for the bury + drop modals. True when the key was used."""
+        import confirm_modal
+        kind = "bone" if self.bone_prompt else ("drop" if self.drop_prompt else None)
+        if not kind:
+            return False
+        prompt = self.bone_prompt if kind == "bone" else self.drop_prompt
+        spec = prompt.get("_spec") or {"t0": prompt.get("t0") or 0, "buttons": []}
+        role = confirm_modal.key(spec, event)
+        if role == "tab":
+            prompt["focus"] = spec.get("focus")
+            return True
+        if role:
+            self._cm_do(kind, role)
+            return True
+        return event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_TAB)
+
+    def _cm_do(self, kind, role):
+        prompt = self.bone_prompt if kind == "bone" else self.drop_prompt
+        qty = max(1, int(prompt.get("qty") or 1))
+        if role == "primary" and qty == 1:
+            role = "secondary"          # single item: primary does the one action
+        if kind == "bone":
+            if role != "cancel" and prompt.get("dont_ask_on"):
+                import confirm_modal
+                confirm_modal.set_skip("bones", True)
+            if role == "secondary":
+                self.net.send("USE_ITEM", slot_index=prompt["slot"])
+            elif role == "primary":
+                self.net.send("USE_ITEM", slot_index=prompt["slot"], action="bury_all")
+            self.bone_prompt = None
+        else:
+            if role == "secondary":
+                self.net.send("DROP", slot_index=prompt["slot"], qty=1)
+            elif role == "primary":
+                self.net.send("DROP", slot_index=prompt["slot"], qty=qty)
+            self.drop_prompt = None
+
+    def _draw_bone_prompt_legacy(self):
         prompt = self.bone_prompt or {}
         name = prompt.get("name", "bones")
         qty = max(1, int(prompt.get("qty") or 1))

@@ -1,0 +1,4 @@
+Tavern ambience (murmur, fire crackle, clinks, footsteps) in tavern_entry_v1.mp4 and tavern_seated_pov.mp4:
+synthesised from scratch with numpy (work/amb.py). No third-party samples. Original work, released CC0 for Crownfall.
+Barman voice: Kokoro-82M TTS (Apache-2.0), voice bm_george, post-processed with ffmpeg.
+Video: generated with GenerateVideo (Grok Imagine); stills with GenerateImage.

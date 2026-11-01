@@ -37,7 +37,7 @@ def _metrics():
     if bar_w > room - 240:
         slot_w = max(28, (room - 240 - 10 - len(STYLES) * gap) // len(STYLES))
         bar_w = 10 + len(STYLES) * (slot_w + gap)
-    # Wide enough for "Coins+bones ON (P)" above the style row.
+    # Wide enough for "Coins+bones ON (L)" above the style row.
     bar_w = max(bar_w, 168)
     chat_w = max(160, sidebar_x - 8 - 16 - bar_w - 8)
     chat = pygame.Rect(8, map_h, chat_w, screen_h - map_h - 8)
@@ -138,10 +138,10 @@ def _draw_combat_bar(client, bar, slot_w):
     auto_on = bool((getattr(client, "player", None) or {}).get("auto_pickup_items"))
     auto_r = pygame.Rect(bar.x + 5, bar.y + 4, bar.w - 10, 20)
     hover_auto = auto_r.collidepoint(mx, my)
-    fill = (36, 92, 52) if auto_on else (72, 40, 38)
+    fill = (36, 92, 52) if auto_on else hud_v2.NAVY_CARD
     border = hud_v2.GOLD if hover_auto else hud_v2.GOLD_DIM
     hud_v2._panel(screen, auto_r, fill, border, radius=5, width=2 if hover_auto else 1)
-    auto_label = f"Coins+bones {'ON' if auto_on else 'OFF'} (P)"
+    auto_label = f"Coins+bones {'ON' if auto_on else 'OFF'} (L)"
     surf = hud_v2._text(client, client.font_tiny, auto_label, hud_v2.INK)
     screen.blit(surf, (auto_r.centerx - surf.get_width() // 2,
                         auto_r.centery - surf.get_height() // 2))

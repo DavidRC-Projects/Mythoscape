@@ -819,7 +819,7 @@ class Outfitters:
         pygame.draw.rect(surf, NAVY, FRAME, border_radius=14)
         pygame.draw.rect(surf, GOLD, FRAME, 2, border_radius=14)
         pygame.draw.rect(surf, GOLD_DIM, FRAME.inflate(-8, -8), 1, border_radius=12)
-        self._text(surf, "Mythos Outfitters", (36, 24), GOLD, 34, bold=True)
+        self._text(surf, "Crownfall Outfitters", (36, 24), GOLD, 34, bold=True)
         self._text(surf, "Hair, clothing and outfits. Try anything on before you buy.", (38, 70), MUTED, 15)
         if self.greeting:
             for i, row in enumerate(self._wrap(f"Mae: \u201c{self.greeting}\u201d", 560, 14)[:2]):
@@ -1730,7 +1730,7 @@ class Outfitters:
         pygame.draw.rect(surf, GOLD, panel, 2, border_radius=14)
         pygame.draw.rect(surf, GOLD_DIM, panel.inflate(-8, -8), 1, border_radius=12)
         self._text(surf, "Create your adventurer", (72, 46), GOLD, 30, bold=True)
-        self._text(surf, "Choose how you look. You can change it later at Mythos Outfitters.", (72, 86), MUTED, 15)
+        self._text(surf, "Choose how you look. You can change it later at Crownfall Outfitters.", (72, 86), MUTED, 15)
         pygame.draw.line(surf, GOLD_DIM, (60, 120), (1140, 120), 1)
         self._draw_creator_stage(surf)
         y = 136
@@ -1776,7 +1776,7 @@ class Outfitters:
                            SAFE_GREEN if starter else MUTED, 13, centre=True)
                 self.hit.append(("item", rect, item))
         pygame.draw.line(surf, GOLD_DIM, (60, 702), (1140, 702), 1)
-        self._text(surf, "Starter looks are free. Locked outfits are earned and bought at Mythos Outfitters.", (60, 716), MUTED, 14)
+        self._text(surf, "Starter looks are free. Locked outfits are earned and bought at Crownfall Outfitters.", (60, 716), MUTED, 14)
         self._text(surf, "Skip uses the basic look for your body type.", (60, 736), MUTED, 14)
         x = 616
         for kind, label, primary in (("random", "Randomise", False), ("reset", "Reset", False), ("skip", "Skip", False),

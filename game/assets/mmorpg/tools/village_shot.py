@@ -17,6 +17,8 @@ g.process_message({"type": "WORLD_STATE", "width": len(grid[0]), "height": len(g
                    "npcs": [], "resources": {}, "interactables": [dict(s) for s in getattr(content, "INTERACTABLES", [])], "craft_recipes": {},
                    "buildings": list(getattr(content, "BUILDINGS", []))})
 g.state = "GAME"; g.needs_appearance = False
+if os.environ.get("VPHASE"):
+    g.env = dict(getattr(g, "env", None) or {}, phase=os.environ["VPHASE"])
 jobs = os.environ.get("VSHOTS") or ",".join(sys.argv_orig[1:5]) if False else os.environ.get("VSHOTS", "")
 for job in [j for j in jobs.split(";") if j]:
     out, x, y, z = job.split(",")

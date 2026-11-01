@@ -27,7 +27,8 @@ def test_set_needs_body_and_legs_only():
             bl = {"body": f"{t}_body", "legs": f"{t}_legs"}
             if t in BH:  # bare-head art installed: body + legs alone show the set
                 assert P.armour_layer_for(sex, bl) == f"armour_{t}_bh_hd", t
-                assert P.armour_layer_for(sex, dict(bl, helmet=f"{t}_helmet")) == f"armour_{t}_bh_hd", t
+                want = f"armour_{t}_hd" if os.path.isdir(os.path.join(ASSETS, sex, "2x", f"armour_{t}_hd")) else f"armour_{t}_bh_hd"
+                assert P.armour_layer_for(sex, dict(bl, helmet=f"{t}_helmet")) == want, t   # enclosed painted helm
             elif os.path.isdir(os.path.join(ASSETS, sex, "2x", f"armour_{t}_hd")):  # full-set rule kept
                 assert P.armour_layer_for(sex, bl) is None, t
                 assert P.armour_layer_for(sex, dict(bl, helmet=f"{t}_helmet")) == f"armour_{t}_hd", t
@@ -73,7 +74,10 @@ def _overlay_checks(calls):
             assert P.last_draw.get("whole") == "armour_bronze_bh_hd", (sex, anim, P.last_draw)
             assert not calls, (sex, anim, calls)
             calls.clear(); _draw(sex, dict(eq, helmet="bronze_helmet"), anim)
-            assert P.last_draw.get("whole") == "armour_bronze_bh_hd"
+            assert P.last_draw.get("whole") == "armour_bronze_hd"     # own-tier helm: painted enclosed figure
+            assert not calls, (sex, anim, calls)
+            calls.clear(); _draw(sex, dict(eq, helmet="iron_helmet"), anim)
+            assert P.last_draw.get("whole") == "armour_bronze_bh_hd"   # other-tier helm: overlay
             assert calls == (["draw"] if anim in ("idle", "walk") else ["action"]), (sex, anim, calls)
 
 
@@ -92,6 +96,12 @@ def test_hair_follows_hair_colour_and_face_follows_skin():
         assert ys.max() < fig.min() + 0.25 * (fig.max() - fig.min()), (sex, ys.max(), fig.min(), fig.max())
 
 
+def test_eclipse_cleaver_swings_axe_strip():
+    for w, want in (("eclipse_cleaver", "melee_axe"), ("mythos_battleaxe", "melee_axe"), ("eclipse_sword", "melee_sword"),
+                    ("bronze_pickaxe", "melee_sword"), ("mythos_longsword", "melee_sword")):
+        assert P._whole_anim_for("melee", 3, 0.0, {"weapon": w})[0] == want, w
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_")]
     bad = 0
@@ -102,3 +112,4 @@ if __name__ == "__main__":
             bad += 1; print("FAIL", n, e)
     print(f"{len(tests) - bad}/{len(tests)} bare-head bronze tests passed")
     sys.exit(1 if bad else 0)
+

@@ -305,6 +305,10 @@ def draw_world_grass(screen, rect, wx, wy, client=None):
         if village_sheet.draw(screen, rect, wx, wy, client):
             _ground_tint(screen, rect, *_view_xy(client, wx, wy))
             return True
+        import ground_sheet                     # same painted sheet map-wide + King's Realm
+        if ground_sheet.draw(screen, rect, wx, wy, client):
+            _ground_tint(screen, rect, *_view_xy(client, wx, wy))
+            return True
     except Exception:
         pass
     tex = _grass_texture(tile, season=None)
@@ -668,6 +672,13 @@ def draw_world_path(screen, rect, wx, wy, client=None):
     try:
         import village_sheet
         if village_sheet.draw(screen, rect, wx, wy, client):
+            fd = _fairy_path_dirs(client, wx, wy) if client is not None and getattr(client, "tiles", None) else []
+            if fd:
+                _blit_petal_merge(screen, rect, wx, wy, fd)
+            _ground_tint(screen, rect, *_view_xy(client, wx, wy))
+            return True
+        import ground_sheet
+        if ground_sheet.draw(screen, rect, wx, wy, client):
             fd = _fairy_path_dirs(client, wx, wy) if client is not None and getattr(client, "tiles", None) else []
             if fd:
                 _blit_petal_merge(screen, rect, wx, wy, fd)

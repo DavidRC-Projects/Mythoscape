@@ -9,6 +9,7 @@ import pygame
 
 import world_map as wm
 import procedural_sprites_finished as sprites
+import village_ground as vg
 
 _HERE = Path(__file__).resolve().parent
 _ROOT = _HERE / "assets" / "castle_realm"
@@ -79,7 +80,19 @@ def _surface(root, relative, tile):
     if not path.is_file():
         _CACHE[key] = None
         return None
-    image = pygame.image.load(str(path)).convert_alpha()
+    image = None
+    # Painted HD layer (same geometry) beside the original; original = fallback.
+    hd = path.with_name(path.stem + "_hd" + path.suffix)
+    if hd.is_file():
+        try:
+            image = pygame.image.load(str(hd)).convert_alpha()
+            if image.get_size() != pygame.image.load(str(path)).get_size():
+                image = None
+        except Exception as exc:
+            print("[castle_realm] hd layer failed, using original:", hd.name, exc)
+            image = None
+    if image is None:
+        image = pygame.image.load(str(path)).convert_alpha()
     image = pygame.transform.smoothscale(image, (max(1, round(image.get_width() * tile / base)), max(1, round(image.get_height() * tile / base))))
     _CACHE[key] = image
     return image
@@ -244,16 +257,27 @@ def _draw_arena_ring(surf, rect, wx, wy):
         pygame.draw.rect(surf, (190, 150, 50), ban, 1)
 
 
+def _realm_grass(client, rect, wx, wy, t):
+    """Painted meadow (ground_sheet via village_ground) with rounded pond shores; old tile on failure."""
+    if vg.draw_world_grass(client.screen, rect, wx, wy, client=client):
+        try:
+            vg.draw_shore_land(client.screen, rect, wx, wy, t, client=client)
+        except Exception:
+            pass
+        return
+    sprites.draw_grass(client.screen, rect, wx, wy)
+
+
 def draw_terrain_tile(client, rect, tile_id, wx, wy, t):
     if not (_realm(client) or _interior(client)):
         return False
     if _realm(client):
         char = REALM_ROWS[wy][wx] if 0 <= wy < len(REALM_ROWS) and 0 <= wx < len(REALM_ROWS[wy]) else "."
         if char == "T":
-            sprites.draw_grass(client.screen, rect, wx, wy)
-            client.draw_resource_sprite("tree", rect.centerx, rect.centery, t)
+            _realm_grass(client, rect, wx, wy, t)     # tree itself is Y-sorted in queue()
         elif char == "~":
-            sprites.draw_water_detailed(client.screen, rect, t, wx, wy)
+            if not vg.draw_world_water(client.screen, rect, wx, wy, t, client=client):
+                sprites.draw_water_detailed(client.screen, rect, t, wx, wy)
         elif char == "s":
             if not _draw_arena_painted_tile(client.screen, rect, wx, wy, "sand_tile"):
                 _draw_arena_sand(client.screen, rect, wx, wy)
@@ -261,9 +285,10 @@ def draw_terrain_tile(client, rect, tile_id, wx, wy, t):
             if not _draw_arena_painted_tile(client.screen, rect, wx, wy, "ring_tile"):
                 _draw_arena_ring(client.screen, rect, wx, wy)
         elif char in "=PSol":
-            sprites.draw_path(client.screen, rect, wx, wy, zone="realm")
+            if not vg.draw_world_path(client.screen, rect, wx, wy, client=client):
+                sprites.draw_path(client.screen, rect, wx, wy, zone="realm")
         else:
-            sprites.draw_grass(client.screen, rect, wx, wy)
+            _realm_grass(client, rect, wx, wy, t)
         return True
     if tile_id == wm.WATER:
         sprites.draw_water_detailed(client.screen, rect, t, wx, wy)
@@ -301,6 +326,7 @@ def queue(client, draw_list, cam_x, cam_y, tile):
     if not _realm(client):
         return
     _queue_arena(client, draw_list, cam_x, cam_y, tile)
+    _queue_trees(client, draw_list, cam_x, cam_y, tile)
     if not ready():
         return
     px, py = client.player_xy() if client.player else (None, None)
@@ -308,6 +334,27 @@ def queue(client, draw_list, cam_x, cam_y, tile):
         if not _castle_ready(blob):
             continue
         _queue_castle(client, draw_list, cam_x, cam_y, tile, castle_id, blob, px, py)
+
+
+def _queue_trees(client, draw_list, cam_x, cam_y, tile):
+    """Realm 'T' trees as Y-sorted sprites (31 Oct): drawn inside the tile pass, later
+    ground tiles cut the canopy into a square patch."""
+    import time
+    t = time.time()
+    view = client.screen.get_rect()
+    x0, y0 = int(cam_x) - 2, int(cam_y) - 2
+    x1, y1 = x0 + view.w // max(1, tile) + 5, y0 + view.h // max(1, tile) + 6
+    for wy in range(max(0, y0), min(len(REALM_ROWS), y1)):
+        row = REALM_ROWS[wy]
+        for wx in range(max(0, x0), min(len(row), x1)):
+            if row[wx] != "T":
+                continue
+            sx, sy = client.world_to_view_offset(wx, wy, cam_x, cam_y)
+            cx, cy = int(sx * tile + tile // 2), int(sy * tile + tile // 2)
+
+            def _draw(cx=cx, cy=cy, wx=wx, wy=wy):
+                client.draw_resource_sprite("tree", cx, cy, t, wx=wx, wy=wy)
+            draw_list.append((cy + tile // 3, 1, _draw))
 
 
 def _arena_blob():
@@ -355,8 +402,51 @@ def _arena_hd_surface(kind, tile, target_w, target_h):
                 _cut_pit_from_ground(image, tile)
             except Exception:
                 pass  # keep the full painted ground if the mask can't be built
+            try:
+                _fade_ground_on_grass(image, tile)
+            except Exception as exc:
+                print("[castle_realm] ground fade", exc)
         _CACHE[key] = image
     return image
+
+
+def _fade_ground_on_grass(image, tile):
+    """The painted arena apron is a rectangle; over realm meadow ('.' / 'T') fade it out
+    on a blurred, noisy contour so the grass meets it with a rounded edge (31 Oct)."""
+    import numpy as np
+    from scipy.ndimage import gaussian_filter, zoom
+    art = _arena_hd().get("art_tiles") or []
+    if len(art) < 4 or not REALM_ROWS:
+        return
+    w, h = image.get_size()
+    ax, ay = float(art[0]), float(art[1])
+    tx0, ty0 = int(np.floor(ax)) - 1, int(np.floor(ay)) - 1
+    tw, th = int(np.ceil(w / tile)) + 3, int(np.ceil(h / tile)) + 3
+    Q = 4
+    m = np.zeros((tw, th), np.float32)
+    for j in range(th):
+        y = ty0 + j
+        row = REALM_ROWS[y] if 0 <= y < len(REALM_ROWS) else ""
+        for i in range(tw):
+            x = tx0 + i
+            ch = row[x] if 0 <= x < len(row) else "."
+            m[i, j] = 1.0 if ch in ".T" else 0.0
+    big = np.kron(m, np.ones((Q, Q), np.float32))
+    f = gaussian_filter(big, Q * 0.85, mode="nearest")
+    rng = np.random.default_rng(9127)
+    n = gaussian_filter(rng.standard_normal(big.shape).astype(np.float32), Q * 1.2, mode="wrap")
+    n /= max(1e-6, float(n.std()))
+    f = f + 0.10 * n
+    px = zoom(f, tile / Q, order=1)
+    ox, oy = int(round((ax - tx0) * tile)), int(round((ay - ty0) * tile))
+    sub = px[ox: ox + w, oy: oy + h]
+    if sub.shape != (w, h):
+        sub = np.pad(sub, ((0, max(0, w - sub.shape[0])), (0, max(0, h - sub.shape[1]))), mode="edge")[:w, :h]
+    e = np.clip((sub - 0.40) / 0.22, 0.0, 1.0)
+    keep = 1.0 - e * e * (3 - 2 * e)
+    al = pygame.surfarray.pixels_alpha(image)
+    al[...] = (al.astype(np.float32) * keep).astype(np.uint8)
+    del al
 
 
 def _cut_pit_from_ground(image, tile):
@@ -473,7 +563,10 @@ def _queue_arena(client, draw_list, cam_x, cam_y, tile):
     # Sort rows: back wall behind the pit, front lip south of it (actors walk between).
     if px0 is not None:
         back_sy = client.world_to_view_offset(px0, py0 + 1, cam_x, cam_y)[1] * tile
-        front_sy = client.world_to_view_offset(px0, py1, cam_x, cam_y)[1] * tile + tile
+        # Front wall sorts below the gate tunnel roof: actors in the passage (rows up to
+        # front_sort_row) walk *under* the gatehouse, not over its roof.
+        front_row = max(py1, int(arena.get("front_sort_row") or py1))
+        front_sy = client.world_to_view_offset(px0, front_row, cam_x, cam_y)[1] * tile + tile
         mid_x = (px0 + px1) / 2.0
         mid_y = (py0 + py1) / 2.0
     else:

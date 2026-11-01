@@ -539,6 +539,9 @@ def trail(client):
     return path
 
 
+_PIP_CACHE: dict = {}
+
+
 def draw_trail(client, cam_x, cam_y, vis_w, vis_h, tile):
     """Ground layer: glowing breadcrumbs toward welcome NPC or quest objective."""
     client._welcome_guide_screen = None
@@ -551,17 +554,34 @@ def draw_trail(client, cam_x, cam_y, vis_w, vis_h, tile):
     for x, y in [(int(client.player["x"]), int(client.player["y"]))] + list(trail(client)):
         sx, sy = client.world_to_view_offset(x, y, cam_x, cam_y)
         pts.append((sx * tile + tile // 2, sy * tile + tile // 2, 0 <= sx <= vis_w and 0 <= sy <= vis_h))
-    r = max(3, tile // 7)
-    layer_size = r * 6
+    # v2 (mine_deeper): the old big pulsing gold ovals read as UI blobs on the ground.  Now a short
+    # run of small, soft lantern-glow pips: every other tile, at most 8, fading with distance.
+    r = max(2, tile // 12)
+    shown = 0
     for i, (cx, cy, on) in enumerate(pts[1:], start=1):
-        if not on:
+        if i % 2 or not on:
             continue
-        pulse = 0.5 + 0.5 * math.cos(now * 5.0 - i * 0.7)
-        dot = pygame.Surface((layer_size, layer_size), pygame.SRCALPHA)
-        mid = layer_size // 2
-        pygame.draw.ellipse(dot, (*GOLD, int(50 + 60 * pulse)), (mid - r * 3, mid - r * 3 // 2, r * 6, r * 3))
-        pygame.draw.ellipse(dot, (*GOLD, int(150 + 100 * pulse)), (mid - r, mid - r // 2, r * 2, r))
-        client.screen.blit(dot, (cx - mid, cy - mid))
+        if shown >= 8:
+            break
+        fade = 1.0 - shown / 9.0
+        pulse = 0.5 + 0.5 * math.cos(now * 3.0 - i * 0.5)
+        key = (r, int(fade * 8), int(pulse * 4))
+        dot = _PIP_CACHE.get(key)
+        if dot is None:
+            size = r * 8
+            dot = pygame.Surface((size, size), pygame.SRCALPHA)
+            mid = size // 2
+            for k in range(r * 3, 0, -1):            # soft halo, no hard edge
+                a = int((22 + 14 * pulse) * fade * (1 - k / (r * 3.0)) ** 0.8)
+                pygame.draw.circle(dot, (255, 214, 140, a), (mid, mid), k)
+            pygame.draw.circle(dot, (40, 26, 10, int(90 * fade)), (mid + 1, mid + 2), r)
+            pygame.draw.circle(dot, (255, 228, 170, int((120 + 60 * pulse) * fade)), (mid, mid), r)
+            pygame.draw.circle(dot, (255, 250, 230, int(160 * fade)), (mid - max(1, r // 3), mid - max(1, r // 3)), max(1, r // 2))
+            if len(_PIP_CACHE) > 64:
+                _PIP_CACHE.clear()
+            _PIP_CACHE[key] = dot
+        client.screen.blit(dot, (cx - dot.get_width() // 2, cy - dot.get_height() // 2))
+        shown += 1
     sx, sy = client.world_to_view_offset(gx, gy, cam_x, cam_y)
     hx, hy = sx * tile + tile // 2, sy * tile + tile // 2
     on = 0 <= sx <= vis_w and 0 <= sy <= vis_h
@@ -573,12 +593,12 @@ def draw_trail(client, cam_x, cam_y, vis_w, vis_h, tile):
         mid = tile * 3 // 2
         rr = int(tile * (0.62 + 0.14 * k))
         pygame.draw.ellipse(
-            ring, (*GOLD, int(70 + 50 * k)),
-            (mid - rr - 4, mid - rr // 2 - 2 + tile // 6, (rr + 4) * 2, rr + 6), 2,
+            ring, (*GOLD, int(30 + 25 * k)),
+            (mid - rr - 4, mid - rr // 2 - 2 + tile // 6, (rr + 4) * 2, rr + 6), 1,
         )
         pygame.draw.ellipse(
-            ring, (*GOLD, int(160 + 90 * k)),
-            (mid - rr, mid - rr // 2 + tile // 6, rr * 2, rr), 4,
+            ring, (*GOLD, int(90 + 60 * k)),
+            (mid - rr, mid - rr // 2 + tile // 6, rr * 2, rr), 2,
         )
         client.screen.blit(ring, (hx - mid, hy - mid))
         label = str(target[2] or "Here")[:28]

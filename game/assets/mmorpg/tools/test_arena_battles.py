@@ -95,6 +95,8 @@ def test_boss_match_staging_and_abilities():
         assert hud["boss"]["name"] == ab.BOSSES[tier]["name"] and "crowd" in hud and "duel" in hud
         assert merc.unit_public(bosses[0])["boss"] is True
         merc.begin_live_fight(s)
+        assert merc.tick_live_match(m) == []      # held while the pre-duel film plays
+        merc.duel_ready(s)                        # client: film finished / skipped
         evs = []
         for _ in range(400):
             evs += merc.tick_live_match(m)
@@ -261,8 +263,48 @@ def test_arena_stands_block_and_npcs_reachable():
             n = (x + dx, y + dy)
             if n not in seen and 0 <= n[1] < len(rows) and 0 <= n[0] < len(rows[0]) and rows[n[1]][n[0]] in walk:
                 seen.add(n); q.append(n)
-    for t in ((188, 147), (196, 147), (196, 148), (196, 128)):
+    # Marshal + quartermaster stand outside, at the foot of the gate stairs.
+    for t in ((192, 166), (200, 166), (196, 147), (196, 148), (196, 128)):
         assert t in seen, t
+    import sys as _s
+    _s.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "server"))
+    import content
+    by_id = {n["id"]: n for n in content.NPCS}
+    for nid, xy in (("marshal_branna", (192, 166)), ("quartermaster_osric", (200, 166))):
+        assert (by_id[nid]["x"], by_id[nid]["y"]) == xy, nid
+        assert xy[1] > 164, "arena NPCs must stand outside the walls"
+
+
+def test_arena_only_entered_through_front_gate():
+    """Walls/gatehouse roof are solid; the 3-wide gate passage is the only way onto the sand."""
+    d, _meta = _realm_map()
+    rows, legend = d["rows"], d["legend"]
+    walk = {k for k, v in legend.items() if v.get("walkable")}
+    inside = {(x, y) for y, r in enumerate(rows) for x, c in enumerate(r) if c in "sA"}
+    assert (196, 128) in inside
+    # flood the arena interior; every walkable tile leaving it must be the gate passage
+    from collections import deque
+    seen, q = {(196, 128)}, deque([(196, 128)])
+    exits = set()
+    while q:
+        x, y = q.popleft()
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            n = (x + dx, y + dy)
+            if n in seen or rows[n[1]][n[0]] not in walk:
+                continue
+            if rows[n[1]][n[0]] not in "sAo":
+                exits.add(n)
+                continue
+            seen.add(n); q.append(n)
+    assert exits and all(195 <= x <= 197 and y >= 151 for x, y in exits), sorted(exits)[:10]
+    # gatehouse roof / wall walk is solid; passage open
+    for x in (188, 190, 192, 194, 198, 200, 204):
+        assert rows[147][x] == "W", x
+    for y in range(143, 151):
+        assert rows[y][196] in walk, y
+    # lion plinths + stair side walls are solid
+    for t in ((188, 160), (191, 158), (200, 160), (204, 162)):
+        assert rows[t[1]][t[0]] == "W", t
 
 
 def test_pond_clear_of_arena_art():
@@ -292,6 +334,79 @@ def test_client_boss_draw_frames_and_no_monkeypatch():
         assert walk and ui.boss_frame(bid, "e", 44, "walk", 1)[0] is not ui.boss_frame(bid, "e", 44, "walk", 0)[0]
         assert ui.boss_frame(bid, "e", 44, "melee", 1) is not None
     assert ui.draw_boss(scr, {"boss_id": "nobody"}, 200, 350, 44, 0, "idle", 0, 0, "s") is None
+
+
+def _realm_bfs(rows, walk, start):
+    from collections import deque
+    seen, q = {start}, deque([start])
+    while q:
+        x, y = q.popleft()
+        for n in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if n not in seen and 0 <= n[1] < len(rows) and 0 <= n[0] < len(rows[0]) and rows[n[1]][n[0]] in walk:
+                seen.add(n); q.append(n)
+    return seen
+
+
+def test_arena_teleport_lands_outside_front_gate():
+    import sys as _s
+    _s.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "server"))
+    import content
+    d, _m = _realm_map()
+    rows, legend = d["rows"], d["legend"]
+    walk = {k for k, v in legend.items() if v.get("walkable")}
+    dest = next(t for t in content.TELEPORT_DESTINATIONS if t["id"] == "arena")
+    x, y = int(dest["x"]), int(dest["y"])
+    fx0, fy0, fx1, fy1 = d["arena"]["footprint"]
+    assert dest["where"] == "castle" and rows[y][x] in walk, (x, y)
+    assert not (fx0 <= x <= fx1 and fy0 <= y <= fy1), "arena teleport must land outside the arena"
+    assert 195 <= x <= 197, "lands in line with the front gate"
+    for nx, ny in ((192, 166), (200, 166)):  # Marshal Branna / Quartermaster Osric
+        assert abs(nx - x) + abs(ny - y) <= 6
+    seen = _realm_bfs(rows, walk, (x, y))
+    assert (196, 128) in seen and (150, 182) in seen
+
+
+def test_arena_road_joins_realm_roads():
+    d, _m = _realm_map()
+    rows = d["rows"]
+    road = set("=PSol")
+    start = (196, 151)  # gate mouth of the arena road
+    seen = _realm_bfs(rows, road, start)
+    assert (150, 182) in seen, "arena road must link to the hub roads"
+    assert (149, 120) in seen, "and on to King's Avenue"
+    back = _realm_bfs(rows, road, (150, 182))
+    assert start in back
+
+
+def test_all_realm_and_overworld_npcs_reachable():
+    import sys as _s
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    _s.path[:0] = [os.path.join(root, "server"), os.path.join(root, "shared")]
+    import server as S, world_map as wm, castle_realm as cr
+    from collections import deque
+    def bfs(start, ok):
+        seen, q = {start}, deque([start])
+        while q:
+            x, y = q.popleft()
+            for n in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if n not in seen and ok(*n):
+                    seen.add(n); q.append(n)
+        return seen
+    g = S.World().grid
+    H, W = len(g), len(g[0])
+    ow = bfs(tuple(S.SPAWN_POINT), lambda x, y: 0 <= x < W and 0 <= y < H and wm.is_walkable(g, x, y))
+    rl = bfs((150, 182), lambda x, y: cr.walkable("realm", x, y))
+    bad = []
+    for n in S.NPCS:
+        p = n.get("plane")
+        if p not in (None, "realm"):
+            continue
+        x, y = n["x"], n["y"]
+        seen = ow if p is None else rl
+        if not any(t in seen for t in ((x, y), (x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1))):
+            bad.append((n["id"], x, y))
+    assert not bad, bad
+    assert g[57][156] == wm.WALL  # wall left solid; herald moved instead
 
 
 if __name__ == "__main__":

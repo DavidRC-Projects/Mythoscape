@@ -1,0 +1,4 @@
+{"source": "tavern_entry_v2.mp4", "fps": 24, "frames": 324, "width": 1280, "height": 720, "duration": 13.5,
+ "audio": "audio.ogg", "frame_pattern": "frames/%04d.jpg",
+ "subtitle": "Evening, traveller! Come in from the cold. Take a seat at the bar... I'll pour you something.",
+ "subtitle_start": 7.4, "subtitle_end": 13.2}

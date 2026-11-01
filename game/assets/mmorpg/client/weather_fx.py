@@ -93,6 +93,11 @@ def draw_phase_tint(client, map_w, map_h):
     overlay = _overlay_surface(map_w, map_h)
     overlay.fill(rgba)
     client.screen.blit(overlay, (0, 0))
+    try:
+        import estate_plaza  # estate lamps glow over the dusk / night tint
+        estate_plaza.draw_glow(client)
+    except Exception:
+        pass
 
 
 def draw_precipitation(client, map_w, map_h, dt=1 / 60):

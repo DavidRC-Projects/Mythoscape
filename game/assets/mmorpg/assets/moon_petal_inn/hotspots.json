@@ -1,0 +1,65 @@
+[
+ {
+  "name": "Selune",
+  "x": 619,
+  "y": 488,
+  "label": "Hostess \u00b7 Moon Window",
+  "hit_radius": 70
+ },
+ {
+  "name": "Ivria",
+  "x": 175,
+  "y": 475,
+  "label": "Reading Nook",
+  "hit_radius": 70
+ },
+ {
+  "name": "Maelis",
+  "x": 444,
+  "y": 500,
+  "label": "Moonbloom Beds",
+  "hit_radius": 70
+ },
+ {
+  "name": "Aerin",
+  "x": 500,
+  "y": 125,
+  "label": "Loft Balcony",
+  "hit_radius": 56
+ },
+ {
+  "name": "Rhosyn",
+  "x": 638,
+  "y": 200,
+  "label": "Harp Loft",
+  "hit_radius": 56
+ },
+ {
+  "name": "Tamsin",
+  "x": 825,
+  "y": 375,
+  "label": "The Bar",
+  "hit_radius": 63
+ },
+ {
+  "name": "Nyx",
+  "x": 975,
+  "y": 438,
+  "label": "Hearth",
+  "hit_radius": 63
+ },
+ {
+  "name": "Kaede",
+  "x": 850,
+  "y": 563,
+  "label": "Letter Desk",
+  "hit_radius": 70
+ },
+ {
+  "name": "Bryony",
+  "x": 1150,
+  "y": 475,
+  "label": "Crystal Bench",
+  "hit_radius": 70
+ }
+]

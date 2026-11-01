@@ -825,4 +825,4 @@ def mae_line(session):
         return "Folk speak well of you. The court colours are yours to try, love."
     if _rep_tier(session) in ("Hated", "Distrusted"):
         return "Plain cloth only, I'm afraid. Mend your name and the good bolts come out."
-    return "Welcome to Mythos Outfitters. Try anything on — paying is the only part that costs."
+    return "Welcome to Crownfall Outfitters. Try anything on — paying is the only part that costs."

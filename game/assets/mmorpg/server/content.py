@@ -663,7 +663,7 @@ MONSTERS = {
         "hp": 8, "attack": 1, "strength": 1, "defence": 1, "def_bonus": 0,   # max hit 1
         "attack_cooldown": 2.4, "xp": 8, "respawn_ticks": 50,
         "drops_locked": True,
-        "drops": [("bones", 1.0, (1, 1)), ("coins", 1.0, (2, 6))],
+        "drops": [("bones", 1.0, (1, 1)), ("coins", 1.0, (2, 6)), ("rat_tail", 0.25, (1, 1))],
         "wander_radius": 1, "aggro_range": 0,                                 # passive until attacked
         "leash_area": (22, 26, 28, 29),
     },
@@ -691,6 +691,40 @@ MONSTERS = {
         "drops": [("coins", 1.0, (1, 3))],
         "wander_radius": 2, "aggro_range": 6,
     },
+    # --- Deepdelve Mine (MINE_SPEC.md). Levels are computed by _apply_monster_levels.
+    "tunnel_scavenger": {"name": "Tunnel Scavenger", "level": 1, "hp": 110, "attack": 42, "strength": 44, "defence": 30,
+        "def_bonus": 12, "xp": 160, "respawn_ticks": 0, "drops_locked": True,
+        "drops": [("bones", 1.0, (1, 1)), ("coins", 1.0, (40, 120)), ("iron_ore", 0.5, (2, 5)), ("coal", 0.4, (2, 5))],
+        "wander_radius": 2, "aggro_range": 6},
+    "ember_crawler": {"name": "Ember Crawler", "level": 1, "hp": 150, "attack": 50, "strength": 52, "defence": 40,
+        "def_bonus": 24, "xp": 210, "respawn_ticks": 0, "drops_locked": True,
+        "drops": [("coins", 1.0, (60, 160)), ("coal", 0.6, (3, 6)), ("iron_bar", 0.25, (1, 2))],
+        "wander_radius": 2, "aggro_range": 6},
+    "scavenger_foreman": {"name": "Scavenger Foreman", "level": 1, "hp": 190, "attack": 56, "strength": 58, "defence": 44,
+        "def_bonus": 20, "xp": 280, "respawn_ticks": 0, "drops_locked": True,
+        "drops": [("bones", 1.0, (1, 1)), ("coins", 1.0, (120, 260)), ("steel_bar", 0.4, (1, 3)), ("sapphire", 0.1, (1, 1))],
+        "wander_radius": 2, "aggro_range": 6},
+    "mithril_wraith": {"name": "Mithril Wraith", "level": 1, "hp": 200, "attack": 66, "strength": 68, "defence": 52,
+        "def_bonus": 24, "xp": 340, "respawn_ticks": 0, "drops_locked": True,
+        "drops": [("coins", 1.0, (150, 320)), ("mithril_ore", 0.6, (2, 4)), ("emerald", 0.08, (1, 1))],
+        "wander_radius": 2, "aggro_range": 6},
+    "shackled_wraith": {"name": "Shackled Wraith", "level": 1, "hp": 240, "attack": 72, "strength": 74, "defence": 58,
+        "def_bonus": 32, "xp": 420, "respawn_ticks": 0, "drops_locked": True,
+        "drops": [("coins", 1.0, (220, 420)), ("mithril_bar", 0.5, (1, 3)), ("ruby", 0.1, (1, 1))],
+        "wander_radius": 2, "aggro_range": 6},
+    "adamant_golem": {"name": "Adamant Golem", "level": 1, "hp": 300, "attack": 78, "strength": 82, "defence": 70,
+        "def_bonus": 40, "xp": 560, "respawn_ticks": 0, "drops_locked": True,
+        "drops": [("coins", 1.0, (300, 600)), ("adamantite_ore", 0.7, (2, 5)), ("ruby", 0.08, (1, 1))],
+        "wander_radius": 1, "aggro_range": 5},
+    "ancient_adamant_golem": {"name": "Ancient Adamant Golem", "level": 1, "hp": 360, "attack": 84, "strength": 88, "defence": 76,
+        "def_bonus": 48, "xp": 720, "respawn_ticks": 0, "drops_locked": True,
+        "drops": [("coins", 1.0, (500, 900)), ("adamantite_bar", 0.6, (1, 3)), ("diamond", 0.08, (1, 1))],
+        "wander_radius": 1, "aggro_range": 5},
+    "heartstone_colossus": {"name": "Heartstone Colossus", "level": 1, "hp": 600, "attack": 88, "strength": 92, "defence": 80,
+        "def_bonus": 48, "xp": 1600, "respawn_ticks": 0, "drops_locked": True, "boss": True,
+        "drops": [("coins", 1.0, (1500, 3000)), ("adamantite_bar", 1.0, (2, 4)), ("diamond", 0.35, (1, 2)),
+                  ("onyx", 0.05, (1, 1))],
+        "wander_radius": 1, "aggro_range": 7},
     "giant_rat": {
         "name": "Giant Rat", "level": 3, "hp": 8, "attack": 11, "strength": 11, "defence": 1,
         "def_bonus": 0, "xp": 12, "respawn_ticks": 15,
@@ -1686,12 +1720,8 @@ def _mountain_wolves():
 MONSTER_SPAWNS = [
     # Below the Village: two passive rats outside the sewer grate, visible from the square.
     ("village_rat", 24, 28), ("village_rat", 26, 27),
-    ("giant_rat", 62, 103), ("giant_rat", 67, 104), ("giant_rat", 72, 103),
-    ("giant_rat", 64, 107), ("giant_rat", 70, 107), ("giant_rat", 66, 110),
-    ("giant_rat", 73, 110), ("giant_rat", 63, 106),
-    ("wolf", 56, 118), ("wolf", 62, 123), ("wolf", 58, 128),
-    ("wolf", 72, 118), ("wolf", 77, 123), ("wolf", 74, 128),
-    ("wolf", 67, 120), ("wolf", 67, 127),
+    # Deepdelve Mine (MINE_SPEC.md): the old rat/wolf square is a mine now. No overworld
+    # spawns; mine monsters live in the per-player lift gauntlets (server/deepdelve.py).
     # Upper dungeon — goblins (more packed)
     ("goblin", 52, 66), ("goblin", 56, 66), ("goblin", 50, 66),
     ("goblin", 70, 58), ("goblin", 74, 60), ("goblin", 66, 62),
@@ -1756,6 +1786,10 @@ RESOURCE_YIELDS = {
     "coal_rock":  {"skill": "mining",      "level_req": 20, "xp": 40, "item": "coal",        "respawn_ticks": 12, "depletion_chance": 0.18},
     "mithril_rock":{"skill": "mining",     "level_req": 40, "xp": 80, "item": "mithril_ore", "respawn_ticks": 18, "depletion_chance": 0.16},
     "adamantite_rock":{"skill": "mining",  "level_req": 46, "xp": 110,"item": "adamantite_ore","respawn_ticks": 22, "depletion_chance": 0.14},
+    "gem_vein": {"skill": "mining", "level_req": 40, "xp": 65, "item": "sapphire", "respawn_ticks": 30, "depletion_chance": 0.25,
+                 "gem_table": [("sapphire", 50), ("emerald", 30), ("ruby", 15), ("diamond", 5)]},
+    "heart_vein": {"skill": "mining", "level_req": 46, "xp": 110, "item": "adamantite_ore", "respawn_ticks": 0, "depletion_chance": 0.0,
+                   "heart_gate": True},
     "fishing_spot_shrimp":  {
         "skill": "fishing", "level_req": 1,  "xp": 10, "item": "raw_shrimp",
         "respawn_ticks": 5, "depletion_chance": 0.0,
@@ -1819,17 +1853,17 @@ TELEPORT_DISCOVER_RADIUS = 12  # Chebyshev tiles
 TELEPORT_DESTINATIONS = [
     {"id": "village", "label": "Village", "blurb": "The crossroads", "where": "overworld", "x": 28, "y": 24},
     {"id": "bank", "label": "Village Bank", "blurb": "Store coins and items", "where": "overworld", "x": 66, "y": 48},
-    {"id": "outfitters", "label": "Mythos Outfitters", "blurb": "Hair, clothes & outfits", "where": "overworld", "x": 52, "y": 65},
+    {"id": "outfitters", "label": "Crownfall Outfitters", "blurb": "Hair, clothes & outfits", "where": "overworld", "x": 52, "y": 65},
     {"id": "void", "label": "Void Sanctum", "blurb": "Outside the sanctum gate", "where": "overworld", "x": 205, "y": 130},
-    {"id": "stonehaven", "label": "Stonehaven", "blurb": "The city square", "where": "overworld", "x": 118, "y": 74},
+    {"id": "stonehaven", "label": "Stonehaven", "blurb": "Beside the plaza fountain", "where": "overworld", "x": 118, "y": 75},
     {"id": "keep", "label": "Stonehaven Castle", "blurb": "The overworld keep", "where": "overworld", "x": 128, "y": 66},
     {"id": "harbour", "label": "Harbourreach", "blurb": "The docks", "where": "overworld", "x": 176, "y": 18},
     {"id": "estate", "label": "Estate Agent", "blurb": "Village estate office (north fringe)", "where": "overworld", "x": 85, "y": 11},
-    {"id": "kings_row_south", "label": "King's Row Homes", "blurb": "South meadow cottages (King's Row)", "where": "overworld", "x": 27, "y": 141},
-    {"id": "realm", "label": "Castle Realm", "blurb": "The plaza", "where": "castle", "x": 150, "y": 183},
+    {"id": "kings_row_south", "label": "King's Row Homes", "blurb": "South-road cottages", "where": "overworld", "x": 27, "y": 151},
+    {"id": "realm", "label": "King's Realm", "blurb": "The plaza", "where": "castle", "x": 150, "y": 183},
     {"id": "gothic", "label": "Gothic Castle", "blurb": "Outside the gate", "where": "castle", "x": 52, "y": 78},
     {"id": "king", "label": "King's Castle", "blurb": "Outside the gate", "where": "castle", "x": 152, "y": 78},
-    {"id": "arena", "label": "Crownfall Arena", "blurb": "Mercenary sand & practice board", "where": "castle", "x": 196, "y": 128},
+    {"id": "arena", "label": "Crownfall Arena", "blurb": "Outside the gate (barracks)", "where": "castle", "x": 196, "y": 164},
     {"id": "rose", "label": "White Rose Castle", "blurb": "Outside the gate", "where": "castle", "x": 257, "y": 86},
     {"id": "sky", "label": "Sky-Anchor", "blurb": "Outside the gate", "where": "castle", "x": 52, "y": 168},
 ]
@@ -1839,7 +1873,7 @@ NPCS = [
     {"id": WIZARD_ID, "name": "Wizard Elowen", "x": WIZARD_TILE[0], "y": WIZARD_TILE[1],
      "lines": [
          "I am Elowen. The violet ring carries you to places you have walked.",
-         "I mark the village and the Castle Realm for you to start.",
+         "I mark the village and the King's Realm for you to start.",
          "Explore the kingdom — each landing you reach is added to your teleport list.",
          "Press T, or the Teleport button, and scroll the places you know.",
      ],
@@ -1850,7 +1884,7 @@ NPCS = [
      "welcome_guide": True},
 
     {"id": "outfitter_mae", "name": "Mae the Outfitter", "x": 51, "y": 58,
-     "lines": ["Welcome to Mythos Outfitters. Hair, clothes, and full outfits."],
+     "lines": ["Welcome to Crownfall Outfitters. Hair, clothes, and full outfits."],
      "cosmetic": "outfitters"},
 
     {"id": "shopkeeper_joe", "name": "Shopkeeper Joe", "x": 45, "y": 7,
@@ -1924,7 +1958,7 @@ NPCS = [
      "lines": ["Every reign is written here. Ask, and I'll read you the longest."]},
 
     # Crownfall phase 7: the paths to the throne
-    {"id": "royal_herald", "name": "Royal Herald", "x": 156, "y": 57,
+    {"id": "royal_herald", "name": "Royal Herald", "x": 157, "y": 58,
      "lines": ["By the old law, a strong guild may challenge for the Crown.",
                "Combat 100, a castle of your own, every quest done, and a guild fit for the Royal Challenge."]},
     {"id": "mistress_celia", "name": "Mistress of the Robes Celia", "x": 158, "y": 50,
@@ -1987,7 +2021,7 @@ NPCS = [
     {"id": "priest_cedric", "name": "Priest Cedric", "x": 6, "y": 8,
      "lines": [
          "Safe travels. Need work? Bring me bones for a blessing.",
-         "Tip: Coins+bones above ATK/STR (or P) auto-grabs coins and bones — off until you turn it on.",
+         "Tip: Coins+bones above ATK/STR (or L) auto-grabs coins and bones — off until you turn it on.",
      ],
      "quest_id": "blessed_bones"},
 
@@ -2097,7 +2131,7 @@ NPCS = [
      "lines": [
          "Fresh bread and travel kits from the market square! Press B to browse.",
          "I stock food, potions, and a few steel scraps for travellers heading to the keep.",
-         "Stonehaven's gates open south and west — castle keep sits to the north.",
+         "Stonehaven's gates open south, west and east — castle keep sits to the north.",
          "Stonehaven prices are Stonehaven taxes, with bread on top.",
      ],
      "shop_id": "stonehaven_market"},
@@ -2135,11 +2169,12 @@ NPCS = [
          "Hail the crown.",
      ]},
 
-    # Crownfall Arena campus (east of the King's road) — barracks / practice board
-    {"id": "marshal_branna", "name": "Marshal Branna", "x": 188, "y": 147, "plane": "realm",
+    # Crownfall Arena campus (east of the King's road) — barracks / practice board.
+    # Both stand outside, either side of the foot of the gate stairs.
+    {"id": "marshal_branna", "name": "Marshal Branna", "x": 192, "y": 166, "plane": "realm",
      "lines": [
          "Welcome to the Crownfall Arena. Recruit here, train them, then take the practice board.",
-         "Mythos Guards answer only to Command 80. Smelt crownsteel at Smithing 60 with Command 60.",
+         "Crown Guards answer only to Command 80. Smelt crownsteel at Smithing 60 with Command 60.",
          "The sand is yours for practice — PvP wagers come next.",
      ],
      "options": [
@@ -2148,7 +2183,7 @@ NPCS = [
          {"id": "command_info", "label": "What is Command?"},
      ],
      "barracks": True},
-    {"id": "quartermaster_osric", "name": "Quartermaster Osric", "x": 196, "y": 147, "plane": "realm",
+    {"id": "quartermaster_osric", "name": "Quartermaster Osric", "x": 200, "y": 166, "plane": "realm",
      "lines": [
          "Bronze to adamant kits — Mythos plate when your Command proves it.",
          "I fit soldiers, not shoppers. Open the barracks and pick a kit.",
@@ -2440,7 +2475,7 @@ QUESTS = {
     "rat_problem": {
         "name": "Rat Problem",
         "giver": "elder_miriam",
-        "description": "Kill 5 Giant Rats in the southern mine, then return here.",
+        "description": "Kill 5 Giant Rats by the village sewer grate, then return here.",
         "type": "kill", "target": "giant_rat", "count": 5,
         "guide_travel": "rats",
         "quest_points": 1,
@@ -2589,7 +2624,7 @@ QUESTS = {
     "rat_tails": {
         "name": "Rat Tails",
         "giver": "elder_miriam",
-        "description": "Collect 5 Rat Tails from the mine, then return here.",
+        "description": "Collect 5 Rat Tails from the village rats, then return here.",
         "type": "collect", "target": "rat_tail", "count": 5,
         "requires": "rat_problem",
         "guide_travel": "rats",
@@ -3046,7 +3081,7 @@ TRAVEL_DESTINATIONS = [
      "x": 66, "y": 48, "blurb": "Store coins & items", "action": {"type": "BANK"}},
     {"id": "stonehaven_bank", "kind": "place", "label": "Stonehaven Bank",
      "x": 140, "y": 113, "blurb": "Store coins & items", "action": {"type": "BANK"}},
-    {"id": "outfitters", "kind": "place", "label": "Mythos Outfitters",
+    {"id": "outfitters", "kind": "place", "label": "Crownfall Outfitters",
      "x": 52, "y": 65, "blurb": "Hair, clothes & outfits"},
     {"id": "general_store", "kind": "place", "label": "General Store",
      "x": 45, "y": 8, "blurb": "Shopkeeper Joe"},
@@ -3086,7 +3121,7 @@ TRAVEL_DESTINATIONS = [
     {"id": "estate_agent", "kind": "place", "label": "Estate Agent Mira",
      "x": 85, "y": 11, "blurb": "Village estate office — buy homes & plots"},
     {"id": "kings_row_homes", "kind": "place", "label": "King's Row Homes",
-     "x": 27, "y": 141, "blurb": "South meadow player houses (King's Row cottages)"},
+     "x": 27, "y": 151, "blurb": "South meadow player houses (King's Row cottages)"},
     {"id": "emberdeep", "kind": "place", "label": "Emberdeep",
      "x": 196, "y": 78, "blurb": "⚠ Lava dungeon — 8 floors · east volcano massif",
      "action": {"type": "ENTER_DUNGEON", "dungeon_id": "emberdeep"}},
@@ -3113,9 +3148,9 @@ TRAVEL_DESTINATIONS = [
      "x": 22, "y": 54, "blurb": "Quest: Silk Harvest"},
     # Monsters (camp centres)
     {"id": "rats", "kind": "monster", "label": "Giant Rats",
-     "x": 67, "y": 107, "monster": "giant_rat", "blurb": "Mine under the volcano"},
-    {"id": "copper_vein", "kind": "place", "label": "Copper & Tin",
-     "x": 61, "y": 101, "blurb": "Starter ores in the rat mine"},
+     "x": 25, "y": 28, "monster": "giant_rat", "blurb": "By the village sewer grate"},
+    {"id": "copper_vein", "kind": "place", "label": "Deepdelve Mine",
+     "x": 61, "y": 101, "blurb": "Copper & tin yard; lifts down to iron, mithril, adamantite"},
     {"id": "goblins", "kind": "monster", "label": "Goblins",
      "x": 64, "y": 16, "monster": "goblin", "blurb": "Crypt (Depths) — Ruined Chapel"},
     {"id": "skeletons", "kind": "monster", "label": "Skeletons",
@@ -3131,7 +3166,7 @@ TRAVEL_DESTINATIONS = [
      "blurb": f"⚠ Lv {MONSTERS['mythos_champion']['level']} — bailey post (peaceful until hit); aggressive inside the keep"},
     {"id": "eclipse_champion", "kind": "monster", "label": "Eclipse Champion",
      "x": 13, "y": 22, "monster": "eclipse_champion",
-     "blurb": f"⚠ Lv {MONSTERS['eclipse_champion']['level']} — PK duel by Castle Realm (talks if PvP off)"},
+     "blurb": f"⚠ Lv {MONSTERS['eclipse_champion']['level']} — PK duel by King's Realm (talks if PvP off)"},
     {"id": "big_skeletons", "kind": "monster", "label": "Big Skeletons",
      "x": 64, "y": 16, "monster": "big_skeleton", "blurb": "Crypt (Depths) — Ossuary"},
     {"id": "spiders", "kind": "monster", "label": "Giant Spiders",
@@ -3184,6 +3219,12 @@ def entrance_mouth_tiles(x, y, kind=None):
 
 
 INTERACTABLES = [
+    # Deepdelve Mine ore banks (painted chests; positions from server/deepdelve_layout.py)
+    {"id": "deepdelve_bank_yard", "kind": "bank", "name": "Ore Bank", "x": 62, "y": 101, "variant": "mine_chest"},
+    {"id": "deepdelve_bank_b0", "kind": "bank", "name": "Ore Bank", "x": 52, "y": 110, "variant": "mine_chest"},
+    {"id": "deepdelve_bank_f1", "kind": "bank", "name": "Ore Bank", "x": 59, "y": 118, "variant": "mine_chest"},
+    {"id": "deepdelve_bank_f2", "kind": "bank", "name": "Ore Bank", "x": 71, "y": 118, "variant": "mine_chest"},
+    {"id": "deepdelve_bank_f3", "kind": "bank", "name": "Ore Bank", "x": 79, "y": 118, "variant": "mine_chest"},
     {"id": "sewer_grate", "kind": "sewer_grate", "name": "Sewer Grate", "x": 25, "y": 30,
      "stand": [25, 28], "dungeon_id": "sewer"},
     {"id": "sewer_sign", "kind": "warning_sign", "name": "Beware Sewer Rats", "x": 23, "y": 29,
@@ -3205,7 +3246,7 @@ INTERACTABLES = [
      "enter_x": 41, "enter_y": 45, "exit_x": 41, "exit_y": 48, "building": "cottage_se"},
     {"id": "bank_door", "kind": "door", "name": "Bank Door", "x": 66, "y": 47,
      "enter_x": 66, "enter_y": 45, "exit_x": 66, "exit_y": 48, "building": "bank"},
-    {"id": "outfitters_door", "kind": "door", "name": "Mythos Outfitters Door", "x": 52, "y": 64,
+    {"id": "outfitters_door", "kind": "door", "name": "Crownfall Outfitters Door", "x": 52, "y": 64,
      "enter_x": 52, "enter_y": 62, "exit_x": 52, "exit_y": 65, "building": "mythos_outfitters"},
     {"id": "pet_door", "kind": "door", "name": "Pet Emporium Door", "x": 85, "y": 48,
      "enter_x": 85, "enter_y": 46, "exit_x": 85, "exit_y": 49, "building": "pet_emporium"},
@@ -3216,10 +3257,10 @@ INTERACTABLES = [
      "x": 64, "y": 11, "enter_x": 64, "enter_y": 11, "exit_x": 64, "exit_y": 12,
      "dungeon_id": "depths", "pack": "skeleton_crypt"},
     {"id": "queens_tree_hall_door", "kind": "flavour", "name": "Queen's Tree-Hall",
-     "x": 11, "y": 83, "stand": [11, 84],
+     "x": 11, "y": 82, "stand": [11, 83],
      "lines": ["The Queen's Tree-Hall hums with old magic."]},
     {"id": "moonpetal_inn_door", "kind": "flavour", "name": "Moonpetal Inn",
-     "x": 20, "y": 82, "stand": [20, 83],
+     "x": 21, "y": 82, "stand": [21, 83],
      "lines": ["The Moonpetal Inn smells of honey bread."]},
     {"id": "mushroom_apothecary_door", "kind": "flavour", "name": "Mushroom Apothecary",
      "x": 36, "y": 67, "stand": [36, 68], "shop_id": "fairy_apothecary",
@@ -3461,7 +3502,7 @@ BUILDINGS = [
         "floor_x0": 79, "floor_y0": 5, "floor_x1": 93, "floor_y1": 17,
     },
     {
-        "id": "mythos_outfitters", "name": "Mythos Outfitters", "kind": "house", "style": 1,
+        "id": "mythos_outfitters", "name": "Crownfall Outfitters", "kind": "house", "style": 1,
         "material": "red_brick",
         "x0": 45, "y0": 54, "x1": 58, "y1": 64,
         "floor_x0": 46, "floor_y0": 55, "floor_x1": 57, "floor_y1": 63,
@@ -3982,6 +4023,8 @@ CRAFT_RECIPES = {
 }
 
 RESOURCE_LABELS = {
+    "gem_vein": "Gem Vein",
+    "heart_vein": "Heartstone Vein",
     "copper_rock": "Copper",
     "tin_rock": "Tin",
     "iron_rock": "Iron",
@@ -4236,7 +4279,7 @@ def _apply_village_compact_layout():
         "inn_hearth": (12, 36),
         # Outside the smithy capture box — pin so compact layout cannot drag them.
         "estate_agent": (85, 11),
-        "kings_row_homes": (27, 141),
+        "kings_row_homes": (27, 151),
     }
     for ent in TRAVEL_DESTINATIONS:
         if ent.get("id") in travel_pins:
@@ -4251,7 +4294,7 @@ def _apply_village_compact_layout():
             ent["x"], ent["y"] = 85, 11
         elif ent.get("id") == "kings_row_south":
             # South meadow housing gate — walkable path by the cottages.
-            ent["x"], ent["y"] = 27, 141
+            ent["x"], ent["y"] = 27, 151
 
     for b in BUILDINGS:
         if b.get("id") == "smithy":
@@ -4438,7 +4481,7 @@ def _castle_realm_portal():
     INTERACTABLES.append({
         "id": "castle_realm_portal",
         "kind": "dungeon_entrance",
-        "name": "Castle Realm",
+        "name": "King's Realm",
         "x": 9,
         "y": 19,
         "dungeon_id": "castle_realm",
@@ -4447,7 +4490,7 @@ def _castle_realm_portal():
     TRAVEL_DESTINATIONS.append({
         "id": "castle_realm",
         "kind": "place",
-        "label": "Castle Realm",
+        "label": "King's Realm",
         "x": 9,
         "y": 19,
         "blurb": "Gold portal west of the wishing well",

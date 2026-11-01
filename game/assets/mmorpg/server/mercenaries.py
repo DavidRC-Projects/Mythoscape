@@ -24,7 +24,7 @@ GEAR_KITS = {
     "steel": {"label": "Steel kit", "cost": 2_500, "command_req": 10},
     "mithril": {"label": "Mithril kit", "cost": 8_000, "command_req": 40},
     "adamant": {"label": "Adamant kit", "cost": 22_000, "command_req": 50},
-    "mythos": {"label": "Mythos kit", "cost": 120_000, "command_req": 80},
+    "mythos": {"label": "Crownforged kit", "cost": 120_000, "command_req": 80},
 }
 
 # Matching plate set for combat bonuses + player_hd armour_*_bh_hd art.
@@ -107,7 +107,7 @@ TEMPLATES = {
         "max_per_roster": 1,
     },
     "mythos_guard": {
-        "name": "Mythos Guard", "role": "elite", "cost": 85_000,
+        "name": "Crown Guard", "role": "elite", "cost": 85_000,
         "attack": 72, "strength": 70, "defence": 68, "hitpoints": 90,
         "train_speed": 0.7, "ability": "mythos_aegis", "command_req": 80,
         "default_gear": "mythos", "blurb": "Crownsteel elite. Needs Command 80.",
@@ -121,7 +121,7 @@ ABILITY_LABELS = {
     "bloodlust": "Bloodlust",
     "riposte": "Riposte",
     "field_dress": "Field Dress",
-    "mythos_aegis": "Mythos Aegis",
+    "mythos_aegis": "Crown Aegis",
 }
 
 # Promote in place — keeps name, battle/train XP, and kit. Cost = next recruit
@@ -208,7 +208,7 @@ COMMAND_UNLOCK_ROWS = [
     (50, "Adamant kits"),
     (60, "Smelt Mythos ore (also needs Smithing 60)"),
     (70, "Practice Duke/King ore drop weight bump"),
-    (80, "Recruit Mythos Guard; Mythos kits; smith Mythos gear (Smithing 70+)"),
+    (80, "Recruit Crown Guard; Crownforged kits; smith Mythos gear (Smithing 70+)"),
     (99, "Title: Warlord"),
 ]
 
@@ -1180,17 +1180,50 @@ def arena_coords():
         spec = arena.get("marshal_tile") or list(ARENA_SPECTATOR)
         # Spectator a little south of the marshal so the camera sees the pit.
         spectator = [int(center[0]), int(pit[3]) + 3]
+        fp = arena.get("footprint")
         return {
             "pit": [int(pit[0]), int(pit[1]), int(pit[2]), int(pit[3])],
             "center": [int(center[0]), int(center[1])],
             "spectator": spectator,
+            "footprint": (
+                [int(fp[0]), int(fp[1]), int(fp[2]), int(fp[3])]
+                if isinstance(fp, (list, tuple)) and len(fp) >= 4
+                else None
+            ),
         }
     except Exception:
         return {
             "pit": list(ARENA_PIT),
             "center": list(ARENA_CENTER),
             "spectator": list(ARENA_SPECTATOR),
+            "footprint": None,
         }
+
+
+def outside_arena_tile():
+    """Barracks foot outside the arena gate — safe logout / resume stand."""
+    # Matches TELEPORT_DESTINATIONS["arena"] and Marshal Branna / Osric.
+    return (196, 164)
+
+
+def inside_arena_campus(x, y):
+    """True if the tile is in the arena footprint (pit, stands, or spectator ring)."""
+    x, y = int(x), int(y)
+    coords = arena_coords()
+    fp = coords.get("footprint")
+    if fp:
+        return fp[0] <= x <= fp[2] and fp[1] <= y <= fp[3]
+    pit = coords["pit"]
+    # Fallback: pit plus a few rows of spectator apron south of it.
+    return pit[0] <= x <= pit[2] and pit[1] <= y <= (pit[3] + 8)
+
+
+def abort_arena_match(session):
+    """Drop a live / staged fight with no rewards (logout, disconnect, leave)."""
+    if getattr(session, "arena_match", None):
+        session.arena_match = None
+        return True
+    return False
 
 
 def _line_up(n: int, x0: int, x1: int, y0: int, y1: int, west: bool) -> list[tuple[int, int]]:
@@ -1455,6 +1488,26 @@ def duel_action(session, action: str) -> tuple[bool, str]:
     return (True, "") if arena_duel.act(match["duel"], str(action or "")) else (False, "Unknown move.")
 
 
+def duel_set_style(session, style) -> tuple[bool, str]:
+    match = getattr(session, "arena_match", None)
+    if not match or match.get("mode") != "duel":
+        return False, "No duel staged."
+    if match.get("phase") != "preview":
+        return False, "Pick your weapon before the duel starts."
+    import arena_duel
+    if not arena_duel.set_style(match, session, str(style or "")):
+        return False, "Pick Sword, Axe or Bow."
+    return True, f"{str(style).title()} chosen."
+
+
+def duel_ready(session) -> bool:
+    match = getattr(session, "arena_match", None)
+    if match and match.get("mode") == "duel" and match.get("phase") == "fight":
+        match["hold_until"] = 0
+        return True
+    return False
+
+
 def begin_live_fight(session) -> tuple[bool, str]:
     """Leave preview and start ticking combat."""
     match = getattr(session, "arena_match", None)
@@ -1466,6 +1519,9 @@ def begin_live_fight(session) -> tuple[bool, str]:
         return False, "Cannot start that match."
     match["phase"] = "fight"
     match["tick"] = 0
+    if match.get("mode") == "duel":
+        import time as _time, arena_duel
+        match["hold_until"] = _time.time() + arena_duel.INTRO_HOLD_S   # pre-duel film; client sends duel_ready
     match["log"] = list(match.get("log") or [])
     _push_log(match, "The champion salutes — duel!" if match.get("mode") == "duel"
               else "Front ranks advance — reserves hold!")
@@ -1598,7 +1654,7 @@ def _free_approach_tile(ux, uy, target, occupied, pit, unit=None, focus_count=0)
             target["y"])
 
 
-def _try_step(ux, uy, goal_x, goal_y, occupied, pit, unit=None, target=None):
+def _try_step(ux, uy, goal_x, goal_y, occupied, pit, unit=None, target=None, foes=None):
     """Step toward goal; if blocked, try alternate directions that close distance.
 
     When a target is known: refuse crossing behind them, and never step
@@ -1612,7 +1668,16 @@ def _try_step(ux, uy, goal_x, goal_y, occupied, pit, unit=None, target=None):
     side = (unit or {}).get("side") or "you"
     tx = target["x"] if target else None
     ty = target["y"] if target else None
-    cur_foe = _chebyshev(ux, uy, tx, ty) if tx is not None else 99
+    # Every living enemy keeps sword room, not only our own target: a foe that
+    # targets someone else must not walk into our tile's face (and vice versa).
+    foe_pts = [(f["x"], f["y"]) for f in (foes or [])]
+    if target is not None and (tx, ty) not in foe_pts:
+        foe_pts.append((tx, ty))
+
+    def _near(px, py):
+        return min((_chebyshev(px, py, fx, fy) for fx, fy in foe_pts), default=99)
+
+    cur_foe = _near(ux, uy) if foe_pts else 99
     best = None
     best_key = None
     for nx, ny in options:
@@ -1627,9 +1692,10 @@ def _try_step(ux, uy, goal_x, goal_y, occupied, pit, unit=None, target=None):
                 crossed = 1
             elif side == "foe" and nx < tx:
                 crossed = 1
-            foe_d = _chebyshev(nx, ny, tx, ty)
+        if foe_pts:
+            foe_d = _near(nx, ny)
         # 0 = at/above sword range, 1 = still too close but improving, 2 = worse/cramped
-        if tx is None:
+        if not foe_pts:
             prox = 0
         elif foe_d >= MATCH_MELEE_RANGE:
             prox = 0
@@ -1707,14 +1773,14 @@ def _release_reserves(match, events):
     events.append({"type": "ARENA_RESERVES", "released": True})
 
 
-def tick_live_match(match: dict) -> list[dict]:
+def tick_live_match(match: dict, steps=None) -> list[dict]:
     """Advance one game tick. Returns combat/event dicts for the client."""
     events = []
     if match.get("phase") != "fight":
         return events
     if match.get("mode") == "duel":
         import arena_duel
-        return arena_duel.tick_match(match)
+        return arena_duel.tick_match(match, steps)
     match["tick"] = int(match.get("tick") or 0) + 1
     units = match["units"]
     pit = match.get("pit") or list(ARENA_PIT)
@@ -1804,6 +1870,7 @@ def tick_live_match(match: dict) -> list[dict]:
             )
             step = _try_step(
                 u["x"], u["y"], goal[0], goal[1], occupied, pit, unit=u, target=target,
+                foes=_enemies(match, u),
             )
             if step and step != (u["x"], u["y"]):
                 occupied.discard((u["x"], u["y"]))
@@ -2211,7 +2278,7 @@ def _field_unit_from_row(row, session, xy, index: int) -> dict:
 
 def _can_deploy(session) -> tuple[bool, str]:
     if not in_castle_realm(session):
-        return False, "Deploy only works inside the Castle Realm."
+        return False, "Deploy only works inside the King's Realm."
     match = getattr(session, "arena_match", None)
     if match and match.get("phase") in ("preview", "fight"):
         return False, "Recall your army after the arena match first."
@@ -2251,7 +2318,7 @@ def deploy_soldiers(conn, session, soldier_id: int | None = None) -> tuple[bool,
     n = len(to_add)
     if soldier_id is not None:
         return True, f"{deployed[-1]['name']} falls in beside you."
-    return True, f"Deployed {n} soldier{'s' if n != 1 else ''} — they follow you in the Castle Realm."
+    return True, f"Deployed {n} soldier{'s' if n != 1 else ''} — they follow you in the King's Realm."
 
 
 def recall_soldiers(session, soldier_id: int | None = None) -> tuple[bool, str]:

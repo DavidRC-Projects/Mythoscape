@@ -5,6 +5,11 @@ World-space props only: no billboarding, no camera-facing rotates of front art.
 East/west curtains use authored EW sprites (not rotated NS art).
 North ring has no city gate/curtain (castle approach stays open).
 South gate is an open arch between spaced towers; no west/east side gates.
+
+HD painted kit (assets/props/stonehaven_walls/hd/, 40 px per tile) is drawn
+from world_map.stonehaven_wall_layout() — the same table the server stamps
+WALL from — so collision matches the art exactly. The legacy sprites above
+remain only as the error fallback when the HD kit cannot load.
 """
 from __future__ import annotations
 
@@ -84,11 +89,22 @@ def _scaled(name, tile, flip_x=False, scale=1.0):
 
 
 def draw_ground(client, rect, wx, wy):
-    """Dark stone strip under fort WALL tiles (sprites carry the Style B look)."""
+    """Ground under fort WALL tiles (sprites carry the Style B look)."""
     if not enabled(client) or not wm.is_stonehaven_fort_wall(wx, wy):
         return False
     import procedural_sprites_finished as sprites
+    cx0, cy0, cx1, cy1 = wm.city_bounds()
+    outside = wy > cy1 or wx < cx0 or wx > cx1 or wy < cy0
+    if outside and _hd_ok():
+        # Tower bases that stand proud of the curtain sit on the meadow.
+        paint = getattr(client, "_paint_meadow", None)
+        if not (paint and paint(rect, wx, wy, "village")):
+            sprites.draw_grass(client.screen, rect, wx, wy)
+        return True
     sprites.draw_stone_floor(client.screen, rect, wx, wy)
+    if _hd_ok():
+        # HD kit: no dark pads — the painted footing band carries the base.
+        return True
     shade = pygame.Surface((rect.w, rect.h), pygame.SRCALPHA)
     shade.fill((20, 18, 24, 70))
     client.screen.blit(shade, rect.topleft)
@@ -154,9 +170,182 @@ def _pieces(client):
     return out
 
 
+# --------------------------------------------------------------------- HD kit
+HD = os.path.join(PACK, "hd")
+_HD_NAMES = ("wall_h", "wall_v", "tower", "gate_s", "footing_h", "footing_v", "footing_disc")
+_HD_RAW = {}
+_HD_SCALED = {}
+_HD_STRIP = {}
+# Anchor pixels in the 40 px/tile art.
+_TOWER_CX, _TOWER_BASE = 76, 476      # tower.png: centre column, ground base row
+_WALLH_BASE = 184                      # wall_h.png: wall foot row
+_GATE_WALL_BASE = 416                  # gate_s.png: row that sits on the wall base line
+
+
+def _hd_raw(name):
+    if name not in _HD_RAW:
+        try:
+            _HD_RAW[name] = pygame.image.load(os.path.join(HD, f"{name}.png")).convert_alpha()
+        except Exception as exc:
+            print("[stonehaven_walls] hd", name, exc)
+            _HD_RAW[name] = None
+    return _HD_RAW[name]
+
+
+def _hd_ok():
+    return all(_hd_raw(n) is not None for n in _HD_NAMES)
+
+
+def _hd(name, tile):
+    key = (name, int(tile))
+    if key not in _HD_SCALED:
+        src = _hd_raw(name)
+        if src is None:
+            return None
+        k = tile / 40.0
+        if int(tile) == 40:
+            img = src
+        else:
+            img = pygame.transform.smoothscale(
+                src, (max(1, round(src.get_width() * k)), max(1, round(src.get_height() * k))))
+        for old in [kk for kk in _HD_SCALED if kk[1] != int(tile)]:
+            _HD_SCALED.pop(old, None)
+            _HD_STRIP.clear()
+        _HD_SCALED[key] = img
+    return _HD_SCALED[key]
+
+
+def _tiled(name, tile, w, h, axis):
+    """A run-long strip built by repeating one seamless HD tile."""
+    key = (name, int(tile), int(w), int(h))
+    if key in _HD_STRIP:
+        return _HD_STRIP[key]
+    src = _hd(name, tile)
+    if src is None:
+        return None
+    surf = pygame.Surface((max(1, w), max(1, h)), pygame.SRCALPHA)
+    if axis == "x":
+        for x in range(0, w, src.get_width()):
+            surf.blit(src, (x, 0))
+    else:
+        for y in range(0, h, src.get_height()):
+            surf.blit(src, (0, y))
+    _HD_STRIP[key] = surf
+    return surf
+
+
+_PILLAR_SCALE = 0.62
+_PILLAR = {}
+
+
+def _pillar(tile, name="tower"):
+    """Scaled-down tower used as a side-gate end pillar."""
+    key = (name, int(tile))
+    if key not in _PILLAR:
+        src = _hd(name, tile)
+        if src is None:
+            return None
+        if any(kk[1] != int(tile) for kk in _PILLAR):
+            _PILLAR.clear()
+        _PILLAR[key] = pygame.transform.smoothscale(
+            src, (max(1, round(src.get_width() * _PILLAR_SCALE)),
+                  max(1, round(src.get_height() * _PILLAR_SCALE))))
+    return _PILLAR[key]
+
+
+def _queue_hd(client, draw_list, cam_x, cam_y, tile, lay=None):
+    """Painted curtain from the shared layout (art == collision)."""
+    if int(getattr(client, "camera_yaw", 0) or 0) % 4:
+        return False  # authored for the default camera; legacy art handles yaw
+    if lay is None:
+        lay = wm.stonehaven_wall_layout()
+    ox, oy = client.world_to_view_offset(0, 0, cam_x, cam_y)
+
+    def px(wx, wy):
+        return int(round((ox + wx) * tile)), int(round((oy + wy) * tile))
+
+    view = client.screen.get_rect().inflate(tile * 4, tile * 14)
+    t = tile
+    k = tile / 40.0
+    ground = []   # footing decals, drawn before every object
+
+    def add(sort_y, img, pos, area=None):
+        r = pygame.Rect(pos, (area.w, area.h) if area else img.get_size())
+        if not r.colliderect(view):
+            return
+        draw_list.append((sort_y, 2, lambda img=img, pos=pos, area=area:
+                          client.screen.blit(img, pos, area)))
+
+    # South / north facing curtain strips
+    for base, x0, x1 in lay["h_runs"]:
+        w = int((x1 - x0) * t)
+        h_img = _hd("wall_h", t)
+        strip = _tiled("wall_h", t, w, h_img.get_height(), "x")
+        fx, fy = px(x0, base)
+        add(fy, strip, (fx, fy - int(_WALLH_BASE * k)))
+        foot = _tiled("footing_h", t, w, _hd("footing_h", t).get_height(), "x")
+        ground.append((foot, (fx, fy - int(foot.get_height() * 0.45))))
+    # Flat east / west curtain + castle spurs: one slice per tile row so
+    # walkers sort correctly against it.
+    for xc, y0, y1 in list(lay["v_runs"]) + list(lay.get("spurs", ())):
+        col = _hd("wall_v", t)
+        hgt = int((y1 - y0) * t)
+        strip = _tiled("wall_v", t, col.get_width(), hgt, "y")
+        sx, sy = px(xc, y0)
+        sx -= col.get_width() // 2
+        for i in range(int(y1 - y0)):
+            area = pygame.Rect(0, i * t, col.get_width(), t)
+            add(sy + (i + 1) * t, strip, (sx, sy + i * t), area)
+        fv = _tiled("footing_v", t, _hd("footing_v", t).get_width(), hgt, "y")
+        ground.append((fv, (sx + col.get_width() // 2 - fv.get_width() // 2, sy)))
+    # Towers (no wall stubs of their own — the strip runs behind them)
+    tw = _hd("tower", t)
+    disc = _hd("footing_disc", t)
+    for cx, base in list(lay["towers"]):
+        bx, by = px(cx, base)
+        add(by, tw, (bx - int(_TOWER_CX * k), by - int(_TOWER_BASE * k)))
+        ground.append((disc, (bx - disc.get_width() // 2, by - int(disc.get_height() * 0.7))))
+    # End pillars where a side curtain stops at a side gate (art only — the
+    # collision is the run itself): a slim capped tower on each bare end.
+    corners = {round(b) for _, b in lay["towers"]}
+    pil = _pillar(t)
+    if pil is not None:
+        pk = k * _PILLAR_SCALE
+        for xc, y0, y1 in lay["v_runs"]:
+            for ey, base in ((y0, y0 + 0.9), (y1, y1 + 0.1)):
+                if any(abs(ey - b) < 3 for b in corners):
+                    continue  # corner/flank tower already caps this end
+                bx, by = px(xc, base)
+                add(by, pil, (bx - int(_TOWER_CX * pk), by - int(_TOWER_BASE * pk)))
+                ds = _pillar(t, "footing_disc")
+                if ds is not None:
+                    ground.append((ds, (bx - ds.get_width() // 2, by - int(ds.get_height() * 0.7))))
+    if lay.get("gate_s"):
+        gl, gbase = lay["gate_s"]
+        gs = _hd("gate_s", t)
+        gx, gy = px(gl, gbase)
+        add(gy + int(1.7 * t), gs, (gx, gy - int(_GATE_WALL_BASE * k)))
+    for cx, base in lay["gate_towers"]:
+        bx, by = px(cx, base)
+        ground.append((disc, (bx - disc.get_width() // 2, by - int(disc.get_height() * 0.7))))
+
+    def _ground(items=ground):
+        for img, pos in items:
+            client.screen.blit(img, pos)
+
+    draw_list.append((-10 ** 9, 0, _ground))
+    return True
+
+
 def queue(client, draw_list, cam_x, cam_y, tile):
     if not enabled(client):
         return
+    try:
+        if _hd_ok() and _queue_hd(client, draw_list, cam_x, cam_y, tile):
+            _queue_hd(client, draw_list, cam_x, cam_y, tile, wm.estate_wall_layout())
+            return
+    except Exception as exc:  # HD art is primary; legacy sprites are the fallback
+        print("[stonehaven_walls] hd queue failed, legacy fallback:", exc)
     scr = client.screen.get_rect()
     view = scr.inflate(tile * 8, tile * 8)
     try:

@@ -351,6 +351,51 @@ def test_commentary_follows_exchange():
     assert D.exchange_line({"kind": "parried", "perfect": True}, "Brutus").startswith("Perfect parry")
 
 
+def test_fighters_always_face_each_other():
+    """Every champion and every hero weapon/gender faces the opponent in every animation state
+    (idle, wind-up, strike, parry, dodge, hit reaction / knockback, stagger, KO)."""
+    U, c, _ = _ui_client()
+    import json
+    import pygame
+    import numpy as np
+    U._SPR.clear(); U._MIRRORED.clear(); U._FACING = None
+    with open(os.path.join(U._SPR_DIR, "facing.json")) as fh:
+        man = json.load(fh)
+    cids = sorted(x for x in os.listdir(U._SPR_DIR) if os.path.isdir(os.path.join(U._SPR_DIR, x)))
+    assert {"varro", "brutus", "crixus", "sabina", "ignatius", "unbroken"} <= set(cids)
+    for h in ("hero_sword", "hero_axe", "hero_bow"):
+        assert h in cids and h + "_f" in cids
+    acts = [("idle", 0), ("charge", 400), ("strike", 300), ("heavy", 500), ("parry", 300), ("parry_ok", 300),
+            ("dodge", 430), ("hit", 360), ("stagger", 600), ("ko", 0)]
+    for cid in cids:
+        side = "hero" if cid.startswith("hero") else "boss"
+        want = "r" if side == "hero" else "l"
+        assert cid in man, cid
+        for state in ("idle", "attack", "block", "dodge", "hit"):
+            img = U._frame(cid, state, 380)
+            assert U.drawn_facing(cid, state) == want, (cid, state)
+            raw = pygame.image.load(os.path.join(U._SPR_DIR, cid, state + ".png")).convert_alpha()
+            a = pygame.surfarray.array_alpha(img) > 128
+            r = pygame.surfarray.array_alpha(raw) > 128
+            if a.shape == r.shape:
+                mirrored = man[cid][state] != want
+                ref = r[::-1, :] if mirrored else r
+                assert (a == ref).mean() > 0.97, (cid, state, "mirror mismatch")
+        for style in ("sword", "axe", "bow"):
+            for act, dur in acts:
+                F = U.Fighter(side)
+                F.update(100.0, 0.016)
+                if act == "ko":
+                    F.ko = 0
+                else:
+                    F.play(act, 0, max(1, dur))
+                for now in (1, dur * 0.3 + 1, dur * 0.6 + 1, 800):
+                    pose = F.transform(now, style)[0]
+                    U._frame(cid, pose, 380)
+                    assert U.drawn_facing(cid, pose) == want, (cid, style, act, now, pose)
+    U._SPR.clear()
+
+
 if __name__ == "__main__":
     fails = 0
     for name, fn in list(globals().items()):

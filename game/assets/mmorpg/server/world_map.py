@@ -40,7 +40,14 @@ TREE_TILES = {TREE, OAK_TREE, WILLOW_TREE, MAPLE_TREE, YEW_TREE, MAGIC_TREE}
 
 # Larger world — room east of the massif for Stonehaven walls + housing.
 WIDTH = 230
-HEIGHT = 145
+BASE_HEIGHT = 145
+# Player-house plaza (x0..44, y>=97) sits ESTATE_DY rows further south than the
+# base map, leaving a wide forecourt between the Fairy Glade and its wall.
+ESTATE_DY = 10
+ESTATE_SPLIT_Y = 97
+ESTATE_X1 = 44
+HEIGHT = BASE_HEIGHT + ESTATE_DY
+_PRE_SPLICE = False
 
 # Zone bounding boxes (x0, y0, x1, y1) inclusive
 ZONES = {
@@ -192,6 +199,48 @@ def _seeded_noise(x, y):
 
 
 def generate_world():
+    """Base world at BASE_HEIGHT, then the estate is slid south by ESTATE_DY."""
+    global HEIGHT, _PRE_SPLICE
+    HEIGHT, _PRE_SPLICE = BASE_HEIGHT, True
+    try:
+        grid = _generate_base_world()
+    finally:
+        HEIGHT, _PRE_SPLICE = BASE_HEIGHT + ESTATE_DY, False
+    return _splice_estate(grid)
+
+
+def _splice_estate(grid):
+    dy, sy, xe = ESTATE_DY, ESTATE_SPLIT_Y, ESTATE_X1
+    for _ in range(dy):
+        grid.append([WALL] * WIDTH)        # new bottom rows: map edge
+    for y in range(HEIGHT - 1, sy + dy - 1, -1):
+        grid[y][:xe + 1] = grid[y - dy][:xe + 1]
+    for y in range(sy, sy + dy):            # forecourt rows
+        grid[y][:xe + 1] = [WALL] + [GRASS] * (xe - 1) + [WALL]
+    import housing
+    housing.stamp(grid, sys.modules[__name__], estate_only=True)
+    import property as _property
+    _property.stamp(grid, sys.modules[__name__])
+    # Forecourt between the Fairy Glade ring and the curtain: old edge walls open.
+    for x in range(1, xe):
+        for y in range(93, ESTATE_WALL_ROW):
+            if grid[y][x] == WALL:
+                grid[y][x] = GRASS
+    # The Fairy Glade's south thicket (rows 93-97, arch posts at y97) stays solid;
+    # only the old map-edge walls south of it open into the forecourt.
+    import fairy_glade
+    for x, y in fairy_glade.ring_cells():
+        if 93 <= y < sy + dy and x <= xe:
+            grid[y][x] = WALL
+    _ew = estate_wall_layout()
+    for x, y in _ew["blocked"]:
+        grid[y][x] = WALL
+    for x, y in _ew["open"]:
+        grid[y][x] = PATH
+    return grid
+
+
+def _generate_base_world():
     rng = random.Random(1337)
     grid = [[GRASS for _ in range(WIDTH)] for _ in range(HEIGHT)]
 
@@ -847,17 +896,166 @@ def is_graveyard_wall(x, y) -> bool:
     return ix in (x0, x1) or iy in (y0, y1)
 
 
+# ---------------------------------------------------------------------------
+# Stonehaven curtain layout — ONE table shared by the server stamp (collision)
+# and the client renderer (art), so blocked tiles always match the sprites.
+# Art is authored at 40 px / tile (client/assets/props/stonehaven_walls/hd).
+# ---------------------------------------------------------------------------
+STONEHAVEN_SOUTH_GATE_XS = (118, 119, 120)
+# (side, rows) — 3-tile road openings in the west / east curtains.
+STONEHAVEN_SIDE_GATES = (("west", (71, 72, 73)), ("east", (71, 72, 73)), ("east", (97, 98, 99)))
+SH_TOWER_HALF_W = 1.6     # tower base half-width in tiles (art 3.5 T wide)
+SH_TOWER_DEPTH = 3.2      # tower ground depth (rows above its base line)
+SH_WALL_TO_TOWER_BASE = 1.7   # tower base sits this far south of a wall base
+SH_GATE_S_LEFT = 113.25   # gate_s.png left edge (world x) — arch px 190..310 → x118..121
+_SH_LAYOUT = {}
+
+
+def _sh_tower_tiles(cx, base):
+    out = set()
+    for ty in range(int(base - SH_TOWER_DEPTH) - 1, int(base) + 1):
+        if not (base - SH_TOWER_DEPTH <= ty + 0.5 < base):
+            continue
+        for tx in range(int(cx - SH_TOWER_HALF_W) - 1, int(cx + SH_TOWER_HALF_W) + 2):
+            if cx - SH_TOWER_HALF_W <= tx + 0.5 < cx + SH_TOWER_HALF_W:
+                out.add((tx, ty))
+    return out
+
+
+ESTATE_GATE_XS = (12, 13, 14, 15)   # walk-in entrance on the north lane
+ESTATE_WALL_ROW = 105 + ESTATE_DY   # north curtain row: rows 93..114 stay open (22-tile forecourt)
+
+
+def estate_wall_layout():
+    """Player-house plaza curtain, Stonehaven style (x0..44, y97..144).
+
+    Same keys as stonehaven_wall_layout(). The ring sits on the plaza's edge
+    rows/columns (x0, x44, y97, y144); round towers cap the four corners and
+    flank the north walk-in entrance. Mine area (x >= 45) is never touched.
+    """
+    x0, x1, yn, ys = 0, 44, ESTATE_WALL_ROW, HEIGHT - 1
+    nb, sb = yn + 1, ys + 1
+    wcx, ecx = x0 + 0.5, x1 + 0.5
+    gl, gr = ESTATE_GATE_XS[0], ESTATE_GATE_XS[-1]
+    tl, tr = gl - 1.5, gr + 2.5
+    tb_n, tb_s = nb + 1.0, float(sb)
+    towers = [(wcx, tb_n), (ecx, tb_n), (wcx, tb_s), (ecx, tb_s), (tl, tb_n), (tr, tb_n)]
+    blocked = set()
+    for x in range(x0, x1 + 1):
+        blocked.add((x, yn)); blocked.add((x, ys))
+    for y in range(yn, ys + 1):
+        blocked.add((x0, y)); blocked.add((x1, y))
+    for cx, base in towers:
+        for tx, ty in _sh_tower_tiles(cx, base):
+            if x0 <= tx <= x1 and yn <= ty <= ys:
+                blocked.add((tx, ty))
+    gate = {(x, yn) for x in ESTATE_GATE_XS}
+    blocked -= gate
+    return {
+        "h_runs": [(nb, wcx, tl), (nb, tr, ecx), (sb, wcx, ecx)],
+        "v_runs": [(wcx, nb, sb), (ecx, nb, sb)],
+        "towers": towers, "gate_s": None, "gate_towers": [],
+        "blocked": frozenset(blocked), "open": frozenset(gate), "spurs": [],
+    }
+
+
+def stonehaven_wall_layout():
+    """Geometry of the Stonehaven curtain: art pieces + blocked / open tiles.
+
+    h_runs  (base_y, x_from, x_to)   south-facing curtain strips (wall_h.png)
+    v_runs  (x_center, y_from, y_to) flat east/west curtain strips (wall_v.png)
+    towers  (center_x, base_y)       round towers (tower.png), no wall stubs
+    gate_s  (left_x, wall_base_y)    south gatehouse (gate_s.png)
+    blocked set of WALL tiles; open set of gate tiles forced to PATH.
+    """
+    active = bool(castle_v2.active())
+    key = (city_bounds(), active)
+    if key in _SH_LAYOUT:
+        return _SH_LAYOUT[key]
+    cx0, cy0, cx1, cy1 = city_bounds()
+    if active:
+        ax0, _ = castle_v2.w(104, 55)
+        ax1, _ = castle_v2.w(119, 55)
+    else:
+        ax0, ax1 = 118, 119
+    nb, sb = cy0 + 2, cy1 + 1               # wall base lines (north / south)
+    wcx, ecx = cx0 + 0.5, cx1 + 0.5         # curtain centre lines (1-tile thick)
+    north_open = {(x, y) for x in range(ax0, ax1 + 1) for y in (cy0, cy0 + 1)}
+    south_open = {(x, y) for x in STONEHAVEN_SOUTH_GATE_XS for y in (cy1 - 1, cy1)}
+    side_open = set()
+    for side, rows in STONEHAVEN_SIDE_GATES:
+        gx = cx0 if side == "west" else cx1
+        side_open |= {(gx, r) for r in rows}
+    gate_open = south_open | side_open
+    # Towers --------------------------------------------------------------
+    tb_n, tb_s = nb + SH_WALL_TO_TOWER_BASE, sb + SH_WALL_TO_TOWER_BASE
+    towers = [(wcx, tb_n), (ecx, tb_n), (wcx, tb_s), (ecx, tb_s)]
+    towers += [(136.5, tb_s), (149.5, tb_s)]
+    towers += [(ax0 - 1.5, tb_n), (ax1 + 2.5, tb_n)]
+    if active:
+        fx0, _fy0, fx1, _fy1 = castle_v2.footprint_tiles()
+        west_x = fx0 - castle_v2.MOAT_SIDE - 1
+        east_x = fx1 + castle_v2.MOAT_SIDE + 1
+        # 2-col spurs (west_x-1..west_x, east_x..east_x+1): strip on the seam.
+        spurs = [(float(west_x), float(max(0, _fy0 - castle_v2.MOAT_BACK)), float(nb)),
+                 (float(east_x + 1), float(max(0, _fy0 - castle_v2.MOAT_BACK)), float(nb))]
+        for sx, _a, _b in spurs:
+            if all(abs(sx - tx) > 3.6 for tx, tby in towers if tby == tb_n):
+                towers.append((sx, tb_n))
+    else:
+        spurs = []
+    # Side-gate openings stay clear — no flank towers on the gap (their 3×3
+    # WALL footprints read as brick plugs between plaza stone and outside grass).
+    towers += [(wcx, 96.0), (wcx, 116.0), (ecx, 121.0)]
+    gl = SH_GATE_S_LEFT
+    gate_towers = [(gl + 3.81, sb + SH_WALL_TO_TOWER_BASE), (gl + 10.66, sb + SH_WALL_TO_TOWER_BASE)]
+    # Runs ----------------------------------------------------------------
+    h_runs = [
+        (sb, wcx, gl + 1.0), (sb, gl + 11.6, ecx),
+        (nb, wcx, ax0 - 1.5), (nb, ax1 + 2.5, ecx),
+    ]
+
+    def _split(x, y_from, y_to, gaps):
+        out, y = [], y_from
+        for g0, g1 in sorted(gaps):
+            if g0 > y:
+                out.append((x, y, float(g0)))
+            y = max(y, float(g1 + 1))
+        if y < y_to:
+            out.append((x, y, y_to))
+        return out
+
+    wg = [(min(r), max(r)) for s_, r in STONEHAVEN_SIDE_GATES if s_ == "west"]
+    eg = [(min(r), max(r)) for s_, r in STONEHAVEN_SIDE_GATES if s_ == "east"]
+    v_runs = _split(wcx, float(nb), float(sb), wg) + _split(ecx, float(nb), float(sb), eg)
+    # Blocked tiles -------------------------------------------------------
+    blocked = set()
+    for x in range(cx0, cx1 + 1):
+        for y in (cy0, cy0 + 1, cy1 - 1, cy1):
+            blocked.add((x, y))
+    for y in range(cy0, cy1 + 1):
+        blocked.add((cx0, y))
+        blocked.add((cx1, y))
+    for cx, base in towers + gate_towers:
+        blocked |= _sh_tower_tiles(cx, base)
+    blocked -= north_open
+    blocked -= gate_open
+    blocked = {(x, y) for x, y in blocked if 0 <= x < WIDTH and 0 <= y < HEIGHT}
+    lay = {
+        "h_runs": h_runs, "v_runs": v_runs, "towers": towers,
+        "gate_s": (gl, float(sb)), "gate_towers": gate_towers,
+        "blocked": frozenset(blocked), "open": frozenset(gate_open),
+        "north_open": frozenset(north_open), "spurs": spurs,
+    }
+    _SH_LAYOUT[key] = lay
+    return lay
+
+
 def is_stonehaven_fort_wall(x, y) -> bool:
     """Outer Style-B city shell (not the open castle approach) and flank spurs."""
     ix, iy = int(x), int(y)
     cx0, cy0, cx1, cy1 = city_bounds()
-    # North ring is open toward the keep — not a fort wall footing.
-    on_south = (cy1 - 1 <= iy <= cy1) and cx0 <= ix <= cx1
-    on_sides = (
-        (cx0 <= ix <= cx0 + 1 or cx1 - 1 <= ix <= cx1)
-        and cy0 <= iy <= cy1
-    )
-    if on_south or on_sides:
+    if (ix, iy) in stonehaven_wall_layout()["blocked"]:
         return True
     if not castle_v2.active():
         return False
@@ -1119,30 +1317,53 @@ def near_volcano_mine(x, y) -> bool:
 
 
 def stamp_volcano_mine(grid):
-    """Rat mine south of the village pit, with a wide mithril and adamantite end."""
-    x0, y0, x1, y1 = VOLCANO_MINE
+    """Deepdelve Mine (MINE_SPEC v1): yard, shaft mouth, B0 and three sealed chambers.
+
+    Replaces the old rat/wolf square on the same footprint. Layout data lives in
+    deepdelve_layout so the client paints exactly what the server walks."""
+    import deepdelve_layout as L
+    x0, y0, x1, y1 = L.BOX
     _rect(grid, x0, y0, x1, y1, WALL)
-    _rect(grid, x0 + 1, y0 + 1, x1 - 1, y1 - 1, FLOOR)
-    mx = VOLCANO_MINE_DOOR_X
-    for x in (mx - 1, mx, mx + 1):
-        if not (0 <= x < WIDTH):
-            continue
+    # Path from the village pit down to the north wall gap.
+    for x in L.DOOR_X:
         grid[y0][x] = PATH
         for y in range(81, y0):
             if grid[y][x] in (GRASS, PATH, FLOOR):
                 grid[y][x] = PATH
-    for x, y, iron in (
-        (59, 101, False), (61, 101, False), (63, 101, False),
-        (71, 101, True), (73, 101, True), (75, 101, True),
-        (59, 105, False), (75, 105, True),
-        (59, 109, True), (75, 109, False),
-    ):
-        grid[y][x] = IRON_ORE if iron else ORE
-    for y in (116, 121, 126, 130):
-        for x in (54, 59, 64):
-            grid[y][x] = MITHRIL_ORE
-        for x in (70, 75, 80):
-            grid[y][x] = ADAMANTITE_ORE
+    # Exterior yard + path lane (rock and boulders east of the path stay WALL).
+    _rect(grid, L.YARD[0], L.YARD[1], L.YARD[2], L.YARD[3], FLOOR)
+    _rect(grid, L.PATH_COLS[0], y0 + 1, L.PATH_COLS[1], y0 + 3, PATH)
+    # Shaft mouth: open lip to the north, ramp running south into B0.
+    _rect(grid, L.RAMP[0], L.RAMP[1], L.RAMP[2], L.RAMP[3], FLOOR)
+    # B0 and the chambers (each chamber is sealed; only the lift reaches it).
+    _rect(grid, L.B0[0], L.B0[1], L.B0[2], L.B0[3], FLOOR)
+    for cx0, cy0, cx1, cy1 in L.CHAMBERS.values():
+        _rect(grid, cx0, cy0, cx1, cy1, FLOOR)
+    tile_for = {
+        "copper_rock": ORE, "tin_rock": ORE, "iron_rock": IRON_ORE, "coal_rock": COAL,
+        "mithril_rock": MITHRIL_ORE, "gem_vein": MITHRIL_ORE,
+        "adamantite_rock": ADAMANTITE_ORE, "heart_vein": ADAMANTITE_ORE,
+    }
+    for x, y, rtype in L.ALL_ROCKS:
+        grid[y][x] = tile_for[rtype]
+    # v2: yard and B0 join on foot by a west slope (the shaft is now the way down).
+    for x, y in getattr(L, "WEST_SLOPE", ()):
+        grid[y][x] = FLOOR
+    # v2: the old dungeon generator left a sealed pocket west of the ring (x 48-49) with
+    # stray mithril in it; mithril/adamantite now live only on mine levels 2 and 3.
+    for y in range(y0 - 4, y1 + 5):
+        for x in list(range(x0 - 6, x0)) + list(range(x1 + 1, x1 + 7)):
+            if 0 <= y < len(grid) and 0 <= x < len(grid[0]) and grid[y][x] in (MITHRIL_ORE, ADAMANTITE_ORE):
+                grid[y][x] = WALL
+    for y in range(102, 119):
+        for x in (48, 49):
+            if grid[y][x] == FLOOR:
+                grid[y][x] = WALL
+    for _id, x, y in L.BANK_CHESTS:
+        grid[y][x] = WALL
+    for x, y, _kind, blocks in L.PROPS:
+        if blocks:
+            grid[y][x] = WALL
 
 
 def _stamp_crypt_graveyard(grid):
@@ -1520,40 +1741,17 @@ def _stamp_stonehaven_walls(grid, cx0, cy0, cx1, cy1):
     castle bridge; 2-tile spurs run up both flanks of the keep (outside the moat)
     so the wall reads as one fortification around castle + Stonehaven.
     """
-    # South only — wide open arch. West/east are solid curtain (no side gates).
-    gate_s = set()
-    for gx in range(116, 123):
-        gate_s.add((gx, cy1))
-        gate_s.add((gx, cy1 - 1))
-    # Full castle south apron open — no city door/wall in front of the keep.
-    gate_n = set()
-    if castle_v2.active():
-        ax0, _ = castle_v2.w(104, 55)
-        ax1, _ = castle_v2.w(119, 55)
-        for gx in range(ax0, ax1 + 1):
-            gate_n.add((gx, cy0))
-            gate_n.add((gx, cy0 + 1))
-    else:
-        gate_n = {(118, cy0), (119, cy0), (118, cy0 + 1), (119, cy0 + 1)}
-    skips = gate_s | gate_n
-
-    def _wall_cell(x, y):
-        if (x, y) in skips:
-            return
-        if 0 <= x < WIDTH and 0 <= y < HEIGHT:
-            grid[y][x] = WALL
-
-    # Double ring on the plaza rectangle
-    for x in range(cx0, cx1 + 1):
-        for y in (cy0, cy0 + 1, cy1 - 1, cy1):
-            _wall_cell(x, y)
-    for y in range(cy0, cy1 + 1):
-        for x in (cx0, cx0 + 1, cx1 - 1, cx1):
-            _wall_cell(x, y)
-
-    # South gatehouse cheeks (pillars beside the wide opening)
-    for gx, gy in ((115, cy1), (123, cy1), (115, cy1 - 1), (123, cy1 - 1)):
-        _wall_cell(gx, gy)
+    # One layout table drives both the WALL stamp and the client art.
+    lay = stonehaven_wall_layout()
+    for x, y in lay["blocked"]:
+        # Curtain cells win over moat water (as the old ring did): keeps the
+        # shoreline — and the seeded fishing-spot layout — unchanged.
+        grid[y][x] = WALL
+    # Old 2-thick east/west ring → the inner column is walkable plaza now.
+    for y in range(cy0 + 2, cy1 - 1):
+        for x in (cx0 + 1, cx1 - 1):
+            if grid[y][x] == WALL and (x, y) not in lay["blocked"]:
+                grid[y][x] = STONE
 
     # Spurs up the castle flanks (outside the 4-tile moat) to the mountain foot.
     if castle_v2.active():
@@ -1586,6 +1784,35 @@ def extend_castle_gate_paving(grid):
         for y in range(by, min(HEIGHT, by + 5)):
             if 0 <= bx < WIDTH and grid[y][bx] in (GRASS, *TREE_TILES, PATH, STONE, WALL):
                 grid[y][bx] = PATH
+
+
+def _lay_stonehaven_gate_roads(grid, cx0, cy0, cx1, cy1):
+    """Short PATH stubs outside each gate so no opening dead-ends on grass."""
+    soft = {GRASS, *TREE_TILES}
+    # South stub: run down from the arch until it meets an existing road.
+    for y in range(cy1 + 1, min(HEIGHT, cy1 + 16)):
+        hit = False
+        for x in STONEHAVEN_SOUTH_GATE_XS:
+            if grid[y][x] == PATH:
+                hit = True
+            elif grid[y][x] in soft:
+                grid[y][x] = PATH
+        if hit:
+            break
+    for side, rows in STONEHAVEN_SIDE_GATES:
+        step, x = (-1, cx0 - 1) if side == "west" else (1, cx1 + 1)
+        for _ in range(12):
+            if not (0 <= x < WIDTH):
+                break
+            hit = False
+            for r in rows:
+                if grid[r][x] == PATH:
+                    hit = True
+                elif grid[r][x] in soft:
+                    grid[r][x] = PATH
+            if hit:
+                break
+            x += step
 
 
 def restore_city_and_void_paving(grid):
@@ -1623,10 +1850,10 @@ def restore_city_and_void_paving(grid):
     cx0, cy0, cx1, cy1 = city_bounds()
     # Roads / void stamps punch the shell — lay Style B walls last, then reopen south + north.
     _stamp_stonehaven_walls(grid, cx0, cy0, cx1, cy1)
-    for gx in range(116, 123):
-        for gy in (cy1, cy1 - 1):
-            if 0 <= gx < WIDTH and 0 <= gy < HEIGHT:
-                grid[gy][gx] = PATH
+    for gx, gy in stonehaven_wall_layout()["open"]:
+        if 0 <= gx < WIDTH and 0 <= gy < HEIGHT:
+            grid[gy][gx] = PATH
+    _lay_stonehaven_gate_roads(grid, cx0, cy0, cx1, cy1)
     if castle_v2.active():
         ax0, _ = castle_v2.w(104, 55)
         ax1, _ = castle_v2.w(119, 55)
@@ -1685,6 +1912,11 @@ def build_resource_nodes(grid):
                 nodes[(x, y)] = {"type": "mithril_rock", "depleted": False, "respawn_at": 0}
             elif t == ADAMANTITE_ORE:
                 nodes[(x, y)] = {"type": "adamantite_rock", "depleted": False, "respawn_at": 0}
+    # Deepdelve Mine rocks have fixed types (copper vs tin, gem veins, the Heart Vein).
+    import deepdelve_layout as _dd
+    for _x, _y, _rtype in _dd.ALL_ROCKS:
+        if (_x, _y) in nodes:
+            nodes[(_x, _y)]["type"] = _rtype
 
     # Shoreline fishing — sparse spots, not every water tile
     fish_candidates = []

@@ -1,0 +1,56 @@
+{
+ "id": "ancient_adamant_golem",
+ "name": "Ancient Adamant Golem",
+ "level": null,
+ "region": "Deepdelve Mine",
+ "look": "painted HD, player proportions (Deepdelve Mine pack)",
+ "canvas": {
+  "1x": [
+   192,
+   168
+  ],
+  "2x": [
+   384,
+   336
+  ]
+ },
+ "feet_px": {
+  "1x": [
+   96,
+   156
+  ],
+  "2x": [
+   192,
+   312
+  ]
+ },
+ "states": {
+  "idle": {
+   "frames": 4
+  },
+  "walk": {
+   "frames": 8
+  },
+  "attack": {
+   "frames": 6,
+   "frame_starts": [
+    0.0,
+    0.14,
+    0.3,
+    0.42,
+    0.6,
+    0.8
+   ]
+  },
+  "hit": {
+   "frames": 3
+  },
+  "death": {
+   "frames": 6
+  }
+ },
+ "healthbar_y_offset_1x": -128,
+ "head_top_idle_1x": -122,
+ "complete": true,
+ "scale_baked": true
+}

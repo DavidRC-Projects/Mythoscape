@@ -1,0 +1,87 @@
+{
+ "_doc": "Which way each painted frame faces as drawn in its PNG (r = toward screen right). arena_duel_ui mirrors any frame that does not face the opponent.",
+ "brutus": {
+  "idle": "l",
+  "attack": "l",
+  "block": "l",
+  "dodge": "l",
+  "hit": "r"
+ },
+ "crixus": {
+  "idle": "l",
+  "attack": "l",
+  "block": "l",
+  "dodge": "r",
+  "hit": "r"
+ },
+ "hero_axe": {
+  "idle": "r",
+  "attack": "r",
+  "block": "r",
+  "dodge": "r",
+  "hit": "r"
+ },
+ "hero_axe_f": {
+  "idle": "r",
+  "attack": "r",
+  "block": "r",
+  "dodge": "r",
+  "hit": "r"
+ },
+ "hero_bow": {
+  "idle": "r",
+  "attack": "r",
+  "block": "r",
+  "dodge": "r",
+  "hit": "r"
+ },
+ "hero_bow_f": {
+  "idle": "r",
+  "attack": "r",
+  "block": "r",
+  "dodge": "r",
+  "hit": "r"
+ },
+ "hero_sword": {
+  "idle": "r",
+  "attack": "r",
+  "block": "r",
+  "dodge": "r",
+  "hit": "r"
+ },
+ "hero_sword_f": {
+  "idle": "r",
+  "attack": "r",
+  "block": "r",
+  "dodge": "r",
+  "hit": "r"
+ },
+ "ignatius": {
+  "idle": "l",
+  "attack": "l",
+  "block": "l",
+  "dodge": "r",
+  "hit": "r"
+ },
+ "sabina": {
+  "idle": "l",
+  "attack": "l",
+  "block": "l",
+  "dodge": "r",
+  "hit": "r"
+ },
+ "unbroken": {
+  "idle": "l",
+  "attack": "l",
+  "block": "l",
+  "dodge": "r",
+  "hit": "r"
+ },
+ "varro": {
+  "idle": "l",
+  "attack": "l",
+  "block": "l",
+  "dodge": "r",
+  "hit": "r"
+ }
+}

@@ -1,0 +1,52 @@
+{
+ "id": "marshal_branna",
+ "name": "Marshal Branna",
+ "sex": "F",
+ "role": "Crownfall Arena marshal (barracks / practice board)",
+ "tile_note": "world xy from content.py (outside the arena gate stairs)",
+ "facing": "s",
+ "facings": {
+  "s": "toward camera (south)",
+  "e": "east / screen right",
+  "n": "away (north)",
+  "w": "west / screen left"
+ },
+ "canvas": {
+  "1x": [
+   96,
+   128
+  ],
+  "2x": [
+   192,
+   256
+  ],
+  "4x": [
+   384,
+   512
+  ]
+ },
+ "feet_px": {
+  "1x": [
+   48,
+   115
+  ],
+  "2x": [
+   96,
+   230
+  ],
+  "4x": [
+   192,
+   461
+  ]
+ },
+ "scale_note": "constant 175.6 px per metre at 4x (43.9 at 1x) for every NPC",
+ "frames": 8,
+ "fps": 8,
+ "loop": true,
+ "idle_frame": 0,
+ "files": "sprite_{1x,2x,4x}/{s,e,n,w}/f00.png .. f07.png",
+ "hero": "marshal_branna_hero_2048.png",
+ "portrait": "portrait_bust.png (1536, transparent) + portrait_bust_512.png + portrait_bust_bg.jpg",
+ "draw_scale": 0.97,
+ "art_note": "painted sheet, player proportions (~7.5 heads); soles 0.07 tile below the feet anchor to match player_hd soles"
+}

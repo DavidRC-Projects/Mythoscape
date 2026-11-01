@@ -30,7 +30,18 @@ def _surface(name, tile):
     if not os.path.isfile(path):
         _cache[key] = None
         return None
-    img = pygame.image.load(path).convert_alpha()
+    img = None
+    hd = path[:-4] + "_hd.png"
+    if os.path.isfile(hd):
+        try:
+            img = pygame.image.load(hd)
+            if pygame.display.get_surface() is not None:
+                img = img.convert_alpha()
+        except Exception as exc:  # painted HD layer is primary; original is fallback
+            print("[castle_sprites] hd layer failed, using original:", exc)
+            img = None
+    if img is None:
+        img = pygame.image.load(path).convert_alpha()
     if name == "castle_ground.png":
         img = _bridge_only(img, base)
     tw = max(1, int(round(img.get_width() * tile / base)))

@@ -394,6 +394,12 @@ class ScreensMixin:
     def handle_login_event(self, event):
         _bind_client_globals()
         if self.show_leaderboard:
+            try:
+                import hiscores_ui
+                if hiscores_ui.handle_event(self, event):
+                    return
+            except Exception as _e:
+                print("[hiscores] event fallback:", _e)
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     self.show_leaderboard = False
@@ -1096,7 +1102,7 @@ class ScreensMixin:
         pygame.draw.rect(self.screen, (180, 150, 80), box, 2, border_radius=10)
         in_realm = bool(self.dungeon and self.dungeon.get("id") == "castle_realm")
         title = self.font_big.render(
-            "Castle Realm Atlas" if in_realm else "Kingdom Atlas", True, (255, 230, 170),
+            "King's Realm Atlas" if in_realm else "Kingdom Atlas", True, (255, 230, 170),
         )
         self.screen.blit(title, (box.x + 20, box.y + 12))
         self.screen.blit(
@@ -1354,7 +1360,7 @@ class ScreensMixin:
         pygame.draw.rect(self.screen, (120, 170, 220), box, 2)
         in_realm = bool(self.dungeon and self.dungeon.get("id") == "castle_realm")
         title = self.font_big.render(
-            "Travel · Castle Realm" if in_realm else "Travel", True, WHITE,
+            "Travel · King's Realm" if in_realm else "Travel", True, WHITE,
         )
         self.screen.blit(title, (box.x + 20, box.y + 12))
         self.screen.blit(
@@ -1559,7 +1565,7 @@ class ScreensMixin:
             self._sb_card(row, bg=(72, 40, 38), border=(170, 90, 70), radius=7)
         self._sb_icon_person(row.x + 14, row.centery)
         auto_txt = self.font_small.render(
-            f"Auto coins+bones {'ON' if auto else 'OFF'} (P)", True, WHITE,
+            f"Auto coins+bones {'ON' if auto else 'OFF'} (L)", True, WHITE,
         )
         self.screen.blit(auto_txt, (row.x + 28, row.y + 6))
         self._sb_icon_gear(
@@ -3123,7 +3129,9 @@ class ScreensMixin:
                 ("Use tinderbox", "Ask to light logs into a campfire"),
                 ("G", "Pick up one stack on your tile"),
                 ("Shift+G / Shift+click loot", "Take all items on the pile"),
-                ("P / Coins+bones", "Toggle auto-pickup for coins & bones (above ATK/STR/DEF/RNG)"),
+                ("L / Coins+bones", "Toggle auto-pickup for coins & bones (above ATK/STR/DEF/RNG)"),
+                ("P", "Open the Party panel"),
+                ("K", "Toggle your PvP flag on / off"),
                 ("X", "Toggle floating XP drops above your head (off = chat XP)"),
                 ("Minimap left-click", "Walk toward that area · click again on the frame to hide/show"),
                 ("Minimap right-click", "Open the world map (named buildings, click a pin to walk there)"),
@@ -3305,6 +3313,14 @@ class ScreensMixin:
 
     def draw_leaderboard_modal(self):
         _bind_client_globals()
+        try:
+            import hiscores_ui
+            hiscores_ui.draw(self)
+            self._hs_v1 = True
+            return
+        except Exception as _e:  # old modal stays as the error fallback
+            print("[hiscores] draw fallback:", _e)
+            self._hs_v1 = False
         box = pygame.Rect(160, 70, 780, 580)
         pygame.draw.rect(self.screen, (14, 16, 24), box)
         pygame.draw.rect(self.screen, (230, 190, 70), box, 2)
@@ -3430,6 +3446,13 @@ class ScreensMixin:
 
     def handle_leaderboard_click(self, pos):
         _bind_client_globals()
+        if getattr(self, "_hs_v1", False):
+            try:
+                import hiscores_ui
+                hiscores_ui.click(self, pos)
+                return
+            except Exception as _e:
+                print("[hiscores] click fallback:", _e)
         mx, my = pos
         for skill, rect in self.leaderboard_tab_rects.items():
             if rect.collidepoint(mx, my):

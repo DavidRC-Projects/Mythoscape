@@ -406,7 +406,7 @@ async def settle_taxes(session, quiet=False):
             )
             if not quiet:
                 await _send(session.ws, "CHAT_MSG", **{
-                    "from": "Castle Realm",
+                    "from": "King's Realm",
                     "text": f"Weekly upkeep of {tax:,} coins leaves your guild bank for {row['display_name']}.",
                 })
         elif int(session.bank_coins) >= tax:
@@ -423,7 +423,7 @@ async def settle_taxes(session, quiet=False):
             )
             if not quiet:
                 await _send(session.ws, "CHAT_MSG", **{
-                    "from": "Castle Realm",
+                    "from": "King's Realm",
                     "text": f"Weekly upkeep of {tax:,} coins leaves your bank for {row['display_name']}.",
                 })
         else:
@@ -435,7 +435,7 @@ async def settle_taxes(session, quiet=False):
             )
             if not quiet:
                 await _send(session.ws, "CHAT_MSG", **{
-                    "from": "Castle Realm",
+                    "from": "King's Realm",
                     "text": f"{row['display_name']} is a week behind on its tax. The vault stays locked.",
                 })
         changed = True

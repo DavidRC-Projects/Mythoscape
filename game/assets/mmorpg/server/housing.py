@@ -11,14 +11,15 @@ import royal_treasury
 
 # West / south-meadow homes stay put. Only the old south-of-city row
 # (ash, oak, reed, willow) moves up and spreads around the castle grounds.
+_ESTATE_DY = 10  # == world_map.ESTATE_DY (plaza slid south for the forecourt)
 _LAYOUT = {
     "estate_office": (81, 6),       # NW corner → door (85, 10)
-    "kings_folly": (2, 109),
-    "crown_villa": (25, 109),
-    "cedar_townhouse": (16, 111),
-    "riverview_estate": (2, 130),
-    "meadow_house": (16, 131),
-    "stonehaven_row": (26, 131),
+    "kings_folly": (2, 109 + _ESTATE_DY),
+    "crown_villa": (25, 109 + _ESTATE_DY),
+    "cedar_townhouse": (16, 111 + _ESTATE_DY),
+    "riverview_estate": (2, 130 + _ESTATE_DY),
+    "meadow_house": (16, 131 + _ESTATE_DY),
+    "stonehaven_row": (26, 131 + _ESTATE_DY),
     # Around the keep (west / east / south-east of the bailey), not a packed row.
     "ash_manor": (103, 60),  # was 96; west curtain slid +7
     "oak_villa": (148, 58),
@@ -129,7 +130,7 @@ def attach(npcs):
     if any(npc.get("id") == "estate_agent_mira" for npc in npcs):
         return
     spot = office()
-    enter = (spot or {}).get("door", {}).get("enter") or [27, 138]
+    enter = (spot or {}).get("door", {}).get("enter") or [27, 148]
     npcs.append({
         "id": "estate_agent_mira",
         "name": "Estate Agent Mira",
@@ -178,11 +179,21 @@ def ensure_schema(conn):
     conn.commit()
 
 
-def stamp(grid, wm):
-    """Paint shells and lanes onto empty grass. Never touch the dungeon."""
+def _is_estate(house):
+    fp = (house or {}).get("footprint") or {}
+    return fp.get("x1", 99) < 45 and fp.get("y0", 0) > 96
+
+
+def stamp(grid, wm, estate_only=False):
+    """Paint shells and lanes onto empty grass. Never touch the dungeon.
+
+    Estate houses use post-splice coords, so world_map stamps them after the
+    splice (estate_only=True); the base pass skips them.
+    """
     if not enabled():
         return
     load()
+    pre = bool(getattr(wm, "_PRE_SPLICE", False))
     # Meadow homes sit on grass; castle-side plots may already be city STONE.
     soft = {wm.GRASS, wm.TREE, wm.STONE}
 
@@ -203,13 +214,20 @@ def stamp(grid, wm):
         grid[y][x] = tile
 
     # Lanes on grass first (west meadow). Shells below replace whatever they cover.
-    for y in range(99, 140):
-        paint_soft(12, y, wm.PATH)
-        paint_soft(24, y, wm.PATH)
-    for x in range(92, 148):
-        paint_soft(x, 143, wm.PATH)
-    for house in list(houses()) + [office()]:
+    if not estate_only:
+        for y in range(99, 140):
+            paint_soft(12, y, wm.PATH)
+            paint_soft(24, y, wm.PATH)
+        for x in range(92, 148):
+            paint_soft(x, 143, wm.PATH)
+
+    def wanted(house):
         if not house:
+            return False
+        return _is_estate(house) if estate_only else not (pre and _is_estate(house))
+
+    for house in list(houses()) + [office()]:
+        if not wanted(house):
             continue
         door = house["door"]
         ex, ey = int(door["exit"][0]), int(door["exit"][1])
@@ -217,7 +235,7 @@ def stamp(grid, wm):
             paint_soft(ex + ox, ey, wm.PATH)
 
     for house in list(houses()) + [office()]:
-        if not house:
+        if not wanted(house):
             continue
         fp = house["footprint"]
         fl = house["floor"]

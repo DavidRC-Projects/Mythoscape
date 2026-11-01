@@ -110,6 +110,73 @@ def _frame_for_state(meta: dict, state: str, t: float, attacking: float, hit_t: 
     return 0
 
 
+# v2 (mine_deeper): the 3D-rendered husky read as a flat grey blob in game.  A painted HD husky
+# (pets_hd/pet_husky/painted/{n,e,s,w}.png, feet at bottom centre) replaces it, animated in code.
+_PAINTED = {"pet_husky": {"n": 1.08, "e": 1.15, "s": 1.2, "w": 1.15}}   # height as a fraction of size
+
+
+def _painted(sprite, face, h):
+    folder = _folder(sprite)
+    rel = _PAINTED.get(folder)
+    if not rel:
+        return None
+    path = os.path.join(_DIR, folder, "painted", f"{face}.png")
+    key = ("painted", path, h)
+    if key in _IMAGES:
+        return _IMAGES[key]
+    img = _load_image(path)
+    if img is None:
+        return None
+    w = max(1, int(round(img.get_width() * h / float(img.get_height()))))
+    out = pygame.transform.smoothscale(img, (w, max(1, h)))
+    _IMAGES[key] = out
+    return out
+
+
+def _draw_painted(screen, sprite, cx, foot_y, size, t, face, state, attacking, hit_t):
+    import math
+    frac = _PAINTED[_folder(sprite)].get(face, 1.0)
+    h = int(round(size * frac))
+    if state == "idle":
+        h = int(round(h * (1.0 + 0.012 * math.sin(t * 2.6))))           # breathing
+    img = _painted(sprite, face, h)
+    if img is None:
+        return False
+    dx = dy = 0.0
+    ang = 0.0
+    if state == "walk":
+        ph = t * 9.0
+        dy = -abs(math.sin(ph)) * size * 0.05                               # trot bob
+        if face in ("e", "w"):
+            ang = math.sin(ph) * 2.5
+    elif state == "attack":
+        lunge = math.sin(min(1.0, max(0.0, attacking)) * math.pi)
+        d = {"e": (1, 0), "w": (-1, 0), "n": (0, -0.5), "s": (0, 0.5)}[face]
+        dx, dy = d[0] * lunge * size * 0.22, d[1] * lunge * size * 0.22 - lunge * size * 0.04
+    if ang:
+        img = pygame.transform.rotozoom(img, ang if face == "w" else -ang, 1.0)
+    # soft contact shadow so the dog sits on the ground
+    sw = int(img.get_width() * (0.8 if face in ("e", "w") else 0.9))
+    sh = max(3, int(size * 0.14))
+    key = ("pshadow", sw, sh)
+    shadow = _IMAGES.get(key)
+    if shadow is None:
+        shadow = pygame.Surface((sw, sh), pygame.SRCALPHA)
+        for i in range(sh // 2, 0, -1):
+            a = int(70 * (1 - i / (sh / 2.0)) + 20)
+            pygame.draw.ellipse(shadow, (0, 0, 0, a), (sw // 2 - i * sw // sh, sh // 2 - i, 2 * i * sw // sh, 2 * i))
+        _IMAGES[key] = shadow
+    screen.blit(shadow, shadow.get_rect(center=(int(cx), int(foot_y - sh * 0.15))))
+    r = img.get_rect(midbottom=(int(cx + dx), int(foot_y + dy + size * 0.03)))
+    screen.blit(img, r)
+    if 0 <= hit_t < 0.36:
+        flash = img.copy()
+        flash.fill((255, 80, 80, 0), special_flags=pygame.BLEND_RGBA_MAX)
+        flash.set_alpha(int(110 * (1 - hit_t / 0.36)))
+        screen.blit(flash, r)
+    return True
+
+
 def draw(
     screen,
     sprite: str,
@@ -138,6 +205,8 @@ def draw(
     else:
         state = "idle"
     face = _facing_str(facing)
+    if _folder(sprite) in _PAINTED and _draw_painted(screen, sprite, cx, foot_y, size, t, face, state, attacking, hit_t):
+        return True
     frame = _frame_for_state(meta, state, t, attacking, hit_t)
     path = os.path.join(_DIR, _folder(sprite), f"sprite_{tag}", state, face, f"f{frame:02d}.png")
     img = _scaled(path, size, base)
@@ -155,6 +224,8 @@ def head_top_dy(sprite: str, size: int, facing=1, state: str = "idle", frame: in
     if not meta:
         return -size
     face = _facing_str(facing)
+    if _folder(sprite) in _PAINTED and _painted(sprite, face, max(8, size)) is not None:
+        return -int(round(size * _PAINTED[_folder(sprite)].get(face, 1.0)))
     anchors = meta.get("anchors_4x") or {}
     head = (anchors.get(f"{state}/{face}/{frame:02d}") or anchors.get("idle/s/00") or {}).get("head_top")
     feet = (meta.get("feet_px") or {}).get("4x") or [256, 528]
@@ -171,6 +242,10 @@ def blit_icon(surf, sprite: str, rect, facing=1) -> bool:
     if not handles(sprite):
         return False
     path = os.path.join(_DIR, _folder(sprite), "sprite_1x", "idle", _facing_str(facing), "f00.png")
+    if _folder(sprite) in _PAINTED:
+        pp = os.path.join(_DIR, _folder(sprite), "painted", _facing_str(facing) + ".png")
+        if os.path.isfile(pp):
+            path = pp
     img = _load_image(path)
     if img is None:
         return False

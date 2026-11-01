@@ -65,10 +65,19 @@ def _queue_standee(client, draw_list, cam_x, cam_y, tile, seller, x, y):
     sprite = _scaled(seller["sprite"]["1x"], height)
 
     def _draw(_cx=cx, _foot=foot, _sprite=sprite, _seller=seller, _height=height):
-        if _sprite is not None:
-            client.screen.blit(_sprite, (_cx - _sprite.get_width() // 2, _foot - _sprite.get_height()))
-        name_y = _foot - (_height + 4)
-        client.blit_nameplate(_seller["display_name"], _cx, name_y, (255, 220, 160))
+        name_y = None
+        try:  # HD painted sheet (player proportions); standee stays as error fallback
+            import npc_hd_client
+            n = {"id": _seller["npc_id"], "name": _seller["display_name"]}
+            if npc_hd_client.draw_npc(client, n, _cx, _foot - tile // 2, tile, pygame.time.get_ticks() / 1000.0):
+                name_y = npc_hd_client.last_nameplate_y
+        except Exception as exc:  # pragma: no cover - fallback path
+            print("castle seller HD draw failed:", exc)
+        if name_y is None:
+            if _sprite is not None:
+                client.screen.blit(_sprite, (_cx - _sprite.get_width() // 2, _foot - _sprite.get_height()))
+            name_y = _foot - (_height + 4)
+            client.blit_nameplate(_seller["display_name"], _cx, name_y, (255, 220, 160))
         hint = getattr(client, "_hover_hint", None)
         if hint and hint[0] == "seller" and hint[1] == _seller["npc_id"]:
             client.blit_action_hint(hint[2], _cx, name_y - 18, hint[3])
@@ -111,19 +120,33 @@ def draw_dialogue(client):
     client.dialogue_btn_rects = {}
     name = client.font.render(client.dialogue.get("npc_name") or "Seller", True, (255, 220, 120))
     client.screen.blit(name, (box.x + 12, box.y + 10))
+    # Painted bust matching the seller's HD standee (npc_hd/<id>/portrait_bust_512.png).
+    bust = None
+    try:
+        import npc_hd_client
+        bust = npc_hd_client.portrait(client, client.dialogue.get("npc_id"), 150)
+    except Exception:
+        bust = None
+    lx = box.x + 12
+    if bust is not None:
+        frame = pygame.Rect(box.x + 12, box.y + 40, bust.get_width() + 4, bust.get_height() + 4)
+        pygame.draw.rect(client.screen, (12, 12, 18), frame)
+        client.screen.blit(bust, (frame.x + 2, frame.y + 2))
+        pygame.draw.rect(client.screen, (180, 160, 90), frame, 1)
+        lx = frame.right + 12
     y = box.y + 40
-    max_w = box.w - 24
+    max_w = box.right - 12 - lx
     for line in client.dialogue.get("lines") or []:
         for wrapped in client._wrap_ui_text(line, client.font_small, max_w):
             if y > box.bottom - 180:
                 break
-            client.screen.blit(client.font_small.render(wrapped, True, (236, 232, 220)), (box.x + 12, y))
+            client.screen.blit(client.font_small.render(wrapped, True, (236, 232, 220)), (lx, y))
             y += 18
     y += 8
     for option in castle.get("options") or []:
         if y + 26 > box.bottom - 8:
             break
-        rect = pygame.Rect(box.x + 12, y, box.w - 24, 24)
+        rect = pygame.Rect(lx, y, box.right - 12 - lx, 24)
         pygame.draw.rect(client.screen, (48, 56, 78), rect, border_radius=4)
         pygame.draw.rect(client.screen, (180, 160, 90), rect, 1, border_radius=4)
         label = option.get("label") or ""

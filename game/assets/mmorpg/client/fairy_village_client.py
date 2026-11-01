@@ -13,8 +13,8 @@ _DIR = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "..", "assets", "fairy_village",
 ))
 _BUILDINGS = (
-    ("queens_tree_hall", 7, 75, 15, 83, "The Queen's Tree-Hall"),
-    ("moonpetal_inn", 16, 75, 25, 82, "The Moonpetal Inn"),
+    ("queens_tree_hall", 7, 74, 15, 82, "The Queen's Tree-Hall"),
+    ("moonpetal_inn", 17, 75, 26, 82, "The Moonpetal Inn"),
     ("mushroom_apothecary", 33, 61, 39, 67, "Tumbleroot's Apothecary"),
 )
 _FOUNTAINS = (

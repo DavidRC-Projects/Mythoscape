@@ -42,7 +42,9 @@
     "mithril": 1.07,
     "adamant": 1.14,
     "rune": 1.2,
-    "mythos": 1.28
+    "mythos": 1.28,
+    "arena": 0.9,
+    "eclipse": 1.34
   },
   "styles": {
     "sword": {
@@ -50,7 +52,7 @@
       "reach": 2.0,
       "light": {
         "sta": 10,
-        "dmg": 0.026,
+        "dmg": 0.029,
         "recover": 2
       },
       "heavy": {
@@ -79,7 +81,8 @@
       "move": {
         "sta": 3,
         "speed": 0.5
-      }
+      },
+      "crit": 0.08
     },
     "axe": {
       "ranged": false,
@@ -116,7 +119,8 @@
         "sta": 3,
         "speed": 0.45
       },
-      "momentum_mult": 1.1
+      "momentum_mult": 1.1,
+      "crit": 0.05
     },
     "bow": {
       "ranged": true,
@@ -156,7 +160,8 @@
       "move": {
         "sta": 4,
         "speed": 0.55
-      }
+      },
+      "crit": 0.06
     }
   },
   "bosses": {
@@ -202,7 +207,9 @@
       "finisher_hp": 0.2,
       "shot_taken": 0.7,
       "bow_focus": 0.95,
-      "momentum_mult_bow": 0.75
+      "momentum_mult_bow": 0.75,
+      "tier": "bronze",
+      "armour_cut": 0.0
     },
     "brutus": {
       "speed": 0.16,
@@ -247,7 +254,9 @@
         }
       ],
       "guard_cut_heavy": 0.4,
-      "finisher_hp": 0.15
+      "finisher_hp": 0.15,
+      "tier": "iron",
+      "armour_cut": 0.02
     },
     "crixus": {
       "speed": 0.42,
@@ -294,7 +303,9 @@
       "shot_taken": 1.15,
       "bow_focus": 0.3,
       "momentum_mult_bow": 1.2,
-      "momentum_mult_axe": 0.9
+      "momentum_mult_axe": 0.9,
+      "tier": "steel",
+      "armour_cut": 0.04
     },
     "sabina": {
       "speed": 0.36,
@@ -327,7 +338,9 @@
           "w": 1
         }
       ],
-      "finisher_hp": 0.38
+      "finisher_hp": 0.38,
+      "tier": "mithril",
+      "armour_cut": 0.05
     },
     "ignatius": {
       "speed": 0.35,
@@ -374,7 +387,9 @@
       "finisher_hp": 0.2,
       "shot_taken": 0.85,
       "momentum_mult_sword": 0.9,
-      "momentum_mult_axe": 0.9
+      "momentum_mult_axe": 0.9,
+      "tier": "adamant",
+      "armour_cut": 0.06
     },
     "unbroken": {
       "speed": 0.4,
@@ -419,10 +434,90 @@
       ],
       "second_wind_momentum": 0.5,
       "finisher_hp": 0.2,
-      "momentum_mult_axe": 1.25
+      "momentum_mult_axe": 1.25,
+      "tier": "mythos",
+      "armour_cut": 0.08
     }
   },
   "recover_walk": 0.5,
   "_doc_v2": "Tuning pass 2: finisher needs momentum>=finisher.momentum and boss HP <= bosses.<id>.finisher_hp (default finisher.boss_hp_frac); bows also need focus>=finisher.bow_focus (hold still). momentum.hit scales with blow size (dmg/hit_ref_dmg, 0.8-2.5x). bosses.<id>.shot_taken = arrow damage at any range, far_shot_taken = extra at >= far_gap, momentum_mult = crowd gain vs this boss, second_wind_momentum = momentum kept when the boss rises (finisher locked until then).",
-  "_doc_v3": "Tuning pass 3 (deterministic sim seeds): casual melee vs Brutus/Unbroken eased, Varro tougher for bows, finisher rates pulled toward 50-75% (axe momentum_mult 1.25, lower finisher_hp for Brutus/Crixus/Ignatius). Per-boss overrides: bow_focus, momentum_mult_<style>."
+  "_doc_v3": "Tuning pass 3 (deterministic sim seeds): casual melee vs Brutus/Unbroken eased, Varro tougher for bows, finisher rates pulled toward 50-75% (axe momentum_mult 1.25, lower finisher_hp for Brutus/Crixus/Ignatius). Per-boss overrides: bow_focus, momentum_mult_<style>.",
+  "_doc_v4": "v4 (arena duel v2): armour_tiers = damage cut / stamina / poise for a full set (else the arena set, the weakest); weapon_tiers = crit bonus (damage via gear_mult); styles.*.crit per TIERS_SPEC (sword 8%, axe 5%); bosses.*.tier/armour_cut scale the champions up the ranks.",
+  "armour_tiers": {
+    "arena": {
+      "cut": 0.0,
+      "sta": 0,
+      "poise": 0.0
+    },
+    "bronze": {
+      "cut": 0.02,
+      "sta": 0,
+      "poise": 0.0
+    },
+    "iron": {
+      "cut": 0.04,
+      "sta": 2,
+      "poise": 0.05
+    },
+    "steel": {
+      "cut": 0.07,
+      "sta": 4,
+      "poise": 0.1
+    },
+    "mithril": {
+      "cut": 0.1,
+      "sta": 6,
+      "poise": 0.15
+    },
+    "adamant": {
+      "cut": 0.13,
+      "sta": 8,
+      "poise": 0.2
+    },
+    "rune": {
+      "cut": 0.15,
+      "sta": 9,
+      "poise": 0.22
+    },
+    "mythos": {
+      "cut": 0.16,
+      "sta": 12,
+      "poise": 0.28
+    },
+    "eclipse": {
+      "cut": 0.18,
+      "sta": 14,
+      "poise": 0.3
+    }
+  },
+  "weapon_tiers": {
+    "arena": {
+      "crit": 0.0
+    },
+    "bronze": {
+      "crit": 0.0
+    },
+    "iron": {
+      "crit": 0.0
+    },
+    "steel": {
+      "crit": 0.0
+    },
+    "mithril": {
+      "crit": 0.005
+    },
+    "adamant": {
+      "crit": 0.01
+    },
+    "rune": {
+      "crit": 0.012
+    },
+    "mythos": {
+      "crit": 0.015
+    },
+    "eclipse": {
+      "crit": 0.035
+    }
+  },
+  "crit_mult": 1.5
 }

@@ -414,8 +414,8 @@ def enter(session) -> None:
         'plane': 'realm',
         'floor': 0,
         'floors': 1,
-        'label': 'Castle Realm',
-        'name': 'Castle Realm',
+        'label': 'King\'s Realm',
+        'name': 'King\'s Realm',
         'tiles': plane['tiles'],
         'width': plane['width'],
         'height': plane['height'],
@@ -466,7 +466,7 @@ def leave(session) -> None:
 def floor_story(plane_name: str):
     """Level index, floor count, room name, and castle name for a plane."""
     if plane_name == "realm" or plane_name not in V2_FLOORS:
-        return 0, 1, "Castle Realm", "Castle Realm"
+        return 0, 1, "King's Realm", "King's Realm"
     floor = V2_FLOORS[plane_name]
     prefix = plane_name.rsplit("_f", 1)[0]
     mates = [name for name in V2_FLOORS if name.rsplit("_f", 1)[0] == prefix]
@@ -535,8 +535,8 @@ def payload(session) -> dict:
         'plane': plane,
         'floor': data.get('floor', 0),
         'floors': data.get('floors', 1),
-        'label': data.get('label', 'Castle Realm'),
-        'name': data.get('name', 'Castle Realm'),
+        'label': data.get('label', 'King\'s Realm'),
+        'name': data.get('name', 'King\'s Realm'),
         'tiles': data.get('tiles', []),
         'width': data.get('width', 0),
         'height': data.get('height', 0),

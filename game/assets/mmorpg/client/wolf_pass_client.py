@@ -50,6 +50,9 @@ def draw_ground(client, rect, wx, wy):
     """Cliff tiles under the painted ridge: draw grass (the ridge art covers them). True when handled."""
     if vale_ring_client.draw_ground(client, rect, wx, wy):
         return True
+    import overworld_rocks
+    if overworld_rocks.draw_ground(client, rect, wx, wy):
+        return True
     if not active(client) or not WP.is_cliff(wx, wy):
         return False
     # Same ground painter as the surrounding open tiles, so no rectangle shows where the ridge base feathers out.
@@ -73,6 +76,11 @@ def queue(client, draw_list, cam_x, cam_y, tile, t=0.0):
         vale_ring_client.queue(client, draw_list, cam_x, cam_y, tile, t)
     except Exception as exc:
         print("[vale_ring] queue", exc)
+    try:
+        import overworld_rocks
+        overworld_rocks.queue(client, draw_list, cam_x, cam_y, tile, t)
+    except Exception as exc:
+        print("[overworld_rocks] queue", exc)
     if not active(client):
         return
     g = WP.geo()

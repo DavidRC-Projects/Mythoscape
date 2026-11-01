@@ -204,6 +204,11 @@ def queue(client, draw_list, cam_x, cam_y, tile):
         return
     estate = housing.load()
     screen = client.screen
+    try:
+        import estate_plaza  # painted walks, lamps and planters; missing art draws nothing
+        estate_plaza.queue(client, draw_list, cam_x, cam_y, tile)
+    except Exception:
+        pass
     owners = getattr(client, "housing_owners", {}) or {}
     for house in list(housing.houses()) + [housing.office()]:
         if not house:
@@ -239,7 +244,7 @@ def queue_outfitters(client, draw_list, cam_x, cam_y, tile, inside):
     _queue_piece(
         client, draw_list, cam_x, cam_y, tile, "kings_folly",
         x0, y0, x1, y1, inside,
-        label=None if inside else "Mythos Outfitters",
+        label=None if inside else "Crownfall Outfitters",
         floor_style=0, hd_tag="outfitters",
     )
 

@@ -40,11 +40,13 @@ MOVED = {
     "queens_tree_hall_door", "moonpetal_inn_door", "mushroom_apothecary_door",
     "moonstone_fountain", "lily_fountain",
 }
-STANDS = [(11, 84), (20, 83), (36, 68), (30, 66), (35, 79)]
+STANDS = [(11, 83), (21, 83), (36, 68), (30, 66), (35, 79)]
 NPCS = [(18, 68), (24, 60), (38, 72), (32, 82)]
-RATS = [(62, 103), (67, 104), (72, 103), (64, 107), (70, 107), (66, 110), (73, 110), (63, 106)]
+# Deepdelve Mine (old rat square): the lift pads must be walkable from spawn.
+import deepdelve_layout as _DDL
+RATS = [tuple(p) for p in _DDL.LIFT_PADS.values()]
 MOUTH = [(63, 10), (64, 10), (65, 10), (63, 11), (64, 11), (65, 11)]
-BUILDINGS = [(7, 75, 15, 83), (16, 75, 25, 82), (33, 61, 39, 67)]
+BUILDINGS = [(7, 74, 15, 82), (17, 75, 26, 82), (33, 61, 39, 67)]
 # Crypt sprite: ~11 wide, ~10.5 north of the door, apron ~5 south.
 CRYPT = (64 - 5, 11 - 11, 64 + 5, 11 + 5)
 
@@ -241,21 +243,19 @@ def check():
     reached = _bfs(live, wm.SPAWN_POINT)
     goals = NPCS + STANDS + MOUTH + [(64, 12)] + RATS
     missing = [xy for xy in goals if xy not in reached]
-    mx0, my0, mx1, my1 = wm.VOLCANO_MINE
-    ores = [(x, y) for y in range(my0, my1 + 1) for x in range(mx0, mx1 + 1)
-            if live[y][x] in (wm.ORE, wm.IRON_ORE, wm.MITHRIL_ORE, wm.ADAMANTITE_ORE)]
+    # Walkable mine ores = yard + B0 copper/tin; the sealed chambers are reached by lift
+    # and checked in tools/test_mine.py.
+    ores = [(x, y) for x, y, _t in _DDL.YARD_ROCKS + _DDL.B0_ROCKS]
     ore_miss = []
     for x, y in ores:
         if not any((x + dx, y + dy) in reached for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
             ore_miss.append((x, y))
-    mith = sum(1 for x, y in ores if live[y][x] == wm.MITHRIL_ORE)
-    adam = sum(1 for x, y in ores if live[y][x] == wm.ADAMANTITE_ORE)
-    if len(ores) != 34 or mith != 12 or adam != 12:
-        fails.append(f"expected 34 ores (12 mith, 12 adamant), found {len(ores)} mith {mith} adam {adam}")
+    if len(ores) != 30 or any(live[y][x] != wm.ORE for x, y in ores):
+        fails.append(f"expected 30 copper/tin ores in the mine yard + B0, found {len(ores)}")
     if missing or ore_miss:
         fails.append(f"unreachable {missing} ores {ore_miss}")
     else:
-        print(f"3. BFS from {wm.SPAWN_POINT} reaches NPCs, stands, mouth, return, rats, ores: PASS")
+        print(f"3. BFS from {wm.SPAWN_POINT} reaches NPCs, stands, mouth, return, mine lifts, ores: PASS")
 
     covered = []
     for box in BUILDINGS:

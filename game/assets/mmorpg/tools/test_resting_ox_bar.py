@@ -1,5 +1,6 @@
-"""Resting Ox bar scene, end to end (headless): new account -> walk-in via the door action -> sit at the bar,
-turn left/right, talk to both patrons, order + drink an ale, sit at a table, leave back to the village.
+"""Resting Ox tavern, end to end (headless): new account -> walk in through the arch -> entry film (skipped) ->
+Bram's greeting and menu, turn left/right, talk to Wenna and Tobin, buy + drink a 5c ale (no free ale for a
+new traveller), pick table 1, board / trophy wall / bard, leave back to the village.
 Test server on port 8798 (or a free port) with a COPY of the test DB; live 8765 / world.db never touched.
 Set BAR_SHOTS=/dir to save proof frames.
 """
@@ -87,19 +88,32 @@ def main():
 
     assert g.can_do_action({"type": "BAR_ENTER", "door": (20, 42)}, 20, 43)
     assert not g.can_do_action({"type": "BAR_ENTER", "door": (20, 42)}, 14, 43)   # the wooden front door is not the bar
-    g.fire_action({"type": "BAR_ENTER"}); pump(90)
+    g.fire_action({"type": "BAR_ENTER"}); pump(40)
+    # first visit: the entry film plays; Skip shows after 0.5 s, any key then skips (0.3 s fade)
+    assert bar.intro is not None, "first visit should play the entry film"
+    pump_for(0.7); shot("00_intro_frame")
+    key(pygame.K_ESCAPE, 1); until(lambda: bar.intro is None, 3)
+    assert bar.intro is None and bar.active, "intro did not skip"
+    pump_for(0.8)
     assert bar.active and bar.view == "bar", (bar.active, bar.view)
-    assert "Resting Ox" in bar.line, bar.line
+    assert bar.speaker == "Bram" and "traveller" in bar.line, (bar.speaker, bar.line)
     shot("01_bar_counter")
-    key(pygame.K_t, 40); assert bar.speaker == "Barnaby", bar.speaker
+    key(pygame.K_t, 40); assert bar.speaker == "Bram", bar.speaker
+    assert [c[0] for c in bar.choices][:2] == ["Drinks", "Food"], bar.choices
+    key(pygame.K_1, 20); assert any("Village Ale" in c[0] for c in bar.choices), bar.choices
+    shot("01b_bram_drinks_menu")
     key(pygame.K_a, 60); assert bar.view == "left"
-    key(pygame.K_t, 40); assert bar.speaker == "Old Tam", bar.speaker
+    key(pygame.K_t, 10); assert any("Sable" in c[0] for c in bar.choices), bar.choices
+    key(pygame.K_2, 40); assert bar.speaker == "Old Wenna", bar.speaker
     shot("02_look_left_talk")
     key(pygame.K_d, 10); key(pygame.K_d, 60); assert bar.view == "right"
-    key(pygame.K_t, 40); assert bar.speaker.startswith("Wren"), bar.speaker
+    key(pygame.K_t, 10); assert any("ranger" in c[0] for c in bar.choices), bar.choices
+    key(pygame.K_2, 40); assert bar.speaker == "Tobin", bar.speaker
     shot("03_look_right_talk")
+    ale = next(m["price"] for m in bar.state["menu"] if m["id"] == "village_ale")
+    assert ale in (4, 5), ale
     key(pygame.K_o, 40); assert bar.view == "bar" and bar.has_ale, "ale not served"
-    assert sess.coins == 10, "first ale should be free"
+    assert sess.coins == 10 - ale, ("no free ale for a new T0 traveller", sess.coins)
     key(pygame.K_SPACE, 1)
     assert bar.drinking()
     until(lambda: time.time() - bar.drink_t > 0.9, 3); shot("04_drink_mid")
@@ -108,14 +122,24 @@ def main():
     key(pygame.K_SPACE, 1); until(lambda: bar.sips == 2); pump(2)
     key(pygame.K_SPACE, 1); until(lambda: bar.sips == 3)
     assert not bar.has_ale and bar.sips == 3
-    key(pygame.K_o, 40); assert bar.has_ale and sess.coins == 8, sess.coins
-    key(pygame.K_s, 60); assert bar.seat == "table" and bar.view == "table"
-    assert (sess.bar or {}).get("seat") == "table"
+    key(pygame.K_o, 40); assert bar.has_ale and sess.coins == 10 - 2 * ale, sess.coins
+    key(pygame.K_o, 20); assert sess.coins == 10 - 2 * ale, "can't buy a second while holding one"
+    key(pygame.K_s, 30); assert bar.seat == "bar" and bar.choices and "Table 1" in bar.choices[0][0], bar.choices
+    key(pygame.K_1, 60); assert bar.seat == "table" and bar.view == "table"
+    assert (sess.bar or {}).get("seat") == "table", sess.bar
+    until(lambda: bar.table is not None, 3); assert bar.table and bar.table["id"] == 1, bar.table
     pump_for(0.5); shot("07_table")
     key(pygame.K_SPACE, 1); until(lambda: time.time() - bar.drink_t > 0.9, 3); shot("06_table_drink")
     until(lambda: not bar.drinking())
+    key(pygame.K_b, 40); assert bar.view == "board" and bar.board is not None; shot("09_board")
+    key(pygame.K_ESCAPE, 20); assert bar.view == "table"
+    key(pygame.K_w, 40); assert bar.view == "trophy" and bar.trophies is not None; shot("10_trophy")
+    key(pygame.K_ESCAPE, 20)
+    key(pygame.K_m, 40); assert bar.view == "bard" and bar.bard is not None; shot("11_bard")
+    key(pygame.K_ESCAPE, 20); assert bar.view == "table"
     key(pygame.K_ESCAPE, 60)
     assert not bar.active and (sess.x, sess.y) == (20, 43) and (g.player["x"], g.player["y"]) == (20, 43)
+    assert sess.coins == 10 - 2 * ale
     shot("08_back_in_village")
     print("RESTING OX BAR TEST PASSED", flush=True)
     os._exit(0)

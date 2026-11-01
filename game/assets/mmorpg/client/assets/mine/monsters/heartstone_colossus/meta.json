@@ -1,0 +1,56 @@
+{
+ "id": "heartstone_colossus",
+ "name": "The Heartstone Colossus",
+ "level": null,
+ "region": "Deepdelve Mine",
+ "look": "painted HD, player proportions (Deepdelve Mine pack)",
+ "canvas": {
+  "1x": [
+   288,
+   256
+  ],
+  "2x": [
+   576,
+   512
+  ]
+ },
+ "feet_px": {
+  "1x": [
+   144,
+   242
+  ],
+  "2x": [
+   288,
+   484
+  ]
+ },
+ "states": {
+  "idle": {
+   "frames": 4
+  },
+  "walk": {
+   "frames": 8
+  },
+  "attack": {
+   "frames": 6,
+   "frame_starts": [
+    0.0,
+    0.14,
+    0.3,
+    0.42,
+    0.6,
+    0.8
+   ]
+  },
+  "hit": {
+   "frames": 3
+  },
+  "death": {
+   "frames": 6
+  }
+ },
+ "healthbar_y_offset_1x": -182,
+ "head_top_idle_1x": -176,
+ "complete": true,
+ "scale_baked": true
+}

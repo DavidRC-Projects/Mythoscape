@@ -54,6 +54,14 @@ OVERWORLD_HD = {
     "city_vendor_mira",
     "packer_nell",
     "outfitter_mae",
+    # Crownfall Arena (outside the gate stairs)
+    "marshal_branna",
+    "quartermaster_osric",
+    # King's Realm castle-gate sellers (castle_realm/owners/json/sellers.json)
+    "marcelline_shade_broker",
+    "seraphine_rose_seneschal",
+    "veyra_skychain",
+    "aldric_crownvale",
 }
 
 # Same sheets as another NPC. The nameplate still uses this character's name.
@@ -155,16 +163,23 @@ def draw_npc(client, n, cx, cy, tile, t, face="s", moving=False):
     if art_id not in OVERWORLD_HD:
         return False
     meta = _meta(art_id)
-    tag, base = _scale_for(tile)
+    # Optional per-NPC meta "draw_scale" (default 1.0) to match the HD player's height.
+    draw_scale = float(meta.get("draw_scale") or 1.0)
+    eff = tile * draw_scale
+    tag, base = _scale_for(eff)
     frames = max(1, int(meta.get("frames") or 8))
     fps = float(meta.get("fps") or 8)
     idx = int(t * fps) % frames
     facing = _sheet_facing(face, moving)
     path = os.path.join(_DIR, art_id, f"sprite_{tag}", facing, f"f{idx:02d}.png")
-    image = _scaled(path, tile, base)
+    image = _scaled(path, eff if draw_scale != 1.0 else tile, base)
     if image is None:
         return False
-    fx, fy = _px(meta, tile, [48, 118])
+    if draw_scale != 1.0:
+        point = (meta.get("feet_px") or {}).get(tag) or [48, 118]
+        fx, fy = point[0] * eff / float(base), point[1] * eff / float(base)
+    else:
+        fx, fy = _px(meta, tile, [48, 118])
     foot_y = cy + tile // 2
     left = cx - fx
     top = foot_y - fy

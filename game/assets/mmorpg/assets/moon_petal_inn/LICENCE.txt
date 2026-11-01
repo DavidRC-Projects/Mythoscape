@@ -1,0 +1,4 @@
+Moon Petal Inn entry (moon_petal_entry_v1.mp4) audio:
+- Music theme and ambience (rain, footsteps, door creak, hearth crackle, harp/celesta sparkle) synthesised from scratch with numpy (work/music.py). No samples, no third-party melodies. Original work, released CC0 for Crownfall.
+- Hostess voice: Kokoro-82M TTS (Apache-2.0), voice bf_emma, post-processed with ffmpeg (highpass/lowpass, light aecho reverb).
+Video: GenerateVideo (Grok Imagine). Stills and portrait: GenerateImage. UI text drawn with PIL (Cinzel, EB Garamond: SIL OFL).

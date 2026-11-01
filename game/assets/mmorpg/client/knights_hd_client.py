@@ -53,6 +53,19 @@ MONSTERS_HD = {
     "crucible_beast",
 }
 
+# Deepdelve Mine pack (painted HD, player proportions) - ships inside the client.
+_MINE_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "assets", "mine", "monsters"))
+MINE_HD = {
+    "tunnel_scavenger",
+    "scavenger_foreman",
+    "ember_crawler",
+    "mithril_wraith",
+    "shackled_wraith",
+    "adamant_golem",
+    "ancient_adamant_golem",
+    "heartstone_colossus",
+}
+
 _META = {}
 _IMAGES = {}
 _CACHE_LIMIT = 512
@@ -60,7 +73,7 @@ _CACHE_LIMIT = 512
 
 def handles(mtype: str) -> bool:
     """Check if this module handles the given monster type."""
-    return mtype in KNIGHTS_HD or mtype in MONSTERS_HD
+    return mtype in KNIGHTS_HD or mtype in MONSTERS_HD or mtype in MINE_HD
 
 
 def baked_px(mtype: str, tile: int):
@@ -73,6 +86,8 @@ def baked_px(mtype: str, tile: int):
 
 
 def _asset_root(mtype: str) -> str:
+    if mtype in MINE_HD:
+        return _MINE_DIR
     if mtype in MONSTERS_HD:
         return _MONSTERS_DIR
     return _KNIGHTS_DIR

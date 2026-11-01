@@ -85,13 +85,13 @@ def test_rat_problem_has_a_kill_camp_destination():
     assert camp["id"] == "rats"
 
 
-def test_quest_objective_dest_points_at_rat_mine():
+def test_quest_objective_dest_points_at_village_rats():
     import new_player_guide as g
     c = _mk(quests={"rat_problem": {"status": "active", "progress": 0}})
     dest = g.quest_objective_dest(c, "rat_problem")
     assert dest is not None
     x, y, label = dest
-    assert (x, y) == (67, 107)
+    assert (x, y) == (25, 28)   # rats moved from the old mine square (now Deepdelve Mine)
     assert "Rat" in label
 
 

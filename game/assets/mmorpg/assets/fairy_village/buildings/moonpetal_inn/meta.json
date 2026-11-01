@@ -6,9 +6,9 @@
   8
  ],
  "footprint": {
-  "x0": 16,
+  "x0": 17,
   "y0": 75,
-  "x1": 25,
+  "x1": 26,
   "y1": 82,
   "w": 10,
   "h": 8
@@ -48,15 +48,15 @@
  },
  "collision": "json/collision/moonpetal_inn.json",
  "interaction_tile": [
-  20,
+  21,
   82
  ],
  "stand_tile": [
-  20,
+  21,
   83
  ],
  "door_tile": [
-  20,
+  21,
   82
  ],
  "files": {

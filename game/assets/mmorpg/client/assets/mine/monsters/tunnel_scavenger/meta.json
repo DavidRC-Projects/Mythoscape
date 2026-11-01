@@ -1,0 +1,56 @@
+{
+ "id": "tunnel_scavenger",
+ "name": "Tunnel Scavenger",
+ "level": null,
+ "region": "Deepdelve Mine",
+ "look": "painted HD, player proportions (Deepdelve Mine pack)",
+ "canvas": {
+  "1x": [
+   128,
+   144
+  ],
+  "2x": [
+   256,
+   288
+  ]
+ },
+ "feet_px": {
+  "1x": [
+   64,
+   132
+  ],
+  "2x": [
+   128,
+   264
+  ]
+ },
+ "states": {
+  "idle": {
+   "frames": 4
+  },
+  "walk": {
+   "frames": 8
+  },
+  "attack": {
+   "frames": 6,
+   "frame_starts": [
+    0.0,
+    0.14,
+    0.3,
+    0.42,
+    0.6,
+    0.8
+   ]
+  },
+  "hit": {
+   "frames": 3
+  },
+  "death": {
+   "frames": 6
+  }
+ },
+ "healthbar_y_offset_1x": -74,
+ "head_top_idle_1x": -68,
+ "complete": true,
+ "scale_baked": true
+}

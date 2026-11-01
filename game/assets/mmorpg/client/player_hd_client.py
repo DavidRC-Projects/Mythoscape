@@ -726,6 +726,10 @@ def armour_layer_for(sex, equipment):
     bare-head figure (hair tinted to the player's colour) and any worn helmet goes on as the overlay; tiers
     without it keep the helmeted full-set figure, which needs the matching helmet too."""
     t = set_tier(equipment)
+    # David, 16 Oct rule (fully enclosed helm, grille visible): with the set's own helmet the painted
+    # helmeted figure is drawn - the overlay on the bare-head figure left the chin and jaw showing.
+    if t and _helm.helmet_tier(equipment) == t and _art_present(sex, armour_hd_layer(t)):
+        return armour_hd_layer(t)
     if t and _art_present(sex, armour_bh_layer(t)):
         return armour_bh_layer(t)
     full = armour_hd_layer(full_armour_tier(equipment))
@@ -869,7 +873,8 @@ def _whole_anim_for(final_anim, frame_idx, t, equipment):
     chop / mine / fish* -> chop / mine / fish: 8 frames, one loop sampled evenly over GATHER_LOOP_MS."""
     if final_anim == "melee":
         w = str((equipment or {}).get("weapon") or "")
-        return ("melee_axe" if ("axe" in w and "pickaxe" not in w) else "melee_sword"), frame_idx
+        axe = ("axe" in w or "cleaver" in w) and "pickaxe" not in w     # eclipse_cleaver is an axe
+        return ("melee_axe" if axe else "melee_sword"), frame_idx
     if is_gather_anim(final_anim):
         base = "fish" if final_anim.startswith("fish") else final_anim
         loop = float(GATHER_LOOP_MS.get(final_anim) or GATHER_LOOP_MS.get(base) or 1800) / 1000.0
@@ -953,6 +958,35 @@ def _hair_without_skin(hair_surf, skin_surf):
     # Where skin is opaque, hair must not tint (forehead / cheeks / hands bleed).
     ha[...] = np.where(sa > 60, 0, ha)
     del ha, sa
+    return out
+
+
+def _coif_jaw(main_surf, skin_surf):
+    """Bare-head armour figure under a helmet of another tier: the overlay stops at the jaw, so the chin and
+    neck skin below it read as an open face. Paint head-band skin as a dark mail coif (shading kept) so the
+    face reads fully enclosed. Hands (below the shoulder band) are left alone."""
+    import numpy as np
+    out = main_surf.copy()
+    if skin_surf is None or skin_surf.get_size() != out.get_size():
+        return out
+    a = pygame.surfarray.pixels_alpha(out)
+    cols = np.nonzero(a.max(axis=0) > 128)[0]
+    if not len(cols):
+        del a
+        return out
+    top, bot = int(cols[0]), int(cols[-1])
+    band = int(top + 0.24 * (bot - top))      # crown .. upper chest
+    del a
+    w = pygame.surfarray.pixels_alpha(skin_surf)[:, :band].astype(np.float32) / 255.0
+    if w.max() <= 0:
+        return out
+    px = pygame.surfarray.pixels3d(out)
+    src = px[:, :band].astype(np.float32)
+    lum = src.mean(axis=2, keepdims=True) / 255.0
+    mail = np.array([58.0, 60.0, 66.0]) * (0.55 + 0.9 * lum)
+    w = w[..., None]
+    px[:, :band] = np.clip(src * (1.0 - w) + mail * w, 0, 255).astype(np.uint8)
+    del px
     return out
 
 
@@ -1335,6 +1369,8 @@ def _draw_player_core(surf, sex, appearance, cx, cy_feet, tile, t, anim, progres
             if hair_surf is not None and hair_surf.get_size() == main_surf.get_size():
                 main_surf = _cached(("hair", id(main_surf), id(hair_surf), hrgb),
                                     lambda: _skin_whole(main_surf, hair_surf, hrgb))
+            if is_barehead_layer(layer_name) and layer_name.startswith("armour_") and _helm.helmet_tier(equipment):
+                main_surf = _cached(("coif", id(main_surf), id(skin_surf)), lambda: _coif_jaw(main_surf, skin_surf))
             tint_rgb = None
         if isinstance(tint_rgb, dict):
             main_surf, tint_surf = _recolour(tint_rgb, main_surf, tint_surf)
