@@ -53,6 +53,7 @@ log = logging.getLogger("server")
 # Private instance dungeons keyed by id (interactable dungeon_id / session.dungeon["id"])
 import sewer_tutorial
 import deepdelve
+import petaldeep
 DUNGEON_MODS = {
     "tidehollow": tidehollow,
     "emberdeep": emberdeep,
@@ -60,6 +61,7 @@ DUNGEON_MODS = {
     "sanctum": explore_dungeons,
     "sewer": sewer_tutorial,
     "deepdelve": deepdelve,
+    "petaldeep": petaldeep,
 }
 DUNGEON_META = {
     "sewer": {
@@ -93,6 +95,13 @@ DUNGEON_META = {
     "sanctum": {
         "name": "Void Sanctum",
         "chat_from": "Void Sanctum",
+        "medal_id": None,
+        "entrance_kinds": ("dungeon_entrance",),
+        "floors_attr": None,
+    },
+    "petaldeep": {
+        "name": "Petaldeep",
+        "chat_from": "Petaldeep",
         "medal_id": None,
         "entrance_kinds": ("dungeon_entrance",),
         "floors_attr": None,
@@ -2798,6 +2807,9 @@ async def _handle_move_body(session, msg):
         if session.dungeon.get("id") == deepdelve.DEEPDELVE_ID:
             if await deepdelve.on_step(session):
                 return
+        if session.dungeon.get("id") == petaldeep.DUNGEON_ID:
+            if await petaldeep.on_step(session):
+                return
         ex = session.dungeon.get("exit_x")
         ey = session.dungeon.get("exit_y")
         if ex is not None and (session.x, session.y) == (int(ex), int(ey)):
@@ -3174,6 +3186,8 @@ def _dungeon_payload(session):
         payload["sewer"] = sewer_tutorial.client_extra(session)
     if d.get("deepdelve") is not None:
         payload["deepdelve"] = deepdelve.client_extra(session)
+    if d.get("id") == petaldeep.DUNGEON_ID:
+        payload["petaldeep"] = petaldeep.client_extra(session)
     if d.get("v2") == "depths":
         import depths_v2
         payload.update(depths_v2.client_extra(session))
@@ -3288,6 +3302,8 @@ async def _finish_dungeon_kill(session, monster=None):
                 await sewer_tutorial.on_kill(session, monster)
             if d.get("id") == deepdelve.DEEPDELVE_ID:
                 await deepdelve.on_kill(session, monster)
+            if d.get("id") == petaldeep.DUNGEON_ID:
+                await petaldeep.on_kill(session, monster)
         return
     await _grant_dungeon_kill_loot(session)
     if d.get("rooms"):
@@ -3704,6 +3720,9 @@ async def _resume_dungeon(session, resume):
     if dungeon_id == "castle_realm":
         await _resume_castle_realm(session, resume)
         return
+    if dungeon_id == petaldeep.DUNGEON_ID:
+        await petaldeep.resume(session, resume)
+        return
     if not explore_dungeons.is_explore(dungeon_id) and dungeon_id not in DUNGEON_MODS:
         _clear_dungeon_resume(session)
         return
@@ -3768,6 +3787,12 @@ async def handle_enter_dungeon(session, msg):
         return
     if dungeon_id == sewer_tutorial.SEWER_ID:
         await sewer_tutorial.enter(session)
+        return
+    if dungeon_id == petaldeep.DUNGEON_ID:
+        if not petaldeep.has_key(session):
+            await send(session.ws, "CHAT_MSG", **{"from": "Petaldeep", "text": petaldeep.WARN})
+            return
+        await petaldeep.enter(session)
         return
     mod = DUNGEON_MODS.get(dungeon_id, tidehollow)
     meta = _dungeon_meta(dungeon_id)
@@ -9687,6 +9712,9 @@ async def handler(ws):
                     await resting_ox_inn.handle(session, mtype, msg, send)
                     if mtype == "BAR_LEAVE":
                         WORLD.db.save_player_position(session.player_id, session.x, session.y)
+                elif (mtype or "").startswith("MOONPETAL_"):
+                    import moonpetal_inn
+                    await moonpetal_inn.handle(session, mtype, msg, send)
                 elif mtype == "ENTER_DUNGEON":
                     await handle_enter_dungeon(session, msg)
                 elif mtype == "LEAVE_DUNGEON":
@@ -9695,6 +9723,8 @@ async def handler(ws):
                     await sewer_tutorial.start_from_log(session)
                 elif mtype == "DUNGEON_INTERACT" and sewer_tutorial.here(session):
                     await sewer_tutorial.handle_interact(session, msg)
+                elif mtype == "DUNGEON_INTERACT" and petaldeep.here(session):
+                    await petaldeep.handle_interact(session, msg)
                 elif mtype == "DUNGEON_INTERACT":
                     if session.dungeon and session.dungeon.get("v2") == "depths":
                         import depths_v2
@@ -11240,7 +11270,13 @@ def process_dungeon_ai():
         tiles = session.dungeon["tiles"]
         mod = _dungeon_mod(session)
         # The sewer's first room teaches "two at once".
-        max_pursuers = 2 if session.dungeon.get("id") == sewer_tutorial.SEWER_ID else 1
+        did = session.dungeon.get("id")
+        if did == petaldeep.DUNGEON_ID:
+            max_pursuers = 3
+        elif did == sewer_tutorial.SEWER_ID:
+            max_pursuers = 2
+        else:
+            max_pursuers = 1
         if session.dungeon.get("v2"):
             import void_v2
             void_v2.process_ai(session)

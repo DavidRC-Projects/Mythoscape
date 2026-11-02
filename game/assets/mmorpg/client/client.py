@@ -3615,7 +3615,11 @@ class GameClient(ScreensMixin, CameraYaw):
             return
         if not self.tiles:
             return
-        self._home_tiles = [row[:] for row in self.tiles]
+        # Keep this list object. Copying it gave the painted-ground caches a new
+        # map on every dungeon exit, so the village sheet and wilderness chunks
+        # were rebuilt and the frame froze. The dungeon swaps self.tiles for its
+        # own grid; this reference stays the overworld.
+        self._home_tiles = self.tiles
         self._home_size = (int(self.world_w), int(self.world_h))
         self._home_npcs = list(self.npcs)
 
@@ -3646,7 +3650,7 @@ class GameClient(ScreensMixin, CameraYaw):
         if not self.dungeon:
             self._capture_home_map()
         if self._overworld_tiles is None and self._home_tiles is None:
-            self._overworld_tiles = [row[:] for row in self.tiles]
+            self._overworld_tiles = self.tiles
             self._overworld_size = (self.world_w, self.world_h)
             self._overworld_npcs = list(self.npcs)
         tiles = msg.get("tiles") or []
@@ -3697,7 +3701,7 @@ class GameClient(ScreensMixin, CameraYaw):
         size = self._home_size if self._home_tiles is not None else self._overworld_size
         npcs = self._home_npcs if self._home_tiles is not None else self._overworld_npcs
         if tiles is not None:
-            self.tiles = [row[:] for row in tiles]
+            self.tiles = tiles
             if size:
                 self.world_w, self.world_h = size
         if npcs is not None:
@@ -9109,6 +9113,7 @@ class GameClient(ScreensMixin, CameraYaw):
         if self.dungeon and self.dungeon.get("v2") == "depths":
             import depths_v2_client
             depths_v2_client.draw_tile(self, rect, tile_id, wx, wy, t)
+            depths_v2_client.reveal_fog(self, rect, wx, wy)
             return
         if self.dungeon and self.dungeon.get("v2"):
             import void_v2_client
@@ -10736,6 +10741,9 @@ class GameClient(ScreensMixin, CameraYaw):
                     import void_v2_client
                     if void_v2_client.minimap_hidden(self, wx, wy):
                         color = (8, 6, 12)
+                    elif self.dungeon.get("v2") == "depths":
+                        import depths_v2_client
+                        color = depths_v2_client.minimap_color(self, wx, wy) or self.minimap_tile_color(self.tiles[wy][wx])
                     else:
                         color = self.minimap_tile_color(self.tiles[wy][wx])
                 else:

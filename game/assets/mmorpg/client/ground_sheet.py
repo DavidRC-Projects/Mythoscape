@@ -8,13 +8,17 @@ shared world-aligned meadow sheet.
 
 The map is too big for one sheet, so the smooth fields are computed once for the
 whole map at 4 px per tile and each 16x16-tile chunk is baked at 32 px per tile
-on first use (LRU cache, plus one scaled copy per zoom level). Because every
-chunk samples the same global fields and world-aligned textures, chunk borders
-do not show.
+the first time that chunk is seen (LRU cache, plus one scaled copy per zoom
+level). Baking runs off the draw thread: until a chunk is ready, draw() returns
+False and the plain tile painter covers that frame, so a teleport does not
+stall while a new stretch of country is painted. Because every chunk samples
+the same global fields and world-aligned textures, chunk borders do not show.
 Visual only: tiles and walkability are untouched; road cores stay dirt and grass
 centres stay grass. Any failure returns False and the old painter draws instead.
 """
 import os
+import queue
+import threading
 from collections import OrderedDict
 
 import numpy as np
@@ -54,43 +58,6 @@ def _noise(rng, shape, sigma):
 def _realm(client):
     d = getattr(client, "dungeon", None) or {}
     return d.get("id") == "castle_realm" and d.get("plane") == "realm"
-
-
-def _source(client):
-    """(key, path grid [x, y] bool) for the ground the client is standing on, or None."""
-    tiles = getattr(client, "tiles", None)
-    if not tiles:
-        return None
-    if _realm(client):
-        import castle_realm_renderer as crr
-        rows = crr.REALM_ROWS
-        if not rows:
-            return None
-        key = ("realm", id(rows))
-        if key not in _F:
-            W, H = len(rows[0]), len(rows)
-            path = np.zeros((W, H), bool)
-            pave = np.zeros((W, H), bool)
-            for y, row in enumerate(rows):
-                for x, ch in enumerate(row):
-                    path[x, y] = ch in REALM_PATH
-                    pave[x, y] = ch in REALM_PAVE
-            _F[key] = _fields(path, 7331, pave)
-        return key
-    if getattr(client, "dungeon", None):
-        return None
-    key = ("ow", id(tiles))
-    if key not in _F:
-        for k in [k for k in _F if k[0] == "ow"]:
-            del _F[k]
-        H, W = len(tiles), len(tiles[0])
-        path = np.zeros((W, H), bool)
-        for y in range(H):
-            row = tiles[y]
-            for x in range(W):
-                path[x, y] = row[x] == wm.PATH
-        _F[key] = _fields(path, 5150)
-    return key
 
 
 def covers(client, wx, wy):
@@ -231,33 +198,165 @@ def _bake(key, cx, cy):
             edge = a * (1 - a) * 4                         # dusty mortar where the paving meets the road
             stones = stones * (1 - 0.25 * edge[..., None]) + dirt * (0.25 * edge[..., None])
             out = out * (1 - a[..., None]) + stones * a[..., None]
-    surf = pygame.Surface((N, N))
-    pygame.surfarray.blit_array(surf, np.clip(out, 0, 255).astype(np.uint8))
-    return surf.convert()
+    return np.clip(out, 0, 255).astype(np.uint8)
 
 
-def _chunk(key, cx, cy, tile):
+# Baking touches scipy and large arrays. It runs on one worker so a teleport
+# into a new stretch of country does not stall the frame that draws it.
+_JOBS = queue.Queue()
+_OUT_LOCK = threading.Lock()
+_OUT = []
+_PENDING = set()
+_FAILED = set()
+_WORKER = False
+
+
+def _ensure_worker():
+    global _WORKER
+    if _WORKER:
+        return
+    _WORKER = True
+
+    def loop():
+        while True:
+            job = _JOBS.get()
+            try:
+                kind = job[0]
+                if kind == "fields":
+                    _, key, path, seed, pave = job
+                    fields = _fields(path, seed, pave)
+                    with _OUT_LOCK:
+                        _OUT.append(("fields", key, fields))
+                else:
+                    _, key, cx, cy = job
+                    arr = _bake(key, cx, cy)
+                    with _OUT_LOCK:
+                        _OUT.append(("chunk", key, cx, cy, arr))
+            except Exception as exc:
+                with _OUT_LOCK:
+                    _OUT.append(("err", job, exc))
+
+    threading.Thread(target=loop, name="ground-sheet", daemon=True).start()
+
+
+def _pump():
+    """Install finished fields and chunks. Draw thread only (pygame surfaces)."""
+    _ensure_worker()
+    with _OUT_LOCK:
+        done = list(_OUT)
+        _OUT.clear()
+    for item in done:
+        kind = item[0]
+        if kind == "fields":
+            _, key, fields = item
+            _F[key] = fields
+            _PENDING.discard(("fields", key))
+        elif kind == "chunk":
+            _, key, cx, cy, arr = item
+            ck = (key, cx, cy)
+            surf = pygame.Surface((arr.shape[0], arr.shape[1]))
+            pygame.surfarray.blit_array(surf, arr)
+            _C[ck] = surf.convert()
+            _C.move_to_end(ck)
+            while len(_C) > _MAX_CHUNKS:
+                old, _ = _C.popitem(last=False)
+                _PENDING.discard(old)
+                _drop_scales(old)
+            _PENDING.discard(ck)
+        else:
+            _, job, exc = item
+            if not _STATE.get("warned"):
+                print("[ground_sheet]", exc)
+                _STATE["warned"] = True
+            if job and job[0] == "fields":
+                _FAILED.add(("fields", job[1]))
+                _PENDING.discard(("fields", job[1]))
+            elif job and job[0] == "chunk":
+                ck = (job[1], job[2], job[3])
+                _FAILED.add(ck)
+                _PENDING.discard(ck)
+
+
+def _drop_scales(ck):
+    for sk in [k for k in _SC if k[0] == ck]:
+        _SC.pop(sk, None)
+
+
+def _schedule_fields(client):
+    """Return the field key when it is ready. Otherwise queue it and return None."""
+    if _realm(client):
+        import castle_realm_renderer as crr
+        rows = crr.REALM_ROWS
+        if not rows:
+            return None
+        key = ("realm", id(rows))
+        if key in _F:
+            return key
+        token = ("fields", key)
+        if token in _PENDING or token in _FAILED:
+            return None
+        w, h = len(rows[0]), len(rows)
+        path = np.zeros((w, h), bool)
+        pave = np.zeros((w, h), bool)
+        for y, row in enumerate(rows):
+            for x, ch in enumerate(row):
+                path[x, y] = ch in REALM_PATH
+                pave[x, y] = ch in REALM_PAVE
+        _PENDING.add(token)
+        _ensure_worker()
+        _JOBS.put(("fields", key, path, 7331, pave))
+        return None
+    if getattr(client, "dungeon", None):
+        return None
+    tiles = getattr(client, "tiles", None)
+    if not tiles:
+        return None
+    key = ("ow", id(tiles))
+    if key in _F:
+        return key
+    token = ("fields", key)
+    if token in _PENDING or token in _FAILED:
+        return None
+    for old in [k for k in _F if k[0] == "ow"]:
+        del _F[old]
+    h, w = len(tiles), len(tiles[0])
+    path = np.zeros((w, h), bool)
+    for y in range(h):
+        row = tiles[y]
+        path[:, y] = [cell == wm.PATH for cell in row]
+    _PENDING.add(token)
+    _ensure_worker()
+    _JOBS.put(("fields", key, path, 5150, None))
+    return None
+
+
+def _request_chunk(key, cx, cy):
     ck = (key, cx, cy)
-    base = _C.get(ck)
-    if base is None:
-        base = _bake(key, cx, cy)
-        _C[ck] = base
-        while len(_C) > _MAX_CHUNKS:
-            _C.popitem(last=False)
-    else:
-        _C.move_to_end(ck)
+    if ck in _C or ck in _PENDING or ck in _FAILED:
+        return
+    _textures()
+    if key[0] == "realm":
+        _pave_tex()
+    _PENDING.add(ck)
+    _JOBS.put(("chunk", key, cx, cy))
+
+
+def _scaled(key, cx, cy, tile):
+    ck = (key, cx, cy)
+    base = _C[ck]
+    _C.move_to_end(ck)
     if tile == P:
         return base
     sk = (ck, tile)
-    s = _SC.get(sk)
-    if s is None:
-        s = pygame.transform.smoothscale(base, (CH * tile, CH * tile))
-        _SC[sk] = s
+    scaled = _SC.get(sk)
+    if scaled is None:
+        scaled = pygame.transform.smoothscale(base, (CH * tile, CH * tile))
+        _SC[sk] = scaled
         while len(_SC) > _MAX_SCALED:
             _SC.popitem(last=False)
     else:
         _SC.move_to_end(sk)
-    return s
+    return scaled
 
 
 def draw(screen, rect, wx, wy, client):
@@ -266,15 +365,19 @@ def draw(screen, rect, wx, wy, client):
     if tile <= 0 or rect.h != tile or not covers(client, wx, wy):
         return False
     try:
-        key = _source(client)
+        _pump()
+        key = _schedule_fields(client)
         if key is None:
             return False
-        F = _F[key]
+        fields = _F[key]
         wx, wy = int(wx), int(wy)
-        if not (0 <= wx < F["W"] and 0 <= wy < F["H"]):
+        if not (0 <= wx < fields["W"] and 0 <= wy < fields["H"]):
             return False
         cx, cy = wx // CH, wy // CH
-        surf = _chunk(key, cx, cy, tile)
+        if (key, cx, cy) not in _C:
+            _request_chunk(key, cx, cy)
+            return False
+        surf = _scaled(key, cx, cy, tile)
         screen.blit(surf, rect.topleft, pygame.Rect((wx - cx * CH) * tile, (wy - cy * CH) * tile, tile, tile))
         return True
     except Exception as exc:

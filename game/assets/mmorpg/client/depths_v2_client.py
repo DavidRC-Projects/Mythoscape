@@ -36,6 +36,17 @@ WALL_PAL = {
     "mausoleum": (66, 60, 54), "wyrm": (70, 56, 44), "arena": (44, 40, 40), "bridge": (40, 36, 34),
 }
 CANDLE = (255, 190, 90)
+ZONE_LIGHT = {
+    "chapel": (255, 186, 110, 16),
+    "ossuary": (214, 196, 160, 12),
+    "catacomb": (30, 110, 100, 20),
+    "tomb": (150, 170, 210, 16),
+    "mausoleum": (196, 176, 140, 12),
+    "wyrm": (180, 90, 40, 18),
+    "bridge": (8, 10, 16, 26),
+    "arena": (120, 24, 24, 18),
+}
+_fog_cache = {}
 
 
 def _seed(x, y, n):
@@ -60,6 +71,14 @@ def _glow(surf, cx, cy, r, col, a):
     surf.blit(g, (int(cx - r), int(cy - r)))
 
 
+# Overlay corridors share floor with the room they cross. They must not paint
+# a second background through the middle of an area.
+_OVERLAY_ZONES = {"stair", "bridge"}
+# One mirrored repeat of an area's floor. Small enough that the stone reads as
+# pavement, large enough that the repeat is not a stamp.
+_AREA_PERIOD = 8
+
+
 def style_at(d, x, y):
     decor = (d.get("decor") or {}).get(f"{x},{y}", "")
     if decor in ("bridge", "pit", "deep", "shallow"):
@@ -73,6 +92,20 @@ def style_at(d, x, y):
             found = zone.get("style") or found
             break
     return found
+
+
+def floor_style(d, x, y):
+    """The area that owns this floor. Overlay zones do not cut a new room."""
+    for zone in (d or {}).get("zones") or []:
+        if zone.get("id") in _OVERLAY_ZONES:
+            continue
+        rect = zone.get("rect") or ()
+        if len(rect) != 4:
+            continue
+        x0, y0, x1, y1 = (int(v) for v in rect)
+        if x0 <= int(x) <= x1 and y0 <= int(y) <= y1:
+            return zone.get("style") or "arena"
+    return None
 
 
 def _load_tex(name):
@@ -167,55 +200,169 @@ def _water_edges(d, wx, wy):
     }
 
 
-def _draw_crypt_water(screen, rect, wx, wy, t, d, deep=True):
-    """Animated water drawn in world space so a channel is one surface, not tiles."""
-    tw, th = rect.w, rect.h
-    phase = (t or time.time()) * 1.5
-    if deep:
-        shore = sum(1 for v in _water_edges(d, wx, wy).values() if v)
-        lift = 10 if shore else -6
-        base = (18 + lift, 52 + lift // 2, 56 + lift // 2)
-        pygame.draw.rect(screen, base, rect)
-    else:
-        veil = pygame.Surface(rect.size, pygame.SRCALPHA)
-        veil.fill((18, 78, 82, 96))
-        screen.blit(veil, rect.topleft)
-    ripples = pygame.Surface(rect.size, pygame.SRCALPHA)
-    spacing = max(7, th // 2)
-    world_top = int(wy) * th
-    i0 = int(world_top // spacing) - 1
-    i1 = int((world_top + th) // spacing) + 2
-    for i in range(i0, i1):
-        wobble = math.sin(phase + i * 0.65) * 1.6
-        py = int(i * spacing + wobble - world_top)
-        if not (0 <= py < th):
-            continue
-        if deep:
-            col = (80, 150, 148, 36) if i % 2 == 0 else (10, 36, 42, 28)
-        else:
-            col = (190, 230, 225, 42) if i % 2 == 0 else (50, 110, 115, 24)
-        band = max(2, th // 10)
-        top = max(0, py - band // 2)
-        pygame.draw.rect(ripples, col, (0, top, tw, min(band, th - top)))
-    # A glint that travels along the channel and lines up across tiles.
-    glint_x = (phase * 22 + int(wy) * 13) % (tw * 8)
-    local = int(glint_x) - (int(wx) % 8) * tw
-    if -6 <= local <= tw + 6:
-        pygame.draw.line(
-            ripples, (230, 245, 240, 90 if not deep else 70),
-            (max(0, local), 0), (max(0, local), th - 1),
+def _caustic_sheet(tw):
+    """One seamless light-web. Two scrolls of it are the whole pool's caustics.
+
+    Still dungeon water (a pond, not a sea) is a dark body plus a slow caustic
+    network. The network is shared in world space so neighbouring tiles are
+    one surface.
+    """
+    tw = max(8, int(tw))
+    key = ("caustic", tw)
+    hit = _plate_cache.get(key)
+    if hit is not None or key in _plate_cache:
+        return hit
+    try:
+        import numpy as np
+        side = 8 * tw
+        axis = np.linspace(0, 2 * np.pi, side, endpoint=False)
+        x, y = np.meshgrid(axis, axis, indexing="ij")
+        field = (
+            np.sin(x * 2.0 + y * 1.2)
+            + np.sin(x * 3.0 - y * 1.7)
+            + 0.55 * np.sin((x + y) * 4.0)
         )
-    screen.blit(ripples, rect.topleft)
+        field = (field - field.min()) / (float(field.max() - field.min()) + 1e-6)
+        field = np.clip((field - 0.58) * 2.6, 0, 1) ** 1.5
+        rgb = np.zeros((side, side, 3), np.uint8)
+        rgb[..., 0] = (field * 46).astype(np.uint8)
+        rgb[..., 1] = (field * 88).astype(np.uint8)
+        rgb[..., 2] = (field * 92).astype(np.uint8)
+        surf = pygame.Surface((side, side))
+        pygame.surfarray.blit_array(surf, rgb)
+        surf = surf.convert()
+    except Exception:
+        surf = None
+    _plate_cache[key] = surf
+    return surf
+
+
+def _blit_wrapped(dest, dest_rect, sheet, sx, sy, flags=0):
+    """Blit a window of a tiling sheet, wrapping so the scroll has no seam."""
+    side_w, side_h = sheet.get_size()
+    tw, th = dest_rect.size
+    sx %= side_w
+    sy %= side_h
+    w1 = min(tw, side_w - sx)
+    h1 = min(th, side_h - sy)
+
+    def piece(dx, dy, w, h, ssx, ssy):
+        dest.blit(
+            sheet, (dest_rect.x + dx, dest_rect.y + dy),
+            pygame.Rect(ssx, ssy, w, h), special_flags=flags,
+        )
+
+    piece(0, 0, w1, h1, sx, sy)
+    if w1 < tw:
+        piece(w1, 0, tw - w1, h1, 0, sy)
+    if h1 < th:
+        piece(0, h1, w1, th - h1, sx, 0)
+    if w1 < tw and h1 < th:
+        piece(w1, h1, tw - w1, th - h1, 0, 0)
+
+
+def _solid(size, color):
+    key = ("solid", size, color)
+    hit = _plate_cache.get(key)
+    if hit is None and key not in _plate_cache:
+        surf = pygame.Surface(size)
+        surf.fill(color)
+        hit = surf.convert()
+        _plate_cache[key] = hit
+    return hit
+
+
+def _shore_strip(length, depth, vertical):
+    """Soft wet lip. Feathered, so a straight shore is one line, not a tile box."""
+    length = max(1, int(length))
+    depth = max(2, int(depth))
+    key = ("shore", length, depth, bool(vertical))
+    hit = _plate_cache.get(key)
+    if hit is not None or key in _plate_cache:
+        return hit
+    if vertical:
+        surf = pygame.Surface((depth, length), pygame.SRCALPHA)
+        for i in range(depth):
+            fade = (1.0 - i / float(depth)) ** 2
+            pygame.draw.line(surf, (176, 206, 200, int(90 * fade)), (i, 0), (i, length - 1))
+    else:
+        surf = pygame.Surface((length, depth), pygame.SRCALPHA)
+        for i in range(depth):
+            fade = (1.0 - i / float(depth)) ** 2
+            pygame.draw.line(surf, (176, 206, 200, int(90 * fade)), (0, i), (length - 1, i))
+    _plate_cache[key] = surf
+    return surf
+
+
+def _shore_edge(length, depth, side):
+    """Cached wet lip for one side, so a shoreline is not rebuilt every frame."""
+    key = ("shore-edge", int(length), int(depth), side)
+    hit = _plate_cache.get(key)
+    if hit is not None or key in _plate_cache:
+        return hit
+    base = _shore_strip(length, depth, side in ("W", "E"))
+    if base is None:
+        _plate_cache[key] = None
+        return None
+    if side == "S":
+        hit = pygame.transform.flip(base, False, True)
+    elif side == "E":
+        hit = pygame.transform.flip(base, True, False)
+    else:
+        hit = base
+    _plate_cache[key] = hit
+    return hit
+
+
+def _draw_crypt_water(screen, rect, wx, wy, t, d, deep=True):
+    """Pond water: depth tint, one scrolling caustic field, foam only on stone.
+
+    Shallow water keeps the floor (the stone is the 'refraction'). Deep water
+    is the same colour with the floor gone, so a channel reads as one body.
+    """
+    tw, th = rect.w, rect.h
+    now = t or time.time()
+    if deep:
+        pygame.draw.rect(screen, (5, 18, 24), rect)
+    else:
+        # Cool the stone, then lay a flat wash over it. The floor still tints
+        # the pool, but its grout no longer reads as a grid of water tiles.
+        tint = _solid(rect.size, (80, 130, 138))
+        if tint is not None:
+            screen.blit(tint, rect.topleft, special_flags=pygame.BLEND_RGB_MULT)
+        veil = _plate_cache.get(("water-veil", rect.size))
+        if veil is None:
+            veil = pygame.Surface(rect.size, pygame.SRCALPHA)
+            veil.fill((8, 36, 44, 128))
+            _plate_cache[("water-veil", rect.size)] = veil
+        screen.blit(veil, rect.topleft)
+    sheet = _caustic_sheet(tw)
+    if sheet is not None:
+        # Two layers, different speed and direction — the usual stand-in for
+        # two scrolling normals. Still water drifts; it does not stripe.
+        _blit_wrapped(
+            screen, rect, sheet,
+            int(wx) * tw + int(now * 14),
+            int(wy) * th + int(now * 9),
+            flags=pygame.BLEND_RGB_ADD,
+        )
+        if deep:
+            _blit_wrapped(
+                screen, rect, sheet,
+                int(wx) * tw - int(now * 8),
+                int(wy) * th + int(now * 11),
+                flags=pygame.BLEND_RGB_ADD,
+            )
     edges = _water_edges(d, wx, wy)
-    foam = (210, 225, 220) if not deep else (70, 110, 112)
+    lip = max(4, tw // 7)
     if edges.get("N"):
-        pygame.draw.line(screen, foam, (rect.left, rect.top), (rect.right - 1, rect.top), 2)
+        screen.blit(_shore_edge(tw, lip, "N"), rect.topleft)
     if edges.get("S"):
-        pygame.draw.line(screen, foam, (rect.left, rect.bottom - 1), (rect.right - 1, rect.bottom - 1), 2)
+        screen.blit(_shore_edge(tw, lip, "S"), (rect.left, rect.bottom - lip))
     if edges.get("W"):
-        pygame.draw.line(screen, foam, (rect.left, rect.top), (rect.left, rect.bottom - 1), 2)
+        screen.blit(_shore_edge(th, lip, "W"), rect.topleft)
     if edges.get("E"):
-        pygame.draw.line(screen, foam, (rect.right - 1, rect.top), (rect.right - 1, rect.bottom - 1), 2)
+        screen.blit(_shore_edge(th, lip, "E"), (rect.right - lip, rect.top))
 
 
 def _chasm_bounds(d):
@@ -416,6 +563,94 @@ def _blit_full(screen, rect, name):
     return True
 
 
+def _fold_tile(i, period):
+    """Mirror a tile index so a repeat turns back on itself instead of cutting."""
+    span = period * 2
+    i = int(i) % span
+    if i < 0:
+        i += span
+    if i >= period:
+        i = span - 1 - i
+    return i
+
+
+def _area_sheet(style, tile_px):
+    """One area's floor, scaled to a short mirrored repeat. Same art everywhere in that area."""
+    tw = max(8, int(tile_px))
+    key = ("area", _ART_REV, style, tw)
+    sheet = _plate_cache.get(key)
+    if sheet is not None or key in _plate_cache:
+        return sheet
+    raw = _load_tex(style)
+    if raw is None:
+        _plate_cache[key] = None
+        return None
+    side = _AREA_PERIOD * tw
+    sw, sh = raw.get_size()
+    scale = side / float(min(sw, sh))
+    dw = max(side, int(round(sw * scale)))
+    dh = max(side, int(round(sh * scale)))
+    big = pygame.transform.smoothscale(raw, (dw, dh))
+    crop = pygame.Rect((dw - side) // 2, (dh - side) // 2, side, side)
+    sheet = big.subsurface(crop).copy()
+    _plate_cache[key] = sheet
+    return sheet
+
+
+def _blit_area(screen, rect, style, wx, wy):
+    """World-aligned sample of this area's floor. Neighbouring tiles continue it."""
+    sheet = _area_sheet(style, rect.w)
+    if sheet is None:
+        pal = FLOOR_PAL.get(style)
+        if not pal:
+            return False
+        pygame.draw.rect(screen, pal[0], rect)
+        return True
+    tw = rect.w
+    sx = _fold_tile(wx, _AREA_PERIOD) * tw
+    sy = _fold_tile(wy, _AREA_PERIOD) * tw
+    screen.blit(sheet, rect.topleft, pygame.Rect(sx, sy, tw, rect.h))
+    return True
+
+
+def _blit_area_alpha(screen, rect, style, wx, wy, alpha):
+    alpha = int(alpha)
+    if alpha <= 4:
+        return False
+    tile = pygame.Surface(rect.size, pygame.SRCALPHA)
+    if not _blit_area(tile, tile.get_rect(), style, wx, wy):
+        return False
+    tile.set_alpha(alpha)
+    screen.blit(tile, rect.topleft)
+    return True
+
+
+def _merge_areas(screen, rect, wx, wy, d, here):
+    """Dissolve into the next area over a few tiles. The interior of an area stays one floor."""
+    wx, wy = int(wx), int(wy)
+    best_style = None
+    best_alpha = 0
+    for dist in range(1, _LIP_TILES + 1):
+        strength = 1.0 - (dist - 1) / float(_LIP_TILES)
+        alpha = int(150 * strength * strength)
+        if alpha <= best_alpha:
+            continue
+        for dx in range(-dist, dist + 1):
+            for dy in range(-dist, dist + 1):
+                if max(abs(dx), abs(dy)) != dist:
+                    continue
+                other = floor_style(d, wx + dx, wy + dy)
+                if not other or other == here:
+                    continue
+                best_style = other
+                best_alpha = alpha
+                break
+            if best_style and best_alpha == alpha:
+                break
+    if best_style:
+        _blit_area_alpha(screen, rect, best_style, wx, wy, best_alpha)
+
+
 def _zone_sheet(style, tile_px):
     """Room art at its real aspect, repeating. Never stretched to the zone."""
     tw = max(8, int(tile_px))
@@ -437,9 +672,10 @@ def _zone_sheet(style, tile_px):
 
 
 def draw_zone_backdrop(client, cam_x, cam_y, tile):
-    """Paint each zone's AI art into its own world rect, tiled at the real aspect.
+    """Dark the panel. Each area's floor is drawn with the tiles, not as a slab per room.
 
-    Adjacent rooms keep their own art. The plate is never stretched to the zone.
+    Painting a zone rectangle here is what cut the stair and the silk nest through
+    the rooms as hard bands. Floors now share one texture for the whole area.
     """
     d = getattr(client, "dungeon", None) or {}
     if d.get("v2") != "depths":
@@ -451,48 +687,12 @@ def draw_zone_backdrop(client, cam_x, cam_y, tile):
         screen_h = int(getattr(client_mod, "SCREEN_H", panel_h + 80))
     except Exception:
         panel_w, panel_h, screen_h = 900, 640, 720
-    panel = pygame.Rect(0, 0, panel_w, screen_h)
-    client.screen.fill((8, 6, 8), panel)
-    tw = max(8, int(tile))
-    prev_clip = client.screen.get_clip()
-    client.screen.set_clip(panel)
-    for zone in d.get("zones") or []:
-        style = zone.get("style") or "chapel"
-        rect = zone.get("rect") or ()
-        if len(rect) != 4:
-            continue
-        x0, y0, x1, y1 = (int(v) for v in rect)
-        if x1 < x0 or y1 < y0:
-            continue
-        zw = (x1 - x0 + 1) * tw
-        zh = (y1 - y0 + 1) * tw
-        sheet = _zone_sheet(style, tw)
-        if sheet is None:
-            continue
-        sw, sh = sheet.get_size()
-        sx, sy = client.world_to_view_offset(x0, y0, cam_x, cam_y)
-        origin_x = int(sx * tw)
-        origin_y = int(sy * tw)
-        zone_rect = pygame.Rect(origin_x, origin_y, zw, zh)
-        clip = zone_rect.clip(panel)
-        if clip.width <= 0 or clip.height <= 0:
-            continue
-        client.screen.set_clip(clip)
-        x_from = ((clip.x - origin_x) // sw) * sw
-        y_from = ((clip.y - origin_y) // sh) * sh
-        x = origin_x + x_from
-        while x < clip.right:
-            y = origin_y + y_from
-            while y < clip.bottom:
-                client.screen.blit(sheet, (x, y))
-                y += sh
-            x += sw
-    client.screen.set_clip(prev_clip)
+    client.screen.fill((8, 6, 8), pygame.Rect(0, 0, panel_w, screen_h))
     return True
 
 
 def draw_tile(client, rect, tile_id, wx, wy, t):
-    """Zone plate shows through floors; walls and water are opaque AI tiles."""
+    """Each area is one continuous floor. Walls, water, and the bridge cover it."""
     import world_map as wm
     d = client.dungeon
     decor = (d.get("decor") or {}).get(f"{wx},{wy}", "")
@@ -553,11 +753,17 @@ def draw_tile(client, rect, tile_id, wx, wy, t):
             pygame.draw.rect(client.screen, (230, 190, 100), rect, 3)
         return
 
-    # Floor: the room plate, with the next room faded in along the join.
-    _fade_into_rooms(client.screen, rect, wx, wy, d, style)
-    wash = pygame.Surface(rect.size, pygame.SRCALPHA)
-    wash.fill((12, 10, 12, 28))
-    client.screen.blit(wash, rect.topleft)
+    # One floor for the whole area. The next area dissolves in at the join.
+    area = floor_style(d, wx, wy) or style
+    if not _blit_area(client.screen, rect, area, wx, wy):
+        pygame.draw.rect(client.screen, FLOOR_PAL.get(area, FLOOR_PAL["arena"])[0], rect)
+    _merge_areas(client.screen, rect, wx, wy, d, area)
+    veil = _plate_cache.get(("floor-veil", rect.size))
+    if veil is None:
+        veil = pygame.Surface(rect.size, pygame.SRCALPHA)
+        veil.fill((8, 6, 8, 36))
+        _plate_cache[("floor-veil", rect.size)] = veil
+    client.screen.blit(veil, rect.topleft)
     if decor == "shallow":
         _draw_crypt_water(client.screen, rect, wx, wy, t, d, deep=False)
     _prop(client, rect, decor, style, wx, wy, t)
@@ -808,24 +1014,38 @@ def _prop(client, rect, decor, style, x, y, t):
                 sprites.draw_brazier(surf, cx, cy, tile, t)
         except Exception:
             sprites.draw_brazier(surf, cx, cy, tile, t)
-        _glow(surf, cx, cy - tile * 0.35, int(tile * 0.85), CANDLE, 48)
+        flicker = 0.72 + 0.28 * math.sin((t or time.time()) * 7.0 + x * 1.7)
+        _glow(surf, cx, cy - tile * 0.35, int(tile * 0.9), CANDLE, int(36 + 28 * flicker))
     elif decor.startswith("sarcophagus"):
         state = decor.split(":", 1)[1] if ":" in decor else "closed"
         if not prop_sprites.draw_prop(surf, "crypt_sarcophagus", cx, cy, tile):
             draw_sarcophagus(surf, cx, cy, tile, state, t)
     elif decor == "clutter":
         _draw_clutter(surf, rect, style, x, y)
+    elif decor == "chest":
+        if not _try_chest(surf, cx, cy, tile, t, open_=False):
+            pygame.draw.rect(surf, (110, 72, 36), pygame.Rect(cx - tile // 4, cy - tile // 6, tile // 2, tile // 3))
+    elif decor == "chest_open":
+        if not _try_chest(surf, cx, cy, tile, t, open_=True):
+            pygame.draw.rect(surf, (70, 48, 28), pygame.Rect(cx - tile // 4, cy - tile // 6, tile // 2, tile // 3))
+    elif decor == "lore":
+        pygame.draw.rect(surf, (214, 196, 150), (cx - tile // 6, cy - tile // 10, tile // 3, tile // 5))
+        pygame.draw.line(surf, (120, 90, 50), (cx - tile // 8, cy), (cx + tile // 10, cy), 1)
+    elif decor == "lever":
+        pygame.draw.rect(surf, (70, 64, 58), (cx - 3, cy - 2, 6, 10))
+        pygame.draw.line(surf, (180, 60, 50), (cx, cy - 2), (cx + tile // 6, cy - tile // 4), 3)
+    elif decor == "pedestal":
+        pygame.draw.rect(surf, (90, 88, 84), (cx - tile // 8, cy - 2, tile // 4, tile // 6))
+        _glow(surf, cx, cy - tile // 5, tile // 2, (120, 200, 190), 40)
+    elif decor == "warning":
+        pygame.draw.polygon(surf, (150, 130, 70), [(cx, cy - tile // 5), (cx - tile // 7, cy + tile // 8), (cx + tile // 7, cy + tile // 8)])
+    elif decor in ("cache", "cache_open", "loot"):
+        pygame.draw.circle(surf, (210, 180, 80), (cx, cy), max(3, tile // 7))
     elif decor == "shrine":
         s = tile / 40.0
         pygame.draw.rect(surf, (200, 196, 180), (cx - 1.5 * s, cy - 18 * s, 3 * s, 16 * s))
         pygame.draw.rect(surf, (200, 196, 180), (cx - 7 * s, cy - 14 * s, 14 * s, 3 * s))
         _glow(surf, cx, cy - 12 * s, int(28 * s), (255, 230, 160), 50)
-    elif decor == "chest":
-        pygame.draw.rect(surf, (110, 72, 36), pygame.Rect(cx - tile // 4, cy - tile // 6, tile // 2, tile // 3))
-    elif decor == "chest_open":
-        pygame.draw.rect(surf, (70, 48, 28), pygame.Rect(cx - tile // 4, cy - tile // 6, tile // 2, tile // 3))
-    elif decor in ("cache", "cache_open", "loot", "pedestal", "lore", "lever", "warning"):
-        pygame.draw.circle(surf, (180, 160, 110), (cx, cy), max(2, tile // 7))
 
 
 def queue_wall_faces(client, draw_list, cam_x, cam_y, vis_w, vis_h, t):
@@ -922,4 +1142,112 @@ def draw_key_strip(client):
 def draw_overlay(client, t):
     import void_v2_client
     void_v2_client.draw_overlay(client, t)
+    _atmosphere(client, t or time.time())
     draw_key_strip(client)
+
+
+def _try_chest(surf, cx, cy, tile, t, open_=False):
+    drawer = getattr(sprites, "draw_chest", None)
+    if not drawer:
+        return False
+    try:
+        drawer(surf, cx, cy, tile, t or 0)
+    except Exception:
+        return False
+    if open_:
+        pygame.draw.rect(surf, (168, 124, 64), (cx - tile // 5, cy - tile // 3, tile // 2, max(3, tile // 10)))
+    return True
+
+
+def _explored(d):
+    raw = d.get("explored")
+    if isinstance(raw, set):
+        return raw
+    found = set()
+    for pair in raw or []:
+        if isinstance(pair, (list, tuple)) and len(pair) >= 2:
+            found.add((int(pair[0]), int(pair[1])))
+    d["explored"] = found
+    return found
+
+
+def reveal_fog(client, rect, wx, wy):
+    """Light a radius around the player and veil the rest. Minimap uses the same set."""
+    d = getattr(client, "dungeon", None) or {}
+    if d.get("v2") != "depths":
+        return
+    player = getattr(client, "player", None) or {}
+    try:
+        px, py = int(player.get("x")), int(player.get("y"))
+    except (TypeError, ValueError):
+        return
+    seen = _explored(d)
+    wx, wy = int(wx), int(wy)
+    if max(abs(wx - px), abs(wy - py)) <= 8:
+        if (wx, wy) not in seen:
+            seen.add((wx, wy))
+            client._minimap_base = None
+        return
+    if (wx, wy) in seen:
+        return
+    key = (rect.w, rect.h)
+    fog = _fog_cache.get(key)
+    if fog is None:
+        fog = pygame.Surface((rect.w, rect.h), pygame.SRCALPHA)
+        fog.fill((5, 4, 8, 196))
+        _fog_cache[key] = fog
+    client.screen.blit(fog, rect.topleft)
+
+
+def minimap_color(client, wx, wy):
+    decor = ((getattr(client, "dungeon", None) or {}).get("decor") or {}).get(f"{wx},{wy}", "")
+    if decor == "deep":
+        return (16, 72, 80)
+    if decor == "shallow":
+        return (48, 118, 114)
+    if decor == "pit":
+        return (6, 6, 8)
+    if decor == "bridge" or decor == "rail":
+        return (118, 112, 102)
+    if decor and str(decor).startswith("seal"):
+        return (168, 48, 48)
+    if decor == "shrine":
+        return (214, 186, 96)
+    if decor in ("skull", "secret"):
+        return (150, 140, 112)
+    return None
+
+
+def _atmosphere(client, t):
+    """One tint and a handful of mist motes for the room the player is standing in."""
+    d = getattr(client, "dungeon", None) or {}
+    if d.get("v2") != "depths":
+        return
+    player = getattr(client, "player", None) or {}
+    try:
+        px, py = int(player.get("x")), int(player.get("y"))
+    except (TypeError, ValueError):
+        return
+    style = style_at(d, px, py)
+    phase = str(d.get("boss_phase") or "")
+    if style == "arena":
+        pulse = 0.55 + 0.45 * math.sin(t * (2.2 if "Collapse" in phase else 1.1))
+        tint = (140, 20, 18, int(16 + 18 * pulse))
+    else:
+        tint = ZONE_LIGHT.get(style)
+    if not tint:
+        return
+    try:
+        import client as client_mod
+        panel_w = int(getattr(client_mod, "MAP_W", 900))
+        panel_h = int(getattr(client_mod, "SCREEN_H", 720))
+    except Exception:
+        panel_w, panel_h = 900, 720
+    wash = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+    wash.fill(tint)
+    if style in ("catacomb", "bridge", "arena"):
+        for i in range(5):
+            mx = int((0.15 + 0.18 * i) * panel_w + math.sin(t * 0.35 + i) * 24)
+            my = int((0.2 + 0.15 * (i % 3)) * panel_h + math.cos(t * 0.28 + i * 1.3) * 18)
+            pygame.draw.circle(wash, (180, 190, 200, 18), (mx, my), 36 + i * 4)
+    client.screen.blit(wash, (0, 0))
