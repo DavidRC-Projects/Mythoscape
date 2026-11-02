@@ -45,12 +45,14 @@ def _load(path):
 
 
 def _scale_for(tile):
-    """Smallest source >= the target tile, then smoothscale down only."""
+    """Smallest source >= the target tile, then smoothscale down only.
+
+    The world never asks for more than the 2x sheets (zoom keeps the tile
+    at 40px, and drawers pass tile * 1.1).
+    """
     if tile <= 40:
         return "1x", 40
-    if tile <= 80:
-        return "2x", 80
-    return "4x", 160
+    return "2x", 80
 
 
 def _building(key, tile):

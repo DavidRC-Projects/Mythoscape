@@ -4,7 +4,7 @@ Each strip is 5 frames side-by-side (320×320), baked by anim_test.py:
   0=idle, 1=walk-a, 2=walk-b, 3=attack, 4=death
 
 Strips are front-facing only — we flip horizontally for west. No Panda3D at runtime.
-Unused strip keys (no content monster yet) are left unmapped for later.
+Only the strips named in TYPE_MAP are shipped.
 """
 from __future__ import annotations
 
