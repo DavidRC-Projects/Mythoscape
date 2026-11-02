@@ -64,6 +64,10 @@ def attach(client, msg):
         d["secret_hints"] = msg["secret_hints"]
     if msg.get("door_hints"):
         d["door_hints"] = msg["door_hints"]
+    if "opened" in msg:
+        d["opened"] = list(msg.get("opened") or [])
+    if msg.get("keys_held") is not None:
+        d["keys_held"] = dict(msg.get("keys_held") or {})
     d["lore_modal"] = None
     d["warning_modal"] = False
     d["warning_seen"] = False
@@ -328,13 +332,23 @@ def handle_click(client, tx, ty):
 def apply_tiles(client, msg):
     import world_map as wm
     for change in msg.get("changes") or []:
-        x, y, tile = change
+        try:
+            if isinstance(change, dict):
+                x, y, tile = int(change["x"]), int(change["y"]), change["tile"]
+            else:
+                x, y, tile = int(change[0]), int(change[1]), change[2]
+        except (TypeError, ValueError, IndexError, KeyError):
+            continue
         if 0 <= y < len(client.tiles) and 0 <= x < len(client.tiles[y]):
             client.tiles[y][x] = tile
             if tile != wm.WALL:
                 client.dungeon.setdefault("explored", set()).add((x, y))
     if "decor" in msg:
         client.dungeon["decor"] = msg["decor"]
+    if "opened" in msg:
+        client.dungeon["opened"] = list(msg.get("opened") or [])
+    if msg.get("keys_held") is not None:
+        client.dungeon["keys_held"] = dict(msg.get("keys_held") or {})
     client._minimap_base = None
 
 

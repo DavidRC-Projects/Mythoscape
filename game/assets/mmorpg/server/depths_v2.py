@@ -13,9 +13,18 @@ from world_map import FLOOR, WALL
 _MAP = None
 
 DOOR_HINTS = {
-    "A": "The Bone Gate is locked. The Ossuary Keeper drops a Bone Key. Walk into the gate once you have it.",
-    "B": "The Drowned Gate is locked. Search the skulls for a Tide Key, then walk into the gate.",
-    "C": "The Knights' Seal is locked. Sir Aldric carries a Knights' Seal. Walk into the door once you have it.",
+    "A": (
+        "Bone Gate — locked. Kill the Ossuary Keeper in the bone halls for a Bone Key, "
+        "then walk into this gate."
+    ),
+    "B": (
+        "Drowned Gate — locked. In the flooded catacombs, search the skull niche "
+        "(wrong-facing skull) for the Tide Key pedestal, then walk into this gate."
+    ),
+    "C": (
+        "Knights' Seal — locked. Defeat Sir Aldric in the knights' tomb for the Seal, "
+        "then walk into this door."
+    ),
 }
 
 CHEST_LOOT = {
@@ -96,7 +105,11 @@ def _secret_open_at(x, y, open_secrets, secrets):
 
 
 def _blocked_prop(ch):
-    return ch in "Zoiw"
+    """Scenery painted into the room art (coffins, candles, rubble) is walkable.
+
+    Real walls, water, pits, locked doors, and secret doors stay blocked.
+    """
+    return False
 
 
 def bake(chars, opened, open_secrets, gate_open, pack, sarc_state):
@@ -122,6 +135,8 @@ def bake(chars, opened, open_secrets, gate_open, pack, sarc_state):
             elif ch in doors and ch not in opened:
                 tile = WALL
             elif ch == "X" and not gate_open:
+                tile = WALL
+            elif ch == "R":
                 tile = WALL
             elif ch in "SK" and not _secret_open_at(x, y, open_secrets, secrets):
                 tile = WALL
@@ -149,6 +164,8 @@ def _decor(ch, x, y, opened, open_secrets, gate_open, pack, sarc_state):
         return "shallow"
     if ch == "=":
         return "bridge"
+    if ch == "R":
+        return "rail"
     if ch == "Z":
         state = (sarc_state or {}).get(f"{x},{y}")
         return f"sarcophagus:{state}" if state else "sarcophagus"
@@ -311,6 +328,12 @@ def build(session, next_id, monster_cls, spawns=None):
 
 def client_extra(session):
     d = session.dungeon
+    import dungeon_v2_common as common
+    keys = {
+        "A": common._has_item(session, "depths_bone_key"),
+        "B": common._has_item(session, "depths_tide_key"),
+        "C": common._has_item(session, "depths_knight_seal"),
+    }
     return {
         "v2": "depths",
         "decor": d.get("decor") or {},
@@ -324,6 +347,13 @@ def client_extra(session):
         "depth_of": {},
         "secret_hints": d.get("secret_hints") or {},
         "door_hints": d.get("door_hints") or {},
+        "opened": list(d.get("opened") or []),
+        "keys_held": keys,
+        "art_style": True,
+        "chasm": {
+            "pit": [12, 79, 54, 91],
+            "deck": [29, 78, 37, 91],
+        },
     }
 
 
@@ -452,12 +482,14 @@ def _spawn_ambush(session, x, y):
 
 def _bridge_tiles(d):
     bridge = d["pack"]["bridge"]
-    x = bridge["x"]
-    tiles = []
     chars = d["chars"]
-    for y in range(bridge["y0"], bridge["y1"] + 1):
-        if 0 <= y < len(chars) and chars[y][x] == "=":
-            tiles.append((x, y))
+    x0 = int(bridge.get("x0", bridge["x"]))
+    x1 = int(bridge.get("x1", bridge["x"]))
+    tiles = []
+    for y in range(int(bridge["y0"]), int(bridge["y1"]) + 1):
+        for x in range(x0, x1 + 1):
+            if 0 <= y < len(chars) and 0 <= x < len(chars[y]) and chars[y][x] == "=":
+                tiles.append((x, y))
     return tiles
 
 

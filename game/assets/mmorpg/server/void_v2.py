@@ -607,8 +607,16 @@ async def try_blocked_step(session, nx, ny):
         return None
     if ch in "ABC" and ch in d.get("opened", []):
         return None
+    has_key = False
+    if ch in "ABC" and ch in DOORS:
+        has_key = _has_item(session, DOORS[ch][2])
     now = time.time()
-    if getattr(session, "_block_hint_tile", None) == (nx, ny) and now < getattr(session, "_block_hint_at", 0) + 2.5:
+    # Throttle empty-handed bumps only — never skip a key unlock.
+    if (
+        not has_key
+        and getattr(session, "_block_hint_tile", None) == (nx, ny)
+        and now < getattr(session, "_block_hint_at", 0) + 2.5
+    ):
         return "blocked"
     session._block_hint_tile = (nx, ny)
     session._block_hint_at = now

@@ -55,19 +55,27 @@ class HarbourTidehollow(unittest.TestCase):
         self.assertEqual(inlet, 0)
 
     def test_harbour_sealed_without_wolf_pass(self):
+        # Pinch the west flank of the massif AND the intentional spur road gaps so
+        # this still measures "no slip around Wolf Pass" (not southern kingdom roads).
         cut = [(x, y) for x in range(136, 166) for y in range(0, 29)]
+        cut += [(x, y) for x in range(HS.ROCK_X[0], HS.ROCK_X[1] + 1) for y in HS.ROAD_GAPS]
         harbour = [p for p in bfs(self.grid, wm.SPAWN_POINT, cut)
                    if 170 <= p[0] <= 198 and 1 <= p[1] <= 42]
         self.assertEqual(harbour, [])
         open_h = [p for p in self.reach if 170 <= p[0] <= 198 and 1 <= p[1] <= 42]
         self.assertGreater(len(open_h), 500)
-        # Spur leaves only the pass rows open.
+        # Spur leaves only Wolf Pass + listed dungeon-road rows open.
+        open_y = set(range(HS.PASS_Y0, HS.PASS_Y1 + 1)) | set(HS.ROAD_GAPS)
         for y in range(len(self.grid)):
             for x in range(HS.ROCK_X[0], HS.ROCK_X[1] + 1):
-                if HS.PASS_Y0 <= y <= HS.PASS_Y1:
+                if y in open_y:
                     continue
                 if self.grid[y][x] in W:
                     self.fail(f"spur gap at ({x},{y})")
+        # East approach to Void Sanctum / Emberdeep must cross the spur.
+        for x in range(HS.ROCK_X[0], HS.ROCK_X[1] + 1):
+            self.assertIn(self.grid[80][x], W, f"ember apron blocked at ({x},80)")
+            self.assertIn(self.grid[98][x], W, f"void road blocked at ({x},98)")
 
     def test_fishing_water_has_deck_shore(self):
         fish = [

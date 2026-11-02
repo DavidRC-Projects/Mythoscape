@@ -334,6 +334,10 @@ class Database:
             self.conn.execute(
                 "ALTER TABLE players ADD COLUMN tax_notice_seen INTEGER NOT NULL DEFAULT 0"
             )
+        if "tracked_quest_id" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN tracked_quest_id TEXT NOT NULL DEFAULT ''"
+            )
         import clans
         clans.ensure_tables(self.conn)
         import royal_treasury

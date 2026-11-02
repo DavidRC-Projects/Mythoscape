@@ -574,7 +574,10 @@ class GameClient(ScreensMixin, CameraYaw):
     # ------------------------------------------------------------------
     def handle_network(self):
         for msg in self.net.poll():
-            self.process_message(msg)
+            try:
+                self.process_message(msg)
+            except Exception:
+                traceback.print_exc()
 
     def process_message(self, msg):
         t = msg.get("type")
@@ -755,6 +758,9 @@ class GameClient(ScreensMixin, CameraYaw):
             sewer_client.on_message(self, t, msg)
         elif t.startswith("BAR_"):
             self.resting_ox.on_message(t, msg)
+        elif t.startswith("MOONPETAL_"):
+            if getattr(self, "moon_petal", None):
+                self.moon_petal.on_message(t, msg)
         elif t == "DUNGEON_ENTER":
             self._enter_dungeon_view(msg)
         elif t == "DUNGEON_TILES":
@@ -762,11 +768,15 @@ class GameClient(ScreensMixin, CameraYaw):
                 # Tidehollow and Emberdeep share this message to announce that
                 # a chamber door has opened. Apply the changed tiles directly;
                 # void_v2_client expects a v2 payload and would misread it.
+                # Accept both [x, y, tile] lists and {"x","y","tile"} dicts.
                 self._minimap_base = None
                 for change in msg.get("changes") or []:
                     try:
-                        x, y, tile = int(change[0]), int(change[1]), change[2]
-                    except (TypeError, ValueError, IndexError):
+                        if isinstance(change, dict):
+                            x, y, tile = int(change["x"]), int(change["y"]), change["tile"]
+                        else:
+                            x, y, tile = int(change[0]), int(change[1]), change[2]
+                    except (TypeError, ValueError, IndexError, KeyError):
                         continue
                     if 0 <= y < len(self.tiles) and 0 <= x < len(self.tiles[y]):
                         self.tiles[y][x] = tile
@@ -1257,6 +1267,9 @@ class GameClient(ScreensMixin, CameraYaw):
                     self.player["bank_coins"] = msg["bank_coins"]
         elif t == "QUEST_LOG":
             self.quests = msg["quests"]
+            if "tracked_quest_id" in msg:
+                # Server-authoritative pin (survives logout / teleport / death).
+                self.tracked_quest_id = msg.get("tracked_quest_id") or None
             # Every active quest gets a golden path to its objective (mine, NPC, hand-in…).
             new_player_guide.sync_quest_guide(self, announce=True)
         elif t == "ROYAL_STATE":
@@ -3324,16 +3337,23 @@ class GameClient(ScreensMixin, CameraYaw):
         """Pin a quest to the HUD card from the journal list.
 
         Clicking an already-tracked quest unpins it, letting the card fall
-        back to its default choice.
+        back to its default choice. Persisted on the server via QUEST_TRACK.
         """
+        name = (QUESTS.get(qid) or {}).get("name") or qid.replace("_", " ").title()
         if self.tracked_quest_id == qid:
             self.tracked_quest_id = None
-            name = (QUESTS.get(qid) or {}).get("name") or qid.replace("_", " ").title()
             self.add_chat(f"Stopped tracking {name}.")
+            try:
+                self.fire_action({"type": "QUEST_TRACK", "quest_id": ""})
+            except Exception:
+                pass
             return
         self.tracked_quest_id = qid
-        name = (QUESTS.get(qid) or {}).get("name") or qid.replace("_", " ").title()
         self.add_chat(f"Tracking {name}.")
+        try:
+            self.fire_action({"type": "QUEST_TRACK", "quest_id": qid})
+        except Exception:
+            pass
 
     def _walk_to_quest_giver(self, qid):
         if qid == "below_the_village":
@@ -3653,6 +3673,8 @@ class GameClient(ScreensMixin, CameraYaw):
         }
         if msg.get("sewer"):
             self.dungeon["sewer"] = dict(msg["sewer"])
+        if msg.get("petaldeep"):
+            self.dungeon["petaldeep"] = dict(msg["petaldeep"])
         if msg.get("deepdelve"):
             self.dungeon["deepdelve"] = dict(msg["deepdelve"])
         self.monsters = {m["id"]: m for m in (msg.get("monsters") or [])}
@@ -5107,6 +5129,10 @@ class GameClient(ScreensMixin, CameraYaw):
                 return
             if self.dungeon.get("id") == "sewer" and sewer_client.handle_click(self, tx, ty):
                 return
+            if self.dungeon.get("id") == "petaldeep":
+                import petaldeep_client
+                if petaldeep_client.handle_click(self, tx, ty):
+                    return
             if self.dungeon.get("v2") == "depths":
                 import depths_v2_client
                 if depths_v2_client.handle_click(self, tx, ty):
@@ -7082,6 +7108,18 @@ class GameClient(ScreensMixin, CameraYaw):
         self._house_crest_queue = []
         self._defer_nameplates = True
 
+        if self.dungeon and self.dungeon.get("id") == "petaldeep":
+            try:
+                import petaldeep_client
+                petaldeep_client.draw_room_backdrop(self, cam_x, cam_y, TILE)
+            except Exception:
+                pass
+        if self.dungeon and self.dungeon.get("v2") == "depths":
+            try:
+                import depths_v2_client
+                depths_v2_client.draw_zone_backdrop(self, cam_x, cam_y, TILE)
+            except Exception:
+                pass
         for sy in range(vis_h + 1 + strip_rows):
             for sx in range(vis_w + 1):
                 vx, vy = cam_x + sx, cam_y + sy
@@ -7098,9 +7136,22 @@ class GameClient(ScreensMixin, CameraYaw):
                                     and wm.get_zone(wx, wy) not in ("volcano", "fairy_village")
                                     and not self._is_pier_tile(wx, wy)):
                                 village_ground.draw_shore_land(self.screen, rect, wx, wy, t, client=self)
-                    else:
+                    elif not (
+                        self.dungeon
+                        and (
+                            self.dungeon.get("id") == "petaldeep"
+                            or self.dungeon.get("v2") == "depths"
+                        )
+                    ):
+                        # AI-plate dungeons already painted the panel — keep it.
                         pygame.draw.rect(self.screen, (8, 6, 10), rect)
-                else:
+                elif not (
+                    self.dungeon
+                    and (
+                        self.dungeon.get("id") == "petaldeep"
+                        or self.dungeon.get("v2") == "depths"
+                    )
+                ):
                     # Outside view map: void
                     pygame.draw.rect(self.screen, (8, 6, 10), rect)
 
@@ -7144,6 +7195,11 @@ class GameClient(ScreensMixin, CameraYaw):
                     yaw = self.camera_yaw
                     if did == "deepdelve" and deepdelve_client.draw_exit(self, cx, cy, TILE):
                         return
+                    if did == "petaldeep":
+                        import petaldeep_client
+                        if petaldeep_client.draw_exit(self.screen, cx, cy, TILE):
+                            pygame.draw.circle(self.screen, (255, 210, 80), (cx, cy - 6), TILE // 5, 2)
+                            return
                     if did == "emberdeep":
                         sprites.draw_volcano_entrance(self.screen, cx, cy, TILE, t, yaw=yaw)
                     else:
@@ -7415,6 +7471,11 @@ class GameClient(ScreensMixin, CameraYaw):
                                 pygame.draw.circle(self.screen, (90, 60, 16), (cx, cy - 2), ring + 2, 3)
                                 pygame.draw.circle(self.screen, (255, 214, 90), (cx, cy - 2), ring, 2)
                             self.blit_nameplate("KING'S REALM", cx, portal_top - 4, (255, 220, 120))
+                        elif kind == "dungeon_entrance" and spot.get("dungeon_id") == "petaldeep":
+                            import petaldeep_client
+                            entrance_top = petaldeep_client.draw_mouth(self.screen, cx, cy, TILE, t=t)
+                            self.blit_nameplate("⚠ HIGH LEVEL", cx, entrance_top - 18, (255, 140, 180))
+                            self.blit_nameplate("PETALDEEP", cx, entrance_top - 4, (255, 190, 255))
                         elif kind == "dungeon_entrance":
                             entrance_top = None
                             pack = spot.get("pack")
@@ -9040,6 +9101,10 @@ class GameClient(ScreensMixin, CameraYaw):
                 return
         if self.dungeon and self.dungeon.get("id") == "sewer":
             if sewer_client.draw_tile(self, rect, tile_id, wx, wy, t):
+                return
+        if self.dungeon and self.dungeon.get("id") == "petaldeep":
+            import petaldeep_client
+            if petaldeep_client.draw_tile(self, rect, tile_id, wx, wy, t):
                 return
         if self.dungeon and self.dungeon.get("v2") == "depths":
             import depths_v2_client
@@ -13539,17 +13604,37 @@ class GameClient(ScreensMixin, CameraYaw):
             "depths": "The Depths",
             "sanctum": "Void Sanctum",
             "tidehollow": "Tidehollow",
+            "petaldeep": "Petaldeep",
         }
         name = d.get("name") or names.get(did, "Dungeon")
         if did == "emberdeep":
             fill, border, title_col = (36, 18, 14, 230), (255, 140, 60), (255, 200, 110)
-        elif did == "sanctum":
+        elif did == "sanctum" or did == "petaldeep":
             fill, border, title_col = (28, 16, 40, 230), (180, 120, 255), (220, 190, 255)
         else:
             fill, border, title_col = (16, 20, 30, 220), (210, 175, 70), (255, 220, 110)
         if d.get("id") == "castle_realm" and d.get("plane") not in (None, "", "realm"):
             title_txt = d.get("label") or name
             sub_txt = f"Floor {d.get('floor', 1)} of {d.get('floors', 1)} · {name}"
+        elif did == "petaldeep":
+            fill, border, title_col = (28, 14, 36, 230), (210, 130, 255), (240, 200, 255)
+            pd = d.get("petaldeep") or {}
+            hall = pd.get("label") or d.get("label") or "Petaldeep"
+            room_i = int(pd.get("room") or 0) + 1
+            total = int(pd.get("rooms_total") or d.get("floors") or 5)
+            lvl = pd.get("room_level")
+            title_txt = f"{hall}"
+            if room_i >= total:
+                if pd.get("cleared"):
+                    sub_txt = f"Hall {room_i}/{total} · Queen fallen · south to leave"
+                elif lvl:
+                    sub_txt = f"Hall {room_i}/{total} · combat {lvl} · the Queen"
+                else:
+                    sub_txt = f"Hall {room_i}/{total} · the Queen"
+            elif lvl:
+                sub_txt = f"Hall {room_i}/{total} · combat {lvl} · north open"
+            else:
+                sub_txt = f"Hall {room_i}/{total} · north open — walk through"
         elif d.get("explore"):
             title_txt = name
             sub_txt = "Exit to leave"

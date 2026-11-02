@@ -171,6 +171,23 @@ async def _handle(session, mtype, msg, send):
         if ok:
             await _line(send, session, line, info.get("speaker"), patron=pid, offer=info.get("offer"),
                         quest=info.get("quest"), close=True)
+            # Hale — real content.QUESTS bridge (North Road Warning)
+            act = info.get("hale_action")
+            qid = info.get("quest_id") or "north_road_warning"
+            if act == "offer" and qid not in (session.quests or {}):
+                import server as srv
+                await srv.handle_quest_accept(session, {"quest_id": qid})
+            elif act == "turnin":
+                import server as srv
+                await srv.handle_quest_turnin(session, {"quest_id": qid})
+            elif act == "progress":
+                import server as srv
+                srv.check_quest_progress_on_talk(session, "hale")
+                prog = (session.quests or {}).get(qid) or {}
+                if prog.get("status") == "ready":
+                    await srv.handle_quest_turnin(session, {"quest_id": qid})
+                else:
+                    await srv.send_quest_log(session)
     elif mtype == "BAR_SABLE_DRINK":
         ok, line, _price = tavern.buy_sable_drink(session, conn)
         await _line(send, session, line, "Sable", patron="sable", close=True)

@@ -7,6 +7,7 @@ boss bar) can load either map.
 Grid legend (one char per tile):
   '#' wall            '.' floor            '~' burial pit (blocked, drawn as a bottomless pit)
   '=' bridge          '%' shallow water (walkable, splash decor)   'W' deep water (blocked)
+  'R' bridge parapet (blocked stone edge)
   'A' 'B' 'C' locked doors (blocked until that player unlocks them)
   'X' shortcut gate (blocked until lever 'v' is pulled; persists per player)
   'S' secret wall (loose bricks)   'K' skull-lever niche (a secret wall opened by turning the skull)
@@ -26,13 +27,13 @@ ZONES = [
     ("ossuary",   "Ossuary Halls",        "Lv 15–34", (5, 17, 59, 34),  "ossuary"),
     ("catacombs", "Flooded Catacombs",    "Lv 36–48", (1, 35, 59, 51),  "catacomb"),
     ("tomb",      "Tomb of the Knights",  "Lv 44–52", (0, 52, 59, 67),  "tomb"),
-    ("mausoleum", "Collapsed Mausoleum",  "Lv 55–62", (12, 68, 52, 78), "mausoleum"),
+    ("mausoleum", "Collapsed Mausoleum",  "Lv 55–62", (12, 68, 52, 80), "mausoleum"),
     ("wyrm",      "Wyrm Ossuary",         "Optional · Lv 78", (1, 68, 11, 78), "wyrm"),
     ("stair",     "Sexton's Stair",       "Shortcut", (46, 8, 66, 74), "mausoleum"),
     # After stair so zone lookup prefers the nest over the stair band.
     ("silk",      "Webbed Crypt",         "Lv 20–28", (44, 12, 58, 18), "catacomb"),
     ("bridge",    "The Bone Bridge",      "Grasping hands", (12, 79, 54, 91), "bridge"),
-    ("arena",     "Throne of Bones",      "Boss · Lv 70", (13, 92, 53, 105), "arena"),
+    ("arena",     "Throne of Bones",      "Boss · Lv 70", (13, 89, 53, 105), "arena"),
 ]
 
 
@@ -122,8 +123,11 @@ def build_grid():
     _put(g, 44, 10, "X")
     _put(g, 63, 30, "l")
     # ---- 6 Burial pit + the Bone Bridge ----
+    # Wide stone span over one chasm. Parapets block a step into the drop.
     _rect(g, 12, 79, 54, 91, "~")
-    _rect(g, 33, 78, 33, 91, "=")                # 1-wide, 14 tiles
+    _rect(g, 29, 78, 29, 91, "R")
+    _rect(g, 37, 78, 37, 91, "R")
+    _rect(g, 30, 78, 36, 91, "=")
     # ---- 7 Throne of Bones ----
     for y in range(92, 105):
         for x in range(14, 53):
@@ -210,7 +214,7 @@ SUPPLY_CACHES = [(24, 14), (31, 48), (31, 64)]
 GROUND_LOOT = [(18, 11), (57, 31), (44, 38), (4, 61), (44, 69)]
 SHRINE = (33, 76)
 WARNING_STONE = (31, 77)
-BRIDGE = {"x": 33, "y0": 79, "y1": 91, "hazard": "grasping_hands"}
+BRIDGE = {"x": 33, "x0": 30, "x1": 36, "y0": 78, "y1": 91, "hazard": "grasping_hands"}
 BOSS_SPAWN = (33, 98)
 EXIT = (33, 2)
 SPAWN = (33, 4)

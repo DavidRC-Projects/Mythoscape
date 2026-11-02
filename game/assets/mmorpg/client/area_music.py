@@ -5,8 +5,15 @@ then interrupts it so the new place is heard at once. A boss does the
 same. Login uses the main theme. The opening comic stays silent so the
 narration is alone.
 
-Village plays Rising Theme once, then The Narrow Way, then cycles.
-Places without their own Suno track use Rising Theme until one is added.
+The village playlist (Rising Theme, then The Narrow Way) keeps playing
+across the village, the outfitters, the south fringe, forest, and open
+wilderness. It changes at Wolf Pass, the Deepdelve mine, the fairy village,
+Stonehaven, the harbour, the crypts, and castles. An arena fight swaps to
+Ceremonial Clash until the match ends.
+
+Untitled.wav (repo /music) plays inside Petaldeep. It does not play
+on the glade itself.
+
 Set USE_AREA_MUSIC=0 to disable this. Missing files are skipped.
 """
 from __future__ import annotations
@@ -21,17 +28,35 @@ import world_map as wm
 _DIR = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "..", "assets", "music",
 ))
+# Author drops (Mythoscape/music) — friendly filenames, not copied into assets.
+_REPO_MUSIC = os.path.normpath(os.path.join(
+    os.path.dirname(__file__), "..", "..", "..", "..", "music",
+))
 _VOLUME = 0.72
 _END_EVENT = pygame.USEREVENT + 31
 
-# Zone name -> region key (file stem, or "village" for the playlist).
-# Anything not listed falls back to Rising Theme ("theme").
+# Plays only while inside Petaldeep (not on the fairy-village overworld).
+FAIRY_DUNGEON_TRACK = "Untitled.wav"
+
+# Stem -> extra filenames (assets/music/{stem}.wav is always tried first).
+_ALIASES = {
+    "deep_mine_pulse": ("Deep Mine Pulse.wav",),
+    "ceremonial_clash": ("Ceremonial Clash.wav",),
+    "petaldeep": (FAIRY_DUNGEON_TRACK,),
+}
+
+# Zone name -> region key. village / forest / dungeon share the travel playlist
+# so walking past the outfitters does not stop and restart the song.
+# Wilderness (unlisted) also stays on that playlist.
 _ZONE = {
     "village": "village",
+    "forest": "village",
+    "dungeon": "village",
     "fairy_village": "fairy_glade",
     "city": "city",
     "fishing_village": "harbour",
     "mountains": "cautious_march",
+    "mine": "deep_mine_pulse",
     # Emberdeep overworld + Void Sanctum share crypt so the track keeps playing
     # when you walk between the volcano field and the sanctum approach.
     "volcano": "crypt",
@@ -97,21 +122,37 @@ def stop():
         pass
 
 
+def _arena_fighting(client):
+    """True once a gladiator match has left the lineup and the fight is on."""
+    match = getattr(client, "arena_match", None) or {}
+    if not match.get("active"):
+        return False
+    phase = str(match.get("phase") or (match.get("hud") or {}).get("phase") or "")
+    return phase not in ("", "preview", "done")
+
+
 def _key(client):
     state = getattr(client, "state", "")
     if state in ("LOGIN", "STAT_ALLOC"):
         return "theme"
     if state != "GAME" or not getattr(client, "player", None):
         return None
+    if _arena_fighting(client):
+        return "ceremonial_clash"
     dungeon = getattr(client, "dungeon", None) or {}
     if dungeon.get("id") == "castle_realm":
         return "castle"
+    # Going down the mine — Deep Mine Pulse (overworld yard uses the mine zone too).
+    if dungeon.get("id") == "deepdelve":
+        return "deep_mine_pulse"
+    if dungeon.get("id") == "petaldeep":
+        return "petaldeep"
     # Void Sanctum + Emberdeep (inside or on the approach) share crypt music.
     if dungeon.get("id") == "emberdeep":
         return "crypt"
     if dungeon.get("v2") or dungeon.get("id") in ("void", "sanctum", "shadow_crypt"):
         return "crypt"
-    # Other private dungeons — Rising Theme until they get their own track
+    # Other private dungeons — Rising Theme until they get their own track.
     if dungeon:
         return "theme"
     for building in getattr(client, "buildings", None) or []:
@@ -125,7 +166,8 @@ def _key(client):
         return "cautious_march"
     if _in_emberdeep_music(x, y):
         return "crypt"
-    return _ZONE.get(wm.get_zone(x, y), "theme")
+    # Open land (wilderness, village fringe, outfitters) stays on the travel playlist.
+    return _ZONE.get(wm.get_zone(x, y), "village")
 
 
 def _in_emberdeep_music(x, y):
@@ -188,11 +230,25 @@ def _play_region(key):
     _start_track(key, loop=True)
 
 
+def _track_path(stem):
+    """assets/music/{stem}.wav, else a friendly file in the repo music folder."""
+    direct = os.path.join(_DIR, stem + ".wav")
+    if os.path.isfile(direct):
+        return direct
+    names = _ALIASES.get(stem) or ()
+    for folder in (_DIR, _REPO_MUSIC):
+        for name in names:
+            path = os.path.join(folder, name)
+            if os.path.isfile(path):
+                return path
+    return None
+
+
 def _start_track(stem, loop=True):
     global _track
     _track = stem
-    path = os.path.join(_DIR, stem + ".wav")
-    if not os.path.isfile(path):
+    path = _track_path(stem)
+    if not path:
         return
     try:
         if not pygame.mixer.get_init():

@@ -18,6 +18,14 @@ TYPE_MAP = {
     "goblin": "goblin_grunt",
     "skeleton": "skeleton_warrior",
     "spider": "spider_giant",
+    # Corrupted fairies reuse the skeleton sheet, drawn smaller via content scale.
+    "petal_thrall": "skeleton_warrior",
+    "petal_thrall_thorn": "skeleton_warrior",
+    "petal_thrall_mirror": "skeleton_warrior",
+    "petal_elite_mirror": "skeleton_warrior",
+    "petal_thrall_night": "skeleton_warrior",
+    "petal_elite_night": "skeleton_warrior",
+    "petaldeep_queen": "skeleton_warrior",
 }
 
 # Relative height in tiles (player ~2 tiles, dragon sheet ~6.5).

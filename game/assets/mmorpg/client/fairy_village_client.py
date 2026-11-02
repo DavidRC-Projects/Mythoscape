@@ -164,6 +164,42 @@ def _sheet_facing(face, moving):
     return "s"
 
 
+def _queen_alpha(client):
+    """See-through only on the path that runs behind the Queen's Tree-Hall."""
+    try:
+        px, py = client.player_xy()
+        px, py = int(px), int(py)
+    except Exception:
+        return 255
+    # Footprint is (7,74)-(15,82). The canopy hangs north over the east-west
+    # path at y 70-72. The open grass south and east of the hall stay solid.
+    if py not in (70, 71, 72) or not (5 <= px <= 16):
+        return 255
+    tiles = getattr(client, "tiles", None) or []
+    try:
+        if tiles[py][px] != wm.PATH:
+            return 255
+    except Exception:
+        return 255
+    return 100
+
+
+_GHOST = {}
+
+
+def _ghost(image, alpha):
+    key = (id(image), alpha)
+    cached = _GHOST.get(key)
+    if cached is not None:
+        return cached
+    ghost = image.copy()
+    ghost.fill((255, 255, 255, alpha), special_flags=pygame.BLEND_RGBA_MULT)
+    if len(_GHOST) > 24:
+        _GHOST.clear()
+    _GHOST[key] = ghost
+    return ghost
+
+
 def queue(client, draw_list, cam_x, cam_y, tile, t=0.0):
     if client.dungeon:
         return
@@ -177,8 +213,13 @@ def queue(client, draw_list, cam_x, cam_y, tile, t=0.0):
         _sx, south = client.world_to_view_offset(x0, y1, cam_x, cam_y)
         sort_y = south * tile + tile
 
-        def _blit(image=image, left=left, top=top, label=label):
-            client.screen.blit(image, (left, top))
+        def _blit(image=image, left=left, top=top, label=label, key=key):
+            shown = image
+            if key == "queens_tree_hall":
+                alpha = _queen_alpha(client)
+                if alpha < 250:
+                    shown = _ghost(image, alpha)
+            client.screen.blit(shown, (left, top))
             client.blit_nameplate(label, left + image.get_width() // 2, top + 8, (220, 200, 255))
 
         draw_list.append((sort_y, 1, _blit))
@@ -190,6 +231,11 @@ def queue(client, draw_list, cam_x, cam_y, tile, t=0.0):
             _draw_fountain(client, cam_x, cam_y, tile, x0, y0, key, t)
 
         draw_list.append((sort_y, 1, _fountain))
+    try:
+        import petaldeep_client
+        petaldeep_client.queue_corner(client, draw_list, cam_x, cam_y, tile)
+    except Exception:
+        pass
 
 
 def _draw_fountain(client, cam_x, cam_y, tile, x0, y0, key, t):

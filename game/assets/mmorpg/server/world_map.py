@@ -331,7 +331,7 @@ def _generate_base_world():
                 continue
             if 6 <= x <= 96 and 2 <= y <= 88:
                 continue
-            village_fringe.append((x, y))
+                village_fringe.append((x, y))
     rng.shuffle(village_fringe)
     tree_positions = []
     for x, y in village_fringe:

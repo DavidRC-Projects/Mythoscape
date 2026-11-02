@@ -38,6 +38,10 @@ class CastleMove(unittest.TestCase):
 
     def test_harbour_sealed_without_wolf_pass(self):
         cut = [(x, y) for x in range(136, 166) for y in range(0, 29)]
+        # Pinch intentional spur road gaps (Emberdeep / Void) so this still
+        # measures the Wolf Pass flank seal, not southern kingdom roads.
+        cut += [(x, y) for x in range(harbour_seal.ROCK_X[0], harbour_seal.ROCK_X[1] + 1)
+                for y in harbour_seal.ROAD_GAPS]
         self.assertEqual(self.harbour(bfs(self.grid, wm.SPAWN_POINT, cut)), [])
         self.assertGreater(len(self.harbour(self.reach)), 500)
 

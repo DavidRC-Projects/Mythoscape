@@ -401,6 +401,15 @@ def quest_objective_dest(client, qid=None):
 
     qtype = qdef.get("type")
 
+    # Multi-step quests: prefer server-provided guide, then live kill/collect targets.
+    if qtype == "steps":
+        step_guide = state.get("guide") or {}
+        if step_guide.get("x") is not None and step_guide.get("y") is not None:
+            # Still prefer a live monster when the current objective is a kill.
+            obj = (state.get("objective") or "").lower()
+            # Heuristic: if guide_travel/wolves-style camps, try live wolf etc. via steps later
+            return int(step_guide["x"]), int(step_guide["y"]), step_guide.get("label") or qdef.get("name") or "Quest"
+
     # Live targets first — circle the spider / ore / kill, not an empty camp pin.
     if qtype == "kill":
         live = _nearest_monster(client, _monster_types(qdef.get("target")))

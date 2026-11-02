@@ -8,9 +8,13 @@ Lumière du Château → castle.wav       castle realm / keep
 March of the King → city.wav          Stonehaven
 Welcome to the Hall → harbour.wav     Harbourreach
 Cautious March   → cautious_march.wav Wolf Pass
+Deep Mine Pulse  → Deep Mine Pulse.wav (repo /music)  Deepdelve, when you go down
+Ceremonial Clash → Ceremonial Clash.wav (repo /music) gladiator arena, when the fight starts
+Untitled.wav     → Petaldeep (inside the dungeon only; the glade keeps its own song)
 
-Dedicated songs above; forest, mine, wilderness, Emberdeep, and other
-dungeons use Rising Theme until a track is assigned.
+The village playlist (Rising Theme → The Narrow Way) continues across the
+village, outfitters, forest, and open wilderness. It changes at Wolf Pass,
+the mine, the fairy village, Stonehaven, the harbour, the crypts, and castles.
 
 Throne vision film (assets/throne_vision, first login / Settings replay)
 Five Armies by Kevin MacLeod (incompetech.com), CC BY 4.0

@@ -179,6 +179,20 @@ def test_idle_dev_toggle():
     _go(go())
 
 
+def test_logout_parks_arena_campus():
+    async def go():
+        import safe_points
+        import mercenaries as merc
+        s = _player()
+        s.dungeon = {"id": "castle_realm", "plane": "realm", "return_x": 28, "return_y": 24}
+        s.x, s.y = merc.arena_coords()["spectator"][0], merc.arena_coords()["spectator"][1]
+        s.arena_match = {"phase": "fight"}
+        await server.logout_session(s, "disconnect")
+        assert s.arena_match is None
+        assert (s.x, s.y) == safe_points.ARENA_GATE
+    _go(go())
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for fn in tests:

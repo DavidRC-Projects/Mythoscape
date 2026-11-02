@@ -170,9 +170,20 @@ def queue(client, draw_list, cam_x, cam_y, tile, t=0.0):
         small = FG.near_lane(x, y)
         if small:
             jx = jy = 0
+        try:
+            import petaldeep_client as _pd
+            infected = _pd.infects(x, y)
+        except Exception:
+            infected = False
 
-        def _draw(cx=cx + jx, cy=cy + jy, kind=kind, flip=flip, size_q=size_q, v=v, small=small):
+        def _draw(cx=cx + jx, cy=cy + jy, kind=kind, flip=flip, size_q=size_q, v=v, small=small, infected=infected):
             img = _sprite(kind, tile, flip, size_q, False, small)
+            if infected:
+                try:
+                    import petaldeep_client as _pd
+                    img = _pd.infect_surface(img)
+                except Exception:
+                    pass
             feet = cy + int(tile * 0.38)
             box = pygame.Rect(cx - img.get_width() // 2, feet - img.get_height(), img.get_width(), img.get_height())
             client.screen.blit(img, box.topleft)
@@ -182,7 +193,7 @@ def queue(client, draw_list, cam_x, cam_y, tile, t=0.0):
                 a = ph + now * (0.7 + 0.25 * i) + i * 2.1
                 gx = box.centerx + int(math.cos(a) * box.w * 0.22)
                 gy = box.top + int(box.h * (0.28 + 0.12 * i) + math.sin(a * 1.3) * box.h * 0.06)
-                col = (255, 214, 140) if kind == 0 else (170, 230, 255)
+                col = (160, 60, 200) if infected else ((255, 214, 140) if kind == 0 else (170, 230, 255))
                 g = _glow(max(4, tile // 4), col)
                 client.screen.blit(g, (gx - g.get_width() // 2, gy - g.get_height() // 2),
                                    special_flags=pygame.BLEND_ADD)

@@ -1,11 +1,8 @@
 """The Moon Petal Inn (MOON_PETAL_INN_SPEC.md v1): entry film, first-person room, 9 talkable fairies.
 
-Client-only, conversation only. Door = content.py interactable "moonpetal_inn_door" (21,82) in Moonpetal Glade:
-click it, or walk into it from its stand tile. The film plays like tavern_intro (pre-extracted frames +
-audio.ogg in assets/moon_petal_inn). First view per character plays with "Skip" after 0.5 s; later views
-are skippable at once and follow the "Replay inn intro" setting (always / once per session / never,
-default once per session). Not built (spec v1 / brief): voiced greetings, drink buffs, Moon-Touched title,
-quest hooks (topics stay text; hooks shown nowhere yet).
+Door = content.py interactable "moonpetal_inn_door" (21,82) in Moonpetal Glade.
+Film + room POV are client-local; quests, friendship, compliments and the house
+secret go through MOONPETAL_* server messages (fairy_friendship.py).
 """
 from __future__ import annotations
 
@@ -24,75 +21,27 @@ DOOR_ID = "moonpetal_inn_door"
 SKIP_AFTER_S = 0.5
 FADE_S = 0.3
 STILL_S = 2.0
-TYPE_CPS = 40.0
+TYPE_CPS = 48.0
 PREFS = os.path.join(os.path.expanduser("~"), ".crownfall", "moon_petal.json")
 LOFT = ("Aerin", "Rhosyn")
-TOPICS = (("moon", "The Moon"), ("fae", "The Fae"), ("throne", "Throne & Realm"), ("rumours", "Rumours"))
 
+# Display titles only — long dialogue lives on the server now.
 FAIRIES = {
-    "Selune": ("Hostess of the Moon Petal",
-        "You came in with the rain on your boots and the realm on your shoulders. Set both down a while. What shall it be?",
-        {"moon": "The moon was not always alone. There were two, once. The second fell the night the first king was crowned, and its petals still bloom wherever it struck.",
-         "fae": "We are not your fairy tales. We were here before the roads, and we will be here after the crowns. We simply prefer to be guests.",
-         "throne": "Every ruler of Crownfall has drunk here once. Most never knew who poured it.",
-         "rumours": "Ask the others. Each of my girls hears a different thing. Together, we hear everything."},
-        "Go gently. The door always finds you again."),
-    "Ivria": ("The Archivist",
-        "Mind the candle. These pages are older than your grandmother's grandmother.",
-        {"moon": "Moon-phases decide which of our doors are open. Learn the calendar and the world gets much larger.",
-         "fae": "Our names are contracts. Never give us yours lightly, and never take ours without a gift.",
-         "throne": "The chronicles say the Founder King won his crown by the sword. My copy says he bought it. With a promise to us.",
-         "rumours": "A page has gone missing from this book. The last person who read it is wearing a crown now."},
-        "Come back when you can read between lines."),
-    "Maelis": ("The Moonbloom Keeper",
-        "Don't touch the blue ones. They bite. Only a little.",
-        {"moon": "Moonblooms only open under a full moon. Pick one at the wrong hour and it turns to ash in your hand.",
-         "fae": "Every one of us is bound to something that grows. Burn a forest and somewhere a fae forgets her own name.",
-         "throne": "The king's men cut the Elderwood for warships last spring. You will be hearing about that.",
-         "rumours": "Something is digging under the old orchard at night. Not moles. Moles don't sing."},
-        "Take a petal for luck. Not that one."),
-    "Aerin": ("The Watcher on the Balcony",
-        "I saw you three streets away. You walk like someone being followed.",
-        {"moon": "From up here you can see the moon's reflection in every window in town. Count the dark ones.",
-         "fae": "We fly less than we used to. The sky over Crownfall has too many arrows in it.",
-         "throne": "Guards changed shifts at the castle twice tonight. Once is routine.",
-         "rumours": "A cloaked rider has visited the north gate each night this week. She never comes in."},
-        "Watch your back. I'll watch the rest."),
-    "Rhosyn": ("The Harpist",
-        "You stopped on the stairs to listen. Everyone does. Come, sit, I don't bite either.",
-        {"moon": "There is a song that only works when the moon is full. Play it in the right place and the ground remembers what stood there.",
-         "fae": "Our music is how we keep our history. Lose a song and you lose a war.",
-         "throne": "I played at the last coronation. The new king asked for a happy song. I gave him the truest one I had.",
-         "rumours": "A bard in the tavern has been singing one of our songs. Badly. And it is working."},
-        "Hum it on the road. It keeps the dark polite."),
-    "Tamsin": ("The Moon Bar",
-        "Moonwine, dewmead or something honest? I'd suggest honest, for your first night.",
-        {"moon": "Moonwine is pressed only on the full moon. One glass and you dream of where you'll be in a year. Two and you dream of where you'll be in ten.",
-         "fae": "Selune runs the house. I run the house's money. Guess which of us the merchants fear.",
-         "throne": "The crown owes this inn a debt older than the treasury. We have never asked for it. Yet.",
-         "rumours": "Someone paid for a room upstairs in old royal coin. Coin that was melted down a hundred years ago."},
-        "Mind the step. It moves."),
-    "Nyx": ("The Hearthwitch",
-        "Sit by the fire. You've been cold for longer than tonight.",
-        {"moon": "The dark of the moon is mine. When it vanishes, the old things under Crownfall stretch.",
-         "fae": "Not all fae drink in pretty inns. Some of my sisters chose the deep places. Do not take their bargains.",
-         "throne": "The throne is carved from a tree that was alive when it was cut. It still dreams. Ask the king why he doesn't sleep.",
-         "rumours": "The miners have stopped going below the third floor of the mine after dark. They say they hear a heartbeat."},
-        "Keep a light lit. Any light."),
-    "Kaede": ("The Letter-Writer",
-        "Don't read over my shoulder. Unless you're offering to deliver this.",
-        {"moon": "Letters sealed with moon-wax can only be opened by the one they're meant for. Useful, in a city of spies.",
-         "fae": "I write for half the court of Crownfall. They think I'm a scribe. I let them.",
-         "throne": "Three lords wrote to me this month asking how much a crown costs. I quoted them all different prices.",
-         "rumours": "A duke has been writing love letters to someone who has been dead for twenty years. She writes back."},
-        "If anyone asks, you never saw me."),
-    "Bryony": ("The Crystal Reader",
-        "Oh, you're the one from the crystals! Well, someone like you. Sit, sit.",
-        {"moon": "Each crystal holds a night of moonlight. Break one and you get a night back. I've only ever broken two.",
-         "fae": "We age by moons, not years. I'm very young. Selune is very, very not.",
-         "throne": "Every crystal I read for the throne shows the same thing: an empty chair, and a lot of people walking toward it.",
-         "rumours": "Someone in this room is not a fae. I won't say who. It's funnier this way."},
-        "Your fortune for tonight: you'll come back."),
+    "Selune": ("Hostess of the Moon Petal",),
+    "Ivria": ("The Archivist",),
+    "Maelis": ("The Moonbloom Keeper",),
+    "Aerin": ("The Watcher on the Balcony",),
+    "Rhosyn": ("The Harpist",),
+    "Tamsin": ("The Moon Bar",),
+    "Nyx": ("The Hearthwitch",),
+    "Kaede": ("The Letter-Writer",),
+    "Bryony": ("The Crystal Reader",),
+}
+FRIEND_MAX = 100
+FRIEND_ID = {
+    "Selune": "selune", "Ivria": "ivria", "Maelis": "maelis", "Aerin": "aerin",
+    "Rhosyn": "rhosyn", "Tamsin": "tamsin_moon", "Kaede": "kaede",
+    "Bryony": "bryony", "Nyx": "nyx",
 }
 
 
@@ -138,16 +87,22 @@ def tab_order(spots):
 
 
 def wrap(font, text, width):
-    rows, row = [], ""
-    for w in text.split():
-        t = (row + " " + w).strip()
-        if font.size(t)[0] > width and row:
+    """Word-wrap; blank lines from \\n become empty rows for paragraph breaks."""
+    rows = []
+    for para in str(text or "").split("\n"):
+        if not para.strip():
+            rows.append("")
+            continue
+        row = ""
+        for w in para.split():
+            t = (row + " " + w).strip()
+            if font.size(t)[0] > width and row:
+                rows.append(row)
+                row = w
+            else:
+                row = t
+        if row:
             rows.append(row)
-            row = w
-        else:
-            row = t
-    if row:
-        rows.append(row)
     return rows
 
 
@@ -264,8 +219,17 @@ class MoonPetalInn:
         self.hover = None           # index into self.spots
         self.focus = None           # keyboard focus index
         self.talk = None            # fairy name
-        self.page = "greeting"      # greeting | topic key | farewell
-        self.visited = {}           # fairy -> set(topic)
+        self.page = "greeting"      # server page hint: greeting | quest | compliments | social | secret
+        self.quest_line = None
+        self.quest_choices = []
+        self.quest_payload = None
+        self.friendship = {}        # fairy_id -> 0..100
+        self.friend_max = FRIEND_MAX
+        self.friend_detail = None   # public_state for current fairy
+        self.secret_unlocked = False
+        self.last_gained = 0
+        self.menu_kind = "greeting"  # greeting | compliments | social | secret | quest
+        self.waiting_line = False
         self.type_start = 0.0
         self.room_start = 0.0
         self.burst = None           # (x, y, t0)
@@ -320,6 +284,16 @@ class MoonPetalInn:
         self.active = True
         self.talk = None
         self.hover = self.focus = None
+        self.quest_line = None
+        self.quest_choices = []
+        self.quest_payload = None
+        self.friend_detail = None
+        self.last_gained = 0
+        self.waiting_line = False
+        try:
+            self.client.net.send("MOONPETAL_ENTER", id=DOOR_ID)
+        except Exception:
+            pass
         if self.should_play():
             first = self.first_view()
             self.mode = "film"
@@ -341,6 +315,15 @@ class MoonPetalInn:
         set_cursor(None)
         self.active = False
         self.mode = self.talk = self.film = None
+        self.quest_line = None
+        self.quest_choices = []
+        self.quest_payload = None
+        self.friend_detail = None
+        self.waiting_line = False
+        try:
+            self.client.net.send("MOONPETAL_LEAVE")
+        except Exception:
+            pass
         c = self.client
         try:  # outside the door, facing away from it
             c._entity_facing[("p", c.player.get("id"))] = "front"
@@ -350,9 +333,65 @@ class MoonPetalInn:
     def open_talk(self, name):
         self.talk = name
         self.page = "greeting"
+        self.menu_kind = "greeting"
         self.reply_focus = None
         self.mode = "talk"
         self.type_start = time.time()
+        self.quest_line = "…"
+        self.quest_choices = []
+        self.quest_payload = None
+        self.waiting_line = True
+        try:
+            self.client.net.send("MOONPETAL_TALK", fairy=name)
+        except Exception:
+            self.waiting_line = False
+
+    def _apply_friendship(self, payload):
+        if not isinstance(payload, dict):
+            return
+        bag = payload.get("friendship")
+        if isinstance(bag, dict):
+            for k, v in bag.items():
+                try:
+                    self.friendship[k] = int(v)
+                except (TypeError, ValueError):
+                    pass
+        if payload.get("value") is not None and payload.get("fairy_id"):
+            try:
+                self.friendship[payload["fairy_id"]] = int(payload["value"])
+            except (TypeError, ValueError):
+                pass
+        self.friend_max = int(payload.get("max") or FRIEND_MAX)
+        self.secret_unlocked = bool(payload.get("secret_unlocked"))
+        self.friend_detail = payload
+
+    def on_message(self, t, msg):
+        if t == "MOONPETAL_LINE":
+            if msg.get("fairy"):
+                self.talk = msg["fairy"]
+            self.quest_line = msg.get("line") or ""
+            self.quest_choices = list(msg.get("choices") or [])
+            self.quest_payload = msg.get("quest")
+            self._apply_friendship(msg.get("friendship") or {})
+            self.last_gained = int(msg.get("gained") or 0)
+            self.menu_kind = str(msg.get("page") or "greeting")
+            self.page = self.menu_kind
+            self.mode = "talk"
+            self.waiting_line = False
+            self.type_start = time.time()
+            self.reply_focus = None
+            if msg.get("close") and not self.quest_choices:
+                self.mode, self.talk = "room", None
+            return True
+        if t == "MOONPETAL_STATE":
+            if msg.get("inside"):
+                self._apply_friendship(msg.get("friendship") or {})
+            return True
+        return False
+
+    def friend_of(self, name):
+        fid = FRIEND_ID.get(name) or ""
+        return int(self.friendship.get(fid) or 0)
 
     # ---- geometry ----------------------------------------------------------------------
     def _cover(self, sw, sh):
@@ -380,22 +419,21 @@ class MoonPetalInn:
 
     # ---- dialogue model ----------------------------------------------------------------
     def body(self):
-        title, greet, topics, bye = FAIRIES[self.talk]
-        if self.page == "greeting":
-            return greet
-        if self.page == "farewell":
-            return bye
-        return topics[self.page]
+        if self.waiting_line and not self.quest_line:
+            return "…"
+        return self.quest_line or "…"
 
     def replies(self):
         """[(label, action, state)] state: new | seen | None."""
-        if self.page == "greeting":
-            seen = self.visited.get(self.talk, set())
-            out = [(lab, key, "seen" if key in seen else "new") for key, lab in TOPICS]
-            return out + [("Farewell", "farewell", None)]
-        if self.page == "farewell":
-            return [("Back to the room", "close", None)]
-        return [("Back", "back", None), ("Farewell", "farewell", None)]
+        if self.waiting_line and not self.quest_choices:
+            return []
+        out = []
+        for i, lab in enumerate(self.quest_choices or []):
+            state = "seen" if str(lab).endswith(" ✓") else ("new" if "Compliment" in str(lab) or "Ask about" in str(lab) else None)
+            if str(lab).endswith(" ✓"):
+                state = "seen"
+            out.append((lab, ("server_choice", i), state))
+        return out
 
     def typed_all(self):
         return (time.time() - self.type_start) * TYPE_CPS >= len(self.body())
@@ -405,18 +443,20 @@ class MoonPetalInn:
         if not (0 <= idx < len(rs)):
             return
         act = rs[idx][1]
-        if act == "close":
-            self.mode, self.talk = "room", None
+        if not (isinstance(act, tuple) and act and act[0] == "server_choice"):
             return
-        if act == "back":
-            self.page = "greeting"
-        elif act == "farewell":
-            self.page = "farewell"
-        else:
-            self.visited.setdefault(self.talk, set()).add(act)
-            self.page = act
+        choice = int(act[1])
+        self.waiting_line = True
+        menu = self.menu_kind or "greeting"
+        if menu in ("quest", "quest_offer"):
+            menu = ""
+        try:
+            self.client.net.send(
+                "MOONPETAL_CHOICE", fairy=self.talk, choice=choice, menu=menu,
+            )
+        except Exception:
+            self.waiting_line = False
         self.reply_focus = None
-        self.type_start = time.time()
 
     # ---- events ------------------------------------------------------------------------
     def handle_event(self, event):
@@ -457,11 +497,9 @@ class MoonPetalInn:
                 self.hover_reply = next((i for i, r in enumerate(self.reply_rects) if r.collidepoint(event.pos)), None)
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    if self.page == "farewell":
-                        self.mode, self.talk = "room", None
-                    else:
-                        self.page, self.type_start = "farewell", time.time()
-                elif pygame.K_1 <= event.key <= pygame.K_5:
+                    self.mode, self.talk = "room", None
+                    self.waiting_line = False
+                elif pygame.K_1 <= event.key <= pygame.K_9:
                     self.choose(event.key - pygame.K_1)
                 elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
                     if not self.typed_all():
@@ -470,7 +508,8 @@ class MoonPetalInn:
                         self.choose(self.reply_focus or 0)
                 elif event.key == pygame.K_TAB:
                     n = len(self.replies())
-                    self.reply_focus = 0 if self.reply_focus is None else (self.reply_focus + 1) % n
+                    if n:
+                        self.reply_focus = 0 if self.reply_focus is None else (self.reply_focus + 1) % n
             return True
         return True
 
@@ -540,18 +579,24 @@ class MoonPetalInn:
             else:
                 pygame.draw.ellipse(ov, (230, 203, 142, 90), rr, 2)
             screen.blit(ov, (ring.x - 12, ring.y - 12))
-            # plaque above the fairy
-            name = f_name.render(s["name"], True, S.ACTIVE_TXT if hov else S.TITLE)
+            # plaque above the fairy (+ friendship %)
+            fpct = self.friend_of(s["name"])
+            name = f_name.render(f"{s['name']}  {fpct}%", True, S.ACTIVE_TXT if hov else S.TITLE)
             pr = pygame.Rect(0, 0, name.get_width() + 22, name.get_height() + 8)
             pr.midbottom = (r.centerx, r.y + 2)
             pr.clamp_ip(screen.get_rect().inflate(-8, -8))
             plate = pygame.Surface(pr.size, pygame.SRCALPHA)
             pygame.draw.rect(plate, (18, 12, 8, 200), plate.get_rect(), border_radius=6)
             screen.blit(plate, pr.topleft)
-            pygame.draw.rect(screen, S.GLOW if hov else S.GOLD, pr, 2 if hov else 1, border_radius=6)
+            rim = S.GLOW if fpct >= FRIEND_MAX else (S.GLOW if hov else S.GOLD)
+            pygame.draw.rect(screen, rim, pr, 2 if hov or fpct >= FRIEND_MAX else 1, border_radius=6)
             screen.blit(name, (pr.x + 11, pr.y + 4))
             if hov:
-                sub = f_sub.render(f"{FAIRIES[s['name']][0]} \u00b7 {s['label']} \u00b7 Click to talk", True, (240, 226, 196))
+                title = (FAIRIES.get(s["name"]) or ("Fairy",))[0]
+                tip = f"{title} · Friendship {fpct}/{FRIEND_MAX} · Click to talk"
+                if self.secret_unlocked:
+                    tip += " · House trusts you"
+                sub = f_sub.render(tip, True, (240, 226, 196))
                 sr = sub.get_rect(midtop=(pr.centerx, pr.bottom + 3))
                 sr.clamp_ip(screen.get_rect().inflate(-8, -8))
                 bgs = pygame.Surface(sr.inflate(14, 6).size, pygame.SRCALPHA)
@@ -571,9 +616,23 @@ class MoonPetalInn:
         S.text(screen, "Leave the inn", S.font("title", 15), S.label_color("idle"), self.leave_rect.center, anchor="center")
         S.keycap(screen, (self.leave_rect.right + 26, self.leave_rect.centery), "Esc", small=True)
         try:
-            S.shield_badge(screen, pygame.Rect(sw - 214, 14, 200, 44), "safe", "Safe zone", "Moon Petal Inn")
+            sub = "House trusts you" if self.secret_unlocked else "Moon Petal Inn"
+            S.shield_badge(screen, pygame.Rect(sw - 214, 14, 200, 44), "safe", "Safe zone", sub)
         except Exception:
             pass
+        # House-wide friendship strip (how many fairies are fully trusted)
+        maxed = sum(1 for n in FAIRIES if self.friend_of(n) >= FRIEND_MAX)
+        strip = pygame.Rect(18, 14, 260, 44)
+        S.card(screen, strip, 6)
+        S.text(screen, f"Inn trust  {maxed}/9", S.font("title", 15), S.TITLE, (strip.x + 12, strip.y + 6))
+        bar = pygame.Rect(strip.x + 12, strip.bottom - 16, strip.w - 24, 8)
+        pygame.draw.rect(screen, (20, 14, 10), bar, border_radius=3)
+        if maxed:
+            pygame.draw.rect(
+                screen, (255, 211, 107) if maxed >= 9 else (120, 190, 255),
+                pygame.Rect(bar.x, bar.y, int(bar.w * (maxed / 9.0)), bar.h), border_radius=3,
+            )
+        pygame.draw.rect(screen, S.GOLD, bar, 1, border_radius=3)
         if self.mode == "room" and time.time() - self.room_start < FADE_S:
             veil = pygame.Surface((sw, sh))
             veil.set_alpha(int(255 * (1 - (time.time() - self.room_start) / FADE_S)))
@@ -587,13 +646,31 @@ class MoonPetalInn:
     def _portrait(self, name):
         return self._image(os.path.join("portraits", name.lower() + ".jpg"), (290, 360))
 
+    def _draw_friend_bar(self, screen, rect, value, gained=0):
+        """Friendship meter under the portrait nameplate."""
+        v = max(0, min(self.friend_max, int(value)))
+        pygame.draw.rect(screen, (20, 14, 10), rect, border_radius=5)
+        pygame.draw.rect(screen, S.GOLD, rect, 1, border_radius=5)
+        inner = rect.inflate(-6, -6)
+        if inner.w > 0 and inner.h > 0:
+            fill_w = int(inner.w * (v / float(self.friend_max or 100)))
+            if fill_w > 0:
+                fill = pygame.Rect(inner.x, inner.y, fill_w, inner.h)
+                col = (120, 190, 255) if v < self.friend_max else (255, 211, 107)
+                pygame.draw.rect(screen, col, fill, border_radius=3)
+        label = f"Friendship  {v}/{self.friend_max}"
+        if gained:
+            label += f"  (+{gained})"
+        S.text(screen, label, S.font("body", 13), S.ACTIVE_TXT if v >= self.friend_max else S.MUTED,
+               (rect.centerx, rect.centery), anchor="center")
+
     def _draw_talk(self, screen, sw, sh):
         veil = pygame.Surface((sw, sh), pygame.SRCALPHA)
         veil.fill((4, 4, 12, 150))
         screen.blit(veil, (0, 0))
-        title, *_ = FAIRIES[self.talk]
-        W, H = min(sw - 60, 1040), 470
-        box = pygame.Rect((sw - W) // 2, sh - H - 40, W, H)
+        title = (FAIRIES.get(self.talk) or ("Fairy",))[0]
+        W, H = min(sw - 60, 1040), min(sh - 50, 520)
+        box = pygame.Rect((sw - W) // 2, sh - H - 28, W, H)
         # portrait: gold double rim, diamond corners
         pr = pygame.Rect(box.x, box.y, 290, 360)
         img = self._portrait(self.talk)
@@ -604,10 +681,15 @@ class MoonPetalInn:
         pygame.draw.rect(screen, S.GOLD_HI, pr.inflate(4, 4), 1)
         for cx, cy in (pr.inflate(16, 16).topleft, pr.inflate(16, 16).topright, pr.inflate(16, 16).bottomleft, pr.inflate(16, 16).bottomright):
             S.diamond(screen, cx, cy, 7, S.GOLD_HI, S.WOOD_DK)
-        npl = pygame.Rect(pr.x - 8, pr.bottom + 14, pr.w + 16, 86)
+        npl = pygame.Rect(pr.x - 8, pr.bottom + 10, pr.w + 16, 72)
         S.card(screen, npl, 6)
-        S.text(screen, S.fit(S.font("title", 22), self.talk, npl.w - 20), S.font("title", 22), S.TITLE, (npl.centerx, npl.y + 12), anchor="midtop")
-        S.text(screen, title, S.font("body", 15), S.MUTED, (npl.centerx, npl.y + 50), anchor="midtop")
+        S.text(screen, S.fit(S.font("title", 22), self.talk or "", npl.w - 20), S.font("title", 22), S.TITLE, (npl.centerx, npl.y + 8), anchor="midtop")
+        S.text(screen, title, S.font("body", 14), S.MUTED, (npl.centerx, npl.y + 42), anchor="midtop")
+        bar = pygame.Rect(npl.x, npl.bottom + 8, npl.w, 22)
+        self._draw_friend_bar(screen, bar, self.friend_of(self.talk), self.last_gained)
+        if self.secret_unlocked:
+            S.text(screen, "House secret unlocked", S.font("body", 12), S.GOLD_HI,
+                   (bar.centerx, bar.bottom + 10), anchor="midtop")
         # dialogue box
         db = pygame.Rect(pr.right + 30, box.y, box.right - pr.right - 30, H)
         S.card(screen, db, 8, ornate=True)
@@ -618,34 +700,38 @@ class MoonPetalInn:
         body = self.body()
         n = int((time.time() - self.type_start) * TYPE_CPS)
         shown = body[:max(0, n)]
-        f = S.font("body", 23)
-        y = db.y + 36
-        for row in wrap(f, shown, db.w - 56)[:6]:
-            S.text(screen, row, f, (240, 226, 196), (db.x + 28, y))
-            y += 31
-        # replies
+        f = S.font("body", 20)
         rs = self.replies()
+        rh, gap = 34, 6
+        reply_block = len(rs) * (rh + gap) + 28
+        text_bottom = db.bottom - reply_block - 8
+        y = db.y + 28
+        for row in wrap(f, shown, db.w - 56):
+            if y + 26 > text_bottom:
+                break
+            S.text(screen, row, f, (240, 226, 196), (db.x + 28, y))
+            y += 26
+        # replies
         self.reply_rects = []
-        rh, gap = 38, 8
-        ry = db.bottom - 24 - len(rs) * (rh + gap) + gap
+        ry = db.bottom - 22 - len(rs) * (rh + gap) + gap
         mouse = pygame.mouse.get_pos()
-        rf = S.font("body", 22)
+        rf = S.font("body", 18)
         focus = self.reply_focus
         for i, (lab, act, state) in enumerate(rs):
-            r = pygame.Rect(db.x + 24, ry + i * (rh + gap), db.w - 48, rh)
+            r = pygame.Rect(db.x + 20, ry + i * (rh + gap), db.w - 40, rh)
             hov = r.collidepoint(mouse) or focus == i
             muted = state == "seen"
             S.button(screen, r, "idle", hover=hov, r=5)
-            S.keycap(screen, (r.x + 20, r.centery), str(i + 1), small=True)
+            S.keycap(screen, (r.x + 18, r.centery), str(i + 1), small=True)
             col = S.MUTED if muted else (S.ACTIVE_TXT if hov else S.label_color("idle"))
-            lr = S.text(screen, lab, rf, col, (r.x + 42, r.centery), anchor="midleft")
+            lr = S.text(screen, S.fit(rf, lab, r.w - 70), rf, col, (r.x + 38, r.centery), anchor="midleft")
             if muted:
-                _check(screen, lr.right + 14, r.centery, S.MUTED)
+                _check(screen, min(r.right - 18, lr.right + 14), r.centery, S.MUTED)
             elif state == "new":
-                S.notify_dot(screen, lr.right + 12, r.centery)
+                S.notify_dot(screen, min(r.right - 14, lr.right + 12), r.centery)
             self.reply_rects.append(r)
-        hint = "1-5 choose  \u00b7  Tab / Enter  \u00b7  Esc farewell"
-        S.text(screen, hint, S.font("body", 14), S.MUTED, (db.right - 16, db.bottom - 8), anchor="bottomright")
+        hint = "1-9 choose  ·  Tab / Enter  ·  Esc back to room"
+        S.text(screen, hint, S.font("body", 13), S.MUTED, (db.right - 16, db.bottom - 6), anchor="bottomright")
 
 
 # ---- cursors (drawn shapes) -------------------------------------------------------------

@@ -1202,8 +1202,11 @@ def arena_coords():
 
 def outside_arena_tile():
     """Barracks foot outside the arena gate — safe logout / resume stand."""
-    # Matches TELEPORT_DESTINATIONS["arena"] and Marshal Branna / Osric.
-    return (196, 164)
+    try:
+        import safe_points
+        return tuple(safe_points.ARENA_GATE)
+    except Exception:
+        return (196, 164)
 
 
 def inside_arena_campus(x, y):

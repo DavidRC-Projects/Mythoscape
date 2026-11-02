@@ -73,7 +73,11 @@ async def grant_table(session, table, speaker="Loot"):
 
 
 async def try_blocked_step(session, nx, ny):
-    """Walking into a locked door with the key opens it. A bare bump explains the lock."""
+    """Walking into a locked door with the key opens it. A bare bump explains the lock.
+
+    Hint spam is throttled, but having the matching key always retries the unlock —
+    otherwise a bump without the key silently blocks the next bump with the key.
+    """
     import time
     d = session.dungeon
     spec = (d or {}).get("spec") or {}
@@ -89,8 +93,17 @@ async def try_blocked_step(session, nx, ny):
         return None
     if ch in doors and ch in d.get("opened", []):
         return None
+    has_key = False
+    if ch in doors:
+        _x, _y, key_id, _name = doors[ch]
+        has_key = _has_item(session, key_id)
     now = time.time()
-    if getattr(session, "_block_hint_tile", None) == (nx, ny) and now < getattr(session, "_block_hint_at", 0) + 2.5:
+    # Only throttle empty-handed bumps (hint spam). Never skip a key unlock.
+    if (
+        not has_key
+        and getattr(session, "_block_hint_tile", None) == (nx, ny)
+        and now < getattr(session, "_block_hint_at", 0) + 2.5
+    ):
         return "blocked"
     session._block_hint_tile = (nx, ny)
     session._block_hint_at = now
@@ -133,8 +146,16 @@ async def handle_interact(session, msg):
         before = [row[:] for row in d["tiles"]]
         _refresh(d)
         changes = _changes_from(before, d["tiles"])
-        await srv.send(session.ws, "DUNGEON_TILES", changes=changes, decor=d["decor"])
-        await srv.send(session.ws, "CHAT_MSG", **{"from": name, "text": f"The {name} grinds open."})
+        await srv.send(
+            session.ws, "DUNGEON_TILES",
+            changes=changes, decor=d["decor"], opened=list(d.get("opened") or []),
+            keys_held={
+                "A": _has_item(session, "depths_bone_key"),
+                "B": _has_item(session, "depths_tide_key"),
+                "C": _has_item(session, "depths_knight_seal"),
+            },
+        )
+        await srv.send(session.ws, "CHAT_MSG", **{"from": name, "text": f"The {name} grinds open. Walk through."})
         await srv.send(session.ws, "PLAYER_UPDATE", player=session.full_state())
         return True
     for sid, secret in (spec.get("secrets") or {}).items():
@@ -163,7 +184,14 @@ async def handle_interact(session, msg):
             await srv.send(session.ws, "CHAT_MSG", **{"from": who, "text": "Your inventory is full."})
         await srv.send(session.ws, "PLAYER_UPDATE", player=session.full_state())
         _refresh(d)
-        await srv.send(session.ws, "DUNGEON_TILES", changes=[], decor=d["decor"])
+        await srv.send(
+            session.ws, "DUNGEON_TILES", changes=[], decor=d["decor"],
+            keys_held={
+                "A": _has_item(session, "depths_bone_key"),
+                "B": _has_item(session, "depths_tide_key"),
+                "C": _has_item(session, "depths_knight_seal"),
+            },
+        )
         return True
     if ch == "c":
         key = f"{x},{y}"

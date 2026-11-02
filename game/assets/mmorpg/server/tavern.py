@@ -116,6 +116,8 @@ PATRONS["hale"] = {
                  "and something bigger is driving them.", None),
                 ("What's driving them?", "Ask the miners. Whatever woke under Stonehaven, the beasts smelled it first.", None),
                 ("Any advice for the road?", "Light no fire you can't see past. Carry more bread than you think.", None),
+                ("About the north road…", "Packs on the pass. Bren's watching them. If you can walk the north road and "
+                 "bring back my cache from the watchpost, I'll mark you as someone who listens.", "north_road_warning"),
                 ("[Leave him be]", None, None)]}
 SABLE_CRIXUS = ("Crixus fights like he's late for supper: all rush. Let him come, sidestep the third swing, "
                 "and he's open for a breath.")
@@ -725,6 +727,7 @@ def patron_talk(session, conn, patron, choice=None):
         return False, "Nobody there.", {}
     d = load(conn, session.player_id)
     q = d["quests"].get("cellar_rats") or {}
+    hale_q = (session.quests or {}).get("north_road_warning") or {}
     if choice is None:
         labels = [c[0] for c in p["choices"]]
         line = p["open"]
@@ -734,11 +737,40 @@ def patron_talk(session, conn, patron, choice=None):
         elif patron == "tobin" and q.get("state") == "done":
             line = "The cellar's quiet. You've no idea how grateful I am."
             labels = ["Glad to help."]
+        elif patron == "hale":
+            import quest_steps
+            from content import QUESTS
+            qdef = QUESTS.get("north_road_warning") or {}
+            st = hale_q.get("status")
+            if st == "active":
+                line = quest_steps.objective_text(qdef, hale_q, session)
+                labels = ["[Report in]", "[Leave him be]"]
+            elif st == "ready":
+                line = "You brought the cache. Hand it over — and the report."
+                labels = ["[Turn in]", "[Leave him be]"]
+            elif st == "complete":
+                line = "Road's quieter. Don't get soft."
+                labels = ["[Leave him be]"]
         return True, line, {"speaker": p["name"], "choices": labels}
     i = int(choice)
     if patron == "tobin" and q.get("state") in ("active", "done"):
         return True, ("Right. Thanks." if q.get("state") == "done" else "Five rats. You've got this."), \
             {"speaker": p["name"], "close": True}
+    if patron == "hale" and hale_q.get("status") in ("active", "ready", "complete"):
+        info = {"speaker": p["name"], "close": True, "hale_action": hale_q.get("status")}
+        if hale_q.get("status") == "ready":
+            info["hale_action"] = "turnin"
+            return True, "Good. Keep the charm. Watch the north road.", info
+        if hale_q.get("status") == "active":
+            info["hale_action"] = "progress"
+            import quest_steps
+            from content import QUESTS
+            # Talking to Hale can advance deliver step
+            quest_steps.on_talk(session, "hale")
+            return True, quest_steps.objective_text(
+                QUESTS.get("north_road_warning") or {}, session.quests.get("north_road_warning") or {}, session
+            ), info
+        return True, "Road's quieter.", info
     if not 0 <= i < len(p["choices"]):
         return False, "", {}
     _label, reply, effect = p["choices"][i]
@@ -747,6 +779,10 @@ def patron_talk(session, conn, patron, choice=None):
         d["quests"]["cellar_rats"] = {"state": "active", "count": 0}
         info["quest"] = "Cellar Rats"
         reply += f" (Quest: Cellar Rats. Clear {CELLAR_RATS['need']} rats: {CELLAR_RATS['coins']}c + bread.)"
+    elif effect == "north_road_warning":
+        info["hale_action"] = "offer"
+        info["quest_id"] = "north_road_warning"
+        reply = (reply or "") + " (Quest: North Road Warning.)"
     elif effect == "buy_sable":
         info["offer"] = {"kind": "sable_drink", "price": DRINKS["village_ale"]["price"]}
     save(conn, session.player_id, d)
