@@ -128,35 +128,6 @@ def _load_tex(name):
     return raw
 
 
-def _cell(name, tile_px, wx, wy):
-    """Opaque tile-sized blit from an AI texture, stable per world cell."""
-    key = ("cell", _ART_REV, name, int(tile_px))
-    sheet = _plate_cache.get(key)
-    if sheet is None and key not in _plate_cache:
-        raw = _load_tex(name)
-        if raw is None:
-            _plate_cache[key] = None
-            return None
-        tw = max(8, int(tile_px))
-        # 8×8 tile sheet so neighbouring cells look varied, not one stamp.
-        sheet = pygame.transform.smoothscale(raw, (tw * 8, tw * 8))
-        _plate_cache[key] = sheet
-    if sheet is None:
-        return None
-    tw = max(8, int(tile_px))
-    sx = (int(wx) % 8) * tw
-    sy = (int(wy) % 8) * tw
-    return sheet.subsurface(pygame.Rect(sx, sy, tw, tw))
-
-
-def _blit_cell(screen, rect, name, wx, wy):
-    cell = _cell(name, rect.w, wx, wy)
-    if cell is None:
-        return False
-    screen.blit(cell, rect.topleft)
-    return True
-
-
 def _water_cell(name, tile_px, wx, wy):
     """Continuous AI water sample — adjacent cells share one seamless sheet."""
     period = _WATER_PERIOD
@@ -463,54 +434,6 @@ def _blit_zone_tile(screen, rect, style, wx, wy, origin):
     if w1 < tw and h1 < th:
         chunk(w1, h1, tw - w1, th - h1, 0, 0)
     return True
-
-
-def _blit_zone_tile_alpha(screen, rect, style, wx, wy, origin, alpha):
-    """Lay another room's floor over this tile so the join is a fade, not a cut."""
-    alpha = int(alpha)
-    if alpha <= 4:
-        return False
-    tile = pygame.Surface(rect.size, pygame.SRCALPHA)
-    if not _blit_zone_tile(tile, tile.get_rect(), style, wx, wy, origin):
-        return False
-    tile.set_alpha(alpha)
-    screen.blit(tile, rect.topleft)
-    return True
-
-
-def _fade_into_rooms(screen, rect, wx, wy, d, here):
-    """Bleed neighbouring room floors across the boundary."""
-    wx, wy = int(wx), int(wy)
-    for zone in (d or {}).get("zones") or []:
-        if zone.get("id") in ("stair", "bridge"):
-            continue
-        style = zone.get("style") or ""
-        if not style or style == here or style == "bridge":
-            continue
-        bounds = zone.get("rect") or ()
-        if len(bounds) != 4:
-            continue
-        x0, y0, x1, y1 = (int(v) for v in bounds)
-        if x0 <= wx <= x1 and y0 <= wy <= y1:
-            continue
-        if wx < x0:
-            dx = x0 - wx
-        elif wx > x1:
-            dx = wx - x1
-        else:
-            dx = 0
-        if wy < y0:
-            dy = y0 - wy
-        elif wy > y1:
-            dy = wy - y1
-        else:
-            dy = 0
-        dist = max(dx, dy)
-        if dist < 1 or dist > _LIP_TILES:
-            continue
-        strength = 1.0 - (dist - 1) / float(_LIP_TILES)
-        alpha = int(170 * strength * strength)
-        _blit_zone_tile_alpha(screen, rect, style, wx, wy, (x0, y0), alpha)
 
 
 def _blit_deck(screen, rect, wx, wy, deck, d):
