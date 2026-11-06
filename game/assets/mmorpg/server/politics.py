@@ -845,25 +845,17 @@ def state_payload(conn, pid, now=None):
     st = stances(conn)
     p = pledge_of(conn, pid)
     role = ruling.role(conn, pid)
-    # Design: War Council also surfaces from the kingdom / world overview.
+    # Design: War Council also surfaces from the kingdom / world overview / atlas.
     war_line = None
+    war_atlas = None
     try:
         import crown_siege
-        war = crown_siege.current_war(conn)
-        if war:
-            pub = crown_siege.war_public(conn, war) or {}
-            atk = ((pub.get("sides") or {}).get("attack") or {}).get("lead") or {}
-            dfn = ((pub.get("sides") or {}).get("defend") or {}).get("lead") or {}
-            bit = f"War for the Crown — {war['status']}"
-            if atk.get("name") or dfn.get("name"):
-                bit += f": {atk.get('name') or '—'} vs {dfn.get('name') or '—'}"
-            war_line = bit
-        else:
-            notes = crown_siege.recent_war_notes(conn, limit=1)
-            if notes:
-                war_line = f"Last Crownfall: {notes[0]['note']}"
+        war_atlas = crown_siege.atlas_war_summary(conn, pid, now=now)
+        if war_atlas:
+            war_line = war_atlas.get("line")
     except Exception:
         war_line = None
+        war_atlas = None
     return {
         "mood": int(round(m)), "band": band_of(m),
         "drift": [{"label": k, "value": v} for k, v in parts],
@@ -872,6 +864,7 @@ def state_payload(conn, pid, now=None):
         "event": event_payload(conn, pid, now) if role in ("Monarch", "Chancellor") or
         role in ruling.POSTS else None,
         "war": war_line,
+        "war_atlas": war_atlas,
     }
 
 

@@ -186,6 +186,11 @@ class Database:
             # already know the game, so they count as finished (and as having had the bronze gift).
             self.conn.execute("ALTER TABLE players ADD COLUMN guide_tour INTEGER NOT NULL DEFAULT 0")
             self.conn.execute("UPDATE players SET guide_tour = 100")
+        if "crown_guide" not in cols:
+            # Seraphine → Royal Herald War for the Crown walk (see crown_war_guide.py).
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN crown_guide INTEGER NOT NULL DEFAULT 0"
+            )
         if "guide_bronze" not in cols:
             self.conn.execute("ALTER TABLE players ADD COLUMN guide_bronze INTEGER NOT NULL DEFAULT 0")
             self.conn.execute("UPDATE players SET guide_bronze = 1")

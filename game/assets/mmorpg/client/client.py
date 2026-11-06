@@ -371,6 +371,8 @@ class GameClient(ScreensMixin, CameraYaw):
         self.war_chip_rect = None
         self.war_board_rect = None
         self.war_board_close_rect = None
+        self.war_council_atlas = None  # world-map War Council card from WAR_COUNCIL
+        self.world_map_war_rect = None
         self.show_bank = False
         self.sidebar_tab = "inventory"  # inventory | combat | magic | quests
         self.sidebar_action_rects = {}
@@ -542,6 +544,10 @@ class GameClient(ScreensMixin, CameraYaw):
         self.death_banner_until = 0.0
         self.death_banner_text = ""
         self.death_where = "village"
+        self.crownfall_until = 0.0
+        self.crownfall_title = ""
+        self.crownfall_subtitle = ""
+        self.crownfall_text = ""
         self.hit_shake_until = 0.0
         self.hit_shake_mag = 0
         self.arrival_guide = False
@@ -608,6 +614,9 @@ class GameClient(ScreensMixin, CameraYaw):
         if t == "GUIDE_TOUR_STATE":
             import guide_tour
             guide_tour.on_state(self, msg)
+        if t == "CROWN_GUIDE_STATE":
+            import crown_war_guide
+            crown_war_guide.on_state(self, msg)
             return
         if t == "UI_COACH":
             ui_coach.on_message(self, msg)
@@ -1364,8 +1373,25 @@ class GameClient(ScreensMixin, CameraYaw):
                 self.npcs = npcs
         elif t == "COURT_EVENT":
             self.show_court_event(msg.get("event") or {})
+        elif t == "CROWNFALL":
+            # Stage 5: realm-wide coronation announce after the War for the Crown.
+            title = str(msg.get("title") or "CROWNFALL")
+            subtitle = str(msg.get("subtitle") or "")
+            text = str(msg.get("text") or "")
+            self.crownfall_until = time.time() + 6.5
+            self.crownfall_title = title
+            self.crownfall_subtitle = subtitle
+            self.crownfall_text = text
+            self.add_chat(
+                f"*** {title} — {subtitle or text} ***",
+                color=(255, 215, 90),
+                highlight=True,
+            )
         elif t == "KINGDOM_STATE":
             self.show_kingdom_state(msg.get("state") or {})
+        elif t == "WAR_COUNCIL":
+            summary = msg.get("summary")
+            self.war_council_atlas = summary if isinstance(summary, dict) else None
         elif t == "THRONE_HUD":
             self.throne_hud = (msg.get("text") or "", time.time() + float(msg.get("ttl") or 10))
         elif t == "CLAN_INFO":
@@ -1752,10 +1778,13 @@ class GameClient(ScreensMixin, CameraYaw):
         import guide_tour
         if event.type == pygame.MOUSEBUTTONDOWN and guide_tour.handle_click(self, event):
             return
+        import crown_war_guide
+        if crown_war_guide.handle_event(self, event):
+            return
         import adventure_guide
         if adventure_guide.handle_event(self, event):
             return
-        if not guide_tour.active(self) and ui_coach.handle_event(self, event):
+        if not guide_tour.active(self) and not crown_war_guide.active(self) and ui_coach.handle_event(self, event):
             return
         if new_player_guide.handle_event(self, event):
             return
@@ -2816,6 +2845,11 @@ class GameClient(ScreensMixin, CameraYaw):
             self.show_shop_panel = False
             self.show_skills = False
             self.show_pets = False
+            # Design: Royal War Council is reachable from the world map.
+            try:
+                self.net.send("WAR_COUNCIL")
+            except Exception:
+                pass
             # Centre the scroll viewport on the player
             scale = self.world_map_scale
             view_w = max(1, 700 // scale)
@@ -3839,9 +3873,11 @@ class GameClient(ScreensMixin, CameraYaw):
             # Flat structure map, or hud snapshot without nested structures.
             for key, val in raw.items():
                 if key in ("war", "heraldry", "breaches", "side", "eliminated",
-                           "interest_radius", "structures", "board",
+                           "interest_radius", "interest_cap", "side_cap",
+                           "human_min", "merc_max_fraction", "structures", "board",
                            "walls_breached", "watchtower_down", "armoury_down",
-                           "depot_down", "keep_down"):
+                           "depot_down", "keep_down", "last_stand",
+                           "royal_guard", "is_royal_guard"):
                     continue
                 if isinstance(val, dict) and "state" in val:
                     blob[key] = val
@@ -3855,6 +3891,13 @@ class GameClient(ScreensMixin, CameraYaw):
             "side": raw.get("side"),
             "eliminated": raw.get("eliminated"),
             "interest_radius": raw.get("interest_radius"),
+            "interest_cap": raw.get("interest_cap"),
+            "side_cap": raw.get("side_cap"),
+            "human_min": raw.get("human_min"),
+            "merc_max_fraction": raw.get("merc_max_fraction"),
+            "last_stand": raw.get("last_stand"),
+            "royal_guard": list(raw.get("royal_guard") or []),
+            "is_royal_guard": bool(raw.get("is_royal_guard")),
         }
         for flag in ("walls_breached", "watchtower_down", "armoury_down",
                      "depot_down", "keep_down", "board"):
@@ -4233,9 +4276,14 @@ class GameClient(ScreensMixin, CameraYaw):
         pl = st.get("pledge")
         lines.append(f"Your house: {pl['house']}, favour {pl['favour']}/500" if pl else "Your house: none")
         war = st.get("war")
+        atlas = st.get("war_atlas")
+        if isinstance(atlas, dict):
+            self.war_council_atlas = atlas
         if war:
             lines.append(str(war))
-            lines.append("War Council: notice board · guild panel · Royal Herald · /siege status")
+            lines.append(
+                "War Council: notice board · guild panel · world map · Royal Herald · /siege status"
+            )
         ev = st.get("event")
         if ev:
             lines.append(f"Open court matter: {ev.get('title')} - say /court to decide.")
@@ -5109,6 +5157,11 @@ class GameClient(ScreensMixin, CameraYaw):
         if self.show_help and tour and tour.collidepoint(mx, my):
             import guide_tour
             guide_tour.replay(self)
+            return
+        crown_tour = getattr(self, "crown_guide_replay_rect", None)
+        if self.show_help and crown_tour and crown_tour.collidepoint(mx, my):
+            import crown_war_guide
+            crown_war_guide.replay(self)
             return
         replay = getattr(self, "throne_vision_replay_rect", None)
         if self.show_help and replay and replay.collidepoint(mx, my):
@@ -7308,7 +7361,8 @@ class GameClient(ScreensMixin, CameraYaw):
             self.draw_dialogue()
         # Pointers must draw above the talk box — they used to paint inside draw_map and vanish under dialogue.
         import guide_tour
-        if not guide_tour.active(self):
+        import crown_war_guide
+        if not guide_tour.active(self) and not crown_war_guide.active(self):
             ui_coach.draw(self)
         if self.housing_open:
             import housing_sprites
@@ -7404,6 +7458,9 @@ class GameClient(ScreensMixin, CameraYaw):
         import guide_tour
         guide_tour.tick(self)
         guide_tour.draw(self)
+        import crown_war_guide
+        crown_war_guide.tick(self)
+        crown_war_guide.draw(self)
         import adventure_guide
         adventure_guide.draw(self)
 
@@ -8873,6 +8930,8 @@ class GameClient(ScreensMixin, CameraYaw):
         # Death respawn banner overlay
         if time.time() < self.death_banner_until and self.death_banner_text:
             self.draw_death_banner()
+        if time.time() < self.crownfall_until and (self.crownfall_title or self.crownfall_text):
+            self.draw_crownfall_banner()
         new_player_guide.draw(self)
         # ui_coach draws later in draw_game (after dialogue) so pointers sit on top.
         zone = wm.get_zone(self.player["x"], self.player["y"])
@@ -11383,6 +11442,28 @@ class GameClient(ScreensMixin, CameraYaw):
         self.walk_and_act(goals, None)
         return True
 
+    def open_war_council_from_map(self):
+        """Open the Royal War Council dialogue from the world-map card."""
+        summary = getattr(self, "war_council_atlas", None)
+        if isinstance(summary, dict) and summary.get("lines"):
+            self.dialogue = {
+                "npc_id": "war_council",
+                "npc_name": "Royal War Council",
+                "lines": list(summary.get("lines") or []),
+            }
+            return
+        try:
+            self.net.send("WAR_COUNCIL", open=True)
+        except Exception:
+            self.dialogue = {
+                "npc_id": "war_council",
+                "npc_name": "Royal War Council",
+                "lines": [
+                    "Royal War Council — no War for the Crown is open.",
+                    "A guild Leader may /siege register attack|defend to open registration.",
+                ],
+            }
+
     def handle_world_map_click(self, mx, my, button=1):
         box = self.world_map_view_rect()
         canvas = self.world_map_canvas_rect()
@@ -11409,6 +11490,10 @@ class GameClient(ScreensMixin, CameraYaw):
             px, py = self.player_xy()
             self.world_map_scroll = [px - view_w // 2, py - view_h // 2]
             self.clamp_world_map_scroll()
+            return
+        war_rect = getattr(self, "world_map_war_rect", None)
+        if war_rect and war_rect.collidepoint(mx, my):
+            self.open_war_council_from_map()
             return
         # Side place cards / named pins
         for rect, dest in list(getattr(self, "world_map_card_rects", None) or []) + list(
@@ -13839,6 +13924,29 @@ class GameClient(ScreensMixin, CameraYaw):
         tip = self.font_small.render(tip_text, True, (200, 180, 170))
         tip.set_alpha(int(220 * fade))
         self.screen.blit(tip, (MAP_W // 2 - tip.get_width() // 2, MAP_H // 2 + 16))
+
+    def draw_crownfall_banner(self):
+        """Realm-wide coronation overlay after the War for the Crown ends."""
+        now = time.time()
+        remaining = max(0.0, self.crownfall_until - now)
+        fade = min(1.0, remaining / 0.8)
+        panel = pygame.Surface((MAP_W, 128), pygame.SRCALPHA)
+        panel.fill((28, 18, 8, int(210 * fade)))
+        self.screen.blit(panel, (0, MAP_H // 2 - 68))
+        title = self.font_big.render(self.crownfall_title or "CROWNFALL", True, (255, 215, 90))
+        title.set_alpha(int(255 * fade))
+        self.screen.blit(title, (MAP_W // 2 - title.get_width() // 2, MAP_H // 2 - 58))
+        sub_txt = self.crownfall_subtitle or self.crownfall_text
+        if sub_txt:
+            sub = self.font.render(str(sub_txt)[:72], True, (255, 235, 190))
+            sub.set_alpha(int(255 * fade))
+            self.screen.blit(sub, (MAP_W // 2 - sub.get_width() // 2, MAP_H // 2 - 18))
+        tip = self.font_small.render(
+            "Royal heraldry flies over the King's Castle · Regal robes at Mae's",
+            True, (220, 200, 160),
+        )
+        tip.set_alpha(int(220 * fade))
+        self.screen.blit(tip, (MAP_W // 2 - tip.get_width() // 2, MAP_H // 2 + 20))
 
     def _announce_new_stat_boosts(self, prev, current):
         """Floating text + chat when a potion boost is freshly applied or increased."""

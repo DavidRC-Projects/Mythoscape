@@ -1314,8 +1314,37 @@ class ScreensMixin:
                 self.screen.blit(s, (tbox.x + 10, yy))
                 yy += s.get_height() + 2
 
+        # Design: Royal War Council is reachable from the world map.
+        self.world_map_war_rect = None
+        atlas = getattr(self, "war_council_atlas", None)
+        if isinstance(atlas, dict) and atlas.get("line"):
+            war_rect = pygame.Rect(box.x + 20, box.bottom - 58, box.w - 40, 28)
+            open_war = bool(atlas.get("open"))
+            fill = (48, 28, 18) if open_war else (28, 30, 38)
+            edge = (220, 170, 70) if open_war else (120, 110, 90)
+            pygame.draw.rect(self.screen, fill, war_rect, border_radius=6)
+            pygame.draw.rect(self.screen, edge, war_rect, 1, border_radius=6)
+            label = "War Council"
+            hdr = self.font_tiny.render(label, True, (255, 220, 140))
+            self.screen.blit(hdr, (war_rect.x + 8, war_rect.y + 6))
+            blurb = str(atlas.get("line") or "")
+            max_w = war_rect.w - hdr.get_width() - 28
+            tip = self.font_tiny.render(" · click to open", True, (180, 160, 120))
+            body = self.font_tiny.render(blurb, True, (240, 230, 200))
+            while body.get_width() > max_w and len(blurb) > 12:
+                blurb = blurb[:-4].rstrip(" ·") + "…"
+                body = self.font_tiny.render(blurb, True, (240, 230, 200))
+            self.screen.blit(body, (war_rect.x + 12 + hdr.get_width(), war_rect.y + 6))
+            if war_rect.w > hdr.get_width() + tip.get_width() + 24:
+                self.screen.blit(
+                    tip,
+                    (war_rect.right - tip.get_width() - 8, war_rect.y + 6),
+                )
+            self.world_map_war_rect = war_rect
+
         foot = self.font_tiny.render(
-            "Portrait pins mark destinations  ·  Side cards show where you can go  ·  Press M for the Travel list",
+            "Portrait pins mark destinations  ·  Side cards show where you can go  ·  "
+            "War Council on the atlas  ·  Press M for the Travel list",
             True, (140, 130, 110),
         )
         self.screen.blit(foot, (box.x + 20, box.bottom - 26))
@@ -2932,6 +2961,12 @@ class ScreensMixin:
         pygame.draw.rect(self.screen, (212, 175, 90), self.guide_tour_replay_rect, 1, border_radius=14)
         self.screen.blit(self.font_small.render("Tour with Seraphine", True, (232, 226, 210)),
                          (self.guide_tour_replay_rect.x + 12, self.guide_tour_replay_rect.y + 5))
+        # Settings > Help > War for the Crown walk (Seraphine → Royal Herald outside castle)
+        self.crown_guide_replay_rect = pygame.Rect(box.x + 288, box.y + 134, 270, 28)
+        pygame.draw.rect(self.screen, (32, 42, 68), self.crown_guide_replay_rect, border_radius=14)
+        pygame.draw.rect(self.screen, (212, 175, 90), self.crown_guide_replay_rect, 1, border_radius=14)
+        self.screen.blit(self.font_small.render("War for the Crown tour", True, (232, 226, 210)),
+                         (self.crown_guide_replay_rect.x + 12, self.crown_guide_replay_rect.y + 5))
         import outfit_fx
         st = outfit_fx.state
         self.outfit_fx_rect = pygame.Rect(box.x + 16, box.y + 100, 260, 28)

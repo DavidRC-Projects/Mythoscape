@@ -94,6 +94,7 @@ DIVORCE_COOLDOWN = WEEK
 REP_MARRIAGE = 10
 
 HERALD_OPTIONS = [
+    {"id": "siege_guide", "label": "How the War for the Crown works"},
     {"id": "crown_check", "label": "War for the Crown"},
     {"id": "castle_check", "label": "Castle Challenge"},
     {"id": "throne_list", "label": "Current challenges"},
@@ -103,6 +104,8 @@ HERALD_OPTIONS = [
     {"id": "siege_store", "label": "War storehouse"},
     {"id": "siege_costs", "label": "Siege resource costs"},
     {"id": "siege_scout", "label": "Scout the castle walls"},
+    {"id": "siege_royalguard", "label": "Royal Guard"},
+    {"id": "siege_report", "label": "Battle report"},
 ]
 CELIA_OPTIONS = [
     {"id": "court_status", "label": "Court Favour"},

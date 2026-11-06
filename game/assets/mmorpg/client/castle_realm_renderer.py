@@ -194,11 +194,32 @@ def _siege_overlay(screen, rect, state, cracks=False):
             pygame.draw.ellipse(rubble, (50, 40, 30, 220), (rx, 2, 10, 6))
         veil.blit(rubble, (0, rect.h - rubble.get_height()))
     if state in ("heavily_damaged", "destroyed"):
+        # Design: heavily damaged shows fire and debris; destroyed leaves ruins.
         smoke = pygame.Surface((rect.w, max(6, rect.h // 3)), pygame.SRCALPHA)
         for i in range(4):
             sx = (i * 41 + 5) % max(1, rect.w - 12)
             pygame.draw.ellipse(smoke, (40, 40, 40, 70), (sx, i * 3, 14, 10))
         veil.blit(smoke, (0, 0))
+        fire = pygame.Surface((rect.w, max(8, rect.h // 4)), pygame.SRCALPHA)
+        for i in range(5 if state == "heavily_damaged" else 3):
+            fx = (i * 33 + 9) % max(1, rect.w - 10)
+            h = 6 + (i % 3) * 3
+            # Ember core + orange tongue (banners burn / fire and debris).
+            pygame.draw.polygon(
+                fire, (255, 140, 40, 160),
+                [(fx, h), (fx + 4, 0), (fx + 8, h)],
+            )
+            pygame.draw.polygon(
+                fire, (255, 220, 120, 200),
+                [(fx + 2, h - 1), (fx + 4, 2), (fx + 6, h - 1)],
+            )
+        veil.blit(fire, (0, max(0, rect.h // 5)))
+        if state == "heavily_damaged":
+            # Charred debris streaks along the face.
+            for i in range(3):
+                dx = (i * 47 + 13) % max(1, rect.w - 16)
+                dy = rect.h // 2 + (i * 11) % max(1, rect.h // 3)
+                pygame.draw.line(veil, (20, 12, 8, 180), (dx, dy), (dx + 12, dy + 3), 2)
     screen.blit(veil, rect.topleft)
 
 
@@ -1109,9 +1130,12 @@ def draw_war_prompt(client):
             delay = int(war.get("assault_delay") or 3600)
             left = max(0, int(float(war["scheduled_at"]) + delay - time.time()))
             bit += f" · assault in {left // 3600}h {(left % 3600) // 60}m"
+            utc = war.get("assault_at_utc")
+            if utc:
+                bit += f" · {utc}"
         if status == "active":
             started = war.get("started_at") or war.get("scheduled_at")
-            secs = int(war.get("assault_seconds") or 6 * 3600)
+            secs = int(war.get("assault_seconds") or 3 * 3600)
             if started:
                 left = max(0, int(float(started) + secs - time.time()))
                 bit += f" · {left // 3600}h {(left % 3600) // 60}m left"
@@ -1127,6 +1151,12 @@ def draw_war_prompt(client):
                 bit += f" · confirm {soonest // 3600}h {(soonest % 3600) // 60}m"
         if hud.get("watchtower_down"):
             bit += " · tower down"
+        if hud.get("last_stand"):
+            bit += " · Last Stand"
+        if hud.get("is_royal_guard"):
+            bit += " · Royal Guard"
+        elif hud.get("royal_guard"):
+            bit += f" · RG×{len(hud.get('royal_guard') or [])}"
         parts.append(bit)
     if heraldry and isinstance(heraldry.get("banner"), dict):
         charge = heraldry["banner"].get("charge") or "arms"
@@ -1169,6 +1199,14 @@ def draw_war_board(client, hud=None):
                 )
             else:
                 lines.append(f"{side.title()}: open")
+            allies = info.get("allies") or []
+            if allies:
+                # Design: smaller guilds join alliances and receive recognition.
+                lines.append(
+                    "  Allies: " + ", ".join(
+                        a.get("name") or f"#{a.get('clan_id')}" for a in allies
+                    )
+                )
             stock = info.get("store") or {}
             if stock:
                 lines.append(
@@ -1319,8 +1357,59 @@ def draw_siege_examine(client):
     screen.blit(label, (box.x + pad_x, box.y + pad_y))
 
 
+def draw_siege_heraldry(client):
+    """Paint the victor's crest over the King's Castle (design: heraldry flies).
+
+    Realm: above the outer gate. Great Hall: above the throne capture zone.
+    """
+    hud = _war_hud(client)
+    heraldry = (hud or {}).get("heraldry") if hud else None
+    if not heraldry:
+        # Fall back to the structure-sync blob when the HUD tick has not arrived.
+        d = getattr(client, "dungeon", None) or {}
+        blob = d.get("crown_siege") or {}
+        heraldry = blob.get("heraldry") if isinstance(blob, dict) else None
+    banner = (heraldry or {}).get("banner") if isinstance(heraldry, dict) else None
+    if not isinstance(banner, dict):
+        return
+    if not hasattr(client, "camera_origin"):
+        return
+    try:
+        cam_x, cam_y = client.camera_origin()
+        import client as _cmod
+        tile = int(getattr(_cmod, "TILE", 40) or 40)
+    except Exception:
+        return
+    plane = _plane(client)
+    if plane == "realm":
+        ax, ay = 149, 62  # just above the outer gate
+    elif plane == "king_f1":
+        ax, ay = 26, 10   # above the throne dais
+    else:
+        return
+    sx = int((ax - cam_x) * tile)
+    sy = int((ay - cam_y) * tile)
+    size = max(28, tile + 8)
+    rect = pygame.Rect(sx - size // 2, sy - size // 2, size, int(size * 1.15))
+    try:
+        import mercenaries_ui
+        mercenaries_ui.draw_house_banner(client.screen, banner, rect)
+    except Exception:
+        # Soft gold plate so heraldry is still visible without the crest helper.
+        pygame.draw.rect(client.screen, (40, 28, 12), rect, border_radius=4)
+        pygame.draw.rect(client.screen, (200, 160, 70), rect, 2, border_radius=4)
+        charge = str(banner.get("charge") or "arms")
+        font = getattr(client, "font_tiny", None) or client.font_small
+        label = font.render(charge[:8], True, (255, 230, 170))
+        client.screen.blit(
+            label,
+            (rect.centerx - label.get_width() // 2, rect.centery - label.get_height() // 2),
+        )
+
+
 def draw_overlay(client):
     if _realm(client):
+        draw_siege_heraldry(client)
         draw_capture_markers(client)
         draw_war_prompt(client)
         draw_siege_examine(client)
@@ -1328,6 +1417,7 @@ def draw_overlay(client):
         return
     if not _interior(client):
         return
+    draw_siege_heraldry(client)
     draw_capture_markers(client)
     draw_war_prompt(client)
     draw_siege_examine(client)

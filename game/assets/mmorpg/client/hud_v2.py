@@ -1401,7 +1401,7 @@ def _draw_guild_home(client, clan, x0, yy, w, bottom, rects):
               (x0, yy), (220, 180, 110))
         yy += 16
         _blit(client, client.font_tiny,
-              "War Council · /siege status · notice board · Herald",
+              "War Council · /siege status · notice board · world map · Herald",
               (x0, yy), MUTED)
         yy += 16
     challenge = str(clan.get("challenge") or "").strip()

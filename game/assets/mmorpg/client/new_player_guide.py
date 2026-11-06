@@ -528,6 +528,14 @@ def active_trail_target(client):
         if wp:
             return wp[0], wp[1], wp[2] or "Waypoint"
         return None
+    # Seraphine's War for the Crown walk → Royal Herald outside the castle.
+    try:
+        import crown_war_guide
+        ct = crown_war_guide.trail_target(client)
+        if ct:
+            return int(ct["x"]), int(ct["y"]), ct.get("label") or "Royal Herald"
+    except Exception:
+        pass
     # Welcome stages first while the kit trail is live (overworld only).
     if not getattr(client, "dungeon", None) and visible(client):
         kind, xy = _stage(client)

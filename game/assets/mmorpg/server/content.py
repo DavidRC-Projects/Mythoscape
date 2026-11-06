@@ -2002,6 +2002,9 @@ TELEPORT_DESTINATIONS = [
     {"id": "estate", "label": "Estate Agent", "blurb": "Village estate office (north fringe)", "where": "overworld", "x": 85, "y": 11},
     {"id": "kings_row_south", "label": "King's Row Homes", "blurb": "South-road cottages", "where": "overworld", "x": 27, "y": 151},
     {"id": "realm", "label": "King's Realm", "blurb": "The plaza", "where": "castle", "x": 150, "y": 183},
+    {"id": "royal_herald", "label": "Royal Herald",
+     "blurb": "Outside the King's Castle approach (King's Realm portal)",
+     "where": "overworld", "x": 12, "y": 21},
     {"id": "gothic", "label": "Gothic Castle", "blurb": "Outside the gate", "where": "castle", "x": 52, "y": 78},
     {"id": "king", "label": "King's Castle", "blurb": "Outside the gate", "where": "castle", "x": 152, "y": 78},
     {"id": "arena", "label": "Crownfall Arena", "blurb": "Outside the gate (barracks)",
@@ -2100,9 +2103,13 @@ NPCS = [
      "lines": ["The Chronicle of Kings is kept here. Ask, and I'll read every reign of Crownfall."]},
 
     # Crownfall phase 7: the paths to the throne
-    {"id": "royal_herald", "name": "Royal Herald", "x": 157, "y": 58,
-     "lines": ["By the old law, a strong guild may challenge for the Crown.",
-               "Combat 100, a castle of your own, every quest done, and a guild fit for the Royal Challenge."]},
+    # Outside the King's Castle approach (King's Realm portal) — Seraphine walks players here.
+    {"id": "royal_herald", "name": "Royal Herald", "x": 12, "y": 21,
+     "lines": [
+         "I stand outside the King's Castle approach so every traveller may learn the law.",
+         "The throne is contested through the War for the Crown — guilds, a shared storehouse, "
+         "and a monthly siege. Ask me how it works, or open War for the Crown when a war is live.",
+     ]},
     {"id": "mistress_celia", "name": "Mistress of the Robes Celia", "x": 158, "y": 50,
      "lines": ["The court has its own ways to the throne, for a lady with the manners for it."]},
     {"id": "chaplain_mirelle", "name": "Chaplain Mirelle", "x": 9, "y": 9,
@@ -4776,6 +4783,14 @@ def _castle_realm_portal():
         "y": 19,
         "blurb": "Gold portal west of the wishing well",
         "action": {"type": "ENTER_DUNGEON", "dungeon_id": "castle_realm"},
+    })
+    TRAVEL_DESTINATIONS.append({
+        "id": "royal_herald",
+        "kind": "place",
+        "label": "Royal Herald",
+        "x": 12,
+        "y": 21,
+        "blurb": "Outside the King's Castle approach — War for the Crown guide",
     })
 
 

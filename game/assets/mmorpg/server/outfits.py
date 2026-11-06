@@ -309,7 +309,13 @@ def upgrade_requirement(session, set_entry, level, conn=None):
             except Exception:
                 siege_ok = False
         if days < REIGN_DAYS_FOR_REGAL_T7 and not siege_ok:
-            return False, f"Reign {REIGN_DAYS_FOR_REGAL_T7} days to reach Regal ({days} / {REIGN_DAYS_FOR_REGAL_T7})."
+            # Design: Regal robes unlock at Mae's after a War for the Crown win,
+            # or after a week on the throne.
+            return False, (
+                f"Reign {REIGN_DAYS_FOR_REGAL_T7} days to reach Regal "
+                f"({days} / {REIGN_DAYS_FOR_REGAL_T7}), "
+                "or win the War for the Crown."
+            )
     return True, ""
 
 

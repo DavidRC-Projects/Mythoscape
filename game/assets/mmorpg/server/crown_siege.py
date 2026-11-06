@@ -11,6 +11,7 @@ assault clock, structure effects, war board / Herald.
 from __future__ import annotations
 
 import time
+from datetime import datetime, timezone
 
 HOUR = 3600
 DAY = 86400
@@ -18,13 +19,29 @@ DAY = 86400
 # ---- milestone 2: declaration / registration ---------------------------------
 CONFIRM_SECONDS = 48 * HOUR
 HUMAN_MIN = 20                 # humans required to confirm a reserved slot
+# Design: under-strength wars are postponed or run at a smaller scale.
+SMALL_SCALE_HUMAN_MIN = max(1, HUMAN_MIN // 2)
 SIDE_CAP = 100                 # milestone 8: max fighters per side (humans + mercs)
 MERC_MAX_FRACTION = 0.40       # mercenaries may not exceed 40% of a side
 INTEREST_RADIUS = 24           # tiles: combat / state interest during an active war
 INTEREST_RADIUS_BREACHED = 36  # after the watchtower falls, the battlefield opens up
-ASSAULT_DELAY = 1 * HOUR       # after both sides confirm, assault begins automatically
-ASSAULT_SECONDS = 6 * HOUR     # active assault window; defenders win if time expires
+# Milestone 8: interest fan-out keeps at most SIDE_CAP other fighters (profiled for 100-a-side).
+INTEREST_CAP = SIDE_CAP
+ASSAULT_DELAY = 1 * HOUR       # default after both confirm if attackers do not pick a window
+ASSAULT_SECONDS = 3 * HOUR     # design: siege runs two to three hours
+# Design: attacking alliance selects a coordinated assault window; several days to prepare.
+ASSAULT_WINDOW_MIN_H = max(1, ASSAULT_DELAY // HOUR)
+ASSAULT_WINDOW_MAX_H = 72      # three days — "several days" of community preparation
 SIEGE_COOLDOWN = 30 * DAY      # monthly war cadence between completed wars
+# Design: monthly siege calendar builds anticipation toward Day 30 — The Siege.
+MONTHLY_CALENDAR = (
+    (1, 7, "Days 1–7 — Royal announcements, guild recruitment and diplomacy"),
+    (8, 14, "Days 8–14 — Gathering wood, stone, ore and supplies"),
+    (15, 21, "Days 15–21 — Crafting weapons, siege engines and fortifications"),
+    (22, 27, "Days 22–27 — Final alliances, scouting and military preparation"),
+    (28, 29, "Days 28–29 — War registration and battle assignments"),
+    (30, 30, "Day 30 — The Siege of Crownfall"),
+)
 BREACH_STRUCTURES = ("outer_gate", "west_wall", "east_wall")
 CAPTURE_CONTRIB = 25           # points each fighter present when a point flips to their side
 SIDES = ("attack", "defend")
@@ -71,6 +88,14 @@ WEAPONS = {
         "damage": 500,
         "targets": ("west_wall", "east_wall"),
     },
+    "tower": {
+        # Design: woodcutters supply timber for ladders, rams and siege towers.
+        "name": "Siege Tower",
+        "cost": {"timber": 50, "bars": 4},
+        "alloc": "ladders",
+        "damage": 900,
+        "targets": ("west_wall", "east_wall", "watchtower"),
+    },
     "catapult": {
         "name": "Catapult",
         "cost": {"timber": 30, "ore": 10, "bars": 3},
@@ -102,6 +127,13 @@ _CONN = None  # tests set this; live code uses server.WORLD.db.conn
 # ---- milestone 5: capture points, throne hold, Last Stand --------------------
 # Attackers push stages in order (outer settlement → walls/gate → court → throne).
 CAPTURE_ORDER = ("outer_yard", "gatehouse", "courtyard", "throne")
+# Design stages 1–4 map onto capture points; Stage 5 is Crownfall on resolve.
+CAPTURE_STAGES = {
+    "outer_yard": (1, "Break the outer defences"),
+    "gatehouse": (2, "Breach the walls"),
+    "courtyard": (3, "Capture the courtyard"),
+    "throne": (4, "Take the throne room"),
+}
 CAPTURE_POINTS = {
     "outer_yard": {
         "name": "Outer Yard",
@@ -135,6 +167,8 @@ GUARD_DEPLOY_HP = 30           # HP added per Guard recruit posted on a capture 
 FALLBACK_BARRICADE_HP = 20     # hasty fortification when defenders regroup to the next stage
 ROYAL_GUARD_HP = 50            # throne fortification when the keep falls (final hold)
 ROYAL_GUARD_SENTINEL = -1      # crown_war_guards.recruit_id for the system royal-guard grant
+# Design: limited appointed players who can protect the King.
+ROYAL_GUARD_PLAYER_CAP = 4
 KING_CASTLE_ID = "king"
 
 # Anchored to the existing King's Castle (king_castle.json footprint / Great Hall).
@@ -242,6 +276,12 @@ def ensure_schema(conn):
     war_cols = {r[1] for r in conn.execute("PRAGMA table_info(crown_wars)")}
     if "started_at" not in war_cols:
         conn.execute("ALTER TABLE crown_wars ADD COLUMN started_at REAL")
+    if "postpones" not in war_cols:
+        conn.execute(
+            "ALTER TABLE crown_wars ADD COLUMN postpones INTEGER NOT NULL DEFAULT 0"
+        )
+    if "scale" not in war_cols:
+        conn.execute("ALTER TABLE crown_wars ADD COLUMN scale TEXT")
     conn.execute(
         "CREATE TABLE IF NOT EXISTS crown_war_slots ("
         "id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -367,6 +407,15 @@ def ensure_schema(conn):
         "outfit_unlocked INTEGER NOT NULL DEFAULT 1,"
         "granted_at REAL NOT NULL,"
         "war_id INTEGER)"
+    )
+    # Design: limited appointed players who can protect the King.
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS crown_war_royal_players ("
+        "war_id INTEGER NOT NULL,"
+        "player_id INTEGER NOT NULL,"
+        "appointed_by INTEGER NOT NULL,"
+        "appointed_at REAL NOT NULL,"
+        "PRIMARY KEY (war_id, player_id))"
     )
     conn.commit()
 
@@ -549,6 +598,25 @@ def hall_lines(conn, now=None):
     else:
         lines.append("The Chronicle of Kings records every reign of Crownfall.")
     lines.extend(ruling.reign_lines(conn, now) or ["The records are empty."])
+    # Design: Royal Crown while holding the throne; King's Outfit / throne-room after siege.
+    if cur and cur.get("name"):
+        lines.append(
+            f"Royal Crown: exclusive wearable crown while holding the throne "
+            f"({cur.get('title') or 'Monarch'} {cur['name']})."
+        )
+    heraldry = castle_heraldry(conn)
+    if heraldry and heraldry.get("banner"):
+        charge = (heraldry.get("banner") or {}).get("charge", "arms")
+        lines.append(
+            f"Throne-room appearance: royal heraldry flies here "
+            f"(banner charge: {charge}). King's Outfit — exclusive royal robes, "
+            "mantle, and armour variants unlock at Mae's for the victor."
+        )
+    elif cur and cur.get("path") == "siege":
+        lines.append(
+            "King's Outfit — exclusive royal robes, mantle, and armour variants "
+            "unlock at Mae's for the War for the Crown victor."
+        )
     if wars:
         lines.append("Chronicles of the War for the Crown:")
         # Oldest first so the hall reads as a chronicle.
@@ -620,19 +688,58 @@ def _alliance_humans(conn, war_id, lead_clan_id, side):
     return total
 
 
-def _sides_meet_human_min(conn, war_id):
-    """True when both confirmed leads still field HUMAN_MIN alliance humans."""
+def _sides_meet_human_min(conn, war_id, min_humans=None):
+    """True when both confirmed leads still field the required alliance humans."""
+    if min_humans is None:
+        war = current_war(conn)
+        if war and int(war.get("id") or 0) == int(war_id):
+            min_humans = effective_human_min(war)
+        else:
+            min_humans = HUMAN_MIN
+    need = max(1, int(min_humans))
     weak = []
     for side in SIDES:
         lead = _lead_slot(conn, war_id, side)
         if not lead or lead["status"] != "confirmed":
             return False, f"{side} is not confirmed"
         humans = _alliance_humans(conn, war_id, lead["clan_id"], side)
-        if humans < HUMAN_MIN:
-            weak.append(f"{lead['name']} ({side}, {humans}/{HUMAN_MIN})")
+        if humans < need:
+            weak.append(f"{lead['name']} ({side}, {humans}/{need})")
     if weak:
         return False, "under strength — " + "; ".join(weak)
     return True, None
+
+
+def army_composition_lines(conn, war=None, now=None):
+    """Design: human/mercenary numbers visible to both leaders before roster locks."""
+    war = war or current_war(conn)
+    if not war or war.get("status") not in ("registration", "scheduled", "active"):
+        return []
+    bits = []
+    counts = {}
+    for side in SIDES:
+        lead = _lead_slot(conn, war["id"], side)
+        if not lead:
+            bits.append(f"{side.title()} open")
+            continue
+        humans = _alliance_humans(conn, war["id"], lead["clan_id"], side)
+        mercs = _alliance_mercs(conn, war["id"], lead["clan_id"], side)
+        counts[side] = humans
+        bits.append(f"{side.title()} {humans}h/{mercs}m ({lead['name']})")
+    if war.get("status") == "active":
+        lock = " — locked for the assault"
+    else:
+        lock = " — visible to both leaders; locks when the assault begins"
+    lines = ["Army composition: " + " · ".join(bits) + lock]
+    atk_h = counts.get("attack")
+    dfn_h = counts.get("defend")
+    if atk_h is not None and dfn_h is not None and atk_h != dfn_h:
+        behind = "Attack" if atk_h < dfn_h else "Defend"
+        lines.append(
+            f"{behind} trails in humans — cannot hire mercenaries to pad that "
+            "combat-power disadvantage."
+        )
+    return lines
 
 
 def roster_locked(conn, clan_id=None):
@@ -672,6 +779,10 @@ def hire_allowed(conn, clan_id):
     """Whether a guild may hire another recruit under open-war roster rules.
 
     Returns (ok, message). Peacetime / unregistered guilds always ok.
+
+    Design: a side cannot hire extra mercenaries to compensate for a major
+    combat-power disadvantage — if the opposing alliance fields more humans,
+    further war merc hires are refused.
     """
     if not clan_id:
         return True, None
@@ -685,6 +796,16 @@ def hire_allowed(conn, clan_id):
         return True, None
     humans = _alliance_humans(conn, war["id"], lead_id, side)
     mercs = _alliance_mercs(conn, war["id"], lead_id, side)
+    foe_side = "defend" if side == "attack" else "attack"
+    foe = _lead_slot(conn, war["id"], foe_side)
+    if foe and foe.get("status") in ("reserved", "confirmed"):
+        foe_humans = _alliance_humans(conn, war["id"], foe["clan_id"], foe_side)
+        if humans < foe_humans:
+            return False, (
+                "You cannot hire mercenaries to pad a combat-power disadvantage "
+                f"({humans} humans vs {foe_humans} on the opposing side). "
+                "Recruit more human fighters first."
+            )
     ok, msg = war_merc_caps_ok(humans, mercs + 1)
     if not ok:
         return False, msg
@@ -706,21 +827,47 @@ def _is_leader(conn, player_id):
     return _rank_of(conn, player_id) == "Leader"
 
 
+def assault_starts_at(war):
+    """Unix time when a scheduled war's assault auto-begins."""
+    if not war or war.get("scheduled_at") is None:
+        return None
+    return float(war["scheduled_at"]) + ASSAULT_DELAY
+
+
+def _is_attack_lead_leader(conn, player_id, war):
+    """True when the player leads the attacking alliance's lead guild."""
+    if not war or not _is_leader(conn, player_id):
+        return False
+    clan_id = _clan_of(conn, player_id)
+    atk = _lead_slot(conn, war["id"], "attack")
+    return bool(atk and clan_id and int(atk["clan_id"]) == int(clan_id))
+
+
 def current_war(conn):
     try:
         row = conn.execute(
-            "SELECT id, status, opened_at, scheduled_at, closed_at, note, started_at "
+            "SELECT id, status, opened_at, scheduled_at, closed_at, note, started_at, "
+            "COALESCE(postpones, 0), scale "
             "FROM crown_wars WHERE status IN ('registration', 'scheduled', 'active') "
             "ORDER BY id DESC LIMIT 1"
         ).fetchone()
     except Exception:
-        row = conn.execute(
-            "SELECT id, status, opened_at, scheduled_at, closed_at, note "
-            "FROM crown_wars WHERE status IN ('registration', 'scheduled', 'active') "
-            "ORDER BY id DESC LIMIT 1"
-        ).fetchone()
-        if row:
-            row = tuple(row) + (None,)
+        try:
+            row = conn.execute(
+                "SELECT id, status, opened_at, scheduled_at, closed_at, note, started_at "
+                "FROM crown_wars WHERE status IN ('registration', 'scheduled', 'active') "
+                "ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+            if row:
+                row = tuple(row) + (0, None)
+        except Exception:
+            row = conn.execute(
+                "SELECT id, status, opened_at, scheduled_at, closed_at, note "
+                "FROM crown_wars WHERE status IN ('registration', 'scheduled', 'active') "
+                "ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+            if row:
+                row = tuple(row) + (None, 0, None)
     if not row:
         return None
     return {
@@ -731,7 +878,16 @@ def current_war(conn):
         "closed_at": float(row[4]) if row[4] is not None else None,
         "note": row[5],
         "started_at": float(row[6]) if len(row) > 6 and row[6] is not None else None,
+        "postpones": int(row[7] or 0) if len(row) > 7 else 0,
+        "scale": row[8] if len(row) > 8 else None,
     }
+
+
+def effective_human_min(war=None):
+    """Human minimum for this war — full roster, or smaller scale after postpone."""
+    if war and str(war.get("scale") or "") == "small":
+        return SMALL_SCALE_HUMAN_MIN
+    return HUMAN_MIN
 
 
 def _last_closed(conn):
@@ -902,13 +1058,16 @@ def tick_wars(conn, now=None):
             conn.commit()
             notices.append(
                 "Both sides confirmed. The War for the Crown is scheduled — "
-                f"assault begins in {ASSAULT_DELAY // HOUR} hour(s)."
+                f"assault begins in {ASSAULT_DELAY // HOUR} hour(s) by default. "
+                f"Attack Leader: /siege when <{ASSAULT_WINDOW_MIN_H}-{ASSAULT_WINDOW_MAX_H}>h "
+                "to set the coordinated assault window."
             )
             try:
                 import politics
                 politics.news(
                     conn, "siege",
-                    "Both sides confirmed. The War for the Crown is scheduled.",
+                    "Both sides confirmed. The War for the Crown is scheduled — "
+                    "the attacking alliance may select the assault window.",
                     now,
                 )
             except Exception:
@@ -917,32 +1076,74 @@ def tick_wars(conn, now=None):
     # begin_assault here; that function calls tick_wars and would recurse).
     war = current_war(conn)
     if war and war["status"] == "scheduled":
-        start_at = float(war.get("scheduled_at") or 0) + ASSAULT_DELAY
+        start_at = assault_starts_at(war) or 0
         if now >= start_at:
             atk = _lead_slot(conn, war["id"], "attack")
             dfn = _lead_slot(conn, war["id"], "defend")
             if atk and atk["status"] == "confirmed" and dfn and dfn["status"] == "confirmed":
-                ready, why = _sides_meet_human_min(conn, war["id"])
-                if not ready:
-                    # Push the delay window forward so ticks do not spam.
-                    conn.execute(
-                        "UPDATE crown_wars SET scheduled_at = ? WHERE id = ?",
-                        (now, war["id"]),
-                    )
-                    conn.commit()
-                    msg = (
-                        f"Assault postponed — {why}. "
-                        f"Field enough humans within {ASSAULT_DELAY // HOUR} hour(s)."
-                    )
-                    notices.append(msg)
-                    try:
-                        import politics
-                        politics.news(conn, "siege", msg, now)
-                    except Exception:
-                        pass
-                else:
+                ready, why = _sides_meet_human_min(conn, war["id"], HUMAN_MIN)
+                if ready:
                     msg = _activate_assault(conn, war["id"], now)
                     notices.append(msg)
+                else:
+                    postpones = int(war.get("postpones") or 0)
+                    # Design: postponed or run at a smaller scale.
+                    if postpones >= 1:
+                        ready_small, why_small = _sides_meet_human_min(
+                            conn, war["id"], SMALL_SCALE_HUMAN_MIN,
+                        )
+                        if ready_small:
+                            conn.execute(
+                                "UPDATE crown_wars SET scale = 'small' WHERE id = ?",
+                                (war["id"],),
+                            )
+                            conn.commit()
+                            msg = _activate_assault(conn, war["id"], now)
+                            notices.append(
+                                f"Assault begins at a smaller scale "
+                                f"({SMALL_SCALE_HUMAN_MIN}+ humans per side). {msg}"
+                            )
+                            try:
+                                import politics
+                                politics.news(
+                                    conn, "siege",
+                                    f"The War for the Crown begins at a smaller scale "
+                                    f"({SMALL_SCALE_HUMAN_MIN}+ humans).",
+                                    now,
+                                )
+                            except Exception:
+                                pass
+                            # Skip the postpone path this tick.
+                            ready = True
+                    if not ready:
+                        # Push the delay window forward so ticks do not spam.
+                        conn.execute(
+                            "UPDATE crown_wars SET scheduled_at = ?, "
+                            "postpones = COALESCE(postpones, 0) + 1 WHERE id = ?",
+                            (now, war["id"]),
+                        )
+                        conn.commit()
+                        msg = (
+                            f"Assault postponed — {why}. "
+                            f"Field enough humans within {ASSAULT_DELAY // HOUR} hour(s)"
+                        )
+                        if postpones >= 1:
+                            msg += (
+                                f", or hold at least {SMALL_SCALE_HUMAN_MIN} humans "
+                                "per side for a smaller-scale assault"
+                            )
+                        else:
+                            msg += (
+                                f" (or the war may run at a smaller scale "
+                                f"with {SMALL_SCALE_HUMAN_MIN}+ humans next window)"
+                            )
+                        msg += "."
+                        notices.append(msg)
+                        try:
+                            import politics
+                            politics.news(conn, "siege", msg, now)
+                        except Exception:
+                            pass
     # Assault clock: defenders win if attackers fail to crown in time.
     war = current_war(conn)
     if war and war["status"] == "active":
@@ -1370,9 +1571,21 @@ def war_public(conn, war=None):
         "opened_at": war["opened_at"],
         "scheduled_at": war.get("scheduled_at"),
         "started_at": war.get("started_at"),
+        "assault_at": assault_starts_at(war) if war.get("status") == "scheduled" else None,
+        "assault_at_utc": (
+            utc_stamp(assault_starts_at(war))
+            if war.get("status") == "scheduled" and assault_starts_at(war) is not None
+            else None
+        ),
         "assault_delay": ASSAULT_DELAY,
         "assault_seconds": ASSAULT_SECONDS,
-        "human_min": HUMAN_MIN,
+        "assault_window_min_h": ASSAULT_WINDOW_MIN_H,
+        "assault_window_max_h": ASSAULT_WINDOW_MAX_H,
+        "human_min": effective_human_min(war),
+        "human_min_full": HUMAN_MIN,
+        "human_min_small": SMALL_SCALE_HUMAN_MIN,
+        "scale": war.get("scale") or "full",
+        "postpones": int(war.get("postpones") or 0),
         "confirm_hours": CONFIRM_SECONDS // HOUR,
         "sides": sides,
         "contributors": contrib_board(conn, war["id"], limit=5),
@@ -1403,7 +1616,7 @@ def war_lines(conn, now=None):
         info = pub["sides"][side]
         lead = info["lead"]
         if not lead:
-            lines.append(f"{side.title()}: open — first eligible guild reserves the slot.")
+            lines.append(f"{side.title()}: open — guild priority: first eligible application reserves the slot.")
             continue
         rem = ""
         if lead["status"] == "reserved" and lead.get("confirm_deadline"):
@@ -1423,6 +1636,7 @@ def war_lines(conn, now=None):
 
 
 HERALD_SIEGE_OPTIONS = [
+    {"id": "siege_guide", "label": "How the War for the Crown works"},
     {"id": "siege_status", "label": "War for the Crown"},
     {"id": "siege_register_attack", "label": "Register to attack"},
     {"id": "siege_register_defend", "label": "Register to defend"},
@@ -1430,7 +1644,19 @@ HERALD_SIEGE_OPTIONS = [
     {"id": "siege_store", "label": "War storehouse"},
     {"id": "siege_costs", "label": "Siege resource costs"},
     {"id": "siege_scout", "label": "Scout the castle walls"},
+    {"id": "siege_royalguard", "label": "Royal Guard"},
+    {"id": "siege_report", "label": "Battle report"},
 ]
+
+
+def utc_stamp(ts):
+    """Design: clearly published start time for different time zones."""
+    if ts is None:
+        return None
+    return (
+        datetime.fromtimestamp(float(ts), tz=timezone.utc)
+        .strftime("%Y-%m-%d %H:%M UTC")
+    )
 
 
 # ---- milestone 4: weapons + path breaches ------------------------------------
@@ -1527,19 +1753,41 @@ def _player_skill_level(conn, player_id, skill):
         return 1
 
 
+def _skill_bonus_mult(level):
+    """Level 1 → 1.00×, roughly +0.5% per level, cap +50%."""
+    level = max(1, int(level or 1))
+    bonus = min(0.50, max(0.0, (level - 1.0) * 0.005))
+    return 1.0 + bonus
+
+
 def siege_skill_mult(conn, player_id):
     """Skilled humans operate engines/repairs better (design: smith / timber craft).
 
     Construction is not a live skill — smithing (mechanisms) and woodcutting
-    (timber engines) stand in. Level 1 → 1.00×, roughly +0.5% per level, cap +50%.
+    (timber engines) stand in.
     """
     if not player_id:
         return 1.0
     smith = _player_skill_level(conn, player_id, "smithing")
     wood = _player_skill_level(conn, player_id, "woodcutting")
-    avg = (smith + wood) / 2.0
-    bonus = min(0.50, max(0.0, (avg - 1.0) * 0.005))
-    return 1.0 + bonus
+    return _skill_bonus_mult((smith + wood) / 2.0)
+
+
+def deposit_skill_mult(conn, player_id, resource):
+    """Gatherer / smith skill boosts storehouse contribution (design material table).
+
+    Timber ← Woodcutting; ore/stone ← Mining; bars ← Smithing.
+    Players who dislike large-scale PvP still earn war contribution by supplying.
+    """
+    if not player_id or resource not in STORE_RESOURCES:
+        return 1.0
+    if resource == "timber":
+        skill = "woodcutting"
+    elif resource in ("ore", "stone"):
+        skill = "mining"
+    else:  # bars
+        skill = "smithing"
+    return _skill_bonus_mult(_player_skill_level(conn, player_id, skill))
 
 
 def _side_operator(conn, player_id):
@@ -1792,6 +2040,13 @@ def fire_weapon(conn, player_id, weapon_id, structure_id, now=None):
     )
     if mult > 1.0:
         note += f" [skill ×{mult:.2f}]"
+    # Design: banners burn, siege towers catch fire as the castle is pressed.
+    if weapon_id == "tower":
+        note += " The siege tower catches fire as it presses the walls!"
+    elif updated["state"] in ("heavily_damaged", "destroyed") and (
+        not before or before.get("state") not in ("heavily_damaged", "destroyed")
+    ):
+        note += " Banners burn amid the fire and debris."
     breached = bool(before and before["state"] != "destroyed" and updated["state"] == "destroyed")
     if breached:
         note += " The structure collapses — a breach is open."
@@ -1945,7 +2200,11 @@ def _activate_assault(conn, war_id, now):
 
 
 def begin_assault(conn, player_id=None, now=None):
-    """Move a confirmed war into the active assault."""
+    """Move a confirmed war into the active assault.
+
+    Design: the attacking alliance opens the coordinated window early with
+    /siege begin, or waits for the scheduled auto-start.
+    """
     now = time.time() if now is None else float(now)
     before = current_war(conn)
     before_status = before["status"] if before else None
@@ -1962,15 +2221,82 @@ def begin_assault(conn, player_id=None, now=None):
     dfn = _lead_slot(conn, war["id"], "defend")
     if not (atk and atk["status"] == "confirmed" and dfn and dfn["status"] == "confirmed"):
         return False, "Both sides must confirm before the assault begins."
-    if player_id is not None and not _is_leader(conn, player_id):
-        return False, "Only a guild Leader can signal the assault."
-    ready, why = _sides_meet_human_min(conn, war["id"])
+    if player_id is not None and not _is_attack_lead_leader(conn, player_id, war):
+        return False, "Only the attacking alliance Leader can open the assault."
+    ready, why = _sides_meet_human_min(conn, war["id"], HUMAN_MIN)
     if not ready:
-        return False, f"Assault cannot begin — {why}."
+        # After a postpone, Leaders may open a smaller-scale assault.
+        if int(war.get("postpones") or 0) >= 1:
+            ready_small, why_small = _sides_meet_human_min(
+                conn, war["id"], SMALL_SCALE_HUMAN_MIN,
+            )
+            if not ready_small:
+                return False, f"Assault cannot begin — {why_small}."
+            conn.execute(
+                "UPDATE crown_wars SET scale = 'small' WHERE id = ?",
+                (war["id"],),
+            )
+            conn.commit()
+        else:
+            return False, f"Assault cannot begin — {why}."
     try:
-        return True, _activate_assault(conn, war["id"], now)
+        msg = _activate_assault(conn, war["id"], now)
+        if str((current_war(conn) or {}).get("scale") or "") == "small":
+            msg = (
+                f"Assault begins at a smaller scale "
+                f"({SMALL_SCALE_HUMAN_MIN}+ humans per side). {msg}"
+            )
+        return True, msg
     except ValueError as exc:
         return False, str(exc)
+
+
+def set_assault_window(conn, player_id, hours, now=None):
+    """Attacking lead Leader picks when the assault begins (coordinated window).
+
+    ``hours`` is delay from now until the assault auto-starts. Bounds match
+    design prep ("several days") via ASSAULT_WINDOW_MIN_H / ASSAULT_WINDOW_MAX_H.
+    """
+    now = time.time() if now is None else float(now)
+    tick_wars(conn, now)
+    war = current_war(conn)
+    if not war:
+        return False, "No War for the Crown is open."
+    if war["status"] != "scheduled":
+        if war["status"] == "active":
+            return False, "The assault is already underway."
+        return False, "Both sides must confirm before the assault window can be set."
+    if not _is_attack_lead_leader(conn, player_id, war):
+        return False, "Only the attacking alliance Leader can set the assault window."
+    try:
+        hours = int(hours)
+    except (TypeError, ValueError):
+        return False, (
+            f"Usage: /siege when <{ASSAULT_WINDOW_MIN_H}-{ASSAULT_WINDOW_MAX_H}>h"
+        )
+    if hours < ASSAULT_WINDOW_MIN_H or hours > ASSAULT_WINDOW_MAX_H:
+        return False, (
+            f"Assault window must be {ASSAULT_WINDOW_MIN_H}–{ASSAULT_WINDOW_MAX_H} "
+            f"hours from now (several days to prepare)."
+        )
+    # scheduled_at + ASSAULT_DELAY is the auto-start instant.
+    scheduled_at = now + hours * HOUR - ASSAULT_DELAY
+    conn.execute(
+        "UPDATE crown_wars SET scheduled_at = ? WHERE id = ?",
+        (scheduled_at, war["id"]),
+    )
+    conn.commit()
+    start_at = now + hours * HOUR
+    msg = (
+        f"Assault window set — the attack begins in {hours} hour(s) "
+        f"({utc_stamp(start_at)}). Defenders, finish preparations."
+    )
+    try:
+        import politics
+        politics.news(conn, "siege", msg, now)
+    except Exception:
+        pass
+    return True, msg
 
 
 def capture_state(conn, war_id=None):
@@ -2012,11 +2338,91 @@ def capture_state(conn, war_id=None):
 
 
 def capture_board_lines(conn, war_id=None):
-    """Compact territory lines for the public war progress board."""
+    """Compact territory lines for the public war progress board.
+
+    Design: five-stage siege — Stages 1–4 are capture points; Stage 5 is Crownfall.
+    """
     points = capture_state(conn, war_id)
     if not points:
         return []
-    lines = ["Territory (attack order):"]
+    by_id = {p["id"]: p for p in points}
+    lines = [
+        "Territory — Stages 1–4 (attack order); Stage 5 is Crownfall:",
+    ]
+    # Design Stage 1: capture supply depots, destroy barricades, take outer settlement.
+    outer = by_id.get("outer_yard")
+    gate = by_id.get("gatehouse")
+    court = by_id.get("courtyard")
+    if outer and outer.get("owner") != "attack":
+        depot = get_structure(conn, "supply_depot")
+        depot_bit = (
+            "Supply Depot already rubble (repairs cost double)."
+            if depot and depot.get("state") == "destroyed"
+            else "Press the Supply Depot to cut defender repair capacity."
+        )
+        lines.append(
+            "Stage 1 focus: take the Outer Yard, clear barricades/guards, "
+            f"and capture supply depots — {depot_bit}"
+        )
+    # Design Stage 2: siege engines hit gates/towers/walls; repair crews slow the assault.
+    elif gate and gate.get("owner") != "attack":
+        if walls_breached(conn):
+            breach_bit = "Breach open — take the Gatehouse."
+        else:
+            breach_bit = (
+                "Fire rams, ladders, and siege towers at the Outer Gate and walls "
+                "until a breach opens the Gatehouse."
+            )
+        tower = get_structure(conn, "watchtower")
+        tower_bit = (
+            "Watchtower down (battlefield opens)."
+            if tower and tower.get("state") == "destroyed"
+            else "Drop the Watchtower to open interest and ease realm captures."
+        )
+        lines.append(
+            f"Stage 2 focus: breach the walls — {breach_bit} "
+            f"Repair crews can still slow the assault. {tower_bit}"
+        )
+    # Design Stage 3: control points inside; defenders regroup; territory contest.
+    elif court and court.get("owner") != "attack":
+        lines.append(
+            "Stage 3 focus: capture the Courtyard — establish control inside the castle. "
+            "Defenders may regroup at fallback positions; the battle is a territory contest."
+        )
+    # Design Stage 4: break royal guard; defenders' final opportunity to hold.
+    throne = by_id.get("throne")
+    if throne and throne.get("unlocked_for_attack"):
+        wid = war_id
+        if wid is None:
+            war = current_war(conn)
+            wid = war["id"] if war else None
+        appt = list_royal_guard_players(conn, wid) if wid is not None else []
+        appt_bit = (
+            f" Appointed Royal Guard: {', '.join(g['name'] for g in appt)}."
+            if appt else ""
+        )
+        if throne.get("owner") == "attack" and throne.get("hold_started_at"):
+            lines.append(
+                "Stage 4 — Last Stand: attackers hold the throne chamber — "
+                "defenders' final opportunity to retake it before Crownfall."
+                + appt_bit
+            )
+            # Design Stage 5: winning alliance claims the castle; coronation to the realm.
+            lines.append(
+                "Stage 5 — Crownfall imminent: the winning alliance claims the castle. "
+                "A coronation will announce the new ruler to the entire realm."
+            )
+        elif throne.get("guards") or appt:
+            lines.append(
+                "Stage 4 — Last Stand: break through the royal guard and secure "
+                "the throne chamber. Defenders get a final opportunity to hold."
+                + appt_bit
+            )
+        else:
+            lines.append(
+                "Stage 4 — Last Stand: secure the throne chamber. "
+                "Defenders get a final opportunity to hold the castle."
+            )
     for p in points:
         bits = [f"{p['progress']}/{p['need']}"]
         if p.get("guards"):
@@ -2028,8 +2434,14 @@ def capture_board_lines(conn, war_id=None):
             bits.append(f"holding {held}s/{p.get('hold_seconds') or THRONE_HOLD_SECONDS}s")
         if not p.get("unlocked_for_attack"):
             bits.append("locked")
+        stage = CAPTURE_STAGES.get(p["id"])
+        if stage:
+            num, title = stage
+            label = f"Stage {num} — {p['name']} ({title})"
+        else:
+            label = p["name"]
         lines.append(
-            f"  {p['name']}: {p.get('owner') or 'defend'} ({', '.join(bits)})"
+            f"  {label}: {p.get('owner') or 'defend'} ({', '.join(bits)})"
         )
     return lines
 
@@ -2135,8 +2547,144 @@ def _grant_royal_guard(conn, war_id, now=None):
     conn.commit()
     return (
         f"The Royal Guard forms in the Throne Room "
-        f"(+{ROYAL_GUARD_HP} guard fortification) — the final hold!"
+        f"(+{ROYAL_GUARD_HP} guard fortification) — Stage 4 Last Stand: "
+        "break through the royal guard; defenders get a final opportunity to hold!"
     )
+
+
+def _resolve_player_name(conn, name):
+    """Lookup a player id by character name (case-insensitive)."""
+    name = (name or "").strip()
+    if not name:
+        return None
+    row = conn.execute(
+        "SELECT id FROM players WHERE char_name = ? COLLATE NOCASE LIMIT 1",
+        (name,),
+    ).fetchone()
+    return int(row[0]) if row else None
+
+
+def _can_manage_royal_guard(conn, player_id):
+    """Monarch or Marshal may appoint the limited player Royal Guard."""
+    try:
+        import ruling
+        r = ruling.role(conn, player_id)
+    except Exception:
+        return False
+    return r in ("Monarch", "Marshal")
+
+
+def list_royal_guard_players(conn, war_id=None):
+    """Appointed player royal guards for the current (or given) war."""
+    war_id = int(war_id) if war_id is not None else None
+    if war_id is None:
+        war = current_war(conn)
+        if not war:
+            return []
+        war_id = int(war["id"])
+    rows = conn.execute(
+        "SELECT r.player_id, COALESCE(p.char_name, '#' || r.player_id), r.appointed_at "
+        "FROM crown_war_royal_players r "
+        "LEFT JOIN players p ON p.id = r.player_id "
+        "WHERE r.war_id = ? ORDER BY r.appointed_at, r.player_id",
+        (war_id,),
+    ).fetchall()
+    return [
+        {"player_id": int(r[0]), "name": r[1], "appointed_at": float(r[2])}
+        for r in rows
+    ]
+
+
+def appoint_royal_guard(conn, actor_id, name, now=None):
+    """Appoint a defending player to the limited Royal Guard (protect the King)."""
+    now = time.time() if now is None else float(now)
+    if not _can_manage_royal_guard(conn, actor_id):
+        return False, "Only the Monarch or Marshal can appoint the Royal Guard."
+    war = current_war(conn)
+    if not war or war["status"] not in WAR_OPEN:
+        return False, "No War for the Crown is open."
+    target_id = _resolve_player_name(conn, name)
+    if not target_id:
+        return False, f"No player named {name!r}."
+    if player_side(conn, target_id, war["id"]) != "defend":
+        return False, "Royal Guard appointments must be defending fighters."
+    existing = list_royal_guard_players(conn, war["id"])
+    if any(e["player_id"] == int(target_id) for e in existing):
+        return False, f"{name} is already in the Royal Guard."
+    if len(existing) >= ROYAL_GUARD_PLAYER_CAP:
+        return False, (
+            f"The Royal Guard is full ({ROYAL_GUARD_PLAYER_CAP} appointed players). "
+            "Dismiss one with /siege royalguard dismiss <name>."
+        )
+    conn.execute(
+        "INSERT INTO crown_war_royal_players "
+        "(war_id, player_id, appointed_by, appointed_at) VALUES (?, ?, ?, ?)",
+        (int(war["id"]), int(target_id), int(actor_id), now),
+    )
+    conn.commit()
+    return (
+        True,
+        f"{name} is appointed to the Royal Guard "
+        f"({len(existing) + 1}/{ROYAL_GUARD_PLAYER_CAP}) — they can protect the King "
+        "in the Throne Room.",
+    )
+
+
+def dismiss_royal_guard(conn, actor_id, name, now=None):
+    """Remove an appointed player from the Royal Guard."""
+    if not _can_manage_royal_guard(conn, actor_id):
+        return False, "Only the Monarch or Marshal can dismiss the Royal Guard."
+    war = current_war(conn)
+    if not war or war["status"] not in WAR_OPEN:
+        return False, "No War for the Crown is open."
+    target_id = _resolve_player_name(conn, name)
+    if not target_id:
+        return False, f"No player named {name!r}."
+    cur = conn.execute(
+        "DELETE FROM crown_war_royal_players WHERE war_id = ? AND player_id = ?",
+        (int(war["id"]), int(target_id)),
+    )
+    conn.commit()
+    if cur.rowcount == 0:
+        return False, f"{name} is not in the Royal Guard."
+    return True, f"{name} is dismissed from the Royal Guard."
+
+
+def royal_guard_lines(conn, war_id=None):
+    """Board / command lines for appointed player royal guards."""
+    guards = list_royal_guard_players(conn, war_id)
+    if not guards:
+        return [
+            f"Royal Guard (players): none appointed "
+            f"(cap {ROYAL_GUARD_PLAYER_CAP}). "
+            "Monarch/Marshal: /siege royalguard <name>"
+        ]
+    names = ", ".join(g["name"] for g in guards)
+    return [
+        f"Royal Guard (players): {names} "
+        f"({len(guards)}/{ROYAL_GUARD_PLAYER_CAP}) — "
+        "standing in the Throne Room they protect the King."
+    ]
+
+
+def _appointed_royal_guards_at(conn, war_id, presence, point_id="throne"):
+    """Count appointed Royal Guard players present on a capture point (defend)."""
+    appointed = {
+        int(g["player_id"]) for g in list_royal_guard_players(conn, war_id)
+    }
+    if not appointed:
+        return 0
+    n = 0
+    for player_id, plane, x, y in presence:
+        if int(player_id) not in appointed:
+            continue
+        if is_eliminated(conn, player_id, war_id):
+            continue
+        if player_side(conn, player_id, war_id) != "defend":
+            continue
+        if _point_at(plane, x, y) == point_id:
+            n += 1
+    return n
 
 
 def _capture_unlocked(conn, war_id, point_id):
@@ -2364,12 +2912,21 @@ def tick_captures(conn, presence, now=None):
         # Intact watchtower: defensive archers double the work on realm points.
         need = _capture_need(conn, spec)
         unlocked = _capture_unlocked(conn, war["id"], point_id)
+        # Design: appointed players in the Throne Room protect the King.
+        rg_here = (
+            _appointed_royal_guards_at(conn, war["id"], presence, "throne")
+            if point_id == "throne" else 0
+        )
         pushing = None
         if atk > dfn:
             delta = atk - dfn
             if not unlocked:
                 # Prior stage still held — attackers cannot push this point yet.
                 pushing = None
+            elif rg_here > 0:
+                # Appointed Royal Guard holds the chamber — no chip / no flip.
+                # (Board lines name them; avoid per-tick spam.)
+                hold_started = None
             elif guards > 0:
                 # Posted Guards hold the line before barricades and capture.
                 chip = min(guards, delta)
@@ -2406,6 +2963,9 @@ def tick_captures(conn, presence, now=None):
                 fb = _fallback_fortify(conn, war["id"], point_id, now=now)
                 if fb:
                     notices.append(fb)
+        elif point_id == "throne" and owner == "attack" and rg_here > 0:
+            # Appointed guard re-enters — interrupt Crownfall hold.
+            hold_started = None
         elif point_id == "throne" and owner == "attack" and hold_started is None and atk > 0:
             hold_started = now
         elif point_id == "throne" and owner != "attack":
@@ -2430,6 +2990,65 @@ def tick_captures(conn, presence, now=None):
     return notices
 
 
+def coronation_payload(note, winner=None, crowned_name=None, guild_name=None):
+    """Structured Stage-5 Crownfall event for a realm-wide announce.
+
+    Design: 'A coronation event announces the new ruler to the entire realm.'
+    """
+    text = str(note or "").strip()
+    if not text.upper().startswith("CROWNFALL"):
+        return None
+    title = "CROWNFALL"
+    if winner == "attack" or (crowned_name and "crowned" in text.lower()):
+        subtitle = (
+            f"All hail {crowned_name}!" if crowned_name
+            else "A new ruler claims the King's Castle!"
+        )
+    elif winner == "defend":
+        subtitle = (
+            f"{guild_name} held the walls!" if guild_name
+            else "The defenders keep the crown!"
+        )
+    else:
+        # Infer from the note when callers only pass the herald line.
+        low = text.lower()
+        if "held the walls" in low or "defenders keep" in low:
+            subtitle = "The defenders keep the crown!"
+        elif "all hail" in low:
+            # Prefer the crowned name after "All hail".
+            after = text.split("All hail", 1)[-1].strip(" !.")
+            name = after.split("!")[0].strip() if after else ""
+            subtitle = f"All hail {name}!" if name else "A new ruler claims the King's Castle!"
+        else:
+            subtitle = "The War for the Crown is over."
+    return {
+        "title": title,
+        "text": text,
+        "subtitle": subtitle,
+        "winner": winner,
+        "crowned_name": crowned_name,
+        "guild_name": guild_name,
+    }
+
+
+def _alliance_recognition(conn, war_id, side):
+    """Accepted ally guild names for Crownfall recognition.
+
+    Design: 'Smaller guilds can join alliances and receive recognition.'
+    """
+    allies = [
+        a for a in _allies(conn, war_id, side=side) if a.get("status") == "accepted"
+    ]
+    names = [a.get("ally_name") for a in allies if a.get("ally_name")]
+    if not names:
+        return ""
+    if len(names) == 1:
+        return f" with {names[0]}"
+    if len(names) == 2:
+        return f" with {names[0]} and {names[1]}"
+    return f" with {', '.join(names[:-1])}, and {names[-1]}"
+
+
 def resolve_war(conn, winner="attack", now=None):
     """End the war. Attacker victory crowns the attacking lead guild's leader."""
     now = time.time() if now is None else float(now)
@@ -2440,6 +3059,7 @@ def resolve_war(conn, winner="attack", now=None):
     note = f"War #{war['id']} won by {winner}."
     crowned_pid = None
     crowned_name = None
+    ally_bit = _alliance_recognition(conn, war["id"], winner) if lead else ""
     if winner == "attack" and lead:
         row = conn.execute(
             "SELECT leader_id FROM clans WHERE clan_id = ?", (lead["clan_id"],)
@@ -2454,13 +3074,13 @@ def resolve_war(conn, winner="attack", now=None):
                 ).fetchone()
                 crowned_name = (name_row[0] if name_row else None) or lead["name"]
                 note = (
-                    f"CROWNFALL — {lead['name']} takes the castle! "
+                    f"CROWNFALL — {lead['name']}{ally_bit} takes the castle! "
                     f"{crowned_name} is crowned. The War for the Crown is over."
                 )
             except Exception as exc:
-                note = f"War won by {lead['name']}, but crowning failed: {exc}"
+                note = f"War won by {lead['name']}{ally_bit}, but crowning failed: {exc}"
     elif winner == "defend":
-        hold_name = lead["name"] if lead else "the defenders"
+        hold_name = (lead["name"] if lead else "the defenders") + ally_bit
         note = (
             f"CROWNFALL — {hold_name} held the walls. "
             "The defenders keep the crown. The War for the Crown is over."
@@ -2655,7 +3275,8 @@ def eliminate(conn, player_id, now=None, killer_id=None):
             _credit_kill(conn, war["id"], killer_id, clan_id)
     return True, (
         "You fall in the War for the Crown. You are out of this siege — "
-        "respawn outside and watch, or prepare for the next war."
+        "respawn outside, watch and cheer your alliance, then /siege report "
+        "for the full battle report after Crownfall."
     )
 
 
@@ -2720,24 +3341,267 @@ def in_interest(ax, ay, bx, by, radius=None):
     return max(abs(int(ax) - int(bx)), abs(int(ay) - int(by))) <= radius
 
 
-def filter_by_interest(origin, others, radius=None):
-    """Keep ``origin`` plus anyone within the interest radius (same list of public states).
+def filter_by_interest(origin, others, radius=None, cap=None):
+    """Keep ``origin`` plus nearby fighters, capped for a 100-a-side profile.
 
     ``origin`` is a public_state dict with x/y; ``others`` is a list of the same.
+    When more than ``cap`` (default INTEREST_CAP / SIDE_CAP) others fall inside the
+    interest radius, keep the nearest by Chebyshev distance so STATE_UPDATE stays
+    profiled for large assaults.
     """
     if not origin:
         return list(others or [])
     ox, oy = int(origin.get("x", 0)), int(origin.get("y", 0))
     oid = origin.get("id") or origin.get("player_id")
-    kept = []
+    cap = INTEREST_CAP if cap is None else max(0, int(cap))
+    self_row = None
+    nearby = []
     for row in others or []:
         rid = row.get("id") or row.get("player_id")
         if oid is not None and rid == oid:
-            kept.append(row)
+            self_row = row
             continue
         if in_interest(ox, oy, row.get("x", 0), row.get("y", 0), radius):
-            kept.append(row)
+            dist = max(abs(ox - int(row.get("x", 0))), abs(oy - int(row.get("y", 0))))
+            nearby.append((dist, rid if rid is not None else 0, row))
+    nearby.sort(key=lambda t: (t[0], t[1]))
+    kept = [t[2] for t in nearby[:cap]]
+    if self_row is not None:
+        kept.insert(0, self_row)
+    elif oid is not None:
+        # Origin may not be in ``others``; still return nearby-only list.
+        pass
     return kept
+
+
+def interest_profile_lines(conn, war=None):
+    """Milestone 8: surface interest radius + profiled roster/fan-out caps."""
+    war = war or current_war(conn)
+    if not war or war.get("status") not in ("registration", "scheduled", "active"):
+        return []
+    radius = effective_interest_radius(conn)
+    lines = [
+        f"Roster profile: {HUMAN_MIN}–{SIDE_CAP} fighters/side · "
+        f"mercs ≤{int(MERC_MAX_FRACTION * 100)}% · "
+        f"interest radius {radius} tiles · fan-out cap {INTEREST_CAP} nearest."
+    ]
+    if war.get("status") == "active":
+        lines.append(
+            "Interest management: assault STATE fan-out only includes fighters "
+            f"within {radius} tiles (nearest {INTEREST_CAP} when crowded)."
+        )
+    return lines
+
+
+
+
+def month_day_in_cycle(conn, now=None):
+    """1–30 day index in the monthly siege calendar, or None if unknown."""
+    now = time.time() if now is None else float(now)
+    war = current_war(conn)
+    if war and war.get("status") == "active":
+        return 30
+    if war and war.get("status") in ("registration", "scheduled"):
+        # Registration / assault window selection = late-month battle assignments.
+        return 29
+    last = _last_closed(conn)
+    if last is None:
+        return None
+    elapsed = max(0.0, now - float(last))
+    day = int(elapsed // DAY) + 1  # day 1 begins immediately after Crownfall
+    return max(1, min(30, day))
+
+
+def monthly_calendar_phase(conn, now=None):
+    """(day, label) for the current monthly calendar phase, or (None, None)."""
+    day = month_day_in_cycle(conn, now)
+    if day is None:
+        return None, None
+    for lo, hi, label in MONTHLY_CALENDAR:
+        if lo <= day <= hi:
+            return day, label
+    return day, MONTHLY_CALENDAR[-1][2]
+
+
+def monthly_calendar_lines(conn, now=None):
+    """Design: build anticipation over the entire month toward The Siege of Crownfall."""
+    now = time.time() if now is None else float(now)
+    day, label = monthly_calendar_phase(conn, now)
+    if not label:
+        return []
+    lines = [f"Monthly siege calendar (day {day}/30): {label}."]
+    war = current_war(conn)
+    if not war:
+        if day <= 27:
+            lines.append(
+                "Contribute throughout the month — gather supplies now; "
+                "deposit into the war storehouse when registration opens (days 28–29)."
+            )
+        elif day >= 28:
+            lines.append(
+                "Registration window — a guild Leader may /siege register attack|defend "
+                "once the cooldown ends."
+            )
+    elif war.get("status") in ("registration", "scheduled"):
+        lines.append(
+            "Battle assignments are open — form alliances, deposit supplies, craft engines, "
+            "scout, and set the coordinated assault window."
+        )
+    elif war.get("status") == "active":
+        lines.append(
+            "The Siege of Crownfall is underway — hold or take the throne before the assault clock ends."
+        )
+    return lines
+
+
+def next_war_opens_in_days(conn, now=None):
+    """Days until the monthly War for the Crown may open, or None if unknown/open.
+
+    Returns 0 when the cooldown has already elapsed (registration can open).
+    """
+    now = time.time() if now is None else float(now)
+    if current_war(conn):
+        return None
+    last = _last_closed(conn)
+    if last is None:
+        return None
+    remaining = float(SIEGE_COOLDOWN) - (now - float(last))
+    if remaining <= 0:
+        return 0
+    return int((remaining + DAY - 1) // DAY)
+
+
+
+def _completed_war(conn, war_id=None):
+    """Fetch a completed war row (latest if war_id omitted)."""
+    if war_id is not None:
+        row = conn.execute(
+            "SELECT id, status, opened_at, scheduled_at, started_at, closed_at, note, scale "
+            "FROM crown_wars WHERE id = ?",
+            (int(war_id),),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT id, status, opened_at, scheduled_at, started_at, closed_at, note, scale "
+            "FROM crown_wars WHERE status = 'completed' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        "id": int(row[0]),
+        "status": row[1],
+        "opened_at": float(row[2]) if row[2] is not None else None,
+        "scheduled_at": float(row[3]) if row[3] is not None else None,
+        "started_at": float(row[4]) if row[4] is not None else None,
+        "closed_at": float(row[5]) if row[5] is not None else None,
+        "note": row[6],
+        "scale": row[7],
+    }
+
+
+def battle_report_lines(conn, war_id=None, now=None):
+    """Full battle report after a war (design: eliminated fighters still get a report).
+
+    Uses the latest completed war when ``war_id`` is omitted. During an active war,
+    returns a live progress report instead.
+    """
+    now = time.time() if now is None else float(now)
+    tick_wars(conn, now)
+    live = current_war(conn)
+    if live and live.get("status") == "active" and war_id is None:
+        war = live
+        lines = [f"Battle report — War #{war['id']} (live assault):"]
+        left = assault_time_left(war, now)
+        if left is not None:
+            lines.append(
+                f"Assault clock: {left // HOUR}h {(left % HOUR) // 60}m remaining."
+            )
+    else:
+        war = _completed_war(conn, war_id)
+        if not war:
+            return ["No completed War for the Crown battle report yet."]
+        lines = [f"Battle report — War #{war['id']}:"]
+        if war.get("note"):
+            lines.append(str(war["note"]))
+        started = war.get("started_at") or war.get("scheduled_at")
+        closed = war.get("closed_at")
+        if started and closed:
+            dur = max(0, int(float(closed) - float(started)))
+            lines.append(
+                f"Assault lasted {dur // HOUR}h {(dur % HOUR) // 60}m"
+                + (f" · scale {war['scale']}" if war.get("scale") else "")
+                + "."
+            )
+        elif war.get("scale"):
+            lines.append(f"Scale: {war['scale']}.")
+
+    # Sides / composition snapshot.
+    for side in SIDES:
+        lead = _lead_slot(conn, war["id"], side)
+        if not lead:
+            lines.append(f"{side.title()}: —")
+            continue
+        humans = _alliance_humans(conn, war["id"], lead["clan_id"], side)
+        mercs = _alliance_mercs(conn, war["id"], lead["clan_id"], side)
+        lines.append(
+            f"{side.title()}: {lead['name']} — {humans} humans / {mercs} mercs"
+        )
+
+    fighters = contrib_board(conn, war["id"], limit=5)
+    if fighters:
+        lines.append(
+            "Top fighters: "
+            + " · ".join(
+                f"{e['name']} {e['points']}pts/{e['kills']}k"
+                for e in fighters
+            )
+        )
+    elim_n = conn.execute(
+        "SELECT COUNT(*) FROM crown_war_elim WHERE war_id = ?", (war["id"],)
+    ).fetchone()[0]
+    lines.append(f"Fallen this siege: {int(elim_n)}.")
+    weak = [
+        s["name"] for s in list_structures(conn)
+        if s and s["state"] in ("heavily_damaged", "destroyed")
+    ]
+    if weak:
+        lines.append("Castle scars: " + ", ".join(weak) + ".")
+    if live and live.get("status") == "active" and war_id is None:
+        lines.append(
+            "Eliminated fighters may watch and cheer their alliance — "
+            "a full battle report is waiting after Crownfall (/siege report)."
+        )
+    else:
+        lines.append("Herald: /siege report · Great Hall chronicle · world map War Council.")
+    return lines
+
+
+def king_defend_lines(conn, player_id=None, war=None, now=None):
+    """Design: King protects the keep, organises defenders, and decides tactics."""
+    war = war or current_war(conn)
+    if not war or war.get("status") not in ("registration", "scheduled", "active"):
+        return []
+    try:
+        import throne
+        st = throne.state(conn)
+    except Exception:
+        return []
+    if st.get("monarch_kind") != "player" or not st.get("monarch_player_id"):
+        return []
+    lines = [
+        "King's duties in this war: protect the royal keep · organise defending guilds "
+        "(/siege ally) · appoint a limited Royal Guard (/siege royalguard <name>) · "
+        "make tactical decisions (/siege alloc, /siege status, /siege when). "
+        "If the King falls, the castle still stands — attackers must take the throne."
+    ]
+    if player_id and int(player_id) == int(st["monarch_player_id"]):
+        lines.append(
+            "You are the reigning monarch — defend Crownfall; your death does not "
+            "end the siege by itself. Appoint up to "
+            f"{ROYAL_GUARD_PLAYER_CAP} players to protect you in the Throne Room."
+        )
+    lines.extend(royal_guard_lines(conn, war["id"]))
+    return lines
 
 
 def war_council_lines(conn, player_id=None, now=None):
@@ -2748,19 +3612,107 @@ def war_council_lines(conn, player_id=None, now=None):
     if not war:
         # Keep the last Crownfall note visible between monthly wars.
         notes = recent_war_notes(conn, limit=1)
-        if notes:
-            return [
-                "Royal War Council — no War for the Crown is open.",
-                f"Last Crownfall: {notes[0]['note']}",
-                "A guild Leader may /siege register attack|defend to open registration.",
-            ]
-        return []
+        if not notes:
+            return []
+        lines = [
+            "Royal War Council — no War for the Crown is open.",
+            f"Last Crownfall: {notes[0]['note']}",
+        ]
+        days = next_war_opens_in_days(conn, now)
+        if days is None:
+            lines.append(
+                "A guild Leader may /siege register attack|defend to open registration."
+            )
+        elif days <= 0:
+            lines.append(
+                "The monthly cooldown has ended — a guild Leader may "
+                "/siege register attack|defend to open registration."
+            )
+        else:
+            lines.append(
+                f"Monthly cadence: the next War for the Crown opens in about {days} day(s). "
+                "Leaders may /siege register once the cooldown ends."
+            )
+        # Design: monthly siege calendar builds anticipation toward Day 30.
+        lines.extend(monthly_calendar_lines(conn, now=now))
+        # Design: receive a full battle report afterwards.
+        report = battle_report_lines(conn, war_id=notes[0]["id"], now=now)
+        if report:
+            lines.append("Last battle report — /siege report for the full tally.")
+            # Compact: outcome + top fighters if present.
+            for ln in report[1:4]:
+                lines.append(ln)
+        return lines
     lines = ["Royal War Council — War for the Crown"]
     # Compact status + both sides so the board shows community contribution at a glance.
     for ln in board_lines(conn, player_id, now=now)[:6]:
         lines.append(ln)
-    lines.append("Herald at the castle · /siege status · /siege store · /siege costs")
+    lines.append(
+        "Herald at the castle · /siege status · /siege store · /siege costs · "
+        "world map War Council"
+    )
     return lines
+
+
+def atlas_war_summary(conn, player_id=None, now=None):
+    """World-map War Council card (design: notice board, guild panel, and world map).
+
+    Returns None when there is nothing to show (no open war and no last Crownfall).
+    """
+    now = time.time() if now is None else float(now)
+    tick_wars(conn, now)
+    lines = war_council_lines(conn, player_id, now=now)
+    war = current_war(conn)
+    if war:
+        pub = war_public(conn, war) or {}
+        atk = ((pub.get("sides") or {}).get("attack") or {}).get("lead") or {}
+        dfn = ((pub.get("sides") or {}).get("defend") or {}).get("lead") or {}
+        line = f"War for the Crown — {war['status']}"
+        if atk.get("name") or dfn.get("name"):
+            line += f": {atk.get('name') or '—'} vs {dfn.get('name') or '—'}"
+        if war["status"] == "scheduled":
+            start = assault_starts_at(war)
+            if start is not None:
+                left = max(0, int(start - now))
+                line += f" · assault in {left // HOUR}h {(left % HOUR) // 60}m"
+        elif war["status"] == "active":
+            left = assault_time_left(war, now)
+            if left is not None:
+                line += f" · {left // HOUR}h {(left % HOUR) // 60}m left"
+        return {
+            "open": True,
+            "status": war["status"],
+            "line": line,
+            "lines": lines,
+        }
+    if not lines:
+        return None
+    note = next(
+        (ln for ln in lines if str(ln).lower().startswith("last crownfall")),
+        lines[0],
+    )
+    days = next_war_opens_in_days(conn, now)
+    cal_day, cal_label = monthly_calendar_phase(conn, now)
+    if days is not None and days > 0:
+        line = f"War for the Crown — next war in about {days} day(s)"
+        if cal_day is not None:
+            line += f" · calendar day {cal_day}/30"
+    elif days == 0:
+        line = "War for the Crown — registration can open"
+    else:
+        line = note
+    if cal_label and days is not None:
+        # Prefer a short calendar tag on the atlas card.
+        short = cal_label.split(" — ", 1)[0]
+        if short not in line:
+            line += f" · {short}"
+    return {
+        "open": False,
+        "status": None,
+        "line": line,
+        "next_war_days": days,
+        "lines": lines,
+    }
 
 
 def guild_war_summary(conn, clan_id, now=None):
@@ -2792,9 +3744,11 @@ def guild_war_summary(conn, clan_id, now=None):
         "role": role,
         "line": f"War for the Crown — {war['status']}: {bit}",
     }
-    if war["status"] == "scheduled" and war.get("scheduled_at"):
-        left = max(0, int(float(war["scheduled_at"]) + ASSAULT_DELAY - now))
+    if war["status"] == "scheduled" and war.get("scheduled_at") is not None:
+        start_at = assault_starts_at(war)
+        left = max(0, int(start_at - now)) if start_at is not None else 0
         out["assault_in"] = left
+        out["assault_at"] = start_at
         out["line"] += f" · assault in {left // HOUR}h {(left % HOUR) // 60}m"
     elif war["status"] == "active":
         left = assault_time_left(war, now)
@@ -2812,6 +3766,10 @@ def hud_snapshot(conn, player_id=None):
         "war": war_public(conn, war) if war else None,
         "heraldry": castle_heraldry(conn),
         "interest_radius": effective_interest_radius(conn),
+        "interest_cap": INTEREST_CAP,
+        "side_cap": SIDE_CAP,
+        "human_min": HUMAN_MIN,
+        "merc_max_fraction": MERC_MAX_FRACTION,
         "side": player_side(conn, player_id) if player_id else None,
         "eliminated": bool(player_id and is_eliminated(conn, player_id)),
         "board": board_lines(conn, player_id) if war else [],
@@ -2820,7 +3778,21 @@ def hud_snapshot(conn, player_id=None):
         "armoury_down": _structure_destroyed(conn, "armoury"),
         "depot_down": _structure_destroyed(conn, "supply_depot"),
         "keep_down": _structure_destroyed(conn, "royal_keep"),
+        "last_stand": bool(
+            war
+            and war.get("status") == "active"
+            and _capture_unlocked(conn, war["id"], "throne")
+        ),
     }
+    if war:
+        guards = list_royal_guard_players(conn, war["id"])
+        snap["royal_guard"] = [g["name"] for g in guards]
+        snap["is_royal_guard"] = bool(
+            player_id and any(int(g["player_id"]) == int(player_id) for g in guards)
+        )
+    else:
+        snap["royal_guard"] = []
+        snap["is_royal_guard"] = False
     return snap
 
 
@@ -2945,14 +3917,19 @@ def deposit(conn, player_id, item_id, qty, now=None, take_fn=None):
     if take_fn is not None:
         if not take_fn(item_id, qty):
             return False, "You do not have that many."
-    credit_deposit(conn, war["id"], lead_id, player_id, resource, qty, points_each * qty, now)
+    mult = deposit_skill_mult(conn, player_id, resource)
+    pts = int(round(points_each * qty * mult))
+    credit_deposit(conn, war["id"], lead_id, player_id, resource, qty, pts, now)
     stock = store_stock(conn, war["id"], lead_id)
-    return True, (
+    note = (
         f"Deposited {qty}× {item_id.replace('_', ' ')} into {_clan_name(conn, lead_id)}'s "
-        f"war storehouse (+{points_each * qty} contribution). "
+        f"war storehouse (+{pts} contribution). "
         f"Stock: timber {stock['timber']}, ore {stock['ore']}, bars {stock['bars']}, "
         f"stone {stock['stone']}."
     )
+    if mult > 1.001:
+        note += f" [skill ×{mult:.2f}]"
+    return True, note
 
 
 def set_allocation(conn, player_id, mapping, now=None):
@@ -3043,16 +4020,46 @@ def contrib_board(conn, war_id=None, limit=10):
 
 
 def structure_lines(conn):
-    """Scout report — HP bands for every castle structure (weak points)."""
+    """Scout report — design: scouts reveal defensive weak points.
+
+    Damaged / heavily damaged / destroyed structures are listed first so the
+    assault window and Herald scout call out soft spots before the full roster.
+    """
     lines = ["Siege scout — Crownfall structure report:"]
-    for s in list_structures(conn):
-        if not s:
-            continue
-        pct = int(100 * s["hp"] / max(1, s["max_hp"]))
-        lines.append(
-            f"  {s['name']}: {s['state']} ({s['hp']}/{s['max_hp']}, {pct}%)"
-            + (f" — {s['effect']}" if s["state"] == "destroyed" else "")
-        )
+    structs = [s for s in list_structures(conn) if s]
+    order = {"destroyed": 0, "heavily_damaged": 1, "damaged": 2, "intact": 3}
+    weak = [s for s in structs if s["state"] != "intact"]
+    weak.sort(key=lambda s: (order.get(s["state"], 9), s["name"]))
+    intact = [s for s in structs if s["state"] == "intact"]
+    if weak:
+        lines.append("Weak points:")
+        for s in weak:
+            pct = int(100 * s["hp"] / max(1, s["max_hp"]))
+            bit = f"  {s['name']}: {s['state']} ({s['hp']}/{s['max_hp']}, {pct}%)"
+            # Design damage bands: progressive devastation stays visible.
+            if s["state"] == "destroyed":
+                bit += " — rubble and a changed battlefield"
+                if s.get("effect"):
+                    bit += f" ({s['effect']})"
+            elif s["state"] == "heavily_damaged":
+                bit += " — missing sections, fire and debris"
+            elif s["state"] == "damaged":
+                bit += " — cracks and smoke"
+            lines.append(bit)
+        if len(weak) >= 2:
+            lines.append(
+                "Damage is persistent — the castle grows more devastated as the battle develops."
+            )
+    if intact:
+        if weak:
+            lines.append("Still holding:")
+        for s in intact:
+            pct = int(100 * s["hp"] / max(1, s["max_hp"]))
+            lines.append(
+                f"  {s['name']}: intact ({s['hp']}/{s['max_hp']}, {pct}%)"
+            )
+    if not structs:
+        lines.append("  No structures recorded.")
     if walls_breached(conn):
         lines.append("A wall or gate breach is open.")
     else:
@@ -3084,7 +4091,8 @@ def requirement_lines():
     )
     lines.append(
         "Any fighter on your side may craft, fire, repair, or deploy. "
-        "High Smithing and Woodcutting operate engines and repairs more effectively."
+        "High Smithing and Woodcutting operate engines and repairs more effectively. "
+        "Mining, Woodcutting, and Smithing raise contribution when you deposit matching supplies."
     )
     return lines
 
@@ -3094,12 +4102,57 @@ def board_lines(conn, player_id=None, now=None):
     now = time.time() if now is None else float(now)
     lines = list(war_lines(conn, now))
     war = current_war(conn)
-    if war and war["status"] == "scheduled" and war.get("scheduled_at"):
-        left = max(0, int(float(war["scheduled_at"]) + ASSAULT_DELAY - now))
+    if war and war["status"] == "scheduled" and war.get("scheduled_at") is not None:
+        start_at = assault_starts_at(war)
+        left = max(0, int(start_at - now)) if start_at is not None else 0
+        utc_bit = f", {utc_stamp(start_at)}" if start_at is not None else ""
         lines.append(
-            f"Assault begins in {left // HOUR}h {(left % HOUR) // 60}m "
-            f"(or a Leader uses /siege begin)."
+            f"Assault window: begins in {left // HOUR}h {(left % HOUR) // 60}m{utc_bit} "
+            f"(attack Leader: /siege when <{ASSAULT_WINDOW_MIN_H}-{ASSAULT_WINDOW_MAX_H}>h "
+            "or /siege begin)."
         )
+    # Design: monthly siege calendar (late-month registration / Day 30 siege).
+    if war and war["status"] in ("registration", "scheduled", "active"):
+        lines.extend(monthly_calendar_lines(conn, now=now))
+    # Design: siege preparation — register, alliances form, deposit, craft, reinforce, scout.
+    if war and war["status"] in ("registration", "scheduled"):
+        lines.append(
+            "Preparation: guilds register · Leaders form alliances "
+            "(/siege ally <guild>, /siege accept) · deposit war supplies · "
+            "craft rams, ladders, siege towers · defenders reinforce gates/walls "
+            "(/siege repair) · /siege scout for weak points · "
+            f"attack Leader sets the coordinated assault window "
+            f"(/siege when <{ASSAULT_WINDOW_MIN_H}-{ASSAULT_WINDOW_MAX_H}>h)."
+        )
+        # Design: community roles — guild leaders organise; non-PvP players still matter.
+        lines.append(
+            "Community roles: Guild leaders organise attack or defence · "
+            "Warriors fight · Archers hold walls · "
+            "Miners gather ore/stone · Smiths craft engines · "
+            "Woodcutters supply timber · Scouts reveal weak points."
+        )
+    if war and war["status"] in ("registration", "scheduled", "active"):
+        # Design: human/mercenary numbers visible to both leaders before roster locks.
+        lines.extend(army_composition_lines(conn, war, now=now))
+        # Milestone 8: interest management + profiled roster/fan-out caps.
+        lines.extend(interest_profile_lines(conn, war))
+        # Design: King genuinely defendable — duties + death does not auto-fall.
+        lines.extend(king_defend_lines(conn, player_id, war, now=now))
+        if war["status"] == "active":
+            lines.append(
+                "Recruit contracts are locked for the assault — "
+                "no new hires or dismissals until Crownfall."
+            )
+        if str(war.get("scale") or "") == "small":
+            lines.append(
+                f"Smaller-scale war — human minimum {SMALL_SCALE_HUMAN_MIN} per side "
+                f"(full roster needs {HUMAN_MIN})."
+            )
+        elif int(war.get("postpones") or 0) >= 1 and war["status"] == "scheduled":
+            lines.append(
+                f"Under-strength postpone used — next window may run at a smaller scale "
+                f"({SMALL_SCALE_HUMAN_MIN}+ humans), or field {HUMAN_MIN}+ for a full assault."
+            )
     # Supplies + costs stay public before the roster locks and through the assault.
     # Keep room for both sides' stock / alloc / spent lines plus costs + suppliers.
     if war and war["status"] in ("registration", "scheduled", "active"):
@@ -3160,6 +4213,11 @@ def store_lines(conn, player_id=None, now=None, include_costs=False):
     if not war:
         return ["No War for the Crown is open — the storehouse is sealed."]
     lines = ["War Storehouse — deposits earn contribution (combat is not the only path)."]
+    # Design: leader sees stock and allocates; cannot withdraw deposits for personal use.
+    lines.append(
+        "Deposits cannot be withdrawn for personal use — the lead Leader allocates "
+        "stock to rams, ladders, barricades, and reserve only."
+    )
     if include_costs:
         # Compact one-liners so the board stays readable.
         cost_bits = []
@@ -3251,6 +4309,11 @@ def handle_command(conn, player_id, text):
         return True, store_lines(conn, player_id, include_costs=True)
     if sub in ("costs", "requirements", "recipes"):
         return True, requirement_lines()
+    if sub in ("withdraw", "take", "retrieve"):
+        return False, [
+            "War storehouse deposits cannot be withdrawn for personal use. "
+            "The lead Leader allocates stock with /siege alloc — materials stay in the war."
+        ]
     if sub == "deposit":
         if len(parts) < 4:
             return False, ["Usage: /siege deposit <item> <qty>"]
@@ -3295,6 +4358,8 @@ def handle_command(conn, player_id, text):
             mapping[k.lower()] = v
         ok, msg = set_allocation(conn, player_id, mapping)
         return ok, [msg]
+    if sub in ("report", "battle", "battlereport"):
+        return True, battle_report_lines(conn, now=time.time())
     if sub in ("contrib", "contribution", "suppliers"):
         board = contrib_board(conn)
         if not board:
@@ -3353,6 +4418,46 @@ def handle_command(conn, player_id, text):
     if sub in ("begin", "assault", "start"):
         ok, msg = begin_assault(conn, player_id)
         return ok, [msg]
+    if sub in ("roster", "army", "composition"):
+        war = current_war(conn)
+        if not war:
+            return True, ["No War for the Crown is open."]
+        lines = army_composition_lines(conn, war)
+        need = effective_human_min(war)
+        lines.append(
+            f"Human minimum: {need} "
+            f"(full {HUMAN_MIN}; smaller scale {SMALL_SCALE_HUMAN_MIN} after postpone)."
+        )
+        if war.get("status") != "active":
+            lines.append("Roster locks when the assault begins.")
+        else:
+            lines.append("Roster is locked for this assault.")
+        return True, lines
+    if sub in ("when", "window", "schedule"):
+        # Design: attacking alliance selects a coordinated assault window.
+        if len(parts) < 3:
+            return False, [
+                f"Usage: /siege when <{ASSAULT_WINDOW_MIN_H}-{ASSAULT_WINDOW_MAX_H}>h  "
+                "(attack Leader sets when the assault begins)"
+            ]
+        raw = parts[2].lower().rstrip("h")
+        if raw.endswith("d"):
+            try:
+                raw_h = int(raw[:-1]) * 24
+            except ValueError:
+                return False, [
+                    f"Usage: /siege when <{ASSAULT_WINDOW_MIN_H}-{ASSAULT_WINDOW_MAX_H}>h"
+                ]
+            ok, msg = set_assault_window(conn, player_id, raw_h)
+            return ok, [msg]
+        try:
+            hours = int(raw)
+        except ValueError:
+            return False, [
+                f"Usage: /siege when <{ASSAULT_WINDOW_MIN_H}-{ASSAULT_WINDOW_MAX_H}>h"
+            ]
+        ok, msg = set_assault_window(conn, player_id, hours)
+        return ok, [msg]
     if sub in ("scout", "structures", "damage", "weak"):
         return True, structure_lines(conn)
     if sub in ("barricade", "barricades", "fortify"):
@@ -3370,6 +4475,20 @@ def handle_command(conn, player_id, text):
                 "(defenders post a Guard recruit onto a capture point)"
             ]
         ok, msg = deploy_guard(conn, player_id, parts[2].lower())
+        return ok, [msg]
+    if sub in ("royalguard", "royalguards", "rg"):
+        # Design: limited appointed players who can protect the King.
+        if len(parts) < 3:
+            return True, royal_guard_lines(conn)
+        action = parts[2].lower()
+        if action == "dismiss":
+            name = " ".join(parts[3:]).strip()
+            if not name:
+                return False, ["Usage: /siege royalguard dismiss <name>"]
+            ok, msg = dismiss_royal_guard(conn, player_id, name)
+            return ok, [msg]
+        name = " ".join(parts[2:]).strip()
+        ok, msg = appoint_royal_guard(conn, player_id, name)
         return ok, [msg]
     if sub in ("capture", "captures", "points"):
         war = current_war(conn)
@@ -3404,10 +4523,12 @@ def handle_command(conn, player_id, text):
         ]
     return False, [
         "Usage: /siege [status|register attack|register defend|confirm|forfeit|"
-        "ally <guild>|accept|decline|open|store|costs|deposit <item> <qty>|"
+        "ally <guild>|accept|decline|open|store|costs|report|deposit <item> <qty>|"
         "alloc rams=.. ladders=.. barricades=.. reserve=..|contrib|"
         "craft <weapon> [qty]|fire <weapon> <structure>|barricade <point>|"
-        "guard <point>|repair <structure>|scout|weapons|begin|captures|council|heraldry]"
+        "guard <point>|royalguard <name>|royalguard dismiss <name>|"
+        "repair <structure>|scout|weapons|begin|roster|"
+        f"when <{ASSAULT_WINDOW_MIN_H}-{ASSAULT_WINDOW_MAX_H}>h|captures|council|heraldry]"
     ]
 
 

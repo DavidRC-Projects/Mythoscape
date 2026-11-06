@@ -308,6 +308,7 @@ class PlayerSession:
         self.throne_vision_seen = bool(row["throne_vision_seen"]) if "throne_vision_seen" in row.keys() else True
         self.guide_tour = int(row["guide_tour"]) if "guide_tour" in row.keys() else 100
         self.guide_bronze = bool(row["guide_bronze"]) if "guide_bronze" in row.keys() else True
+        self.crown_guide = int(row["crown_guide"]) if "crown_guide" in row.keys() else 0
         self.sewer_choice = (row["sewer_choice"] if "sewer_choice" in row.keys() else "") or ""
         raw_ignore = row["pickup_ignore"] if "pickup_ignore" in row.keys() else "[]"
         try:
@@ -1214,6 +1215,7 @@ class PlayerSession:
             "throne_vision_seen": bool(getattr(self, "throne_vision_seen", True)),
             "guide_tour": int(getattr(self, "guide_tour", 100)),
             "guide_bronze": bool(getattr(self, "guide_bronze", True)),
+            "crown_guide": int(getattr(self, "crown_guide", 0)),
             "sewer_choice": getattr(self, "sewer_choice", "") or "",
             "pickup_ignore": sorted(self.pickup_ignore),
             "stats_allocated": self.stats_allocated,
@@ -4492,6 +4494,54 @@ async def handle_guide_tour(session, msg):
     return True
 
 
+CROWN_GUIDE_FIELDS = frozenset({"type", "action", "step"})
+
+
+async def _crown_guide_send(session):
+    await send(
+        session.ws, "CROWN_GUIDE_STATE",
+        step=int(getattr(session, "crown_guide", 0)),
+    )
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+
+
+async def handle_crown_guide(session, msg):
+    """CROWN_GUIDE {action} — Seraphine walks the player to the Royal Herald outside the castle."""
+    import crown_war_guide as cg
+    if not isinstance(msg, dict) or set(msg.keys()) - CROWN_GUIDE_FIELDS:
+        return False
+    if not getattr(session, "player_id", None):
+        return False
+    # First tour must be finished before this walk.
+    if int(getattr(session, "guide_tour", 100)) not in GUIDE_FINISHED:
+        return False
+    action = msg.get("action")
+    if not isinstance(action, str):
+        return False
+    cur = int(getattr(session, "crown_guide", 0) or 0)
+    if action == "start":
+        if cur not in (0, cg.CROWN_GUIDE_DONE, cg.CROWN_GUIDE_SKIPPED):
+            return False
+        session.crown_guide = cg.CROWN_GUIDE_WALK
+    elif action == "arrived":
+        if cur != cg.CROWN_GUIDE_WALK:
+            return False
+        session.crown_guide = cg.CROWN_GUIDE_TALK
+    elif action == "skip":
+        if cur in cg.CROWN_GUIDE_FINISHED:
+            return False
+        session.crown_guide = cg.CROWN_GUIDE_SKIPPED
+    elif action == "replay":
+        if cur not in (0, cg.CROWN_GUIDE_DONE, cg.CROWN_GUIDE_SKIPPED):
+            return False
+        session.crown_guide = cg.CROWN_GUIDE_WALK
+    else:
+        return False
+    WORLD.db.save_player_stats(session.player_id, crown_guide=session.crown_guide)
+    await _crown_guide_send(session)
+    return True
+
+
 EQUIP_ALL_ORDER = ("helmet", "body", "legs", "weapon", "shield", "amulet", "ring")
 EQUIP_ALL_FIELDS = frozenset({"type"})
 
@@ -6177,14 +6227,52 @@ async def settle_work(session, login=False):
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
 
 
+async def announce_siege_notes(notes):
+    """Broadcast siege tick lines; Crownfall also fires a realm-wide coronation event."""
+    import crown_siege
+    saw_crownfall = False
+    for note in notes or []:
+        text = str(note or "")
+        if not text:
+            continue
+        await broadcast("CHAT_MSG", **{"from": "Royal Herald", "text": text})
+        payload = crown_siege.coronation_payload(text)
+        if payload:
+            saw_crownfall = True
+            await broadcast(
+                "CROWNFALL",
+                title=payload["title"],
+                text=payload["text"],
+                subtitle=payload["subtitle"],
+                winner=payload.get("winner"),
+                crowned_name=payload.get("crowned_name"),
+                guild_name=payload.get("guild_name"),
+            )
+    if saw_crownfall:
+        # Refresh castle heraldry / scars and live royal titles for everyone online.
+        try:
+            await push_siege_structure_sync()
+        except Exception:
+            log.exception("crownfall siege sync failed")
+        try:
+            import throne_live
+            throne_live.apply_king_state()
+        except Exception:
+            log.exception("crownfall king-state refresh failed")
+        for sess in list(WORLD.sessions.values()):
+            try:
+                await send(sess.ws, "PLAYER_UPDATE", player=sess.full_state())
+            except Exception:
+                pass
+
+
 async def ruling_daily_tick(now=None):
     """Once per real day: pending rates apply, stipends, council rep, works expire, reign days."""
     now = time.time() if now is None else now
     conn = WORLD.db.conn
     try:
         import crown_siege
-        for note in crown_siege.tick_wars(conn, now):
-            await broadcast("CHAT_MSG", **{"from": "Royal Herald", "text": note})
+        await announce_siege_notes(crown_siege.tick_wars(conn, now))
     except Exception:
         log.exception("crown_siege tick failed")
     day = time.strftime("%Y-%m-%d", time.localtime(now))
@@ -6435,6 +6523,25 @@ async def handle_politics_msg(session, mtype, msg):
         else:
             lines = news or ["The board is bare. No news yet."]
         await send(session.ws, "DIALOGUE", npc_id="notice_board", npc_name="Notice Board", lines=lines)
+        return
+    elif mtype == "WAR_COUNCIL":
+        # Design: War Council also opens from the world map atlas.
+        summary = None
+        try:
+            import crown_siege
+            summary = crown_siege.atlas_war_summary(conn, session.player_id)
+        except Exception:
+            log.exception("war council atlas failed")
+        await send(session.ws, "WAR_COUNCIL", summary=summary)
+        if msg.get("open"):
+            lines = (summary or {}).get("lines") or [
+                "Royal War Council — no War for the Crown is open.",
+                "A guild Leader may /siege register attack|defend to open registration.",
+            ]
+            await send(
+                session.ws, "DIALOGUE",
+                npc_id="war_council", npc_name="Royal War Council", lines=lines,
+            )
         return
     await send(session.ws, "KINGDOM_STATE", state=politics.state_payload(conn, session.player_id))
 
@@ -7315,8 +7422,47 @@ async def handle_npc_option(session, msg):
         lines = [await throne_schedule(session, kind, hours)]
     elif opt == "throne_list":
         lines = throne.summary_lines(conn, throne_live._name)
+    elif opt == "siege_guide" or (isinstance(opt, str) and opt.startswith("siege_guide_")):
+        import crown_war_guide
+        if opt == "siege_guide_done":
+            crown_war_guide.mark_talked(conn, pid, session=session)
+            lines = [
+                "Good. When you are ready, join a guild, watch the monthly calendar, "
+                "and ask me again for War for the Crown when registration opens.",
+            ]
+            await send(
+                session.ws, "DIALOGUE",
+                npc_id=npc["id"], npc_name=npc["name"], lines=lines,
+                options=list(_options_for(session, npc) or []),
+            )
+            await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+            return
+        page = 0
+        if opt.startswith("siege_guide_") and opt != "siege_guide":
+            try:
+                page = int(opt.rsplit("_", 1)[-1])
+            except ValueError:
+                page = 0
+        lines, page = crown_war_guide.guide_dialogue_lines(page)
+        # Talking through the guide counts as meeting the Herald for Seraphine's walk.
+        if int(getattr(session, "crown_guide", 0) or 0) in (
+            crown_war_guide.CROWN_GUIDE_WALK, crown_war_guide.CROWN_GUIDE_TALK,
+        ):
+            # Stay on talk step until the last page is acknowledged.
+            if int(getattr(session, "crown_guide", 0) or 0) == crown_war_guide.CROWN_GUIDE_WALK:
+                session.crown_guide = crown_war_guide.CROWN_GUIDE_TALK
+                WORLD.db.save_player_stats(pid, crown_guide=crown_war_guide.CROWN_GUIDE_TALK)
+        await send(
+            session.ws, "DIALOGUE",
+            npc_id=npc["id"], npc_name=npc["name"], lines=lines,
+            options=crown_war_guide.guide_options(page) + list(
+                _options_for(session, npc) or []
+            ),
+        )
+        return
     elif opt in ("siege_status", "siege_register_attack", "siege_register_defend",
-                 "siege_confirm", "siege_store", "siege_costs", "siege_scout"):
+                 "siege_confirm", "siege_store", "siege_costs", "siege_scout",
+                 "siege_royalguard", "siege_report"):
         import crown_siege
         if opt == "siege_status":
             lines = crown_siege.board_lines(conn, pid)
@@ -7326,6 +7472,14 @@ async def handle_npc_option(session, msg):
             lines = crown_siege.requirement_lines()
         elif opt == "siege_scout":
             lines = crown_siege.structure_lines(conn)
+        elif opt == "siege_royalguard":
+            lines = crown_siege.royal_guard_lines(conn)
+            lines.append(
+                "Monarch or Marshal: /siege royalguard <name> · "
+                "/siege royalguard dismiss <name>"
+            )
+        elif opt == "siege_report":
+            lines = crown_siege.battle_report_lines(conn)
         elif opt == "siege_confirm":
             _ok, msg = crown_siege.confirm(conn, pid)
             lines = [msg]
@@ -10053,7 +10207,7 @@ async def handler(ws):
                     await handle_barracks(session, msg)
                 elif mtype == "WELCOME_SKIP":
                     await welcome_skip(session)
-                elif mtype in ("COURT_CHOOSE", "NEWS_BOARD", "KINGDOM_STATE"):
+                elif mtype in ("COURT_CHOOSE", "NEWS_BOARD", "KINGDOM_STATE", "WAR_COUNCIL"):
                     await handle_politics_msg(session, mtype, msg)
                 elif isinstance(mtype, str) and mtype.startswith("RULE_"):
                     await handle_rule(session, mtype, msg)
@@ -10111,6 +10265,8 @@ async def handler(ws):
                     await handle_set_option(session, msg)
                 elif mtype == "GUIDE_TOUR":
                     await handle_guide_tour(session, msg)
+                elif mtype == "CROWN_GUIDE":
+                    await handle_crown_guide(session, msg)
                 elif mtype == "EQUIP_ALL":
                     await handle_equip_all(session, msg)
                 elif mtype == "THRONE_VISION_SEEN":
@@ -10402,8 +10558,9 @@ async def game_loop():
                 await politics_live.tick()
                 try:
                     import crown_siege
-                    for note in crown_siege.tick_live(WORLD.db.conn, WORLD.sessions.values()):
-                        await broadcast("CHAT_MSG", **{"from": "Royal Herald", "text": note})
+                    await announce_siege_notes(
+                        crown_siege.tick_live(WORLD.db.conn, WORLD.sessions.values())
+                    )
                 except Exception:
                     log.exception("crown_siege live tick failed")
             if WORLD.tick_count % 100 == 0:
