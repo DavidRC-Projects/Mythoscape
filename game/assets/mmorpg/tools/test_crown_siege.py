@@ -427,10 +427,19 @@ def _push_point(conn, player_id, point_id, now_start):
     x0, y0, x1, y1 = spec["rect"]
     xy = ((x0 + x1) // 2, (y0 + y1) // 2)
     presence = [(player_id, spec["plane"], xy[0], xy[1])]
-    # Watchtower can double realm need — read live need from capture_state.
+    # Watchtower can double realm need; guards/barricades (incl. fallback / royal
+    # guard that may spawn mid-push when the keep falls) must be cleared first.
     need = int(crown_siege._capture_need(conn, spec))
+    budget = (
+        need
+        + crown_siege.FALLBACK_BARRICADE_HP
+        + crown_siege.BARRICADE_DEPLOY_HP
+        + crown_siege.GUARD_DEPLOY_HP
+        + crown_siege.ROYAL_GUARD_HP
+        + 20
+    )
     notices = []
-    for i in range(need + 5):
+    for i in range(budget):
         batch = crown_siege.tick_captures(conn, presence, now=now_start + i)
         notices.extend(batch)
         points = {p["id"]: p for p in crown_siege.capture_state(conn)}
@@ -438,7 +447,7 @@ def _push_point(conn, player_id, point_id, now_start):
             return notices, now_start + i + 1
     points = {p["id"]: p for p in crown_siege.capture_state(conn)}
     check(points[point_id]["owner"] == "attack", f"{point_id} flips to attack ({points[point_id]})")
-    return notices, now_start + need + 5
+    return notices, now_start + budget
 
 
 def test_capture_throne_and_last_stand():
@@ -591,9 +600,26 @@ def test_live_interest_and_presence():
     _notices, t = _push_point(conn, atk, "gatehouse", t)
     _notices, t = _push_point(conn, atk, "courtyard", t)
     crown_siege.apply_damage(conn, "royal_keep", 99999)
+    # Royal guard forms when the keep is down — clear forts so the live-tick
+    # assertion measures capture progress (and re-clear after the grant fires).
+    war_id = crown_siege.current_war(conn)["id"]
+    conn.execute(
+        "UPDATE crown_war_captures SET barricades = 0, guards = 0 "
+        "WHERE war_id = ? AND point_id = 'throne'",
+        (war_id,),
+    )
+    conn.commit()
     sessions = [Fake(atk, "king_f1", 26, 17)]
+    # First tick grants the royal guard before any progress; strip it, then push.
+    crown_siege.tick_live(conn, sessions, now=t + 10)
+    conn.execute(
+        "UPDATE crown_war_captures SET barricades = 0, guards = 0 "
+        "WHERE war_id = ? AND point_id = 'throne'",
+        (war_id,),
+    )
+    conn.commit()
     for i in range(30):
-        crown_siege.tick_live(conn, sessions, now=t + 10 + i)
+        crown_siege.tick_live(conn, sessions, now=t + 11 + i)
     points = {p["id"]: p for p in crown_siege.capture_state(conn)}
     check(points["throne"]["progress"] > 0 or points["throne"]["owner"] == "attack",
           f"live tick advances throne ({points['throne']})")
@@ -1267,6 +1293,144 @@ def test_war_hire_caps_elim_names_and_herald_costs():
     check(ok and any("battering ram" in ln.lower() for ln in lines), f"costs still work ({lines})")
 
 
+def test_war_board_shows_territory():
+    """Public war progress board lists capture owners / forts during the assault."""
+    db = make_db()
+    conn = db.conn
+    atk, dfn = _confirm_both_sides(db)
+    crown_siege.begin_assault(conn, atk, now=T0 + 10)
+    # Seed a Guard on the outer yard so the board names fortifications.
+    dfn_cid = crown_siege._clan_of(conn, dfn)
+    conn.execute(
+        "INSERT INTO clan_recruits (clan_id, name, role, hired_at, upkeep_paid_through, active) "
+        "VALUES (?, 'Board Guard', 'Guard', ?, ?, 1)",
+        (dfn_cid, T0, T0 + 86400),
+    )
+    conn.commit()
+    ok, msg = crown_siege.deploy_guard(conn, dfn, "outer_yard", now=T0 + 11)
+    check(ok, f"seed guard for board ({msg})")
+    lines = crown_siege.board_lines(conn, atk, now=T0 + 12)
+    blob = " ".join(lines).lower()
+    check("territory" in blob, f"board names territory ({lines})")
+    check("outer yard" in blob, f"board lists outer yard ({lines})")
+    check("guards" in blob, f"board shows guard fortification ({lines})")
+    check(any("locked" in ln.lower() for ln in lines if "gatehouse" in ln.lower() or "throne" in ln.lower()),
+          f"later stages marked locked ({lines})")
+    # Fallback fortification also surfaces after a stage falls.
+    crown_siege.apply_damage(conn, "watchtower", 99999)
+    _notices, _t = _push_point(conn, atk, "outer_yard", T0 + 20)
+    lines2 = crown_siege.board_lines(conn, atk, now=T0 + 30)
+    blob2 = " ".join(lines2).lower()
+    check("gatehouse" in blob2 and "barricades" in blob2,
+          f"board shows fallback barricades on gatehouse ({lines2})")
+
+
+def test_fallback_and_royal_guard():
+    db = make_db()
+    conn = db.conn
+    atk, dfn = _confirm_both_sides(db)
+    crown_siege.begin_assault(conn, atk, now=T0 + 10)
+    crown_siege.apply_damage(conn, "watchtower", 99999)
+    notices, t = _push_point(conn, atk, "outer_yard", T0 + 20)
+    check(any("regroup" in n.lower() and "gatehouse" in n.lower() for n in notices),
+          f"fallback notice after outer yard ({notices})")
+    points = {p["id"]: p for p in crown_siege.capture_state(conn)}
+    check(points["gatehouse"]["barricades"] >= crown_siege.FALLBACK_BARRICADE_HP,
+          f"gatehouse got fallback barricades ({points['gatehouse']})")
+    # Breach so gatehouse unlocks, then take it — courtyard gets the next fallback.
+    crown_siege.apply_damage(conn, "outer_gate", 99999)
+    notices, t = _push_point(conn, atk, "gatehouse", t)
+    check(any("courtyard" in n.lower() and "regroup" in n.lower() for n in notices),
+          f"fallback to courtyard ({notices})")
+    points = {p["id"]: p for p in crown_siege.capture_state(conn)}
+    check(points["courtyard"]["barricades"] >= crown_siege.FALLBACK_BARRICADE_HP,
+          f"courtyard fallback ({points['courtyard']})")
+    # Courtyard falls first (keep still up → no royal guard yet).
+    check(points["throne"]["guards"] == 0, "throne has no royal guard yet")
+    notices, t = _push_point(conn, atk, "courtyard", t)
+    points = {p["id"]: p for p in crown_siege.capture_state(conn)}
+    check(points["throne"]["guards"] == 0, "throne still unguarded while keep stands")
+    # Keep falls → royal guard forms before attackers can chip throne progress.
+    crown_siege.apply_damage(conn, "royal_keep", 99999)
+    presence = [(atk, "king_f1", 26, 17)]
+    notices = crown_siege.tick_captures(conn, presence, now=t + 1)
+    check(any("royal guard" in n.lower() for n in notices), f"royal guard notice ({notices})")
+    points = {p["id"]: p for p in crown_siege.capture_state(conn)}
+    check(points["throne"]["guards"] == crown_siege.ROYAL_GUARD_HP - 1,
+          f"grant then chip one guard HP ({points['throne']})")
+    check(points["throne"]["progress"] == 0,
+          f"no throne progress while royal guard stands ({points['throne']})")
+    # Second tick does not stack another royal guard.
+    notices2 = crown_siege.tick_captures(conn, [], now=t + 2)
+    check(not any("royal guard" in n.lower() for n in notices2), f"no second grant ({notices2})")
+    points = {p["id"]: p for p in crown_siege.capture_state(conn)}
+    check(points["throne"]["guards"] == crown_siege.ROYAL_GUARD_HP - 1,
+          f"royal guard not stacked ({points['throne']})")
+
+
+def test_deploy_guards_before_barricades():
+    db = make_db()
+    conn = db.conn
+    atk, dfn = _confirm_both_sides(db)
+    dfn_cid = crown_siege._clan_of(conn, dfn)
+    # Seed a Guard recruit for the defending lead.
+    conn.execute(
+        "INSERT INTO clan_recruits (clan_id, name, role, hired_at, upkeep_paid_through, active) "
+        "VALUES (?, 'Wall Guard', 'Guard', ?, ?, 1)",
+        (dfn_cid, T0, T0 + 86400),
+    )
+    conn.commit()
+    _fund_side(
+        conn, dfn,
+        {"timber": 100, "stone": 50},
+        alloc={"rams": 10, "ladders": 10, "barricades": 60, "reserve": 20},
+        now=T0 + 4,
+    )
+    ok, msg = crown_siege.craft_weapon(conn, dfn, "barricade", 1, now=T0 + 5)
+    check(ok, f"craft barricade ({msg})")
+    crown_siege.begin_assault(conn, atk, now=T0 + 10)
+    # Destroy watchtower so capture need is base (not doubled).
+    crown_siege.apply_damage(conn, "watchtower", 99999)
+    ok, msg = crown_siege.deploy_guard(conn, dfn, "outer_yard", now=T0 + 11)
+    check(ok and "wall guard" in msg.lower(), f"deploy guard ({msg})")
+    points = {p["id"]: p for p in crown_siege.capture_state(conn)}
+    check(points["outer_yard"]["guards"] == crown_siege.GUARD_DEPLOY_HP,
+          f"guards on outer yard ({points['outer_yard']})")
+    # Same recruit cannot post twice.
+    ok, msg = crown_siege.deploy_guard(conn, dfn, "gatehouse", now=T0 + 12)
+    check(not ok and "no free guard" in msg.lower(), f"second post blocked ({msg})")
+    ok, msg = crown_siege.deploy_barricade(conn, dfn, "outer_yard", now=T0 + 15)
+    check(ok, f"deploy barricade under guards ({msg})")
+    spec = crown_siege.CAPTURE_POINTS["outer_yard"]
+    x0, y0, x1, y1 = spec["rect"]
+    presence = [(atk, spec["plane"], (x0 + x1) // 2, (y0 + y1) // 2)]
+    notices = []
+    for i in range(crown_siege.GUARD_DEPLOY_HP):
+        notices = crown_siege.tick_captures(conn, presence, now=T0 + 20 + i)
+    points = {p["id"]: p for p in crown_siege.capture_state(conn)}
+    check(points["outer_yard"]["guards"] == 0, "guards cleared")
+    check(points["outer_yard"]["barricades"] == crown_siege.BARRICADE_DEPLOY_HP,
+          "barricades untouched until guards fall")
+    check(points["outer_yard"]["progress"] == 0, "no capture progress while fortifications stand")
+    check(any("guards" in n.lower() and "broken" in n.lower() for n in notices),
+          f"guard break notice ({notices})")
+    # Clear barricades, then capture.
+    for i in range(crown_siege.BARRICADE_DEPLOY_HP):
+        crown_siege.tick_captures(conn, presence, now=T0 + 100 + i)
+    points = {p["id"]: p for p in crown_siege.capture_state(conn)}
+    check(points["outer_yard"]["barricades"] == 0, "barricades cleared after guards")
+    need = int(points["outer_yard"]["need"])
+    for i in range(need):
+        crown_siege.tick_captures(conn, presence, now=T0 + 200 + i)
+    points = {p["id"]: p for p in crown_siege.capture_state(conn)}
+    check(points["outer_yard"]["owner"] == "attack", "outer yard falls after guards+barricades")
+    # Attacker cannot deploy guards.
+    ok, msg = crown_siege.deploy_guard(conn, atk, "gatehouse", now=T0 + 300)
+    check(not ok and "defend" in msg.lower(), f"attacker cannot post guards ({msg})")
+    ok, lines = crown_siege.handle_command(conn, dfn, "/siege captures")
+    check(ok, f"captures command ({lines})")
+
+
 def test_side_fighters_and_skill_boost():
     db = make_db()
     conn = db.conn
@@ -1474,6 +1638,9 @@ if __name__ == "__main__":
     test_chronicle_roster_lock_postpone_and_scar_click()
     test_elim_blocks_actions_and_requirements_board()
     test_war_hire_caps_elim_names_and_herald_costs()
+    test_fallback_and_royal_guard()
+    test_war_board_shows_territory()
+    test_deploy_guards_before_barricades()
     test_side_fighters_and_skill_boost()
     test_war_council_notice_and_guild_panel()
     test_alloc_budget_enforced_and_locked()

@@ -1068,11 +1068,17 @@ def draw_capture_markers(client):
         name = str(cap.get("name") or cap.get("id") or "?")
         prog = f"{int(cap.get('progress') or 0)}/{int(cap.get('need') or 0)}"
         bar = int(cap.get("barricades") or 0)
+        guards = int(cap.get("guards") or 0)
         lock = "" if cap.get("unlocked_for_attack", True) else " · locked"
         label = font.render(f"{name} · {owner} {prog}{lock}", True, (255, 235, 200))
         client.screen.blit(label, (sx - label.get_width() // 2, sy - 14))
+        bits = []
+        if guards:
+            bits.append(f"guards {guards}")
         if bar:
-            b = font.render(f"barricades {bar}", True, (255, 200, 120))
+            bits.append(f"barricades {bar}")
+        if bits:
+            b = font.render(" · ".join(bits), True, (255, 200, 120))
             client.screen.blit(b, (sx - b.get_width() // 2, sy + 2))
 
 
@@ -1168,6 +1174,21 @@ def draw_war_board(client, hud=None):
                 lines.append(
                     f"  Store: timber {stock.get('timber', 0)} · ore {stock.get('ore', 0)} · "
                     f"bars {stock.get('bars', 0)} · stone {stock.get('stone', 0)}"
+                )
+        caps = war.get("captures") or []
+        if status == "active" and caps:
+            lines.append("Territory:")
+            for cap in caps:
+                bits = [f"{cap.get('progress', 0)}/{cap.get('need', 0)}"]
+                if cap.get("guards"):
+                    bits.append(f"guards {cap.get('guards')}")
+                if cap.get("barricades"):
+                    bits.append(f"barricades {cap.get('barricades')}")
+                if not cap.get("unlocked_for_attack", True):
+                    bits.append("locked")
+                lines.append(
+                    f"  {cap.get('name') or cap.get('id')}: "
+                    f"{cap.get('owner') or 'defend'} ({', '.join(bits)})"
                 )
         contrib = war.get("contributors") or []
         if contrib:

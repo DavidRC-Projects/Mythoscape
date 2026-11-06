@@ -131,6 +131,10 @@ CAPTURE_POINTS = {
 }
 THRONE_HOLD_SECONDS = 120
 BARRICADE_DEPLOY_HP = 40       # HP added per deployed barricade on a capture point
+GUARD_DEPLOY_HP = 30           # HP added per Guard recruit posted on a capture point
+FALLBACK_BARRICADE_HP = 20     # hasty fortification when defenders regroup to the next stage
+ROYAL_GUARD_HP = 50            # throne fortification when the keep falls (final hold)
+ROYAL_GUARD_SENTINEL = -1      # crown_war_guards.recruit_id for the system royal-guard grant
 KING_CASTLE_ID = "king"
 
 # Anchored to the existing King's Castle (king_castle.json footprint / Great Hall).
@@ -335,6 +339,19 @@ def ensure_schema(conn):
         conn.execute(
             "ALTER TABLE crown_war_captures ADD COLUMN barricades INTEGER NOT NULL DEFAULT 0"
         )
+    if "guards" not in cap_cols:
+        conn.execute(
+            "ALTER TABLE crown_war_captures ADD COLUMN guards INTEGER NOT NULL DEFAULT 0"
+        )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS crown_war_guards ("
+        "war_id INTEGER NOT NULL,"
+        "recruit_id INTEGER NOT NULL,"
+        "clan_id INTEGER NOT NULL,"
+        "point_id TEXT NOT NULL,"
+        "deployed_at REAL NOT NULL,"
+        "PRIMARY KEY (war_id, recruit_id))"
+    )
     conn.execute(
         "CREATE TABLE IF NOT EXISTS crown_war_elim ("
         "war_id INTEGER NOT NULL,"
@@ -1867,7 +1884,8 @@ def structure_sync(conn):
     }
 
 
-def _init_captures(conn, war_id, now):
+def _ensure_captures(conn, war_id, now):
+    """Make sure capture rows exist without wiping fortifications mid-prep."""
     for point_id in CAPTURE_POINTS:
         conn.execute(
             "INSERT OR IGNORE INTO crown_war_captures "
@@ -1875,6 +1893,12 @@ def _init_captures(conn, war_id, now):
             "VALUES (?, ?, 'defend', 0, NULL, ?)",
             (int(war_id), point_id, now),
         )
+    conn.commit()
+
+
+def _init_captures(conn, war_id, now):
+    """Reset capture ownership for a fresh assault; keep prep fortifications."""
+    _ensure_captures(conn, war_id, now)
     conn.execute(
         "UPDATE crown_war_captures SET owner = 'defend', progress = 0, hold_started_at = NULL "
         "WHERE war_id = ?",
@@ -1956,12 +1980,13 @@ def capture_state(conn, war_id=None):
     try:
         rows = conn.execute(
             "SELECT point_id, owner, progress, hold_started_at, updated_at, "
-            "COALESCE(barricades, 0) FROM crown_war_captures WHERE war_id = ?",
+            "COALESCE(barricades, 0), COALESCE(guards, 0) "
+            "FROM crown_war_captures WHERE war_id = ?",
             (int(war["id"]),),
         ).fetchall()
     except Exception:
         rows = conn.execute(
-            "SELECT point_id, owner, progress, hold_started_at, updated_at, 0 "
+            "SELECT point_id, owner, progress, hold_started_at, updated_at, 0, 0 "
             "FROM crown_war_captures WHERE war_id = ?",
             (int(war["id"]),),
         ).fetchall()
@@ -1980,9 +2005,33 @@ def capture_state(conn, war_id=None):
             "hold_started_at": float(row[3]) if row and row[3] is not None else None,
             "hold_seconds": int(spec.get("hold_seconds") or 0),
             "barricades": int(row[5]) if row else 0,
+            "guards": int(row[6]) if row and len(row) > 6 else 0,
             "unlocked_for_attack": _capture_unlocked(conn, war["id"], pid),
         })
     return out
+
+
+def capture_board_lines(conn, war_id=None):
+    """Compact territory lines for the public war progress board."""
+    points = capture_state(conn, war_id)
+    if not points:
+        return []
+    lines = ["Territory (attack order):"]
+    for p in points:
+        bits = [f"{p['progress']}/{p['need']}"]
+        if p.get("guards"):
+            bits.append(f"guards {p['guards']}")
+        if p.get("barricades"):
+            bits.append(f"barricades {p['barricades']}")
+        if p["id"] == "throne" and p.get("owner") == "attack" and p.get("hold_started_at"):
+            held = max(0, int(time.time() - float(p["hold_started_at"])))
+            bits.append(f"holding {held}s/{p.get('hold_seconds') or THRONE_HOLD_SECONDS}s")
+        if not p.get("unlocked_for_attack"):
+            bits.append("locked")
+        lines.append(
+            f"  {p['name']}: {p.get('owner') or 'defend'} ({', '.join(bits)})"
+        )
+    return lines
 
 
 def _capture_owner(conn, war_id, point_id):
@@ -2016,6 +2065,78 @@ def _capture_need(conn, spec):
     if spec.get("plane") == "realm" and not _structure_destroyed(conn, "watchtower"):
         return need * 2
     return need
+
+
+def _add_point_fortification(conn, war_id, point_id, *, barricades=0, guards=0, now=None):
+    """Bump fortification HP on a capture point (rows must already exist)."""
+    now = time.time() if now is None else float(now)
+    if point_id not in CAPTURE_POINTS:
+        return
+    if barricades:
+        conn.execute(
+            "UPDATE crown_war_captures SET barricades = COALESCE(barricades, 0) + ?, "
+            "updated_at = ? WHERE war_id = ? AND point_id = ?",
+            (int(barricades), now, int(war_id), point_id),
+        )
+    if guards:
+        conn.execute(
+            "UPDATE crown_war_captures SET guards = COALESCE(guards, 0) + ?, "
+            "updated_at = ? WHERE war_id = ? AND point_id = ?",
+            (int(guards), now, int(war_id), point_id),
+        )
+
+
+def _fallback_fortify(conn, war_id, fallen_point_id, now=None):
+    """When attackers take a stage, defenders regroup at the next point.
+
+    Design: 'Defenders can regroup at fallback positions.'
+    """
+    now = time.time() if now is None else float(now)
+    try:
+        idx = CAPTURE_ORDER.index(fallen_point_id)
+    except ValueError:
+        return None
+    if idx + 1 >= len(CAPTURE_ORDER):
+        return None
+    nxt = CAPTURE_ORDER[idx + 1]
+    _ensure_captures(conn, war_id, now)
+    _add_point_fortification(conn, war_id, nxt, barricades=FALLBACK_BARRICADE_HP, now=now)
+    conn.commit()
+    name = CAPTURE_POINTS[nxt]["name"]
+    return f"Defenders regroup at the {name} (+{FALLBACK_BARRICADE_HP} barricade fortification)!"
+
+
+def _grant_royal_guard(conn, war_id, now=None):
+    """Once the royal keep falls, the throne gets a final Guard line.
+
+    Design: 'break through the royal guard' / 'final opportunity to hold'.
+    """
+    now = time.time() if now is None else float(now)
+    if not _structure_destroyed(conn, "royal_keep"):
+        return None
+    # One grant per war (sentinel recruit_id).
+    existing = conn.execute(
+        "SELECT 1 FROM crown_war_guards WHERE war_id = ? AND recruit_id = ?",
+        (int(war_id), ROYAL_GUARD_SENTINEL),
+    ).fetchone()
+    if existing:
+        return None
+    try:
+        conn.execute(
+            "INSERT INTO crown_war_guards "
+            "(war_id, recruit_id, clan_id, point_id, deployed_at) "
+            "VALUES (?, ?, 0, 'throne', ?)",
+            (int(war_id), ROYAL_GUARD_SENTINEL, now),
+        )
+    except Exception:
+        return None
+    _ensure_captures(conn, war_id, now)
+    _add_point_fortification(conn, war_id, "throne", guards=ROYAL_GUARD_HP, now=now)
+    conn.commit()
+    return (
+        f"The Royal Guard forms in the Throne Room "
+        f"(+{ROYAL_GUARD_HP} guard fortification) — the final hold!"
+    )
 
 
 def _capture_unlocked(conn, war_id, point_id):
@@ -2060,7 +2181,7 @@ def deploy_barricade(conn, player_id, point_id, now=None):
     )
     if conn.total_changes == 0:
         return False, "No barricades in stock. /siege craft barricade"
-    _init_captures(conn, war["id"], now)
+    _ensure_captures(conn, war["id"], now)
     conn.execute(
         "UPDATE crown_war_captures SET barricades = COALESCE(barricades, 0) + ?, "
         "updated_at = ? WHERE war_id = ? AND point_id = ?",
@@ -2075,6 +2196,71 @@ def deploy_barricade(conn, player_id, point_id, now=None):
     return True, (
         f"Deployed a barricade at the {name} "
         f"(fortification {int(row[0] if row else 0)} HP)."
+    )
+
+
+def _available_guard_recruit(conn, war_id, clan_id):
+    """Pick an active Guard recruit from this clan that is not already posted this war."""
+    try:
+        row = conn.execute(
+            "SELECT r.id, r.name FROM clan_recruits r "
+            "WHERE r.clan_id = ? AND r.active = 1 AND r.role = 'Guard' "
+            "AND r.id NOT IN ("
+            "  SELECT recruit_id FROM crown_war_guards WHERE war_id = ?"
+            ") ORDER BY r.id LIMIT 1",
+            (int(clan_id), int(war_id)),
+        ).fetchone()
+    except Exception:
+        return None
+    if not row:
+        return None
+    return {"id": int(row[0]), "name": row[1]}
+
+
+def deploy_guard(conn, player_id, point_id, now=None):
+    """Post a Guard recruit on a capture point (design: defenders deploy guards).
+
+    Attackers must clear guard HP before barricades and capture progress. The
+    recruit stays hired but cannot be posted twice in the same war.
+    """
+    now = time.time() if now is None else float(now)
+    point_id = str(point_id or "").strip()
+    if point_id not in CAPTURE_POINTS:
+        return False, f"Unknown point. Choose: {', '.join(CAPTURE_ORDER)}."
+    war, lead_id, err = _side_operator(conn, player_id)
+    if err:
+        return False, err
+    if player_side(conn, player_id, war["id"]) != "defend":
+        return False, "Only defenders can deploy guards."
+    if war["status"] not in ("scheduled", "active", "registration"):
+        return False, "No war is open for guard posts."
+    clan_id = _clan_of(conn, player_id)
+    recruit = _available_guard_recruit(conn, war["id"], clan_id)
+    if not recruit:
+        return False, (
+            "No free Guard recruit to post. Hire a Guard (/guild hire Guard) "
+            "or wait until a posted Guard is free next war."
+        )
+    _ensure_captures(conn, war["id"], now)
+    conn.execute(
+        "INSERT INTO crown_war_guards (war_id, recruit_id, clan_id, point_id, deployed_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (war["id"], recruit["id"], int(clan_id), point_id, now),
+    )
+    conn.execute(
+        "UPDATE crown_war_captures SET guards = COALESCE(guards, 0) + ?, "
+        "updated_at = ? WHERE war_id = ? AND point_id = ?",
+        (GUARD_DEPLOY_HP, now, war["id"], point_id),
+    )
+    conn.commit()
+    row = conn.execute(
+        "SELECT COALESCE(guards, 0) FROM crown_war_captures WHERE war_id = ? AND point_id = ?",
+        (war["id"], point_id),
+    ).fetchone()
+    name = CAPTURE_POINTS[point_id]["name"]
+    return True, (
+        f"Posted Guard {recruit['name']} at the {name} "
+        f"(guard fortification {int(row[0] if row else 0)} HP)."
     )
 
 
@@ -2133,6 +2319,11 @@ def tick_captures(conn, presence, now=None):
     if not war or war["status"] != "active":
         return []
     notices = []
+    # Royal keep down → royal guard forms BEFORE attackers can chip the throne
+    # (design: break through the royal guard to secure the chamber).
+    rg = _grant_royal_guard(conn, war["id"], now=now)
+    if rg:
+        notices.append(rg)
     counts = {pid: {"attack": 0, "defend": 0} for pid in CAPTURE_POINTS}
     for player_id, plane, x, y in presence:
         if is_eliminated(conn, player_id, war["id"]):
@@ -2147,13 +2338,14 @@ def tick_captures(conn, presence, now=None):
     for point_id, spec in CAPTURE_POINTS.items():
         try:
             row = conn.execute(
-                "SELECT owner, progress, hold_started_at, COALESCE(barricades, 0) "
+                "SELECT owner, progress, hold_started_at, "
+                "COALESCE(barricades, 0), COALESCE(guards, 0) "
                 "FROM crown_war_captures WHERE war_id = ? AND point_id = ?",
                 (war["id"], point_id),
             ).fetchone()
         except Exception:
             row = conn.execute(
-                "SELECT owner, progress, hold_started_at, 0 "
+                "SELECT owner, progress, hold_started_at, 0, 0 "
                 "FROM crown_war_captures WHERE war_id = ? AND point_id = ?",
                 (war["id"], point_id),
             ).fetchone()
@@ -2163,10 +2355,10 @@ def tick_captures(conn, presence, now=None):
                 "VALUES (?, ?, 'defend', 0, ?)",
                 (war["id"], point_id, now),
             )
-            owner, progress, hold_started, barricades = "defend", 0, None, 0
+            owner, progress, hold_started, barricades, guards = "defend", 0, None, 0, 0
         else:
-            owner, progress, hold_started, barricades = (
-                row[0], int(row[1]), row[2], int(row[3] or 0),
+            owner, progress, hold_started, barricades, guards = (
+                row[0], int(row[1]), row[2], int(row[3] or 0), int(row[4] or 0),
             )
         atk, dfn = counts[point_id]["attack"], counts[point_id]["defend"]
         # Intact watchtower: defensive archers double the work on realm points.
@@ -2178,6 +2370,12 @@ def tick_captures(conn, presence, now=None):
             if not unlocked:
                 # Prior stage still held — attackers cannot push this point yet.
                 pushing = None
+            elif guards > 0:
+                # Posted Guards hold the line before barricades and capture.
+                chip = min(guards, delta)
+                guards -= chip
+                if guards == 0 and chip > 0:
+                    notices.append(f"Defending Guards at the {spec['name']} are broken!")
             elif barricades > 0:
                 # Clear barricades before capture progress advances.
                 chip = min(barricades, delta)
@@ -2203,14 +2401,19 @@ def tick_captures(conn, presence, now=None):
                     continue
                 if _point_at(plane, x, y) == point_id:
                     _credit_points(conn, war["id"], player_id, CAPTURE_CONTRIB)
+            # Defenders fall back and fortify the next stage.
+            if pushing == "attack":
+                fb = _fallback_fortify(conn, war["id"], point_id, now=now)
+                if fb:
+                    notices.append(fb)
         elif point_id == "throne" and owner == "attack" and hold_started is None and atk > 0:
             hold_started = now
         elif point_id == "throne" and owner != "attack":
             hold_started = None
         conn.execute(
             "UPDATE crown_war_captures SET owner = ?, progress = ?, hold_started_at = ?, "
-            "barricades = ?, updated_at = ? WHERE war_id = ? AND point_id = ?",
-            (owner, progress, hold_started, barricades, now, war["id"], point_id),
+            "barricades = ?, guards = ?, updated_at = ? WHERE war_id = ? AND point_id = ?",
+            (owner, progress, hold_started, barricades, guards, now, war["id"], point_id),
         )
     conn.commit()
 
@@ -2908,6 +3111,8 @@ def board_lines(conn, player_id=None, now=None):
                 f"Assault clock: {left // HOUR}h {(left % HOUR) // 60}m remaining "
                 f"(defenders win if time runs out)."
             )
+        # Design: public war progress board — territory contest during the assault.
+        lines.extend(capture_board_lines(conn, war["id"]))
         board = contrib_board(conn, war["id"], limit=5)
         if board:
             lines.append(
@@ -3158,6 +3363,14 @@ def handle_command(conn, player_id, text):
             ]
         ok, msg = deploy_barricade(conn, player_id, parts[2].lower())
         return ok, [msg]
+    if sub in ("guard", "guards", "post"):
+        if len(parts) < 3:
+            return False, [
+                f"Usage: /siege guard <{'|'.join(CAPTURE_ORDER)}>  "
+                "(defenders post a Guard recruit onto a capture point)"
+            ]
+        ok, msg = deploy_guard(conn, player_id, parts[2].lower())
+        return ok, [msg]
     if sub in ("capture", "captures", "points"):
         war = current_war(conn)
         if not war:
@@ -3170,10 +3383,12 @@ def handle_command(conn, player_id, text):
             hold = ""
             if p["id"] == "throne" and p["owner"] == "attack" and p.get("hold_started_at"):
                 hold = f", holding {int(time.time() - p['hold_started_at'])}s/{p['hold_seconds']}s"
+            grd = f", guards {p['guards']}" if p.get("guards") else ""
             bar = f", barricades {p['barricades']}" if p.get("barricades") else ""
             lock = "" if p.get("unlocked_for_attack") else ", locked for attack"
             lines.append(
-                f"  {p['name']}: {p['owner']} ({p['progress']}/{p['need']}{hold}{bar}{lock})"
+                f"  {p['name']}: {p['owner']} "
+                f"({p['progress']}/{p['need']}{hold}{grd}{bar}{lock})"
             )
         return True, lines
     if sub in ("council", "works"):
@@ -3192,7 +3407,7 @@ def handle_command(conn, player_id, text):
         "ally <guild>|accept|decline|open|store|costs|deposit <item> <qty>|"
         "alloc rams=.. ladders=.. barricades=.. reserve=..|contrib|"
         "craft <weapon> [qty]|fire <weapon> <structure>|barricade <point>|"
-        "repair <structure>|scout|weapons|begin|captures|council|heraldry]"
+        "guard <point>|repair <structure>|scout|weapons|begin|captures|council|heraldry]"
     ]
 
 
