@@ -82,15 +82,15 @@ def stand_at_dungeon(s):
     raise AssertionError("no dungeon entrance in INTERACTABLES")
 
 
-# ---- 1. dungeon gate: a sword or axe, nothing else (23 Oct 2026) ------------------------------------
+# ---- 1. dungeon gate: a sword, axe, or bow (23 Oct 2026; bows added later) ---------------------------
 def test_gate_needs_sword_or_axe():
     s = make()
     stand_at_dungeon(s)
     run(server.handle_enter_dungeon(s, {}))
     assert not s.dungeon and errors(s)[-1] == gear_rules.GATE_MSG, errors(s)
-    # full armour but no weapon, a bow, or a gathering tool: still shut
+    # full armour but no weapon, or a gathering tool: still shut
     wear_kit(s, {"body": KIT["body"], "legs": KIT["legs"], "helmet": KIT["helmet"], "shield": KIT["shield"]})
-    for weapon, tool in ((None, None), ("shortbow", None), (None, "bronze_axe"), (None, "bronze_pickaxe")):
+    for weapon, tool in ((None, None), (None, "bronze_axe"), (None, "bronze_pickaxe")):
         s.equipment["weapon"], s.equipment["tool"] = weapon, tool
         s.ws.out.clear()
         run(server.handle_enter_dungeon(s, {}))
@@ -98,7 +98,7 @@ def test_gate_needs_sword_or_axe():
 
 
 def test_gate_opens_with_weapon_only():
-    for weapon in ("bronze_sword", "steel_longsword", "iron_battleaxe", "recruit_bronze_sword"):
+    for weapon in ("bronze_sword", "steel_longsword", "iron_battleaxe", "recruit_bronze_sword", "shortbow"):
         s = make()
         stand_at_dungeon(s)
         wear_kit(s, {"weapon": weapon})            # no armour at all
@@ -121,7 +121,7 @@ def test_dungeon_no_unequip_lock():
     assert not hasattr(gear_rules, "LOCKED_IN_DUNGEON")
 
 
-# ---- 3. who can fight: a sword or axe, any armour or none, outfit or not -------------------------
+# ---- 3. who can fight: a sword, axe, or bow, any armour or none, outfit or not -----------------
 def test_no_weapon_cannot_attack():
     s = make()
     wear_kit(s, {"body": KIT["body"], "legs": KIT["legs"], "helmet": KIT["helmet"]})   # armour is not enough
@@ -131,15 +131,15 @@ def test_no_weapon_cannot_attack():
     assert s.in_combat_with is None and not gear_rules.can_fight(s, server.ITEMS)
 
 
-def test_bow_or_tool_cannot_attack():
-    for weapon, tool in (("shortbow", None), (None, "bronze_axe"), (None, "bronze_pickaxe")):
+def test_tool_cannot_attack():
+    for weapon, tool in ((None, "bronze_axe"), (None, "bronze_pickaxe")):
         s = make()
         s.equipment["weapon"], s.equipment["tool"] = weapon, tool
         assert not gear_rules.can_fight(s, server.ITEMS), (weapon, tool)
 
 
 def test_armed_can_attack_without_armour():
-    for weapon in ("bronze_sword", "mithril_battleaxe", "eclipse_cleaver"):
+    for weapon in ("bronze_sword", "mithril_battleaxe", "eclipse_cleaver", "shortbow", "magic_shortbow"):
         s = make()
         wear_kit(s, {"weapon": weapon})
         assert gear_rules.can_fight(s, server.ITEMS), weapon
@@ -321,6 +321,32 @@ def test_solo_piece_works_alone():
     _bag(s, "bronze_helmet")
     run(server.handle_equip(s, {"slot_index": _idx(s, "bronze_helmet")}))
     assert s.equipment[server.ITEMS["bronze_helmet"]["equip_slot"]] == "bronze_helmet", errors(s)
+
+
+def test_bow_shoots_an_arrow():
+    s = make()
+    wear_kit(s, {"weapon": "shortbow", "ammo": "arrow_quiver"})
+    s.quiver = {"bronze_arrow": 4}
+    s.x, s.y = 20, 20
+    s.next_swing_at = 0
+    mon = server.MonsterInstance(900001, "goblin", 23, 20)
+    W.monsters[mon.id] = mon
+    W.sessions[s.player_id] = s
+    try:
+        run(server.handle_attack(s, {"target_id": mon.id}))
+        assert gear_rules.NO_FIGHT_MSG not in errors(s), errors(s)
+        assert s.in_combat_with == ("monster", mon.id)
+        events = []
+        run(server.process_combat(events))
+        shots = [
+            e for e in events
+            if e.get("type") == "COMBAT_EVENT" and e["data"].get("kind") == "player_hits_monster"
+        ]
+        assert shots and shots[0]["data"].get("ranged") is True, shots
+        assert s.quiver.get("bronze_arrow") == 3
+    finally:
+        W.sessions.pop(s.player_id, None)
+        W.monsters.pop(mon.id, None)
 
 
 def test_slot_hint_no_pair():

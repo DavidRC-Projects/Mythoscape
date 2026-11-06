@@ -88,7 +88,7 @@ ITEMS = {
     "eclipse_cleaver": {
         "name": "Eclipse Cleaver", "type": "weapon", "stackable": False, "value": 0,
         "equip_slot": "weapon", "str_bonus": 200, "att_bonus": 200, "def_bonus": 8,
-        "tradeable": False, "sellable": False, "bound_username": "david",
+        "tradeable": False, "sellable": False, "bankable": True, "bound_username": "david",
     },
     # Bound unique sword twin of the cleaver: more accuracy, less power (swords = accuracy, axes = power)
     "eclipse_sword": {
@@ -403,6 +403,7 @@ ITEMS = {
     "petaldeep_crown": {
         "name": "Crown of Petaldeep", "type": "armor", "stackable": False, "value": 25000,
         "equip_slot": "helmet", "def_bonus": 18, "tradeable": False, "sellable": False,
+        "art_as": "bone_crown",  # uses the realistic crown sheet until a unique paint lands
         "examine": "Black iron and living petals. Proof you broke the Queen of Petaldeep.",
     },
     "spider_silk":      {"name": "Spider Silk",        "type": "misc",   "stackable": True,  "value": 4, "equip_slot": None},
@@ -2096,7 +2097,7 @@ NPCS = [
 
     # Crownfall phase 8: Hall of Records (north-east room of the King's Great Hall)
     {"id": "keeper_records", "name": "Keeper of Records", "x": 42, "y": 4, "plane": "king_f1",
-     "lines": ["Every reign is written here. Ask, and I'll read you the longest."]},
+     "lines": ["The Chronicle of Kings is kept here. Ask, and I'll read every reign of Crownfall."]},
 
     # Crownfall phase 7: the paths to the throne
     {"id": "royal_herald", "name": "Royal Herald", "x": 157, "y": 58,
@@ -2151,7 +2152,7 @@ NPCS = [
      "lines": ["The rat mine is under the volcano, just south of Emberdeep.",
          "I'm meant to note who leaves the village with full carts. It's never the villagers."]},
 
-    {"id": "village_kid_timmy", "name": "Timmy", "x": 28, "y": 22,
+    {"id": "village_kid_timmy", "name": "Timmy", "x": 44, "y": 40,
      "lines": ["Wanna race? ...no? Okay.",
          "My dad says the King has a room just for coins. Do you think he swims in it?"]},
 
@@ -3505,8 +3506,6 @@ INTERACTABLES = [
     {"id": "deepdelve_bank_f3", "kind": "bank", "name": "Ore Bank", "x": 79, "y": 118, "variant": "mine_chest"},
     {"id": "sewer_grate", "kind": "sewer_grate", "name": "Sewer Grate", "x": 25, "y": 30,
      "stand": [25, 28], "dungeon_id": "sewer"},
-    {"id": "sewer_sign", "kind": "warning_sign", "name": "Beware Sewer Rats", "x": 23, "y": 29,
-     "variant": "sewer"},
     {"id": "smithy_furnace", "kind": "furnace", "name": "Furnace", "x": 80, "y": 6},
     {"id": "smithy_anvil", "kind": "anvil", "name": "Anvil", "x": 87, "y": 6},
     {"id": "smithy_door", "kind": "door", "name": "Smithy Door", "x": 86, "y": 18,
@@ -4505,7 +4504,7 @@ def _apply_village_compact_layout():
         WIZARD_ID: (20, 18),
         # Chebyshev 5–12 from spawn so the welcome trail reads clearly.
         "warden_tamsin": (36, 22),
-        "village_kid_timmy": (24, 30),
+        "village_kid_timmy": (44, 40),
         "village_idiot_bob": (26, 27),
         "packer_nell": (28, 14),
         "jeweler_lira": (42, 16),
@@ -4723,7 +4722,7 @@ def _pin_visible_npcs():
     pins = {
         WIZARD_ID: (20, 18),
         "warden_tamsin": (36, 22),
-        "village_kid_timmy": (24, 30),
+        "village_kid_timmy": (44, 40),
         "village_idiot_bob": (26, 27),
         "packer_nell": (28, 14),
         "jeweler_lira": (42, 16),

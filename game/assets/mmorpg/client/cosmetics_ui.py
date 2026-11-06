@@ -1321,11 +1321,11 @@ class Outfitters:
         surf.set_clip(old_clip)
 
     def _draw_hair_tab(self, surf, area):
-        """§3.4: 10 free colour swatches; style is fixed to the painting."""
+        """§3.4: free colour swatches from catalogue hair_swatches; style is fixed to the painting."""
         self._text(surf, "Hair colour", (area.x + 18, area.y + 14), GOLD, 18, bold=True)
-        self._text(surf, "10 colours, all free. Tints the painted hair (and beard) in every set.",
-                   (area.x + 18, area.y + 40), MUTED, 13)
         sw = self._swatches()
+        self._text(surf, f"{len(sw)} colours, all free. Tints the painted hair (and beard) in every set.",
+                   (area.x + 18, area.y + 40), MUTED, 13)
         size, gap, per_row = 50, 46, 5
         x0 = area.x + (area.w - (per_row * size + (per_row - 1) * gap)) // 2
         for i, colour in enumerate(sw):
@@ -1374,7 +1374,7 @@ class Outfitters:
     def _draw_hair_swatches(self, surf, rect):
         self._text(surf, "Hair colour", (rect.x, rect.y + 14), INK, 14)
         x = rect.x + 96
-        for colour in _catalogue().get("hair_palette") or []:
+        for colour in self._swatches():
             cell = pygame.Rect(x, rect.y + 6, 34, 34)
             pygame.draw.circle(surf, tuple(colour.get("mul") or (80, 80, 80)), cell.center, 13)
             if self.look.get("hair_colour") == colour.get("id"):
@@ -1753,7 +1753,10 @@ class Outfitters:
             self._draw_body_tab(surf, grid)
         elif self.tab == "hair_colour":
             self._text(surf, "Hair colour", (grid.x + 16, grid.y + 12), GOLD, 18, bold=True)
-            for i, colour in enumerate(_catalogue().get("hair_palette") or []):
+            sw = self._swatches()
+            self._text(surf, f"{len(sw)} free colours · more paid options later",
+                       (grid.x + 16, grid.y + 36), MUTED, 13)
+            for i, colour in enumerate(sw):
                 cell = pygame.Rect(grid.x + 30 + (i % 5) * 88, grid.y + 60 + (i // 5) * 88, 72, 72)
                 pygame.draw.circle(surf, tuple(colour.get("mul") or (80, 80, 80)), cell.center, 24)
                 if self.look.get("hair_colour") == colour.get("id"):

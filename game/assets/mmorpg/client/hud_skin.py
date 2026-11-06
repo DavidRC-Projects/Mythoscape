@@ -95,29 +95,37 @@ def _grad(w, h, top, bot):
 
 
 def _grain(w, h, base, seed=7, strength=1.0):
-    """Carved-wood grain: sine-warped streaks plus fine noise (cached per size)."""
-    key = ("grain", w, h, base, seed, strength)
+    """Carved-wood grain: soft sine streaks, light noise (cached per size).
+
+    Streaks are opaque RGB blends — an SRCALPHA overlay blit zeroes dest alpha on
+    macOS/pygame 2.6, and HUD text drawn afterward becomes solid ink bars (guild
+    sidebar, quest parchment, etc.).
+    """
+    key = ("grain", w, h, base, seed, strength, 3)  # rev 3: keep opaque
     if key in _CACHE:
         return _CACHE[key]
-    s = pygame.Surface((max(1, w), max(1, h)))
+    s = pygame.Surface((max(1, w), max(1, h))).convert()
     s.fill(base)
     rng = random.Random(seed + w * 7 + h)
-    lines = pygame.Surface((max(1, w), max(1, h)), pygame.SRCALPHA)
-    for k in range(max(3, h // 3)):
+    for k in range(max(2, h // 5)):
         y0 = rng.uniform(0, h)
-        amp = rng.uniform(0.6, 2.4)
-        freq = rng.uniform(0.01, 0.04)
+        amp = rng.uniform(0.4, 1.6)
+        freq = rng.uniform(0.01, 0.035)
         ph = rng.uniform(0, 6.3)
-        dark = rng.random() < 0.6
-        a = int(rng.randint(14, 34) * strength)
-        col = (0, 0, 0, a) if dark else (255, 220, 170, a // 2)
-        pts = [(x, y0 + amp * math.sin(x * freq + ph) + 0.6 * math.sin(x * freq * 3.3)) for x in range(0, w + 6, 6)]
+        dark = rng.random() < 0.55
+        t = (rng.randint(8, 20) * strength) / 255.0
+        if dark:
+            col = tuple(max(0, int(c * (1 - t))) for c in base)
+        else:
+            hi = (255, 220, 170)
+            col = tuple(min(255, int(c * (1 - t / 2) + hi[i] * (t / 2))) for i, c in enumerate(base))
+        pts = [(x, y0 + amp * math.sin(x * freq + ph) + 0.4 * math.sin(x * freq * 3.3)) for x in range(0, w + 6, 6)]
         if len(pts) > 1:
-            pygame.draw.lines(lines, col, False, pts, 1)
-    s.blit(lines, (0, 0))
-    for _ in range(w * h // 14):
+            pygame.draw.lines(s, col, False, pts, 1)
+    # Sparse noise — dense speckles read as dirt on Retina screenshots.
+    for _ in range(max(4, w * h // 90)):
         x, y = rng.randrange(max(1, w)), rng.randrange(max(1, h))
-        n = rng.randint(-10, 10)
+        n = rng.randint(-5, 5)
         c = s.get_at((x, y))
         s.set_at((x, y), (max(0, min(255, c[0] + n)), max(0, min(255, c[1] + n)), max(0, min(255, c[2] + n))))
     _CACHE[key] = s
@@ -133,14 +141,14 @@ def _inner_shadow(surf, rect, r, depth=6, alpha=170):
 
 
 def gold_rim(surf, rect, r, width=3, reverse=False):
-    """Worn gold leaf: vertical sheen #E6CB8E -> #5A4020 with a rubbed-noise multiply."""
-    key = ("rim", rect.w, rect.h, r, width, reverse)
+    """Worn gold leaf: vertical sheen #E6CB8E -> #5A4020 with a light rub."""
+    key = ("rim", rect.w, rect.h, r, width, reverse, 2)  # rev 2: fewer rim dots
     if key not in _CACHE:
         top, bot = (_c("#E6CB8E"), _c("#5A4020")) if not reverse else (_c("#5A4020"), _c("#E6CB8E"))
         g = pygame.Surface(rect.size, pygame.SRCALPHA)
         g.blit(_grad(rect.w, rect.h, top, bot), (0, 0))
         rng = random.Random(rect.w * 31 + rect.h)
-        for _ in range(max(4, (rect.w + rect.h) // 3)):
+        for _ in range(max(2, (rect.w + rect.h) // 18)):
             x, y = rng.randrange(rect.w), rng.randrange(rect.h)
             pygame.draw.circle(g, (60, 40, 20), (x, y), 1)
         ring = pygame.Surface(rect.size, pygame.SRCALPHA)
@@ -226,7 +234,7 @@ def button(surf, rect, kind="idle", inset=False, hover=False, disabled=False, r=
         surf.blit(sh, (rect.x, rect.y + 3))
     face = pygame.Surface(rect.size, pygame.SRCALPHA)
     face.blit(_grad(rect.w, rect.h, top, bot), (0, 0))
-    gr = _grain(rect.w, rect.h, (150, 150, 150), seed=3, strength=1.3)
+    gr = _grain(rect.w, rect.h, (150, 150, 150), seed=3, strength=0.5)
     face.blit(gr, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
     tint = _grad(rect.w, rect.h, top, bot).copy()
     tint.set_alpha(150)
@@ -498,20 +506,21 @@ def parchment(surf, rect, plaque=None):
     sh = pygame.Surface(paper.size, pygame.SRCALPHA)
     sh.fill((0, 0, 0, 110))
     surf.blit(sh, paper.move(2, 3).topleft)
-    key = ("parch", paper.w, paper.h)
+    # rev 4: edge tint must stay opaque. Blitting an SRCALPHA vignette onto a
+    # plain Surface zeroes dest alpha on macOS/pygame 2.6; font glyphs then blit
+    # as solid ink bars on the quest card.
+    key = ("parch", paper.w, paper.h, 4)
     if key not in _CACHE:
-        p = pygame.Surface(paper.size)
-        p.blit(_grad(paper.w, paper.h, _c("#D9C29A"), _c("#BFA27A")), (0, 0))
-        rng = random.Random(11)
-        for _ in range(paper.w * paper.h // 10):
-            x, y = rng.randrange(paper.w), rng.randrange(paper.h)
-            n = rng.randint(-14, 8)
-            cc = p.get_at((x, y))
-            p.set_at((x, y), (max(0, cc[0] + n), max(0, cc[1] + n), max(0, cc[2] + n)))
-        v = pygame.Surface(paper.size, pygame.SRCALPHA)
-        for i in range(10):
-            pygame.draw.rect(v, (110, 70, 30, int(60 * (1 - i / 10))), (i, 0, paper.w - 2 * i, paper.h), 1)
-        p.blit(v, (0, 0))
+        p = pygame.Surface(paper.size).convert()
+        p.blit(_grad(paper.w, paper.h, _c("#EADCC0"), _c("#D4C09A")), (0, 0))
+        for i in range(5):
+            t = (28 * (1 - i / 5)) / 255.0
+            col = (
+                int(234 * (1 - t) + 110 * t),
+                int(220 * (1 - t) + 70 * t),
+                int(192 * (1 - t) + 30 * t),
+            )
+            pygame.draw.rect(p, col, (i, 0, paper.w - 2 * i, paper.h), 1)
         _CACHE[key] = p
     surf.blit(_CACHE[key], paper.topleft)
     for yy in (rect.y, rect.bottom - roll_h):

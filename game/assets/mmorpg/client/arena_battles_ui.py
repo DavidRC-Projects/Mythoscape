@@ -109,15 +109,85 @@ def _walk_frame(img, fx, fy, face, k):
 
 
 def _attack_frame(img, fx, fy, face, k):
-    """0 wind-up (lean back), 1 strike (lean in), 2 recover."""
-    ang = (6.0, -9.0, -3.0)[k % 3]
+    """Rejected ghost/tilt path — return the clean still unchanged.
+
+    Pit combat must use painted melee poses. Boss combat uses duel pose swap.
+    Do not composite rotated upper bodies over the full silhouette.
+    """
+    return img
+
+
+
+
+def _melee_pose_surface(gid, state, face, tile_px):
+    """Painted melee pose (windup/strike/recover/hit) if authored; else None.
+
+    Files live beside facing stills: ``melee_{state}_{e|w}.png`` under 1x/2x.
+    N/S keep the facing still (no sideways painted pose swap).
+    """
+    if face not in ("e", "w"):
+        return None
+    tag = "1x" if tile_px <= 44 else "2x"
+    k = (gid, tag, state, face, int(tile_px))
+    if k in _GSCALED:
+        return _GSCALED[k]
+    path = os.path.join(_GLAD_DIR, gid, tag, f"melee_{state}_{face}.png")
+    try:
+        img = pygame.image.load(path).convert_alpha() if os.path.isfile(path) else None
+    except Exception:
+        img = None
+    if img is None:
+        return None
+    ht = GLAD_HEIGHT_TILES["female" if gid.startswith("gladiatrix") else "male"]
+    s = (ht * tile_px) / float(_GLAD_BODY[tag])
+    w, h = max(1, int(img.get_width() * s)), max(1, int(img.get_height() * s))
+    fx, fy = _GLAD_FEET[tag]
+    got = (pygame.transform.smoothscale(img, (w, h)), fx * s, fy * s - _GLAD_SOLE_DROP * tile_px)
+    _GSCALED[k] = got
+    if len(_GSCALED) > 240:
+        # keep recent; drop oldest-ish by clear
+        _GSCALED.clear()
+        _GSCALED[k] = got
+    return got
+
+
+def melee_progress(atk, swing):
+    """0..1 through wind-up → strike → recover.
+
+    ``atk`` from attack_anims is already 0 at start → 1 at end. ``swing`` (unit
+    attacking field) starts at 1.0 and decays — using max(atk, swing) wrongly
+    selected the recover frame on every fresh hit. Map swing as 1-swing when
+    atk is inactive.
+    """
+    try:
+        a = float(atk or 0)
+    except (TypeError, ValueError):
+        a = 0.0
+    if a > 0.0:
+        return max(0.0, min(1.0, a))
+    try:
+        s = float(swing or 0)
+    except (TypeError, ValueError):
+        s = 0.0
+    if s > 0.0:
+        return max(0.0, min(1.0, 1.0 - s))
+    return 0.0
+
+
+
+def _death_frame(img, face, u):
+    """Fall over across u in 0..1 (toward the side they faced)."""
+    u = max(0.0, min(1.0, float(u)))
+    e = u * u
+    ang = (85.0 if face in ("e", "s") else -85.0) * e
     if face == "w":
-        ang = -ang
-    elif face in ("n", "s"):
-        ang *= 0.5
-    rot = pygame.transform.rotozoom(img, ang, 1.0)
-    out = pygame.Surface(img.get_size(), pygame.SRCALPHA)
-    out.blit(rot, ((img.get_width() - rot.get_width()) // 2, img.get_height() - rot.get_height()))
+        ang = -85.0 * e
+    sy = 1.0 - 0.08 * e
+    w, h = img.get_size()
+    scaled = pygame.transform.smoothscale(img, (w, max(1, int(h * sy))))
+    rot = pygame.transform.rotozoom(scaled, ang, 1.0)
+    out = pygame.Surface((max(w, rot.get_width()) + 8, max(h, rot.get_height()) + 8), pygame.SRCALPHA)
+    out.blit(rot, ((out.get_width() - rot.get_width()) // 2, out.get_height() - rot.get_height()))
     return out
 
 
@@ -136,27 +206,123 @@ def boss_frame(boss_id, face, tile_px, anim, frame):
     return _FRAMES[k], fx, fy
 
 
+
+# Painted duel poses (idle/attack/hit/block) — real arm/weapon art, not tilted stills.
+_DUEL_DIR = os.path.join(os.path.dirname(__file__), "assets", "castle_realm", "arena", "duel_sprites")
+_DUEL_IMG = {}
+
+
+def _duel_pose(boss_id, state, tile_px):
+    """Scaled painted pose for a champion; feet near bottom of the sheet."""
+    key = (boss_id, state, int(tile_px))
+    if key in _DUEL_IMG:
+        return _DUEL_IMG[key]
+    path = os.path.join(_DUEL_DIR, boss_id, f"{state}.png")
+    try:
+        img = pygame.image.load(path).convert_alpha() if os.path.isfile(path) else None
+    except Exception:
+        img = None
+    if img is None:
+        _DUEL_IMG[key] = None
+        return None
+    # Duel sheets are authored at ~380px tall; pit bosses stand ~BOSS_HEIGHT_TILES.
+    target_h = max(8, int(BOSS_HEIGHT_TILES * tile_px))
+    sc = target_h / float(img.get_height())
+    w, h = max(1, int(img.get_width() * sc)), max(1, int(img.get_height() * sc))
+    scaled = pygame.transform.smoothscale(img, (w, h))
+    bb = scaled.get_bounding_rect(min_alpha=40)
+    fx = w / 2
+    fy = bb.bottom if bb.h else h
+    _DUEL_IMG[key] = (scaled, fx, fy)
+    if len(_DUEL_IMG) > 64:
+        _DUEL_IMG.clear()
+        _DUEL_IMG[key] = (scaled, fx, fy)
+    return _DUEL_IMG[key]
+
+
+def _blit_pose(screen, img, fx, fy, cx, feet, dx=0, dy=0, face="e", flip_for_face=True):
+    blit = img
+    if flip_for_face and face == "e":
+        # Duel champions face left by default; east-facing foe/you may need mirror.
+        blit = pygame.transform.flip(img, True, False)
+    elif flip_for_face and face == "w":
+        blit = img
+    screen.blit(blit, (int(cx - fx + dx), int(feet - fy + dy)))
+
 def draw_boss(screen, m, cx, feet, tile_px, t, anim, atk, swing, face):
     """Draw an arena champion. Returns the y of the top of its head (for the plate),
-    or None when the sheet is missing (caller falls back to the soldier doll)."""
+    or None when the sheet is missing (caller falls back to the soldier doll).
+
+    Combat uses painted duel poses (attack/hit) so the weapon arm is real art.
+    Walk/idle keep the facing sheet (walk frames are stride warps of that sheet).
+    """
     face = face if face in ("n", "e", "s", "w") else ("e" if m.get("facing") == "e" else "w")
-    p = max(float(atk or 0), float(swing or 0))
+    p = melee_progress(atk, swing)
+    hit_u = float(m.get("_arena_hit") or 0)
+    death_u = float(m.get("_arena_death") or 0)
+    bid = m.get("boss_id") or ""
+    dx = dy = 0.0
+    # --- painted combat poses ---
+    if death_u > 0 or hit_u > 0.05 or anim == "melee":
+        if death_u > 0 or hit_u > 0.05:
+            state = "hit"
+        elif anim == "melee":
+            # Wind-up = ready idle; contact through follow-through = painted attack.
+            state = "attack" if 0.34 <= p <= 0.85 else "idle"
+        else:
+            state = "idle"
+        pose = _duel_pose(bid, state, tile_px)
+        if pose is None and state != "idle":
+            pose = _duel_pose(bid, "attack" if state == "hit" else "idle", tile_px)
+        if pose is not None:
+            img, fx, fy = pose
+            if anim == "melee":
+                # Pose swap only (idle <-> painted attack). No skate/tilt of the still.
+                dx = 0.0
+            elif hit_u > 0.05:
+                kb = tile_px * 0.10 * hit_u
+                dx = {"e": -kb, "w": kb}.get(face, 0.0)
+            elif death_u > 0:
+                dx = {"e": tile_px * 0.12 * death_u, "w": -tile_px * 0.12 * death_u}.get(face, 0.0)
+                dy = tile_px * 0.05 * death_u
+                if death_u > 0.55:
+                    img = pygame.transform.rotozoom(img, (70 if face == "e" else -70) * (death_u - 0.55) / 0.45, 1.0)
+                    fx, fy = img.get_width() / 2, img.get_height() * 0.85
+            # ground ring
+            rw, rh = int(tile_px * 1.9), int(tile_px * 0.62)
+            ring = pygame.Surface((rw + 8, rh + 8), pygame.SRCALPHA)
+            pygame.draw.ellipse(ring, (0, 0, 0, 95), (4, 4, rw, rh))
+            side_col = (255, 120, 90) if m.get("side") == "foe" else (110, 190, 255)
+            pulse = 150 + int(60 * math.sin(t * 3.0))
+            pygame.draw.ellipse(ring, (255, 196, 90, pulse), (4, 4, rw, rh), 3)
+            pygame.draw.ellipse(ring, side_col + (110,), (10, 8, rw - 12, rh - 8), 1)
+            if death_u <= 0:
+                screen.blit(ring, (int(cx - ring.get_width() / 2), int(feet - ring.get_height() / 2)))
+            if death_u > 0.7:
+                img = img.copy()
+                img.set_alpha(int(255 * max(0.0, 1.0 - (death_u - 0.7) / 0.3)))
+            # Champions in duel_sprites face left; mirror when we need them facing east.
+            blit = img
+            if face == "e":
+                blit = pygame.transform.flip(img, True, False)
+            screen.blit(blit, (int(cx - fx + dx), int(feet - fy + dy)))
+            if m.get("stunned"):
+                f = pygame.font.Font(None, max(14, int(tile_px * 0.5)))
+                st = f.render("STUNNED", True, (255, 230, 120))
+                screen.blit(st, (int(cx - st.get_width() / 2), int(feet - tile_px * 0.2)))
+            return int(feet - fy + _body_top(blit) + dy)
+        # No painted pose — fall through to facing sheet (idle/walk only; no tilt melee).
+        if anim == "melee":
+            anim = "idle"
     if anim == "walk":
         frame = int(t * 8.0) % WALK_FRAMES
-    elif anim == "melee":
-        frame = 0 if p < 0.35 else (1 if p < 0.75 else 2)
     else:
         frame = 0
-    got = boss_frame(m.get("boss_id") or "", face, tile_px, anim, frame)
+    got = boss_frame(bid, face, tile_px, "walk" if anim == "walk" else "idle", frame)
     if got is None:
         return None
     img, fx, fy = got
-    dx = dy = 0.0
-    if anim == "melee":
-        lunge = math.sin(min(1.0, p) * math.pi) * tile_px * 0.14
-        dx = {"e": lunge, "w": -lunge}.get(face, 0.0)
-        dy = {"s": lunge * 0.4, "n": -lunge * 0.4}.get(face, 0.0)
-    elif anim != "walk":
+    if anim != "walk":
         dy = math.sin(t * 2.2) * tile_px * 0.015
     # champion's ground ring + soft shadow so the boss reads as the centrepiece
     rw, rh = int(tile_px * 1.9), int(tile_px * 0.62)
@@ -166,7 +332,11 @@ def draw_boss(screen, m, cx, feet, tile_px, t, anim, atk, swing, face):
     pulse = 150 + int(60 * math.sin(t * 3.0))
     pygame.draw.ellipse(ring, (255, 196, 90, pulse), (4, 4, rw, rh), 3)
     pygame.draw.ellipse(ring, side_col + (110,), (10, 8, rw - 12, rh - 8), 1)
-    screen.blit(ring, (int(cx - ring.get_width() / 2), int(feet - ring.get_height() / 2)))
+    if anim != "death":
+        screen.blit(ring, (int(cx - ring.get_width() / 2), int(feet - ring.get_height() / 2)))
+    if anim == "death" and death_u > 0.7:
+        img = img.copy()
+        img.set_alpha(int(255 * max(0.0, 1.0 - (death_u - 0.7) / 0.3)))
     screen.blit(img, (int(cx - fx + dx), int(feet - fy + dy)))
     if m.get("stunned"):
         f = pygame.font.Font(None, max(14, int(tile_px * 0.5)))
@@ -459,7 +629,12 @@ def gladiator_surface(gid, face, tile_px, gender="male"):
 
 
 def draw_gladiator(screen, m, cx, feet, tile_px, t, anim, atk, swing, face, gender="male"):
-    """Draw a pit soldier as a gladiator. Returns True when drawn, False to fall back."""
+    """Draw a pit soldier as a gladiator. Returns True when drawn, False to fall back.
+
+    Idle/walk/melee/hit/death all use THIS fighter's own art — painted melee poses
+    when present, otherwise a clean facing still (idle_hold, no silhouette blend).
+    Never swaps to player_hd armour dolls.
+    """
     gid = gladiator_type(m, gender)
     if gid is None:
         return False
@@ -468,27 +643,78 @@ def draw_gladiator(screen, m, cx, feet, tile_px, t, anim, atk, swing, face, gend
     if got is None:
         return False
     img, fx, fy = got
-    p = max(float(atk or 0), float(swing or 0))
+    p = melee_progress(atk, swing)
+    hit_u = float(m.get("_arena_hit") or 0)
+    death_u = float(m.get("_arena_death") or 0)
+    asset_kind = "idle_still"
+    if death_u > 0:
+        anim = "death"
+    elif hit_u > 0.05 and anim != "melee":
+        anim = "hit"
     if anim == "walk":
         frame = int(t * 8.0) % WALK_FRAMES
     elif anim == "melee":
-        frame = 0 if p < 0.35 else (1 if p < 0.75 else 2)
+        frame = 0 if p < 0.28 else (1 if p < 0.68 else 2)
     else:
         frame = -1
-    if frame >= 0:
+    if anim == "melee":
+        state = ("windup", "strike", "recover")[frame]
+        posed = _melee_pose_surface(gid, state, face, tile_px)
+        if posed is not None:
+            img, fx, fy = posed
+            asset_kind = f"painted_melee_{state}"
+        else:
+            # No painted pose yet: keep the clean facing still (no silhouette blend /
+            # part-rig ghosting). Cadence is plant-step only via dx below.
+            asset_kind = f"idle_hold_melee_{state}"
+    elif anim == "walk":
         k = (gid, face, int(tile_px), anim, frame)
         if k not in _GFRAMES:
-            _GFRAMES[k] = (_walk_frame if anim == "walk" else _attack_frame)(img, fx, fy, face, frame)
+            _GFRAMES[k] = _walk_frame(img, fx, fy, face, frame)
             if len(_GFRAMES) > 320:
                 _GFRAMES.clear()
         img = _GFRAMES[k]
+        asset_kind = "walk_rig"
+    elif anim == "hit":
+        posed = _melee_pose_surface(gid, "hit", face, tile_px)
+        if posed is not None:
+            img, fx, fy = posed
+            asset_kind = "painted_hit"
+        else:
+            # Clean still + knockback dx only — never ghost-composite a lean.
+            asset_kind = "idle_hold_hit"
+    elif anim == "death":
+        # Fall of the SAME idle still (identity retained).
+        img = _death_frame(img, face, death_u)
+        fx, fy = img.get_width() / 2, img.get_height() * 0.82
+        asset_kind = "death_fall_same_still"
+    m["_glad_asset"] = asset_kind
     dx = dy = 0.0
     if anim == "melee":
-        lunge = math.sin(min(1.0, p) * math.pi) * tile_px * 0.10
+        if p < 0.28:
+            e = p / 0.28
+            lunge = -tile_px * 0.12 * e
+        elif p < 0.68:
+            e = (p - 0.28) / 0.40
+            lunge = -tile_px * 0.12 + tile_px * 0.36 * e
+        else:
+            e = (p - 0.68) / 0.32
+            lunge = tile_px * 0.24 * (1.0 - e)
+        if str(asset_kind).startswith("painted"):
+            lunge *= 0.28  # painted poses already carry stance; keep feet/root calm
+        elif str(asset_kind).startswith("idle_hold"):
+            lunge *= 0.45  # clean still: modest plant only, no pose art yet
         dx = {"e": lunge, "w": -lunge}.get(face, 0.0)
-        dy = {"s": lunge * 0.4, "n": -lunge * 0.4}.get(face, 0.0)
+        dy = {"s": lunge * 0.35, "n": -lunge * 0.35}.get(face, 0.0)
+    elif anim == "hit":
+        kb = tile_px * 0.10 * hit_u
+        dx = {"e": -kb, "w": kb}.get(face, 0.0)
+        dy = -tile_px * 0.03 * hit_u
+    elif anim == "death":
+        dx = {"e": tile_px * 0.12 * death_u, "w": -tile_px * 0.12 * death_u}.get(face, 0.0)
+        dy = tile_px * 0.06 * death_u
     elif anim != "walk":
-        dy = math.sin(t * 2.0 + (hash(m.get("id")) % 7)) * tile_px * 0.01
+        dy = math.sin(t * 2.0 + (hash(str(m.get("id"))) % 7)) * tile_px * 0.01
     sw, sh = max(8, int(tile_px * 0.9)), max(4, int(tile_px * 0.26))
     sk = ("shadow", sw, sh)
     if sk not in _GFRAMES:
@@ -497,6 +723,10 @@ def draw_gladiator(screen, m, cx, feet, tile_px, t, anim, atk, swing, face, gend
             pygame.draw.ellipse(sd, (0, 0, 0, 26), (i * sw // 10, i * sh // 10, sw - i * sw // 5, sh - i * sh // 5))
         _GFRAMES[sk] = sd
     sole = feet + _GLAD_SOLE_DROP * tile_px
-    screen.blit(_GFRAMES[sk], (int(cx + dx - sw / 2), int(sole - sh * 0.6)))
+    if anim != "death":
+        screen.blit(_GFRAMES[sk], (int(cx + dx - sw / 2), int(sole - sh * 0.6)))
+    if anim == "death" and death_u > 0.7:
+        img = img.copy()
+        img.set_alpha(int(255 * max(0.0, 1.0 - (death_u - 0.7) / 0.3)))
     screen.blit(img, (int(cx - fx + dx), int(feet - fy + dy)))
     return True

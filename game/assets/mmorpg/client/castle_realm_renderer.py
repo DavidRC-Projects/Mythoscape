@@ -102,6 +102,106 @@ def _gate_state(castle_id):
     return _GATES.setdefault(castle_id, {"frame": 0, "acc": 0.0, "dir": 0, "off_ms": None, "last": None})
 
 
+def _siege_structures(client):
+    d = getattr(client, "dungeon", None) or {}
+    blob = d.get("crown_siege") or {}
+    # Milestone 2 wraps structures under "structures"; older payloads were flat.
+    if isinstance(blob.get("structures"), dict):
+        return blob["structures"]
+    return {k: v for k, v in blob.items() if k != "war" and isinstance(v, dict)}
+
+
+def _siege_state(client, structure_id):
+    row = _siege_structures(client).get(structure_id) or {}
+    return str(row.get("state") or "intact")
+
+
+# Fallback anchors matching server STRUCTURES (used when payload omits them).
+_SIEGE_ANCHORS = {
+    "watchtower": (120, 20),
+    "armoury": (160, 40),
+    "supply_depot": (140, 55),
+}
+
+
+def _siege_anchor(client, structure_id):
+    row = _siege_structures(client).get(structure_id) or {}
+    anchor = row.get("anchor")
+    if isinstance(anchor, (list, tuple)) and len(anchor) >= 2:
+        return int(anchor[0]), int(anchor[1])
+    return _SIEGE_ANCHORS.get(structure_id)
+
+
+def _queue_structure_scars(client, draw_list, cam_x, cam_y, tile):
+    """Damage overlays for watchtower / armoury / supply depot on the realm."""
+    screen = client.screen
+    rects = getattr(client, "siege_scar_rects", None)
+    if not isinstance(rects, dict):
+        rects = {}
+    client.siege_scar_rects = rects
+    for sid in ("watchtower", "armoury", "supply_depot"):
+        state = _siege_state(client, sid)
+        if state == "intact":
+            rects.pop(sid, None)
+            continue
+        anchor = _siege_anchor(client, sid)
+        if not anchor:
+            rects.pop(sid, None)
+            continue
+        ax, ay = anchor
+        sx = int((ax - cam_x) * tile)
+        sy = int((ay - cam_y) * tile)
+        size = max(18, tile * 2)
+        rect = pygame.Rect(sx - size // 2, sy - size // 2, size, size)
+        rects[sid] = rect
+
+        def _scar(r=rect, st=state, s=screen):
+            _siege_overlay(s, r, st, cracks=True)
+
+        draw_list.append((sy + size // 2, 44, _scar))
+
+
+# Tint / alpha for structure damage overlays (no new siege paintings).
+_SIEGE_TINT = {
+    "intact": None,
+    "damaged": ((70, 55, 40), 70),
+    "heavily_damaged": ((45, 28, 18), 110),
+    "destroyed": ((22, 14, 10), 160),
+}
+
+
+def _siege_overlay(screen, rect, state, cracks=False):
+    """Darken and mark a castle sprite for the war damage band."""
+    tint = _SIEGE_TINT.get(state)
+    if not tint or rect.w < 4 or rect.h < 4:
+        return
+    colour, alpha = tint
+    veil = pygame.Surface((rect.w, rect.h), pygame.SRCALPHA)
+    veil.fill((*colour, alpha))
+    if cracks or state in ("heavily_damaged", "destroyed"):
+        for i in range(3 if state == "damaged" else 6):
+            x0 = (i * 37 + 11) % max(1, rect.w - 2)
+            y0 = (i * 23 + 7) % max(1, rect.h // 2)
+            x1 = min(rect.w - 1, x0 + 18 + i * 4)
+            y1 = min(rect.h - 1, y0 + 28 + i * 6)
+            pygame.draw.line(veil, (12, 8, 6, 200), (x0, y0), (x1, y1), 2)
+            pygame.draw.line(veil, (90, 70, 50, 120), (x0 + 1, y0), (x1 + 1, y1), 1)
+    if state == "destroyed":
+        rubble = pygame.Surface((rect.w, max(4, rect.h // 5)), pygame.SRCALPHA)
+        rubble.fill((30, 22, 16, 200))
+        for i in range(5):
+            rx = (i * 29) % max(1, rect.w - 8)
+            pygame.draw.ellipse(rubble, (50, 40, 30, 220), (rx, 2, 10, 6))
+        veil.blit(rubble, (0, rect.h - rubble.get_height()))
+    if state in ("heavily_damaged", "destroyed"):
+        smoke = pygame.Surface((rect.w, max(6, rect.h // 3)), pygame.SRCALPHA)
+        for i in range(4):
+            sx = (i * 41 + 5) % max(1, rect.w - 12)
+            pygame.draw.ellipse(smoke, (40, 40, 40, 70), (sx, i * 3, 14, 10))
+        veil.blit(smoke, (0, 0))
+    screen.blit(veil, rect.topleft)
+
+
 def _gate_tiles(blob):
     result = set()
     for group in blob.get("trigger_tiles", {}).values():
@@ -304,17 +404,29 @@ def draw_floor_plane(client, cam_x, cam_y, tile):
         return
     plane = _plane(client)
     import castle_interiors_v2
-    if castle_interiors_v2.draw(client, plane, cam_x, cam_y, tile):
-        return
-    floor = FLOORS[plane]
-    relative = floor.get("sprite_1x" if tile <= 40 else "sprite_2x")
-    image = _surface(floor.get("_root"), relative, tile) if relative else None
-    if image is None:
-        return
-    sx, sy = client.world_to_view_offset(0, 0, cam_x, cam_y)
-    origin = floor.get("origin_px_1x" if tile <= 40 else "origin_px_2x", (0, 0))
-    scale = tile / (40.0 if tile <= 40 else 80.0)
-    client.screen.blit(image, (sx * tile - origin[0] * scale, sy * tile - origin[1] * scale))
+    painted = castle_interiors_v2.draw(client, plane, cam_x, cam_y, tile)
+    if not painted:
+        floor = FLOORS[plane]
+        relative = floor.get("sprite_1x" if tile <= 40 else "sprite_2x")
+        image = _surface(floor.get("_root"), relative, tile) if relative else None
+        if image is None:
+            return
+        sx, sy = client.world_to_view_offset(0, 0, cam_x, cam_y)
+        origin = floor.get("origin_px_1x" if tile <= 40 else "origin_px_2x", (0, 0))
+        scale = tile / (40.0 if tile <= 40 else 80.0)
+        client.screen.blit(image, (sx * tile - origin[0] * scale, sy * tile - origin[1] * scale))
+    # Great Hall shows keep damage as a soft veil over the map panel.
+    if plane == "king_f1":
+        dmg = _siege_state(client, "royal_keep")
+        if dmg != "intact":
+            try:
+                import sys
+                mod = sys.modules.get(type(client).__module__)
+                mw = int(getattr(mod, "MAP_W", 900))
+                mh = int(getattr(mod, "MAP_H", 640))
+            except Exception:
+                mw, mh = 900, 640
+            _siege_overlay(client.screen, pygame.Rect(0, 0, mw, mh), dmg)
 
 
 def return_portal_xy():
@@ -322,10 +434,27 @@ def return_portal_xy():
     return int(portal.get("x", 150)), int(portal.get("y", 186))
 
 
+def _colosseum_report(client, where, exc):
+    """Visible failure: arena_colosseum.report (stderr traceback + log + chat line);
+    if that module itself cannot load, print the full traceback here."""
+    try:
+        import arena_colosseum
+        arena_colosseum.report(client, where, exc)
+    except Exception:  # noqa: BLE001
+        import traceback
+        traceback.print_exception(type(exc), exc, exc.__traceback__)
+
+
 def queue(client, draw_list, cam_x, cam_y, tile):
     if not _realm(client):
         return
     _queue_arena(client, draw_list, cam_x, cam_y, tile)
+    try:
+        import arena_colosseum  # crowd, pennants, fire, sand wear, dust, battle fx (5 Nov)
+        arena_colosseum.queue(client, draw_list, cam_x, cam_y, tile, _arena_hd(), _arena_blob())
+    except Exception as exc:  # keep the realm drawing, but report loudly (log + chat + traceback)
+        client._colosseum_err = str(exc)
+        _colosseum_report(client, "world layers", exc)
     _queue_trees(client, draw_list, cam_x, cam_y, tile)
     if not ready():
         return
@@ -375,12 +504,22 @@ def _arena_hd():
     return _ARENA_META
 
 
+_ARENA_PATHS = {}
+
+
 def _arena_hd_path(rel, tile):
+    # Resolved once per (layer, res): this runs for every painted arena tile each
+    # frame, and two stat() calls per tile were ~40% of a zoomed-out battle frame.
     res = "2x" if tile > 40 else "1x"
+    hit = _ARENA_PATHS.get((rel, res), False)
+    if hit is not False:
+        return hit
     path = _ROOT / "arena" / rel.replace("{res}", res)
     if not path.is_file():
         path = _ROOT / "arena" / rel.replace("{res}", "1x")
-    return path if path.is_file() else None
+    hit = path if path.is_file() else None
+    _ARENA_PATHS[(rel, res)] = hit
+    return hit
 
 
 def _arena_hd_surface(kind, tile, target_w, target_h):
@@ -720,13 +859,84 @@ def _queue_castle(client, draw_list, cam_x, cam_y, tile, castle_id, blob, px, py
     if posts:
         draw_list.append((south_row, 30, lambda g=posts: _blit(g)))
     frames = blob.get("gate", {}).get("frames", [])
+    gate_damage = _siege_state(client, "outer_gate") if castle_id == "king" else "intact"
+    keep_damage = _siege_state(client, "royal_keep") if castle_id == "king" else "intact"
+    wall_w = _siege_state(client, "west_wall") if castle_id == "king" else "intact"
+    wall_e = _siege_state(client, "east_wall") if castle_id == "king" else "intact"
     if frames:
         frame = _gate_frame(castle_id, blob, px or -1, py or -1)
         gate = frames[frame].get("file") or f"sprites/1x/gate/gate_{frame:02d}.png"
         crop = (blob.get("gate") or {}).get("crop_1x") or (0, 0)
         gx = left + int(crop[0]) * scale
         gy = top + int(crop[1]) * scale
-        draw_list.append((south_row, 41, lambda g=gate, x=gx, y=gy: _blit(g, x, y)))
+
+        def _blit_gate(g=gate, x=gx, y=gy, dmg=gate_damage, castle_root=root, n=tile):
+            image = _surface(castle_root, g, n)
+            if image is None:
+                return
+            screen.blit(image, (x, y))
+            _siege_overlay(screen, image.get_rect(topleft=(int(x), int(y))), dmg, cracks=True)
+
+        draw_list.append((south_row, 41, _blit_gate))
+    if castle_id == "king" and not inside:
+        scar_rects = getattr(client, "siege_scar_rects", None)
+        if not isinstance(scar_rects, dict):
+            scar_rects = {}
+            client.siege_scar_rects = scar_rects
+        W = int((x1 - x0) * tile)
+        H = int((y1 - y0) * tile)
+        if wall_w != "intact":
+            scar_rects["west_wall"] = pygame.Rect(
+                int(left), int(top + H * 0.2), max(8, W // 5), max(8, H // 2)
+            )
+        else:
+            scar_rects.pop("west_wall", None)
+        if wall_e != "intact":
+            scar_rects["east_wall"] = pygame.Rect(
+                int(left + W * 0.75), int(top + H * 0.2), max(8, W // 5), max(8, H // 2)
+            )
+        else:
+            scar_rects.pop("east_wall", None)
+        if keep_damage != "intact":
+            scar_rects["royal_keep"] = pygame.Rect(
+                int(left + W * 0.28), int(top + H * 0.05),
+                max(12, int(W * 0.44)), max(12, int(H * 0.45)),
+            )
+        else:
+            scar_rects.pop("royal_keep", None)
+        if frames and gate_damage != "intact":
+            scar_rects["outer_gate"] = pygame.Rect(
+                int(gx), int(gy), max(40, tile * 3), max(40, tile * 3)
+            )
+        else:
+            scar_rects.pop("outer_gate", None)
+    if castle_id == "king" and (wall_w != "intact" or wall_e != "intact"):
+        # Soft scars on the bailey flanks without replacing wall art.
+        def _wall_scars(ww=wall_w, we=wall_e, L=left, T=top, W=int((x1 - x0) * tile), H=int((y1 - y0) * tile)):
+            if ww != "intact":
+                _siege_overlay(screen, pygame.Rect(int(L), int(T + H * 0.2), max(8, W // 5), max(8, H // 2)), ww)
+            if we != "intact":
+                _siege_overlay(
+                    screen,
+                    pygame.Rect(int(L + W * 0.75), int(T + H * 0.2), max(8, W // 5), max(8, H // 2)),
+                    we,
+                )
+
+        draw_list.append((south_row, 42, _wall_scars))
+    if castle_id == "king" and keep_damage != "intact" and not inside:
+        def _keep_scar(dmg=keep_damage, L=left, T=top, W=int((x1 - x0) * tile), H=int((y1 - y0) * tile)):
+            # Keep sits in the northern half of the king footprint.
+            _siege_overlay(
+                screen,
+                pygame.Rect(int(L + W * 0.28), int(T + H * 0.05), max(12, int(W * 0.44)), max(12, int(H * 0.45))),
+                dmg,
+                cracks=True,
+            )
+
+        draw_list.append((back_row + tile, 43, _keep_scar))
+    if castle_id == "king" and not inside:
+        # Watchtower / armoury / supply depot scars at their world anchors.
+        _queue_structure_scars(client, draw_list, cam_x, cam_y, tile)
     if not inside:
         for sort_layer in blob.get("sort_layers", []):
             rel = sort_layer.get("file")
@@ -751,6 +961,10 @@ def _queue_castle(client, draw_list, cam_x, cam_y, tile, castle_id, blob, px, py
         draw_list.append((fall_sy * tile + tile // 2, 36, lambda g=rel, x=wx, y=wy: _blit(g, x, y)))
 
 
+# keep in sync with server/safe_points.ARENA_GATE
+ARENA_GATE_STAND = (196, 164)
+
+
 def near_arena(client, reach: int = 8) -> bool:
     """True when the player stands on or beside the Crownfall Arena campus."""
     if not _realm(client) or not client.player:
@@ -761,7 +975,12 @@ def near_arena(client, reach: int = 8) -> bool:
         return False
     x0, y0, x1, y1 = map(int, fp[:4])
     px, py = client.player_xy()
-    return (x0 - reach) <= px <= (x1 + reach) and (y0 - reach) <= py <= (y1 + reach)
+    if (x0 - reach) <= px <= (x1 + reach) and (y0 - reach) <= py <= (y1 + reach):
+        return True
+    # The server parks players on the barracks foot outside the gate after a bout /
+    # logout (server/safe_points.ARENA_GATE); that stand must reach Branna too.
+    gx, gy = ARENA_GATE_STAND
+    return abs(px - gx) <= 2 and abs(py - gy) <= 2
 
 
 def draw_arena_prompt(client):
@@ -782,12 +1001,315 @@ def draw_arena_prompt(client):
     client.arena_barracks_rect = rect
 
 
+def _war_hud(client):
+    d = getattr(client, "dungeon", None) or {}
+    hud = d.get("crown_siege_hud")
+    if isinstance(hud, dict):
+        return hud
+    blob = d.get("crown_siege") or {}
+    if isinstance(blob, dict) and (blob.get("war") is not None or blob.get("heraldry") is not None):
+        return {"war": blob.get("war"), "heraldry": blob.get("heraldry")}
+    return {}
+
+
+_OWNER_COLOUR = {
+    "attack": (200, 90, 70),
+    "defend": (70, 120, 200),
+    "none": (140, 140, 150),
+}
+
+
+def draw_capture_markers(client):
+    """World markers for capture points on the current castle plane."""
+    hud = _war_hud(client)
+    war = (hud or {}).get("war") if hud else None
+    if not war or str(war.get("status") or "") != "active":
+        return
+    plane = _plane(client)
+    caps = war.get("captures") or []
+    if not caps:
+        return
+    font = getattr(client, "font_tiny", None) or client.font_small
+    try:
+        import client as _cmod
+        tile = int(getattr(_cmod, "TILE", 40) or 40)
+    except Exception:
+        tile = 40
+    if not hasattr(client, "camera_origin"):
+        return
+    try:
+        cam_x, cam_y = client.camera_origin()
+    except Exception:
+        return
+    for cap in caps:
+        if cap.get("plane") != plane:
+            continue
+        rect = cap.get("rect") or []
+        if len(rect) < 4:
+            continue
+        x0, y0, x1, y1 = [int(v) for v in rect]
+        cx = (x0 + x1) / 2.0
+        cy = (y0 + y1) / 2.0
+        sx = int((cx - cam_x) * tile)
+        sy = int((cy - cam_y) * tile)
+        owner = str(cap.get("owner") or "none")
+        col = _OWNER_COLOUR.get(owner, _OWNER_COLOUR["none"])
+        # Soft filled zone + border.
+        zone = pygame.Rect(
+            int((x0 - cam_x) * tile),
+            int((y0 - cam_y) * tile),
+            max(tile, int((x1 - x0 + 1) * tile)),
+            max(tile, int((y1 - y0 + 1) * tile)),
+        )
+        overlay = pygame.Surface((zone.w, zone.h), pygame.SRCALPHA)
+        overlay.fill((*col, 35))
+        client.screen.blit(overlay, zone.topleft)
+        pygame.draw.rect(client.screen, col, zone, 2)
+        name = str(cap.get("name") or cap.get("id") or "?")
+        prog = f"{int(cap.get('progress') or 0)}/{int(cap.get('need') or 0)}"
+        bar = int(cap.get("barricades") or 0)
+        lock = "" if cap.get("unlocked_for_attack", True) else " · locked"
+        label = font.render(f"{name} · {owner} {prog}{lock}", True, (255, 235, 200))
+        client.screen.blit(label, (sx - label.get_width() // 2, sy - 14))
+        if bar:
+            b = font.render(f"barricades {bar}", True, (255, 200, 120))
+            client.screen.blit(b, (sx - b.get_width() // 2, sy + 2))
+
+
+def draw_war_prompt(client):
+    """Top-centre chip for an open / active War for the Crown."""
+    client.war_chip_rect = None
+    hud = _war_hud(client)
+    war = hud.get("war") if hud else None
+    heraldry = hud.get("heraldry") if hud else None
+    if not war and not heraldry:
+        return
+    font = client.font_small
+    parts = []
+    if war:
+        status = str(war.get("status") or "open")
+        side = hud.get("side")
+        bit = f"War for the Crown · {status}"
+        if side:
+            bit += f" · you: {side}"
+        if hud.get("eliminated"):
+            bit += " · eliminated"
+        # Compact capture summary while the assault runs.
+        caps = war.get("captures") or []
+        if status == "active" and caps:
+            held = sum(1 for c in caps if c.get("owner") == "attack")
+            bit += f" · points {held}/{len(caps)}"
+        if status == "scheduled" and war.get("scheduled_at"):
+            delay = int(war.get("assault_delay") or 3600)
+            left = max(0, int(float(war["scheduled_at"]) + delay - time.time()))
+            bit += f" · assault in {left // 3600}h {(left % 3600) // 60}m"
+        if status == "active":
+            started = war.get("started_at") or war.get("scheduled_at")
+            secs = int(war.get("assault_seconds") or 6 * 3600)
+            if started:
+                left = max(0, int(float(started) + secs - time.time()))
+                bit += f" · {left // 3600}h {(left % 3600) // 60}m left"
+        if status in ("registration", "scheduled"):
+            # Surface the soonest confirm deadline so leaders see the 48h window.
+            soonest = None
+            for side in ("attack", "defend"):
+                lead = ((war.get("sides") or {}).get(side) or {}).get("lead") or {}
+                if lead.get("status") == "reserved" and lead.get("confirm_deadline"):
+                    left = max(0, int(float(lead["confirm_deadline"]) - time.time()))
+                    soonest = left if soonest is None else min(soonest, left)
+            if soonest is not None:
+                bit += f" · confirm {soonest // 3600}h {(soonest % 3600) // 60}m"
+        if hud.get("watchtower_down"):
+            bit += " · tower down"
+        parts.append(bit)
+    if heraldry and isinstance(heraldry.get("banner"), dict):
+        charge = heraldry["banner"].get("charge") or "arms"
+        parts.append(f"Royal banner: {charge}")
+    if not parts:
+        return
+    label = font.render("  ·  ".join(parts), True, (255, 230, 170))
+    pad_x, pad_y = 14, 7
+    w, h = label.get_width() + pad_x * 2, label.get_height() + pad_y * 2
+    rect = pygame.Rect(0, 0, w, h)
+    rect.centerx = client.screen.get_width() // 2
+    rect.top = 10
+    pygame.draw.rect(client.screen, (24, 18, 28), rect, border_radius=8)
+    pygame.draw.rect(client.screen, (200, 160, 70), rect, 2, border_radius=8)
+    client.screen.blit(label, (rect.x + pad_x, rect.y + pad_y))
+    client.war_chip_rect = rect
+    if getattr(client, "show_war_board", False):
+        draw_war_board(client, hud)
+
+
+def draw_war_board(client, hud=None):
+    """Clickable war board panel opened from the realm chip."""
+    hud = hud if hud is not None else _war_hud(client)
+    war = (hud or {}).get("war") or {}
+    lines = list((hud or {}).get("board") or [])
+    if not lines:
+        # Compose a short board from the live war payload when board text
+        # has not arrived yet (e.g. enter payload without a full HUD tick).
+        status = str(war.get("status") or "open")
+        lines = [f"War for the Crown — {status}"]
+        for side in ("attack", "defend"):
+            info = (war.get("sides") or {}).get(side) or {}
+            lead = info.get("lead")
+            if lead:
+                mercs = int(lead.get("mercs") or 0)
+                merc_bit = f", {mercs} mercs" if mercs else ""
+                lines.append(
+                    f"{side.title()}: {lead.get('name')} ({lead.get('status')}, "
+                    f"{lead.get('humans', 0)}/{lead.get('human_min', 20)} humans{merc_bit})"
+                )
+            else:
+                lines.append(f"{side.title()}: open")
+            stock = info.get("store") or {}
+            if stock:
+                lines.append(
+                    f"  Store: timber {stock.get('timber', 0)} · ore {stock.get('ore', 0)} · "
+                    f"bars {stock.get('bars', 0)} · stone {stock.get('stone', 0)}"
+                )
+        contrib = war.get("contributors") or []
+        if contrib:
+            lines.append(
+                "Top fighters: "
+                + " · ".join(
+                    f"{e.get('name')} {e.get('points', 0)}pts/{e.get('kills', 0)}k"
+                    for e in contrib[:5]
+                )
+            )
+        lines.append("Click the chip again or Esc to close. Herald: War for the Crown.")
+    font = client.font_small
+    tiny = getattr(client, "font_tiny", None) or font
+    title = font.render("War Board", True, (255, 215, 90))
+    rendered = [tiny.render(str(ln)[:78], True, (225, 225, 235)) for ln in lines[:18]]
+    pad = 14
+    body_h = sum(r.get_height() + 4 for r in rendered)
+    box_w = max(
+        420,
+        title.get_width() + 80,
+        max((r.get_width() for r in rendered), default=200) + pad * 2,
+    )
+    box_h = 40 + body_h + pad
+    box = pygame.Rect(0, 0, box_w, box_h)
+    box.centerx = client.screen.get_width() // 2
+    box.top = 48
+    pygame.draw.rect(client.screen, (22, 18, 28), box, border_radius=8)
+    pygame.draw.rect(client.screen, (200, 160, 70), box, 2, border_radius=8)
+    client.screen.blit(title, (box.x + pad, box.y + 10))
+    close = tiny.render("Close", True, (255, 255, 255))
+    close_r = pygame.Rect(box.right - close.get_width() - 18, box.y + 10,
+                          close.get_width() + 12, close.get_height() + 4)
+    pygame.draw.rect(client.screen, (60, 50, 40), close_r, border_radius=4)
+    pygame.draw.rect(client.screen, (200, 200, 200), close_r, 1, border_radius=4)
+    client.screen.blit(close, (close_r.x + 6, close_r.y + 2))
+    y = box.y + 36
+    for r in rendered:
+        client.screen.blit(r, (box.x + pad, y))
+        y += r.get_height() + 4
+    client.war_board_rect = box
+    client.war_board_close_rect = close_r
+
+
+def war_board_click(client, mx, my):
+    """Handle clicks on the war chip / board. True when the click was consumed."""
+    if getattr(client, "show_war_board", False):
+        close_r = getattr(client, "war_board_close_rect", None)
+        box = getattr(client, "war_board_rect", None)
+        if close_r and close_r.collidepoint(mx, my):
+            client.show_war_board = False
+            return True
+        if box and box.collidepoint(mx, my):
+            return True
+        # Click outside closes.
+        client.show_war_board = False
+        chip = getattr(client, "war_chip_rect", None)
+        if chip and chip.collidepoint(mx, my):
+            return True
+        return False
+    chip = getattr(client, "war_chip_rect", None)
+    if chip and chip.collidepoint(mx, my):
+        client.show_war_board = True
+        return True
+    return False
+
+
+def structure_scar_click(client, mx, my):
+    """Click a damaged structure scar to examine HP / state. True if consumed."""
+    rects = getattr(client, "siege_scar_rects", None) or {}
+    if not isinstance(rects, dict) or not rects:
+        return False
+    structs = _siege_structures(client)
+    # Prefer smaller / more specific scars first (tower over keep).
+    hits = sorted(
+        ((sid, r) for sid, r in rects.items() if r and r.collidepoint(mx, my)),
+        key=lambda pair: pair[1].w * pair[1].h,
+    )
+    if not hits:
+        return False
+    sid, rect = hits[0]
+    row = structs.get(sid) or {}
+    name = row.get("name") or sid.replace("_", " ").title()
+    state = str(row.get("state") or "intact").replace("_", " ")
+    hp = int(row.get("hp") or 0)
+    max_hp = int(row.get("max_hp") or 0)
+    client.siege_examine = {
+        "id": sid,
+        "name": name,
+        "state": state,
+        "hp": hp,
+        "max_hp": max_hp,
+        "until": time.time() + 4.0,
+        "x": mx,
+        "y": my,
+    }
+    return True
+
+
+def draw_siege_examine(client):
+    """Floating label after clicking a damaged structure scar."""
+    ex = getattr(client, "siege_examine", None)
+    if not ex:
+        return
+    if time.time() > float(ex.get("until") or 0):
+        client.siege_examine = None
+        return
+    font = getattr(client, "font_small", None)
+    if font is None:
+        return
+    name = ex.get("name") or "Structure"
+    state = ex.get("state") or "intact"
+    hp = int(ex.get("hp") or 0)
+    max_hp = int(ex.get("max_hp") or 0)
+    pct = int(100 * hp / max(1, max_hp)) if max_hp else 0
+    text = f"{name}: {state} ({hp}/{max_hp}, {pct}%)"
+    label = font.render(text, True, (255, 230, 170))
+    pad_x, pad_y = 10, 6
+    box = pygame.Rect(0, 0, label.get_width() + pad_x * 2, label.get_height() + pad_y * 2)
+    box.topleft = (int(ex.get("x") or 0) + 14, int(ex.get("y") or 0) + 14)
+    screen = client.screen
+    # Keep on screen.
+    box.right = min(box.right, screen.get_width() - 8)
+    box.bottom = min(box.bottom, screen.get_height() - 8)
+    box.left = max(8, box.left)
+    box.top = max(8, box.top)
+    pygame.draw.rect(screen, (24, 18, 28), box, border_radius=6)
+    pygame.draw.rect(screen, (200, 160, 70), box, 1, border_radius=6)
+    screen.blit(label, (box.x + pad_x, box.y + pad_y))
+
+
 def draw_overlay(client):
     if _realm(client):
+        draw_capture_markers(client)
+        draw_war_prompt(client)
+        draw_siege_examine(client)
         draw_arena_prompt(client)
         return
     if not _interior(client):
         return
+    draw_capture_markers(client)
+    draw_war_prompt(client)
+    draw_siege_examine(client)
     mx, my = pygame.mouse.get_pos()
     if mx >= 900 or my >= 640:
         return

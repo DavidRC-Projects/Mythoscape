@@ -479,6 +479,15 @@ def quest_objective_dest(client, qid=None):
 
 def sync_quest_guide(client, announce=True):
     """Point the golden trail at the active quest objective (every quest)."""
+    try:
+        import adventure_guide
+        if adventure_guide.guidance_off():
+            if getattr(client, "quest_guide", None) is not None:
+                client.quest_guide = None
+                client._welcome_path = None
+            return
+    except Exception:
+        pass
     dest = quest_objective_dest(client)
     prev = getattr(client, "quest_guide", None)
     if dest is None:
@@ -507,6 +516,17 @@ def active_trail_target(client):
         return None
     outfitters = getattr(client, "outfitters", None)
     if outfitters is not None and getattr(outfitters, "active", False):
+        return None
+    try:
+        import adventure_guide
+        guidance_off = adventure_guide.guidance_off()
+    except Exception:
+        guidance_off = False
+    # Keep a manual Go waypoint even when automatic guidance is off.
+    if guidance_off:
+        wp = getattr(client, "nav_waypoint", None)
+        if wp:
+            return wp[0], wp[1], wp[2] or "Waypoint"
         return None
     # Welcome stages first while the kit trail is live (overworld only).
     if not getattr(client, "dungeon", None) and visible(client):

@@ -24,18 +24,74 @@ STILL_S = 2.0
 TYPE_CPS = 48.0
 PREFS = os.path.join(os.path.expanduser("~"), ".crownfall", "moon_petal.json")
 LOFT = ("Aerin", "Rhosyn")
+TOPICS = (("moon", "The Moon"), ("fae", "The Fae"), ("throne", "Throne & Realm"), ("rumours", "Rumours"))
 
-# Display titles only — long dialogue lives on the server now.
+# Title, greeting, topic replies, farewell. Shown at once — the server still
+# records friendship, but talk does not wait on it.
 FAIRIES = {
-    "Selune": ("Hostess of the Moon Petal",),
-    "Ivria": ("The Archivist",),
-    "Maelis": ("The Moonbloom Keeper",),
-    "Aerin": ("The Watcher on the Balcony",),
-    "Rhosyn": ("The Harpist",),
-    "Tamsin": ("The Moon Bar",),
-    "Nyx": ("The Hearthwitch",),
-    "Kaede": ("The Letter-Writer",),
-    "Bryony": ("The Crystal Reader",),
+    "Selune": ("Hostess of the Moon Petal",
+        "You came in with the rain on your boots and the realm on your shoulders. Set both down a while. What shall it be?",
+        {"moon": "The moon was not always alone. There were two, once. The second fell the night the first king was crowned, and its petals still bloom wherever it struck.",
+         "fae": "We are not your fairy tales. We were here before the roads, and we will be here after the crowns. We simply prefer to be guests.",
+         "throne": "Every ruler of Crownfall has drunk here once. Most never knew who poured it.",
+         "rumours": "Ask the others. Each of my girls hears a different thing. Together, we hear everything."},
+        "Go gently. The door always finds you again."),
+    "Ivria": ("The Archivist",
+        "Mind the candle. These pages are older than your grandmother's grandmother.",
+        {"moon": "Moon-phases decide which of our doors are open. Learn the calendar and the world gets much larger.",
+         "fae": "Our names are contracts. Never give us yours lightly, and never take ours without a gift.",
+         "throne": "The chronicles say the Founder King won his crown by the sword. My copy says he bought it. With a promise to us.",
+         "rumours": "A page has gone missing from this book. The last person who read it is wearing a crown now."},
+        "Come back when you can read between lines."),
+    "Maelis": ("The Moonbloom Keeper",
+        "Don't touch the blue ones. They bite. Only a little.",
+        {"moon": "Moonblooms only open under a full moon. Pick one at the wrong hour and it turns to ash in your hand.",
+         "fae": "Every one of us is bound to something that grows. Burn a forest and somewhere a fae forgets her own name.",
+         "throne": "The king's men cut the Elderwood for warships last spring. You will be hearing about that.",
+         "rumours": "Something is digging under the old orchard at night. Not moles. Moles don't sing."},
+        "Take a petal for luck. Not that one."),
+    "Aerin": ("The Watcher on the Balcony",
+        "I saw you three streets away. You walk like someone being followed.",
+        {"moon": "From up here you can see the moon's reflection in every window in town. Count the dark ones.",
+         "fae": "We fly less than we used to. The sky over Crownfall has too many arrows in it.",
+         "throne": "Guards changed shifts at the castle twice tonight. Once is routine.",
+         "rumours": "A cloaked rider has visited the north gate each night this week. She never comes in."},
+        "Watch your back. I'll watch the rest."),
+    "Rhosyn": ("The Harpist",
+        "You stopped on the stairs to listen. Everyone does. Come, sit, I don't bite either.",
+        {"moon": "There is a song that only works when the moon is full. Play it in the right place and the ground remembers what stood there.",
+         "fae": "Our music is how we keep our history. Lose a song and you lose a war.",
+         "throne": "I played at the last coronation. The new king asked for a happy song. I gave him the truest one I had.",
+         "rumours": "A bard in the tavern has been singing one of our songs. Badly. And it is working."},
+        "Hum it on the road. It keeps the dark polite."),
+    "Tamsin": ("The Moon Bar",
+        "Moonwine, dewmead or something honest? I'd suggest honest, for your first night.",
+        {"moon": "Moonwine is pressed only on the full moon. One glass and you dream of where you'll be in a year. Two and you dream of where you'll be in ten.",
+         "fae": "Selune runs the house. I run the house's money. Guess which of us the merchants fear.",
+         "throne": "The crown owes this inn a debt older than the treasury. We have never asked for it. Yet.",
+         "rumours": "Someone paid for a room upstairs in old royal coin. Coin that was melted down a hundred years ago."},
+        "Mind the step. It moves."),
+    "Nyx": ("The Hearthwitch",
+        "Sit by the fire. You've been cold for longer than tonight.",
+        {"moon": "The dark of the moon is mine. When it vanishes, the old things under Crownfall stretch.",
+         "fae": "Not all fae drink in pretty inns. Some of my sisters chose the deep places. Do not take their bargains.",
+         "throne": "The throne is carved from a tree that was alive when it was cut. It still dreams. Ask the king why he doesn't sleep.",
+         "rumours": "The miners have stopped going below the third floor of the mine after dark. They say they hear a heartbeat."},
+        "Keep a light lit. Any light."),
+    "Kaede": ("The Letter-Writer",
+        "Don't read over my shoulder. Unless you're offering to deliver this.",
+        {"moon": "Letters sealed with moon-wax can only be opened by the one they're meant for. Useful, in a city of spies.",
+         "fae": "I write for half the court of Crownfall. They think I'm a scribe. I let them.",
+         "throne": "Three lords wrote to me this month asking how much a crown costs. I quoted them all different prices.",
+         "rumours": "A duke has been writing love letters to someone who has been dead for twenty years. She writes back."},
+        "If anyone asks, you never saw me."),
+    "Bryony": ("The Crystal Reader",
+        "Oh, you're the one from the crystals! Well, someone like you. Sit, sit.",
+        {"moon": "Each crystal holds a night of moonlight. Break one and you get a night back. I've only ever broken two.",
+         "fae": "We age by moons, not years. I'm very young. Selune is very, very not.",
+         "throne": "Every crystal I read for the throne shows the same thing: an empty chair, and a lot of people walking toward it.",
+         "rumours": "Someone in this room is not a fae. I won't say who. It's funnier this way."},
+        "Your fortune for tonight: you'll come back."),
 }
 FRIEND_MAX = 100
 FRIEND_ID = {
@@ -219,7 +275,8 @@ class MoonPetalInn:
         self.hover = None           # index into self.spots
         self.focus = None           # keyboard focus index
         self.talk = None            # fairy name
-        self.page = "greeting"      # server page hint: greeting | quest | compliments | social | secret
+        self.page = "greeting"      # greeting | moon | fae | throne | rumours | farewell | quest
+        self.visited = {}           # fairy name -> topic keys already heard
         self.quest_line = None
         self.quest_choices = []
         self.quest_payload = None
@@ -337,14 +394,14 @@ class MoonPetalInn:
         self.reply_focus = None
         self.mode = "talk"
         self.type_start = time.time()
-        self.quest_line = "…"
+        self.quest_line = None
         self.quest_choices = []
         self.quest_payload = None
-        self.waiting_line = True
+        self.waiting_line = False
         try:
             self.client.net.send("MOONPETAL_TALK", fairy=name)
         except Exception:
-            self.waiting_line = False
+            pass
 
     def _apply_friendship(self, payload):
         if not isinstance(payload, dict):
@@ -367,21 +424,25 @@ class MoonPetalInn:
 
     def on_message(self, t, msg):
         if t == "MOONPETAL_LINE":
-            if msg.get("fairy"):
-                self.talk = msg["fairy"]
-            self.quest_line = msg.get("line") or ""
-            self.quest_choices = list(msg.get("choices") or [])
-            self.quest_payload = msg.get("quest")
             self._apply_friendship(msg.get("friendship") or {})
             self.last_gained = int(msg.get("gained") or 0)
-            self.menu_kind = str(msg.get("page") or "greeting")
-            self.page = self.menu_kind
-            self.mode = "talk"
-            self.waiting_line = False
-            self.type_start = time.time()
-            self.reply_focus = None
-            if msg.get("close") and not self.quest_choices:
+            page = str(msg.get("page") or "")
+            # Quest beats the local topic tree. A greeting from the server
+            # must not replace the lines already on screen.
+            if page in ("quest", "quest_offer") or msg.get("quest"):
+                if msg.get("fairy"):
+                    self.talk = msg["fairy"]
+                self.quest_line = msg.get("line") or ""
+                self.quest_choices = list(msg.get("choices") or [])
+                self.quest_payload = msg.get("quest")
+                self.menu_kind = page or "quest"
+                self.page = self.menu_kind
+                self.mode = "talk"
+                self.type_start = time.time()
+                self.reply_focus = None
+            if msg.get("close") and page in ("quest", "quest_offer"):
                 self.mode, self.talk = "room", None
+                self.page = "greeting"
             return True
         if t == "MOONPETAL_STATE":
             if msg.get("inside"):
@@ -419,21 +480,29 @@ class MoonPetalInn:
 
     # ---- dialogue model ----------------------------------------------------------------
     def body(self):
-        if self.waiting_line and not self.quest_line:
-            return "…"
-        return self.quest_line or "…"
+        if self.page in ("quest", "quest_offer") and self.quest_line:
+            return self.quest_line
+        title, greet, topics, bye = FAIRIES[self.talk]
+        if self.page == "greeting":
+            return greet
+        if self.page == "farewell":
+            return bye
+        return topics.get(self.page) or greet
 
     def replies(self):
         """[(label, action, state)] state: new | seen | None."""
-        if self.waiting_line and not self.quest_choices:
-            return []
-        out = []
-        for i, lab in enumerate(self.quest_choices or []):
-            state = "seen" if str(lab).endswith(" ✓") else ("new" if "Compliment" in str(lab) or "Ask about" in str(lab) else None)
-            if str(lab).endswith(" ✓"):
-                state = "seen"
-            out.append((lab, ("server_choice", i), state))
-        return out
+        if self.page in ("quest", "quest_offer") and self.quest_choices:
+            return [
+                (lab, ("server_choice", i), "seen" if str(lab).endswith(" ✓") else None)
+                for i, lab in enumerate(self.quest_choices)
+            ]
+        if self.page == "greeting":
+            seen = self.visited.get(self.talk, set())
+            out = [(lab, key, "seen" if key in seen else "new") for key, lab in TOPICS]
+            return out + [("Farewell", "farewell", None)]
+        if self.page == "farewell":
+            return [("Back to the room", "close", None)]
+        return [("Back", "back", None), ("Farewell", "farewell", None)]
 
     def typed_all(self):
         return (time.time() - self.type_start) * TYPE_CPS >= len(self.body())
@@ -443,20 +512,35 @@ class MoonPetalInn:
         if not (0 <= idx < len(rs)):
             return
         act = rs[idx][1]
-        if not (isinstance(act, tuple) and act and act[0] == "server_choice"):
+        if isinstance(act, tuple) and act and act[0] == "server_choice":
+            choice = int(act[1])
+            menu = "" if self.page in ("quest", "quest_offer") else (self.menu_kind or "")
+            try:
+                self.client.net.send(
+                    "MOONPETAL_CHOICE", fairy=self.talk, choice=choice, menu=menu,
+                )
+            except Exception:
+                pass
+            self.reply_focus = None
             return
-        choice = int(act[1])
-        self.waiting_line = True
-        menu = self.menu_kind or "greeting"
-        if menu in ("quest", "quest_offer"):
-            menu = ""
-        try:
-            self.client.net.send(
-                "MOONPETAL_CHOICE", fairy=self.talk, choice=choice, menu=menu,
-            )
-        except Exception:
-            self.waiting_line = False
+        if act == "close":
+            self.mode, self.talk = "room", None
+            return
+        if act == "back":
+            self.page = "greeting"
+        elif act == "farewell":
+            self.page = "farewell"
+        else:
+            self.visited.setdefault(self.talk, set()).add(act)
+            self.page = act
+            try:
+                self.client.net.send(
+                    "MOONPETAL_SOCIAL", fairy=self.talk, kind="topic", id=act,
+                )
+            except Exception:
+                pass
         self.reply_focus = None
+        self.type_start = time.time()
 
     # ---- events ------------------------------------------------------------------------
     def handle_event(self, event):
@@ -497,8 +581,14 @@ class MoonPetalInn:
                 self.hover_reply = next((i for i, r in enumerate(self.reply_rects) if r.collidepoint(event.pos)), None)
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    self.mode, self.talk = "room", None
-                    self.waiting_line = False
+                    if self.page == "farewell":
+                        self.mode, self.talk = "room", None
+                    elif self.page in ("quest", "quest_offer"):
+                        self.page, self.type_start = "greeting", time.time()
+                        self.quest_line = None
+                        self.quest_choices = []
+                    else:
+                        self.page, self.type_start = "farewell", time.time()
                 elif pygame.K_1 <= event.key <= pygame.K_9:
                     self.choose(event.key - pygame.K_1)
                 elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):

@@ -59,7 +59,27 @@ check(getattr(c, "np_target_frame_rect", None) is not None, "target frame drawn"
 # 6. damage trail
 st = {}; N._trail(st, 10, 10, 0.0); N._trail(st, 4, 10, 0.1)
 check(st.get("from", 10) > 4 or st.get("shown", 10) > 4, "damage chunk trail lingers above new hp")
-# 7. draws without exceptions over many frames
+# 7. player tag is larger and the level chip is a real size
+N._STATE.clear(); c = C()
+N.submit(c, ("p", 1), 400, 300, "The Creator", level=239, rel="self", kind="std", feet=340)
+N.submit(c, "npc", 200, 300, "Bob", rel="npc", kind="std", feet=340)
+drawn = {p["key"]: p for p in N.flush(c)}
+me, bob = drawn[("p", 1)], drawn["npc"]
+check(me["nh"] >= 22 and me["name_px"] >= 14, "player name row is taller")
+check(me["level_px"] >= 13 and me["lw"] >= N._font(13).size("239")[0] + 12, "player level chip is larger")
+check(me["rect"].h > bob["rect"].h and bob["nh"] == 16, "NPC tags stay the smaller size")
+bright = False
+r = me["rect"]
+for x in range(max(0, r.right - me["lw"]), min(c.screen.get_width() - 1, r.right - 2)):
+    for y in range(max(0, r.top + 2), min(c.screen.get_height() - 1, r.bottom - 2)):
+        px = c.screen.get_at((x, y))
+        if px.r > 220 and px.g > 200 and px.b > 140:
+            bright = True
+            break
+    if bright:
+        break
+check(bright, "player level is drawn in a light colour")
+# 8. draws without exceptions over many frames
 c = C(); ok = True
 try:
     for f in range(30):

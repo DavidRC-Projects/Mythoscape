@@ -29,6 +29,7 @@ import sys
 import castle_v2
 import buildings_v2
 import feature_flags
+import tree_cover
 
 (
     GRASS, TREE, WATER, ORE, WALL, PATH, FLOOR, OAK_TREE, IRON_ORE, FISH_SPOT,
@@ -37,6 +38,15 @@ import feature_flags
 
 WALKABLE_TILES = {GRASS, PATH, FLOOR, FISH_SPOT, STONE}
 TREE_TILES = {TREE, OAK_TREE, WILLOW_TREE, MAPLE_TREE, YEW_TREE, MAGIC_TREE}
+
+tree_cover.bind_tiles({
+    TREE: "tree",
+    OAK_TREE: "oak_tree",
+    WILLOW_TREE: "willow_tree",
+    MAPLE_TREE: "maple_tree",
+    YEW_TREE: "yew_tree",
+    MAGIC_TREE: "magic_tree",
+})
 
 # Larger world — room east of the massif for Stonehaven walls + housing.
 WIDTH = 230
@@ -196,6 +206,31 @@ def _seeded_noise(x, y):
     n = (x * 73856093) ^ (y * 19349663) ^ 83492791
     n = (n * 1103515245 + 12345) & 0x7fffffff
     return (n % 10000) / 10000.0
+
+
+def clear_npc_plazas(grid):
+    """PATH stands for key overworld NPCs, re-applied after orphan-path trim.
+
+    Orphan trim turns island plazas back into grass. Grass under a painted
+    canopy is blocked, so Mia's stand became unreachable. Re-stamp PATH and
+    clear only trees whose canopy covers Mia's plaza (the known trapped stand).
+    """
+    plazas = (
+        (102, 8), (103, 8), (102, 9), (101, 8),                 # Mia
+        (100, 23), (99, 23), (101, 23), (100, 24), (100, 22),  # Mad Scientist
+        (94, 16), (95, 16), (93, 16), (94, 15), (94, 17),      # Pete
+        (28, 22), (29, 22), (28, 21),                           # Timmy
+    )
+    mia = {(102, 8), (103, 8), (102, 9), (101, 8)}
+    # Drop only the trunks whose canopy seals Mia in; leave other stands alone.
+    for y in range(max(0, 8 - 6), min(HEIGHT, 8 + 6)):
+        for x in range(max(0, 102 - 6), min(WIDTH, 102 + 6)):
+            name = tree_cover._TILE_NAME.get(grid[y][x])
+            if name and any(tree_cover.covers(name, x, y, px, py) for px, py in mia):
+                grid[y][x] = GRASS
+    for nx, ny in plazas:
+        if 0 <= nx < WIDTH and 0 <= ny < HEIGHT and grid[ny][nx] in (GRASS, *TREE_TILES, PATH, WATER):
+            grid[ny][nx] = PATH
 
 
 def generate_world():
@@ -395,15 +430,7 @@ def _generate_base_world():
         if grid[road_y][x] in (GRASS, *TREE_TILES):
             grid[road_y][x] = PATH
 
-    # Clear small plazas so key NPCs aren't buried under canopy
-    for nx, ny in (
-        (102, 8), (103, 8), (102, 9), (101, 8),                 # Mia
-        (100, 23), (99, 23), (101, 23), (100, 24), (100, 22),  # Mad Scientist (south shore)
-        (94, 16), (95, 16), (93, 16), (94, 15), (94, 17),  # Pete (west lake shore)
-        (28, 22), (29, 22), (28, 21),                       # Timmy
-    ):
-        if 0 <= nx < WIDTH and 0 <= ny < HEIGHT and grid[ny][nx] in (GRASS, *TREE_TILES, PATH, WATER):
-            grid[ny][nx] = PATH
+    clear_npc_plazas(grid)
 
     # --- Mountain pass (east of forest) — peaked ridges with a walkable corridor ---
     mx0, my0, mx1, my1 = ZONES["mountains"]
@@ -835,6 +862,7 @@ def _generate_base_world():
     # Aprons + orphan trim after seals so harbour/fairy stamps cannot wipe them.
     _stamp_exterior_door_aprons(grid)
     trim_orphan_village_paths(grid)
+    clear_npc_plazas(grid)
     # Arch posts must stay trunks after apron/trim road stamps.
     for ax, ay in fairy_glade.arch_posts():
         if 0 <= ay < HEIGHT and 0 <= ax < WIDTH:
@@ -1864,10 +1892,28 @@ def restore_city_and_void_paving(grid):
                     grid[ay][ax] = PATH
 
 
+_tree_block = None  # (id(grid), grass tiles hidden under a painted tree)
+
+
+def _grass_under_trees(grid):
+    """Grass the painted tree covers. Cached per grid; paths stay open."""
+    global _tree_block
+    if _tree_block is not None and _tree_block[0] == id(grid):
+        return _tree_block[1]
+    blocked = tree_cover.grass_blocked(grid, GRASS)
+    _tree_block = (id(grid), blocked)
+    return blocked
+
+
 def is_walkable(grid, x, y):
     if not (0 <= x < WIDTH and 0 <= y < HEIGHT):
         return False
-    return grid[y][x] in WALKABLE_TILES
+    tile = grid[y][x]
+    if tile not in WALKABLE_TILES:
+        return False
+    if tile != GRASS:
+        return True
+    return (x, y) not in _grass_under_trees(grid)
 
 
 def _harbour_fish_type(x, y):

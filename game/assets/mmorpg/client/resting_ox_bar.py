@@ -125,10 +125,22 @@ class RestingOxBar:
     WALK_IN_COOLDOWN_S = 1.5
 
     def is_arch(self, x, y):
+        """True on the arched door tile and the short corridor into the inn.
+
+        Matches client._maybe_walk_into_resting_ox, so a try_move onto any of those
+        tiles enters the bar the same way standing in the doorway does.
+        """
         if getattr(self.client, "dungeon", None):
             return False
+        x, y = int(x), int(y)
         for spot in getattr(self.client, "interactables", None) or []:
-            if spot.get("bar") and (int(spot["x"]), int(spot["y"])) == (int(x), int(y)):
+            if not spot.get("bar"):
+                continue
+            dx, dy = int(spot["x"]), int(spot["y"])
+            ex, ey = int(spot.get("enter_x", dx)), int(spot.get("enter_y", dy - 1))
+            if (x, y) == (dx, dy) or (x, y) == (ex, ey):
+                return True
+            if x == dx and min(dy, ey) <= y <= max(dy, ey):
                 return True
         return False
 
@@ -801,20 +813,38 @@ class RestingOxBar:
                 cloth = tuple(int(c) for c in np.median(px, axis=0))
         return hair, cloth
 
+    @staticmethod
+    def _without_helmet(look):
+        """Same look with an armour helm off. The bar shows the back of the head; the helm stays equipped."""
+        eq = dict(look.get("equipment") or {})
+        changed = False
+        for key, value in list(eq.items()):
+            item_id = value.get("id") if isinstance(value, dict) else value
+            if item_id and "helm" in str(item_id):
+                eq[key] = None
+                changed = True
+        if not changed:
+            return look
+        shown = dict(look)
+        shown["equipment"] = eq
+        return shown
+
     def _back_figure(self, look, height):
         """You, seen from behind (third person): a painted back-view bust for your sex + hairstyle
         (assets/resting_ox/tavern/back/), its hair layer tinted to your hair colour and its garment layer to your
-        outfit's colour, graded into the firelight. Falls back to the HD sprite only if the painting fails."""
+        outfit's colour, graded into the firelight. A helm worn in from the street is not drawn, so the back
+        of the head shows. Falls back to the HD sprite only if the painting fails."""
         import json
-        key = ("_back", json.dumps(look, sort_keys=True, default=str), height)
+        shown = self._without_helmet(look)
+        key = ("_back", json.dumps(shown, sort_keys=True, default=str), height)
         if key in self._img:
             return self._img[key]
         im = None
         try:
-            im = self._wear_hat(look, self._painted_back(look, height), False)
+            im = self._wear_hat(shown, self._painted_back(shown, height), False)
         except Exception as e:                                   # error fallback: the scaled HD sprite
             print("resting ox back layer:", e)
-            fig = self._figure(look, min(height, 560), "back")
+            fig = self._figure(shown, min(height, 560), "back")
             if fig is not None:
                 k = height / fig.get_height()
                 im = pygame.transform.smoothscale(fig, (max(1, int(fig.get_width() * k)), height))

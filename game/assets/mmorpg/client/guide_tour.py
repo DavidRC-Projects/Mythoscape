@@ -28,9 +28,11 @@ INK_SOFT = (110, 82, 52)
 LILAC = (186, 150, 226)
 DIM_A = 165
 DIM_WORLD_A = 95       # walking steps keep the world readable
-DIM_PANEL_A = 50       # panel steps (quests/inventory/equipment/skills): open panel stays fully readable
+DIM_PANEL_A = 28       # panel steps: light wash — inventory/equipment must stay readable
 TAMSIN = "warden_tamsin"
 TAMSIN_NAME = "Warden Tamsin"
+# Gift set Seraphine hands over (must match server GUIDE_BRONZE_SET).
+BRONZE_GIFT = ("bronze_helmet", "bronze_body", "bronze_legs", "bronze_sword", "bronze_shield")
 
 # step -> (target, lines, kind). kind: walk | talk | click | equip_body | equip_all | eat | sewer
 STEP_DEFS = {
@@ -362,10 +364,22 @@ def extra_rects(client, step):
         r = (getattr(client, "equip_slot_rects", None) or {}).get("body")
         if r:
             out.append(r)
-    if step == 8 and _st(client).get("look_t"):
-        r = getattr(client, "_equip_doll_rect", None)
-        if r:
-            out.append(pygame.Rect(r))
+        # Glow every bronze piece still in the bag so the set is easy to spot.
+        for item_id in BRONZE_GIFT:
+            if item_id == "bronze_body":
+                continue
+            br = _bag_rect(client, item_id)
+            if br:
+                out.append(br)
+    if step == 8 and getattr(client, "show_equipment", False):
+        for item_id in BRONZE_GIFT:
+            br = _bag_rect(client, item_id)
+            if br:
+                out.append(br)
+        if _st(client).get("look_t"):
+            r = getattr(client, "_equip_doll_rect", None)
+            if r:
+                out.append(pygame.Rect(r))
     if step == 9:
         hp = getattr(client, "hud_hp_rect", None)
         if hp:
@@ -373,6 +387,52 @@ def extra_rects(client, step):
         b = _bag_rect(client, "bread")
         if b:
             out.append(b)
+    return out
+
+
+def _hud_edges(client):
+    """Right sidebar / chat strip edges — keep in sync with client.SIDEBAR_X / MAP_H."""
+    try:
+        import hud_v2
+        _mw, mh, sx, _sw, _sh = hud_v2._layout()
+        return int(sx), int(mh)
+    except Exception:
+        pass
+    sw, sh = client.screen.get_size()
+    return max(0, sw - 300), min(640, sh)
+
+
+def _on_hud_chrome(client, mx, my):
+    """True for the right bag column or the chat strip under the map."""
+    sx, mh = _hud_edges(client)
+    return mx >= sx or my >= mh
+
+
+def _panel_clear_rects(client, step):
+    """Larger undimmed areas so inventory / equipment stay bright on panel steps."""
+    out = []
+    rects = getattr(client, "hud_rects", None) or {}
+    kind = STEP_DEFS.get(step, (None, (), ""))[2]
+    # Any panel step that rings a HUD control: keep the whole right column bright.
+    # (The old 5–9-only hole made bag buttons look live while clicks were still blocked.)
+    if kind in ("click", "equip_body", "equip_all", "eat"):
+        sx, _mh = _hud_edges(client)
+        sw, sh = client.screen.get_size()
+        out.append(pygame.Rect(sx, 0, max(1, sw - sx), sh))
+    if step in (6, 7, 8) and getattr(client, "show_equipment", False):
+        L = getattr(client, "_equip_layout", None) or {}
+        vp = L.get("vp")
+        if vp is not None:
+            # Equipment window itself (already bright, but clear its shadow too).
+            out.append(pygame.Rect(vp).inflate(24, 24))
+        else:
+            eq = rects.get("equipment")
+            if eq:
+                out.append(pygame.Rect(eq).inflate(20, 20))
+    if step == 5:
+        inv = (rects.get("systems") or {}).get("inventory")
+        if inv:
+            out.append(pygame.Rect(inv).inflate(16, 16))
     return out
 
 
@@ -400,8 +460,16 @@ def _done(client, step):
         d = getattr(client, "dialogue", None) or {}
         return d.get("npc_id") == TAMSIN
     if kind == "click":
+        # Prefer live panel state so a GUIDE_TOUR_STATE refresh that clears
+        # st["clicked"] cannot strand the step after the player already opened it.
+        if step == 4:
+            return st["clicked"] or bool(getattr(client, "show_quests", False))
+        if step == 5:
+            return st["clicked"] or bool(getattr(client, "show_inventory", False))
         if step == 6:
             return bool(getattr(client, "show_equipment", False))
+        if step == 10:
+            return st["clicked"] or bool(getattr(client, "show_skills", False))
         return st["clicked"]
     if kind == "equip_body":
         return eq.get("body") == "bronze_body"
@@ -486,27 +554,46 @@ def handle_click(client, event):
     if tr is not None and tr.collidepoint(mx, my):
         st["clicked"] = True
         return False     # let the game handle the real click
+    # One-action panel steps: chrome that is NOT the target stays swallowed
+    # (Skills must not open during Quests; inventory/equipment targets already
+    # returned above). Walk/talk leave the world — and chrome — clickable.
+    if _on_hud_chrome(client, mx, my):
+        if kind in ("click", "equip_body", "equip_all", "eat"):
+            return True
+        return False
     if kind in ("walk", "walk_npc", "talk"):
         return False     # walking steps leave the world clickable
     if kind == "eat":
         br = _bag_rect(client, "bread")
         if br and br.collidepoint(mx, my):
             return False
+    for r in extra_rects(client, step):
+        if r is not None and getattr(r, "collidepoint", None) and r.collidepoint(mx, my):
+            return False
     # one action at a time: everything else is dimmed and ignored
     return True
 
 
 # ---------------------------------------------------------------- draw
-def _dim(scr, hole, alpha):
+def _dim(scr, holes, alpha):
+    """Dim the screen, punching clear holes so tutorial targets stay bright."""
     w, h = scr.get_size()
     sh = pygame.Surface((w, h), pygame.SRCALPHA)
     sh.fill((2, 3, 5, alpha))
-    if hole is not None:
+    if holes is None:
+        holes = []
+    elif not isinstance(holes, (list, tuple)):
+        holes = [holes]
+    for hole in holes:
+        if hole is None:
+            continue
         hr = hole.inflate(12, 12)
         pygame.draw.rect(sh, (0, 0, 0, 0), hr, border_radius=10)
-        for i in range(10):   # feathered edge
-            pygame.draw.rect(sh, (2, 3, 5, max(0, alpha - 18 * (10 - i))), hr.inflate(i * 2, i * 2), 2,
-                             border_radius=10 + i)
+        for i in range(6):   # soft feather (lighter than before so panels don't re-darken)
+            pygame.draw.rect(
+                sh, (2, 3, 5, max(0, alpha - 22 * (6 - i))),
+                hr.inflate(i * 2, i * 2), 2, border_radius=10 + i,
+            )
     scr.blit(sh, (0, 0))
 
 
@@ -589,7 +676,13 @@ def draw(client):
             lines = (LOOK_LINE, "Defence up. Every slot filled.")
             tr = None
         world_step = kind in ("walk", "walk_npc", "talk")
-        _dim(scr, tr, DIM_WORLD_A if world_step else DIM_PANEL_A)
+        holes = []
+        if tr is not None:
+            holes.append(tr)
+        if not world_step:
+            holes.extend(_panel_clear_rects(client, step))
+            holes.extend(extra_rects(client, step))
+        _dim(scr, holes, DIM_WORLD_A if world_step else DIM_PANEL_A)
         if step == 1:
             _marker(client, scr, t)
         for er in extra_rects(client, step):

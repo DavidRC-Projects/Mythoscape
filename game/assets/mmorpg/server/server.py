@@ -36,6 +36,7 @@ from database import Database
 import explore_dungeons
 import fishing_spots
 
+import tree_cover
 from world_map import (
     generate_world, build_resource_nodes, is_walkable, WIDTH, HEIGHT, SPAWN_POINT, get_zone,
     room_containing, in_room, FLOOR, stamp_emberdeep_mouth, stamp_outfitters_shell,
@@ -276,6 +277,10 @@ class PlayerSession:
         self._sync_legacy_tool_slot()
         self.inventory = {}  # slot -> {"item_id":, "qty":}
         self.quests = {}     # quest_id -> {"status":, "progress":}
+        raw_track = row["tracked_quest_id"] if "tracked_quest_id" in row.keys() else ""
+        self.tracked_quest_id = (raw_track or "") or None
+        if self.tracked_quest_id == "":
+            self.tracked_quest_id = None
         self.quest_log_dirty = False  # push QUEST_LOG on next tick flush
         self.in_combat_with = None   # ("monster", instance_id) or ("player", player_id)
         self.last_input_tick = None        # tick of the last counted input (idle logout)
@@ -1500,6 +1505,14 @@ class World:
     def __init__(self):
         self.db = Database()
         self.grid = generate_world()
+        try:
+            import crown_siege
+            crown_siege.ensure_schema(self.db.conn)
+            crowned = crown_siege.ensure_founder(self.db.conn)
+            if crowned:
+                log.info("War for the Crown: founding reign recorded")
+        except Exception:
+            log.exception("crown_siege founder / schema failed")
         import housing
         housing.bind(self)
         import castle_owners
@@ -1863,6 +1876,74 @@ async def broadcast(msg_type, **fields):
     ], return_exceptions=True)
 
 
+async def push_siege_structure_sync():
+    """Push structure HP / breach tiles to everyone inside the King's Realm."""
+    import crown_siege
+    import castle_realm
+    blob = crown_siege.structure_sync(WORLD.db.conn)
+    try:
+        plane_tiles = castle_realm.build_plane("realm").get("tiles")
+    except Exception:
+        plane_tiles = None
+    for session in list(WORLD.sessions.values()):
+        d = session.dungeon or {}
+        if d.get("id") != "castle_realm":
+            continue
+        await send(session.ws, "SIEGE_UPDATE", **blob)
+        if d.get("plane") == "realm" and plane_tiles is not None:
+            await send(
+                session.ws, "REALM_PLANE",
+                **{**castle_realm.payload(session), "tiles": plane_tiles},
+            )
+
+
+async def broadcast_siege_aware(msg_type, **fields):
+    """During an active war, castle combat FX only reach nearby realm fighters."""
+    if msg_type not in ("COMBAT_EVENT", "MAGIC_CAST"):
+        await broadcast(msg_type, **fields)
+        return
+    try:
+        import crown_siege
+        war = crown_siege.current_war(WORLD.db.conn)
+    except Exception:
+        war = None
+    if not war or war.get("status") != "active":
+        await broadcast(msg_type, **fields)
+        return
+    ids = []
+    for key in ("attacker_id", "defender_id", "caster_id", "target_id", "entity_id", "player_id"):
+        val = fields.get(key)
+        try:
+            ids.append(int(val))
+        except (TypeError, ValueError):
+            continue
+    foci = []
+    for pid in ids:
+        live = WORLD.sessions.get(pid)
+        if live and (live.dungeon or {}).get("id") == "castle_realm":
+            foci.append(live)
+    if not foci:
+        await broadcast(msg_type, **fields)
+        return
+    import crown_siege
+    payload = json.dumps({"type": msg_type, **fields})
+    sends = []
+    for session in WORLD.sessions.values():
+        d = session.dungeon or {}
+        if d.get("id") != "castle_realm":
+            continue
+        radius = crown_siege.effective_interest_radius(WORLD.db.conn)
+        if not any(
+            (d.get("plane") == (f.dungeon or {}).get("plane")
+             and crown_siege.in_interest(session.x, session.y, f.x, f.y, radius))
+            for f in foci
+        ):
+            continue
+        sends.append(session.ws.send(payload))
+    if sends:
+        await asyncio.gather(*sends, return_exceptions=True)
+
+
 async def broadcast_player_state(session):
     """A changed look reaches everyone on the next world-state tick (public_state carries appearance).
     Called by the appearance handlers; this was referenced but never defined, so they raised NameError
@@ -2153,6 +2234,15 @@ def check_quest_progress_on_talk(session, npc_id):
     return changed
 
 
+async def send_quest_log(session):
+    """QUEST_LOG with the server-authoritative tracked pin."""
+    await send(
+        session.ws, "QUEST_LOG",
+        quests={qid: quest_status_for(session, qid) for qid in QUESTS},
+        tracked_quest_id=session.tracked_quest_id or "",
+    )
+
+
 async def flush_quest_logs():
     """Push QUEST_LOG to any session whose quest progress changed this tick."""
     for session in list(WORLD.sessions.values()):
@@ -2283,7 +2373,18 @@ async def handle_login(ws, msg, is_register, peer_ip="unknown"):
         WORLD.db.save_player_stats(session.player_id, hd_player=1)
         session.row = WORLD.db.get_player_by_id(session.player_id)
     needs_alloc = not session.stats_allocated
-    await send(ws, "LOGIN_OK", player=session.full_state(), needs_stat_alloc=needs_alloc)
+    # Restore King's Realm on the session before any client paint so login
+    # never flashes the overworld portal, then the saved tile.
+    resume_dungeon_id = None
+    if resume and resume.get("id") == "castle_realm":
+        if _apply_castle_realm_resume(session, resume):
+            resume_dungeon_id = "castle_realm"
+    await send(
+        ws, "LOGIN_OK",
+        player=session.full_state(),
+        needs_stat_alloc=needs_alloc,
+        resume_dungeon=resume_dungeon_id,
+    )
     if pruned:
         await send(ws, "CHAT_MSG", **{
             "from": "World",
@@ -2301,13 +2402,11 @@ async def handle_login(ws, msg, is_register, peer_ip="unknown"):
         log.info("%s logged in as %s (id=%s) — awaiting stat allocation", username, session.char_name, session.player_id)
         return
 
-    await send_world_join(session)
-    if resume:
-        await _resume_dungeon(session, resume)
+    await send_world_join(session, resume=resume)
     log.info("%s logged in as %s (id=%s)", username, session.char_name, session.player_id)
 
 
-async def send_world_join(session):
+async def send_world_join(session, resume=None):
     import world_clock
     await send(
         session.ws, "WORLD_STATE",
@@ -2321,6 +2420,12 @@ async def send_world_join(session):
     )
     quest_log = {qid: quest_status_for(session, qid) for qid in QUESTS}
     await send(session.ws, "QUEST_LOG", quests=quest_log)
+    # Dungeon resume must follow WORLD_STATE immediately — clans / tips / housing
+    # used to run first and the client painted the overworld portal for those frames.
+    if session.dungeon and session.dungeon.get("id") == "castle_realm":
+        await _notify_castle_realm_resume(session)
+    elif resume:
+        await _resume_dungeon(session, resume)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     import clans
     await clans.on_login(session)
@@ -2519,9 +2624,12 @@ def is_auto_loot_item(item_id):
 
 
 def session_has_item(session, item_id):
+    """Inventory, worn gear, or the bank. Bound uniques must count the bank or login grants a second copy."""
     if item_id in (session.equipment or {}).values():
         return True
-    return any(e.get("item_id") == item_id for e in session.inventory.values())
+    if any(e.get("item_id") == item_id for e in (session.inventory or {}).values()):
+        return True
+    return any(e.get("item_id") == item_id for e in (getattr(session, "bank", None) or {}).values())
 
 
 def migrate_removed_daggers(session):
@@ -3665,17 +3773,22 @@ async def _relock_dungeon_doors(session):
     })
 
 
-async def _resume_castle_realm(session, resume):
-    """Put the player back into Castle Realm at the saved plane and tile."""
+def _apply_castle_realm_resume(session, resume) -> bool:
+    """Restore Castle Realm plane/tile on the session without messaging the client.
+
+    Called during login *before* LOGIN_OK / WORLD_STATE so the first painted
+    frame is already at the saved tile — not the overworld portal apron.
+    """
     if not feature_flags.USE_CASTLE_REALM:
         _clear_dungeon_resume(session)
-        return
+        return False
     import castle_realm
-    import castle_owners
+    if session.dungeon and session.dungeon.get("id") == "castle_realm":
+        return True
     if session.dungeon:
-        if session.dungeon.get("id") == "castle_realm":
-            return
-        await handle_leave_dungeon(session, silent=True)
+        # Drop a leftover instance; silent leave needs the event loop, so
+        # callers that hit this path should use _resume_castle_realm instead.
+        return False
     castle_realm.enter(session)
     rx, ry = resume.get("return_x"), resume.get("return_y")
     if rx is not None and ry is not None:
@@ -3706,13 +3819,34 @@ async def _resume_castle_realm(session, resume):
             session.pet_x, session.pet_y = session.x, session.y
     _bring_pet(session)
     _save_dungeon_resume(session)
-    await send(session.ws, "DUNGEON_ENTER", **castle_realm.payload(session))
+    return True
+
+
+async def _notify_castle_realm_resume(session):
+    """Tell the client they are already standing in the King's Realm."""
+    import castle_realm
+    import castle_owners
+    payload = castle_realm.payload(session)
+    payload["resume"] = True
+    await send(session.ws, "DUNGEON_ENTER", **payload)
     await castle_owners.send_state(session)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     await send(session.ws, "CHAT_MSG", **{
         "from": "King's Realm",
         "text": "You return to the King's Realm where you left off.",
     })
+
+
+async def _resume_castle_realm(session, resume):
+    """Put the player back into Castle Realm at the saved plane and tile."""
+    if session.dungeon and session.dungeon.get("id") == "castle_realm":
+        await _notify_castle_realm_resume(session)
+        return
+    if session.dungeon:
+        await handle_leave_dungeon(session, silent=True)
+    if not _apply_castle_realm_resume(session, resume):
+        return
+    await _notify_castle_realm_resume(session)
 
 
 async def _resume_dungeon(session, resume):
@@ -3761,6 +3895,14 @@ async def handle_enter_dungeon(session, msg):
         if dungeon_id != "castle_realm":
             await send(session.ws, "ERROR", message="Stand at the King's Realm portal.")
             return
+        try:
+            import crown_siege
+            ok_enter, block = crown_siege.can_enter_siege(WORLD.db.conn, session.player_id)
+            if not ok_enter:
+                await send(session.ws, "ERROR", message=block)
+                return
+        except Exception:
+            pass
         import castle_realm
         castle_realm.enter(session)
         rx = int(session.dungeon.get("return_x") or session.x)
@@ -4490,8 +4632,72 @@ async def handle_chat(session, msg):
             await send(session.ws, "COURT_EVENT", event=ev)
         return
     if text.lower().startswith("/reigns"):
-        for line in ruling.reign_lines(WORLD.db.conn):
+        import crown_siege
+        for line in crown_siege.hall_lines(WORLD.db.conn):
             await send(session.ws, "CHAT_MSG", **{"from": "Keeper of Records", "text": line})
+        return
+    if text.lower().startswith("/siege"):
+        import crown_siege
+        parts = text.split()
+        # Live deposits must remove items from the player's inventory.
+        if len(parts) >= 4 and parts[1].lower() == "deposit":
+            item_id = parts[2].lower()
+            try:
+                qty = int(parts[3])
+            except ValueError:
+                await send(session.ws, "CHAT_MSG", **{
+                    "from": "Royal Herald", "text": "Quantity must be a number.",
+                })
+                return
+
+            def _take(iid, q, s=session):
+                return WORLD.count_item(s, iid) >= q and WORLD.remove_item_qty(s, iid, q)
+
+            ok, msg = crown_siege.deposit(
+                WORLD.db.conn, session.player_id, item_id, qty, take_fn=_take,
+            )
+            await send(session.ws, "CHAT_MSG", **{"from": "Royal Herald", "text": msg})
+            if ok:
+                await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+            return
+        # Fire / repair need a structure sync push to everyone in the realm.
+        if len(parts) >= 2 and parts[1].lower() in ("fire", "repair"):
+            if parts[1].lower() == "fire":
+                if len(parts) < 4:
+                    await send(session.ws, "CHAT_MSG", **{
+                        "from": "Royal Herald",
+                        "text": "Usage: /siege fire <weapon> <structure>",
+                    })
+                    return
+                ok, msg, meta = crown_siege.fire_weapon(
+                    WORLD.db.conn, session.player_id, parts[2].lower(), parts[3].lower(),
+                )
+            else:
+                if len(parts) < 3:
+                    await send(session.ws, "CHAT_MSG", **{
+                        "from": "Royal Herald",
+                        "text": "Usage: /siege repair <structure> [batches]",
+                    })
+                    return
+                batches = 1
+                if len(parts) >= 4:
+                    try:
+                        batches = int(parts[3])
+                    except ValueError:
+                        await send(session.ws, "CHAT_MSG", **{
+                            "from": "Royal Herald", "text": "Batches must be a number.",
+                        })
+                        return
+                ok, msg, meta = crown_siege.repair_structure(
+                    WORLD.db.conn, session.player_id, parts[2].lower(), batches,
+                )
+            await send(session.ws, "CHAT_MSG", **{"from": "Royal Herald", "text": msg})
+            if ok and meta and meta.get("sync"):
+                await push_siege_structure_sync()
+            return
+        _ok, lines = crown_siege.handle_command(WORLD.db.conn, session.player_id, text)
+        for line in lines:
+            await send(session.ws, "CHAT_MSG", **{"from": "Royal Herald", "text": line})
         return
     if text.lower().startswith("/treasury"):
         parts = text.split()
@@ -5192,6 +5398,15 @@ def try_auto_magic(session, primary, events, dungeon_tag=None):
             return
 
 
+def _gather_in_reach(px, py, node, x, y):
+    """Ores and fish are chopped from the next tile. A painted tree is chopped
+    from any open tile beside its sprite, which can sit past the trunk."""
+    if adjacent_or_same(px, py, x, y):
+        return True
+    kind = node.get("type") if isinstance(node, dict) else None
+    return kind in tree_cover.NAMES and tree_cover.beside(kind, x, y, px, py)
+
+
 async def handle_gather(session, msg):
     if session.dungeon:
         await send(session.ws, "ERROR", message="There's nothing to gather in the cave.")
@@ -5208,7 +5423,7 @@ async def handle_gather(session, msg):
     if node is None or node["depleted"]:
         await send(session.ws, "ERROR", message="There's nothing to gather there.")
         return
-    if not adjacent_or_same(session.x, session.y, x, y):
+    if not _gather_in_reach(session.x, session.y, node, x, y):
         await send(session.ws, "ERROR", message="You're too far away.")
         return
     yield_def = RESOURCE_YIELDS[node["type"]]
@@ -5677,7 +5892,8 @@ async def handle_talk(session, msg):
                 WORLD.grant_xp(session, "charisma", got)
                 lines.append(f"(His counsel: +{got} Charisma XP.)")
         else:
-            lines = ruling.reign_lines(conn) or ["The records are empty."]
+            import crown_siege
+            lines = crown_siege.hall_lines(conn) or ["The records are empty."]
         await send(session.ws, "DIALOGUE", npc_id=npc_id, npc_name=npc["name"], lines=lines, options=opts)
         return
     import fairy_village
@@ -5965,6 +6181,12 @@ async def ruling_daily_tick(now=None):
     """Once per real day: pending rates apply, stipends, council rep, works expire, reign days."""
     now = time.time() if now is None else now
     conn = WORLD.db.conn
+    try:
+        import crown_siege
+        for note in crown_siege.tick_wars(conn, now):
+            await broadcast("CHAT_MSG", **{"from": "Royal Herald", "text": note})
+    except Exception:
+        log.exception("crown_siege tick failed")
     day = time.strftime("%Y-%m-%d", time.localtime(now))
     row = conn.execute("SELECT value FROM realm_settings WHERE key = 'daily:last'").fetchone()
     last = None if row is None else time.strftime("%Y-%m-%d", time.localtime(float(row[0])))
@@ -6198,7 +6420,20 @@ async def handle_politics_msg(session, mtype, msg):
                 s_.reputation = int(row[0] or 0)
             await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     elif mtype == "NEWS_BOARD":
-        lines = politics.latest_news(conn, politics.NEWS_BOARD_LINES) or ["The board is bare. No news yet."]
+        # Design: Royal War Council is reachable from the notice board.
+        war_lines = []
+        try:
+            import crown_siege
+            war_lines = crown_siege.war_council_lines(conn, session.player_id) or []
+        except Exception:
+            log.exception("war council notice board failed")
+        news = politics.latest_news(conn, politics.NEWS_BOARD_LINES) or []
+        if war_lines and news:
+            lines = war_lines + ["—"] + news
+        elif war_lines:
+            lines = war_lines
+        else:
+            lines = news or ["The board is bare. No news yet."]
         await send(session.ws, "DIALOGUE", npc_id="notice_board", npc_name="Notice Board", lines=lines)
         return
     await send(session.ws, "KINGDOM_STATE", state=politics.state_payload(conn, session.player_id))
@@ -6714,6 +6949,18 @@ async def handle_barracks(session, msg):
         if not ok:
             await send(session.ws, "ERROR", message=text)
         return
+    if action in ("formation_save", "formation_reset"):
+        if action == "formation_save":
+            ok, text = merc.set_formation(conn, session, msg.get("slots"))
+        else:
+            ok, text = merc.clear_formation(conn, session)
+        if ok:
+            import arena_battles
+            arena_battles.refresh_saved_roster(conn, session)
+        await send_barracks_state(session, tab="formation", flash=text)
+        if not ok:
+            await send(session.ws, "ERROR", message=text)
+        return
     if action == "practice":
         await start_arena_practice(session, msg.get("foe_id"))
         return
@@ -7026,10 +7273,22 @@ async def handle_npc_option(session, msg):
     elif opt in ("crown_check", "castle_check", "acclaim_check"):
         kind = opt.split("_")[0]
         if kind == "crown":
-            ok, missing = throne.crown_eligible(session, conn)
-            import politics as _po
-            lines = [f"Crown Challenge (fee {_po.crown_fee(conn, throne.CROWN_FEE):,}; 30-minute battle in the throne room):"]
-            lines.append("✓ All requirements met." if ok else "✗ " + " · ✗ ".join(missing))
+            # Milestone 5 replaced the solo Crown Challenge with the War for the Crown.
+            import crown_siege
+            lines = [
+                "The throne is contested through the War for the Crown — "
+                "guilds register, supply the storehouse, breach the walls, "
+                "and hold the Throne Room.",
+            ]
+            lines.extend(crown_siege.board_lines(conn, pid))
+            await send(
+                session.ws, "DIALOGUE",
+                npc_id=npc["id"], npc_name=npc["name"], lines=lines,
+                options=list(crown_siege.HERALD_SIEGE_OPTIONS) + list(
+                    _options_for(session, npc) or []
+                ),
+            )
+            return
         elif kind == "castle":
             import clans
             cid = clans.clan_of(pid)
@@ -7056,6 +7315,24 @@ async def handle_npc_option(session, msg):
         lines = [await throne_schedule(session, kind, hours)]
     elif opt == "throne_list":
         lines = throne.summary_lines(conn, throne_live._name)
+    elif opt in ("siege_status", "siege_register_attack", "siege_register_defend",
+                 "siege_confirm", "siege_store", "siege_costs", "siege_scout"):
+        import crown_siege
+        if opt == "siege_status":
+            lines = crown_siege.board_lines(conn, pid)
+        elif opt == "siege_store":
+            lines = crown_siege.store_lines(conn, pid, include_costs=True)
+        elif opt == "siege_costs":
+            lines = crown_siege.requirement_lines()
+        elif opt == "siege_scout":
+            lines = crown_siege.structure_lines(conn)
+        elif opt == "siege_confirm":
+            _ok, msg = crown_siege.confirm(conn, pid)
+            lines = [msg]
+        else:
+            side = "attack" if opt.endswith("attack") else "defend"
+            result = crown_siege.register(conn, pid, side)
+            lines = [result[1]]
     elif opt == "court_status":
         f = throne.favour_row(conn, pid)
         conn.commit()
@@ -8068,10 +8345,10 @@ async def handle_equip(session, msg):
             **{"from": "You", "text": f"You equip the {item['name']} for {skill}."},
         )
         return
-    # David, 23 Oct 2026: equipping armour no longer takes the outfit off. Partial armour keeps the outfit's
-    # painted figure (stats apply, the gear isn't drawn); a full matching tier set shows its painted armour.
-    # David, 29 Oct 2026: body and legs are separate again (no pair rule). Only one of them worn shows the
-    # plain default body + legs figure; the outfit comes back by itself when the armour comes off.
+    # David, 23 Oct 2026: equipping armour no longer takes the outfit off.
+    # David, 29 Oct 2026: body and legs equip independently (no pair rule).
+    # David, 6 Nov 2026: client draws white shirt/leggings under a lone chest or legs piece; matching
+    # body+legs of one tier still show that tier's painted set. Outfit returns when both slots empty.
     old = session.equipment.get(eq_slot)
     session.equipment[eq_slot] = entry["item_id"]
     WORLD.db.set_equipment(session.player_id, eq_slot, entry["item_id"])
@@ -9306,6 +9583,24 @@ async def handle_pickup(session, msg):
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
 
 
+
+async def handle_quest_track(session, msg):
+    """Pin or clear the HUD-tracked quest (empty quest_id clears)."""
+    qid = (msg.get("quest_id") or "").strip()
+    if qid and qid not in QUESTS:
+        return
+    if qid and (session.quests.get(qid) or {}).get("status") not in ("active", "ready"):
+        # Allow pin only for live journal entries; clear always ok.
+        if qid:
+            return
+    session.tracked_quest_id = qid or None
+    try:
+        WORLD.db.set_tracked_quest_id(session.player_id, qid)
+    except Exception:
+        pass
+    await send_quest_log(session)
+
+
 async def handle_quest_accept(session, msg):
     quest_id = msg.get("quest_id")
     qdef = QUESTS.get(quest_id)
@@ -9316,11 +9611,17 @@ async def handle_quest_accept(session, msg):
         return
     session.quests[quest_id] = {"status": "active", "progress": 0}
     WORLD.db.set_quest_progress(session.player_id, quest_id, "active", 0)
+    # Fresh accepts pin the journal card (client can unpin / retarget via QUEST_TRACK).
+    session.tracked_quest_id = quest_id
+    try:
+        WORLD.db.set_tracked_quest_id(session.player_id, quest_id)
+    except Exception:
+        pass
     if qdef["type"] == "guild":
         import clans
         if clans.clan_of(session.player_id):
             await guild_tutorial_event(session, "guild", quiet=True)
-    await send(session.ws, "QUEST_LOG", quests={qid: quest_status_for(session, qid) for qid in QUESTS})
+    await send_quest_log(session)
     # One short tip per accept — the gold trail already shows where to go.
     import quest_ux
     giver = next((n for n in NPCS if n.get("id") == qdef.get("giver")), None)
@@ -9822,6 +10123,8 @@ async def handler(ws):
                     await handle_bank_withdraw(session, msg)
                 elif mtype == "QUEST_ACCEPT":
                     await handle_quest_accept(session, msg)
+                elif mtype == "QUEST_TRACK":
+                    await handle_quest_track(session, msg)
                 elif mtype == "QUEST_TURNIN":
                     await handle_quest_turnin(session, msg)
                 elif mtype == "WISH":
@@ -10097,6 +10400,12 @@ async def game_loop():
             if WORLD.tick_count % 10 == 0:
                 await throne_live.tick()
                 await politics_live.tick()
+                try:
+                    import crown_siege
+                    for note in crown_siege.tick_live(WORLD.db.conn, WORLD.sessions.values()):
+                        await broadcast("CHAT_MSG", **{"from": "Royal Herald", "text": note})
+                except Exception:
+                    log.exception("crown_siege live tick failed")
             if WORLD.tick_count % 100 == 0:
                 await ruling_daily_tick()
             if WORLD.tick_count % 10 == 0:
@@ -10177,6 +10486,19 @@ async def game_loop():
                         if (other.dungeon or {}).get("id") == "castle_realm"
                         and (other.dungeon or {}).get("plane") == plane
                     ]
+                    # Active War for the Crown: only send players in the interest radius.
+                    if d.get("id") == "castle_realm":
+                        try:
+                            import crown_siege
+                            war = crown_siege.current_war(WORLD.db.conn)
+                            if war and war.get("status") == "active":
+                                me = session.public_state()
+                                radius = crown_siege.effective_interest_radius(WORLD.db.conn)
+                                realm_players = crown_siege.filter_by_interest(
+                                    me, realm_players, radius=radius,
+                                )
+                        except Exception:
+                            pass
                 else:
                     alive = [m.public_state() for m in d["monsters"].values() if m.alive and not getattr(m, "concealed", False)]
                     realm_players = [session.public_state()]
@@ -10185,6 +10507,22 @@ async def game_loop():
                 show_pet = bool(session.pet_id) and not (
                     d.get("id") == "castle_realm" and _merc_pets.deployed_list(session)
                 )
+                dungeon_hud = {
+                    "floor": d["floor"],
+                    "floors": d["floors"],
+                    "remaining": _dungeon_remaining(d),
+                    "label": d["label"],
+                    **_dungeon_room_hud(session),
+                    **(__import__("void_v2").hud_state(d, WORLD.tick_count) if d.get("v2") else {}),
+                }
+                if d.get("id") == "castle_realm":
+                    try:
+                        import crown_siege
+                        dungeon_hud["crown_siege"] = crown_siege.hud_snapshot(
+                            WORLD.db.conn, session.player_id,
+                        )
+                    except Exception:
+                        pass
                 await send(session.ws, "STATE_UPDATE", **{
                     "players": realm_players,
                     "monsters": alive,
@@ -10194,14 +10532,7 @@ async def game_loop():
                     ),
                     "resources": {},
                     "fires": [],
-                    "dungeon": {
-                        "floor": d["floor"],
-                        "floors": d["floors"],
-                        "remaining": _dungeon_remaining(d),
-                        "label": d["label"],
-                        **_dungeon_room_hud(session),
-                        **(__import__("void_v2").hud_state(d, WORLD.tick_count) if d.get("v2") else {}),
-                    },
+                    "dungeon": dungeon_hud,
                 })
             else:
                 await send(session.ws, "STATE_UPDATE", **{
@@ -10216,7 +10547,7 @@ async def game_loop():
                 if target:
                     await send(target.ws, ev["type"], **data)
             else:
-                await broadcast(ev["type"], **data)
+                await broadcast_siege_aware(ev["type"], **data)
 
 
 def process_fires():
@@ -10613,6 +10944,29 @@ async def process_combat(events):
                 session.in_combat_with = None
             session.pet_target_id = None
             where = "village"
+            siege_elim_msg = None
+            if session.dungeon and session.dungeon.get("id") == "castle_realm":
+                try:
+                    import crown_siege
+                    # Credit a player killer when Last Stand falls to PvP;
+                    # monster deaths eliminate without awarding a siege kill.
+                    killer_id = None
+                    combat = getattr(session, "in_combat_with", None)
+                    if combat and combat[0] == "player":
+                        killer_id = int(combat[1])
+                    elif getattr(session, "last_hit_by_player", None):
+                        killer_id = int(session.last_hit_by_player)
+                    _elim, siege_elim_msg, siege_herald = crown_siege.on_siege_death(
+                        WORLD.db.conn, session.player_id, session.dungeon,
+                        killer_id=killer_id,
+                    )
+                    if _elim and siege_herald:
+                        await broadcast(
+                            "CHAT_MSG",
+                            **{"from": "Royal Herald", "text": siege_herald},
+                        )
+                except Exception:
+                    log.exception("crown_siege Last Stand failed")
             if session.dungeon:
                 v2_kind = session.dungeon.get("v2")
                 realm_death = session.dungeon.get("id") == "castle_realm"
@@ -10636,7 +10990,7 @@ async def process_combat(events):
                     elif v2_death:
                         fall = "You fall in the sanctum and wake outside. The dark keeps what you carried."
                     elif realm_death:
-                        fall = "You wake outside the King's Realm portal."
+                        fall = siege_elim_msg or "You wake outside the King's Realm portal."
                     else:
                         fall = "You fall in the cave and wake outside — the depths reclaim their silence."
                     await send(session.ws, "CHAT_MSG", **{"from": "Tidehollow", "text": fall})
@@ -10975,7 +11329,7 @@ async def process_gathering(events):
         if not session.gathering_node:
             continue
         node = WORLD.resource_nodes.get(session.gathering_node)
-        if not node or node["depleted"] or not adjacent_or_same(session.x, session.y, *session.gathering_node):
+        if not node or node["depleted"] or not _gather_in_reach(session.x, session.y, node, *session.gathering_node):
             session.gathering_node = None
             continue
         ydef = RESOURCE_YIELDS[node["type"]]

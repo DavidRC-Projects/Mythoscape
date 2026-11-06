@@ -798,10 +798,17 @@ def _draw_right(client, c, ITEMS, karma_slot_bonus, dx=0, dy=0):
           font("body", 18), COMBAT_C, (info.x, y))
     y += 22
     import eclipse_fx
-    from content import weapon_stats
-    ws = weapon_stats(eq.get("weapon")) if eq.get("weapon") else None
-    wline = (f"Weapon: Speed {ws['attack_speed']} · Crit {round(ws['crit_chance'] * 100)}% · "
-             f"Heavy +{round(ws['heavy_bonus'] * 100)}%") if ws else "Weapon: no sword or axe"
+    from content import ITEMS, bow_attack_range, is_bow, weapon_stats
+    wid = eq.get("weapon")
+    ws = weapon_stats(wid) if wid else None
+    if ws:
+        wline = (f"Weapon: Speed {ws['attack_speed']} · Crit {round(ws['crit_chance'] * 100)}% · "
+                 f"Heavy +{round(ws['heavy_bonus'] * 100)}%")
+    elif wid and is_bow(wid):
+        name = (ITEMS.get(wid) or {}).get("name", "Bow")
+        wline = f"Weapon: {name} · Range {bow_attack_range(wid)} · shoots arrows"
+    else:
+        wline = "Weapon: no sword, axe, or bow"
     _text(c, wline, font("body", 14), WEAPON_C, (info.x, y))
     y += 18
     tier = eclipse_fx.fx_tier(eq)
@@ -834,19 +841,32 @@ def _draw_footer(c, y, w):
 
 
 _VIGNETTE = {}
+# Soft backdrop only — old values (0.62–0.82) made the inventory sidebar unreadable
+# during the equip tutorial and inside the sewer.
+_VIGNETTE_CENTER = 0.22
+_VIGNETTE_EDGE = 0.38
 
 
-def _vignette(size):
-    if size not in _VIGNETTE:
+def _vignette(size, clear_sidebar=None):
+    """Dark wash behind the equipment window. Optional clear_sidebar keeps the HUD bag readable."""
+    key = (size, clear_sidebar)
+    if key not in _VIGNETTE:
         w, h = size
         small = pygame.Surface((64, 48), pygame.SRCALPHA)
         for yy in range(48):
             for xx in range(64):
                 d = math.hypot((xx - 31.5) / 32, (yy - 23.5) / 24) / 1.414
-                a = int(255 * min(0.82, 0.62 + 0.25 * max(0.0, d - 0.3) / 0.7))
+                a = int(255 * min(
+                    _VIGNETTE_EDGE,
+                    _VIGNETTE_CENTER + (_VIGNETTE_EDGE - _VIGNETTE_CENTER) * max(0.0, d - 0.25) / 0.75,
+                ))
                 small.set_at((xx, yy), (*OVERLAY, a))
-        _VIGNETTE[size] = pygame.transform.smoothscale(small, (w, h))
-    return _VIGNETTE[size]
+        vig = pygame.transform.smoothscale(small, (w, h))
+        if clear_sidebar is not None and 0 < clear_sidebar < w:
+            # Punch out the inventory sidebar so armour in the bag stays bright.
+            vig.fill((0, 0, 0, 0), pygame.Rect(clear_sidebar, 0, w - clear_sidebar, h))
+        _VIGNETTE[key] = vig
+    return _VIGNETTE[key]
 
 
 def _safe(where, fn, *a, **k):
@@ -860,8 +880,11 @@ def _safe(where, fn, *a, **k):
 
 def draw(self, ITEMS, karma_slot_bonus, sprites=None, weapon_style=None):
     scr = self.screen
-    scr.blit(_vignette(scr.get_size()), (0, 0))
     vp = viewport(self)
+    # Soft wash over the world only — keep the inventory sidebar undimmed so armour
+    # stays readable during the equip tutorial and inside the rat sewer.
+    clear_x = vp.right if vp.right < scr.get_width() else None
+    scr.blit(_vignette(scr.get_size(), clear_sidebar=clear_x), (0, 0))
     L = layout(vp.w, vp.h)
     L["vp"] = vp
     self._equip_layout = L
@@ -963,6 +986,10 @@ def handle_click(client, mx, my, ITEMS):
     'inside', or 'outside' (the caller closes the window on 'outside')."""
     p = client.player or {}
     eq = p.get("equipment") or {}
+    # Sidebar stays undimmed beside this window — bag cells equip here; every
+    # other HUD control (filters / Equipment / Skills / …) must fall through.
+    side_x = viewport(client).right
+    on_sidebar = side_x < client.screen.get_width() and mx >= side_x
     # 1) inventory cell (the bag stays visible beside the window)
     try:
         cells = client.inventory_slot_rects()
@@ -987,6 +1014,8 @@ def handle_click(client, mx, my, ITEMS):
                 play_clank()
             client._equip_inv_flash = (rect.copy(), time.time())
             return "equip"
+    if on_sidebar:
+        return "outside"
     m = _to_logical(client, mx, my)
     if m is None:
         return "outside"

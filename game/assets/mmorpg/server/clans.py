@@ -227,17 +227,30 @@ def public(clan_id):
     if row:
         players, active, counted, eligible = royal_challenge_strength(clan_id)
         board, g_lvl, g_xp = _member_totals(clan_id)
+        roster = [
+            {"id": int(r[0]), "name": r[1], "role": r[2], "active": bool(r[3])}
+            for r in recruits(clan_id)
+        ]
         info.update({
             "bank_coins": bank_balance(clan_id),
             "recruits": recruit_count(clan_id),
             "recruits_active": active,
             "max_recruits": recruit_cap(clan_id),
+            "recruit_roster": roster,
             "challenge": strength_line(clan_id),
             "challenge_eligible": eligible,
             "board": board,
             "guild_total_level": g_lvl,
             "guild_total_xp": g_xp,
         })
+        # Design: War Council reachable from the guild interface.
+        try:
+            import crown_siege
+            war = crown_siege.guild_war_summary(_db(), clan_id)
+            if war:
+                info["war"] = war
+        except Exception:
+            pass
     return info
 
 
@@ -454,17 +467,20 @@ def _step(rank, up):
 
 
 def leader_core(actor_id, target_id):
+    """Pass the guild title: target becomes Leader, current Leader becomes Officer."""
     cid = clan_of(actor_id)
     if rank_of(actor_id) != "Leader":
         return False, "Only the Leader can pass on leadership."
     if not cid or clan_of(target_id) != cid or int(target_id) == int(actor_id):
         return False, "They are not in your guild."
     conn = _db()
+    row = conn.execute("SELECT char_name FROM players WHERE id = ?", (int(target_id),)).fetchone()
+    name = (row[0] if row else None) or "them"
     conn.execute("UPDATE clans SET leader_id = ? WHERE clan_id = ?", (int(target_id), cid))
     conn.execute("UPDATE clan_members SET rank = 'Leader' WHERE player_id = ?", (int(target_id),))
     conn.execute("UPDATE clan_members SET rank = 'Officer' WHERE player_id = ?", (int(actor_id),))
     conn.commit()
-    return True, "Leadership passed on."
+    return True, f"{name} is now Leader. You are an Officer."
 
 
 def leave_core(player_id):
@@ -570,6 +586,13 @@ def hire_core(player_id, role, now=None):
         return False, "You are not in a guild."
     if not can_hire(rank_of(player_id)):
         return False, "Only the Leader or an Officer can hire recruits."
+    try:
+        import crown_siege
+        ok_hire, hire_msg = crown_siege.hire_allowed(_db(), cid)
+        if not ok_hire:
+            return False, hire_msg
+    except Exception:
+        pass
     role = (role or "").strip().title()
     if role not in RECRUIT_ROLES:
         return False, "Roles: " + ", ".join(RECRUIT_ROLES) + "."
@@ -594,6 +617,12 @@ def dismiss_core(player_id, recruit_id):
     cid = clan_of(player_id)
     if not cid or not can_hire(rank_of(player_id)):
         return False, "Only the Leader or an Officer can dismiss recruits."
+    try:
+        import crown_siege
+        if crown_siege.hiring_locked(_db(), cid):
+            return False, "Recruit contracts are locked during the War for the Crown assault."
+    except Exception:
+        pass
     cur = _db().execute("DELETE FROM clan_recruits WHERE id = ? AND clan_id = ?", (int(recruit_id), cid))
     _db().commit()
     return (True, "Recruit dismissed.") if cur.rowcount else (False, "No recruit with that id.")
@@ -717,8 +746,14 @@ async def handle_command(session, text):
         if ok:
             await _push(clan_of(session.player_id))
     elif cmd == "leader":
-        target = _player_named(arg) if arg else None
-        ok, msg = leader_core(session.player_id, target[0]) if target else (False, "Who?")
+        if not arg:
+            await _say(session, "Who should lead? /guild leader <player>")
+            return
+        target = _player_named(arg)
+        if not target:
+            await _say(session, f"No one named {arg} is known here.")
+            return
+        ok, msg = leader_core(session.player_id, target[0])
         await _say(session, msg)
         if ok:
             await _push(clan_of(session.player_id))

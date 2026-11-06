@@ -359,13 +359,27 @@ async def enter(session):
     if status(session) == "complete":
         await say(session, "done_again")
         return
-    ensure_quest(session)
+    try:
+        ensure_quest(session)
+    except Exception:
+        srv.log.warning("sewer enter: quest row not saved", exc_info=True)
     # Leave stand is already 2 tiles off the grate; keep return in sync.
+    # A locked database must not abort the entrance — the player is already
+    # on the grate, and failing here is what made the sewer unreachable.
     session._dungeon_return = GRATE_STAND
-    srv.WORLD.db.save_player_position(session.player_id, *GRATE_STAND)
-    srv._clear_dungeon_resume(session)
+    try:
+        srv.WORLD.db.save_player_position(session.player_id, *GRATE_STAND)
+    except Exception:
+        srv.log.warning("sewer enter: return tile not saved", exc_info=True)
+    try:
+        srv._clear_dungeon_resume(session)
+    except Exception:
+        srv.log.warning("sewer enter: could not clear dungeon resume", exc_info=True)
     build(session)
-    _save_progress(session, progress(session) | B_STARTED | B_ENTERED)
+    try:
+        _save_progress(session, progress(session) | B_STARTED | B_ENTERED)
+    except Exception:
+        srv.log.warning("sewer enter: progress not saved", exc_info=True)
     srv._bring_pet(session)
     await srv.send(session.ws, "DUNGEON_ENTER", **srv._dungeon_payload(session))
     await srv.send(session.ws, "PLAYER_UPDATE", player=session.full_state())

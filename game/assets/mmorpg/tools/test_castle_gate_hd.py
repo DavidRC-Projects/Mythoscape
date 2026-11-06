@@ -12,8 +12,9 @@ ids = [s["npc_id"] for s in castle_owners.sellers()]
 check("4 sellers", len(ids) == 4)
 for i in ids:
     check(i + " in OVERWORLD_HD", i in N.OVERWORLD_HD)
-    files = [os.path.join(N._DIR, i, f"sprite_{r}", f, f"f{k:02d}.png") for r in ("1x", "2x", "4x") for f in "senw" for k in range(8)]
-    check(i + " 96 frames", all(os.path.isfile(p) for p in files))
+    # npc_hd_client._scale_for only picks 1x/2x; 4x meta is design canvas, not shipped for overworld sellers.
+    files = [os.path.join(N._DIR, i, f"sprite_{r}", f, f"f{k:02d}.png") for r in ("1x", "2x") for f in "senw" for k in range(8)]
+    check(i + " 64 frames (1x+2x)", all(os.path.isfile(p) for p in files))
     check(i + " draw_scale ~1", 0.9 <= float(N._meta(i).get("draw_scale") or 1) <= 1.1)
 T = 60
 def height(draw):

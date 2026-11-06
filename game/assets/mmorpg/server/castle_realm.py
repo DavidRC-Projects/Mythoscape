@@ -175,12 +175,23 @@ def _castle_at(x: int, y: int):
     return None
 
 
+def _siege_breach(x: int, y: int) -> bool:
+    """True when a destroyed gate/wall has opened this castle tile."""
+    try:
+        import crown_siege
+        return crown_siege.is_breach_tile(x, y)
+    except Exception:
+        return False
+
+
 def _castle_client_tile(x: int, y: int) -> int:
     """Tile the client pathfinder sees. Matches walkable() for this footprint."""
     data = _castle_at(x, y)
     if data is None:
         return wm.WALL
     char = _castle_char_at(data, x, y)
+    if char == "W" and _siege_breach(x, y):
+        return wm.PATH
     if char not in set(data.get("walkable_chars", ())):
         return wm.WATER if char == "M" else wm.WALL
     if char in "BG":
@@ -320,6 +331,8 @@ def walkable(plane, x: int, y: int) -> bool:
             if data is None:
                 return False
             castle_char = _castle_char_at(data, x, y)
+            if castle_char == "W" and _siege_breach(x, y):
+                return True
             return castle_char in set(data.get("walkable_chars", ()))
         spec = REALM.get("legend", {}).get(char, {})
         return bool(spec.get("walkable", False))
@@ -530,6 +543,13 @@ def payload(session) -> dict:
         m.public_state() for m in monsters_on_plane(session)
         if m.alive and not getattr(m, "concealed", False)
     ]
+    siege = {}
+    try:
+        import crown_siege
+        import server as srv
+        siege = crown_siege.public_state(srv.WORLD.db.conn)
+    except Exception:
+        siege = {}
     return {
         'id': 'castle_realm',
         'plane': plane,
@@ -549,6 +569,7 @@ def payload(session) -> dict:
         'exit_y': data.get('exit_y') if data.get('plane') == 'realm' else -1,
         'explore': True,
         'realm': True,
+        'crown_siege': siege,
     }
 
 

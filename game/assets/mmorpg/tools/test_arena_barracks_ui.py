@@ -32,7 +32,7 @@ def frame(g, tab, mouse=None):
 g = F.make_client()
 for tab, _ in V.TABS:
     r = frame(g, tab)
-    check(sum(1 for k in r if k.startswith("tab:")) == 5, f"{tab}: five tabs drawn")
+    check(sum(1 for k in r if k.startswith("tab:")) == len(V.TABS), f"{tab}: all {len(V.TABS)} tabs drawn")
     check(r.get("close") and r["close"].size == (90, 34), f"{tab}: Close is 90x34")
     hb = r.get("house_banner")
     check(hb is None or not hb.colliderect(r["close"]), f"{tab}: Close clear of the house crest")

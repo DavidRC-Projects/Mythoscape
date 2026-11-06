@@ -111,8 +111,13 @@ def _frame_for_state(meta: dict, state: str, t: float, attacking: float, hit_t: 
 
 
 # v2 (mine_deeper): the 3D-rendered husky read as a flat grey blob in game.  A painted HD husky
-# (pets_hd/pet_husky/painted/{n,e,s,w}.png, feet at bottom centre) replaces it, animated in code.
-_PAINTED = {"pet_husky": {"n": 1.08, "e": 1.15, "s": 1.2, "w": 1.15}}   # height as a fraction of size
+# (pets_hd/pet_husky/painted/{n,e,s,w}.png, feet at bottom centre) replaces it. Walk uses
+# painted/walk/{face}/f00..f07.png (baked gait) so all four directions animate.
+# Side views are the reference husky. Front/back used to be drawn taller, which
+# made the face look bigger the moment the dog turned up or down.
+_PAINTED = {"pet_husky": {"n": 1.02, "e": 1.12, "s": 1.02, "w": 1.12}}
+_PAINTED_WALK_FRAMES = 8
+_PAINTED_WALK_HZ = 1.7  # full cycles per second while moving
 
 
 def _painted(sprite, face, h):
@@ -133,28 +138,49 @@ def _painted(sprite, face, h):
     return out
 
 
+def _painted_walk(sprite, face, frame, h):
+    """One baked walk-cycle frame for the painted husky, scaled to height h."""
+    folder = _folder(sprite)
+    if folder not in _PAINTED:
+        return None
+    frame = int(frame) % _PAINTED_WALK_FRAMES
+    path = os.path.join(_DIR, folder, "painted", "walk", face, f"f{frame:02d}.png")
+    key = ("painted_walk", path, h)
+    if key in _IMAGES:
+        return _IMAGES[key]
+    img = _load_image(path)
+    if img is None:
+        return None
+    w = max(1, int(round(img.get_width() * h / float(img.get_height()))))
+    out = pygame.transform.smoothscale(img, (w, max(1, h)))
+    _IMAGES[key] = out
+    return out
+
+
 def _draw_painted(screen, sprite, cx, foot_y, size, t, face, state, attacking, hit_t):
     import math
     frac = _PAINTED[_folder(sprite)].get(face, 1.0)
     h = int(round(size * frac))
+    dx = dy = 0.0
     if state == "idle":
         h = int(round(h * (1.0 + 0.012 * math.sin(t * 2.6))))           # breathing
-    img = _painted(sprite, face, h)
-    if img is None:
-        return False
-    dx = dy = 0.0
-    ang = 0.0
-    if state == "walk":
-        ph = t * 9.0
-        dy = -abs(math.sin(ph)) * size * 0.05                               # trot bob
-        if face in ("e", "w"):
-            ang = math.sin(ph) * 2.5
+        img = _painted(sprite, face, h)
+    elif state == "walk":
+        frame = int(((t * _PAINTED_WALK_HZ) % 1.0) * _PAINTED_WALK_FRAMES) % _PAINTED_WALK_FRAMES
+        img = _painted_walk(sprite, face, frame, h)
+        if img is None:
+            # Fallback: idle art + light bob if walk sheets are missing.
+            img = _painted(sprite, face, h)
+            dy = -abs(math.sin(t * 9.0)) * size * 0.05
     elif state == "attack":
+        img = _painted(sprite, face, h)
         lunge = math.sin(min(1.0, max(0.0, attacking)) * math.pi)
         d = {"e": (1, 0), "w": (-1, 0), "n": (0, -0.5), "s": (0, 0.5)}[face]
         dx, dy = d[0] * lunge * size * 0.22, d[1] * lunge * size * 0.22 - lunge * size * 0.04
-    if ang:
-        img = pygame.transform.rotozoom(img, ang if face == "w" else -ang, 1.0)
+    else:
+        img = _painted(sprite, face, h)
+    if img is None:
+        return False
     # soft contact shadow so the dog sits on the ground
     sw = int(img.get_width() * (0.8 if face in ("e", "w") else 0.9))
     sh = max(3, int(size * 0.14))

@@ -94,9 +94,15 @@ DIVORCE_COOLDOWN = WEEK
 REP_MARRIAGE = 10
 
 HERALD_OPTIONS = [
-    {"id": "crown_check", "label": "Crown Challenge"},
+    {"id": "crown_check", "label": "War for the Crown"},
     {"id": "castle_check", "label": "Castle Challenge"},
     {"id": "throne_list", "label": "Current challenges"},
+    {"id": "siege_register_attack", "label": "Register to attack"},
+    {"id": "siege_register_defend", "label": "Register to defend"},
+    {"id": "siege_confirm", "label": "Confirm our war slot"},
+    {"id": "siege_store", "label": "War storehouse"},
+    {"id": "siege_costs", "label": "Siege resource costs"},
+    {"id": "siege_scout", "label": "Scout the castle walls"},
 ]
 CELIA_OPTIONS = [
     {"id": "court_status", "label": "Court Favour"},
@@ -252,9 +258,15 @@ def _crown(conn, pid, path, old_state, now):
         import ruling
         gname = conn.execute("SELECT c.name FROM clan_members m JOIN clans c ON c.clan_id = m.clan_id "
                              "WHERE m.player_id = ?", (pid,)).fetchone()
+        if path == "founder":
+            reason = "founder"
+        elif path in ("conquest", "siege"):
+            reason = "overthrown"
+        else:
+            reason = "acclaimed"
         ruling.on_throne_change(conn, pid, _player_field(conn, pid, "char_name", f"#{pid}"),
                                 titles.get(int(pid), "King"), path, gname[0] if gname else None, now,
-                                reason="overthrown" if path == "conquest" else "acclaimed")
+                                reason=reason)
     except Exception:
         conn.rollback()   # ruling tables missing (unit tests of phase 7 alone)
     return titles
@@ -334,37 +346,11 @@ def _check_hours(hours):
 
 
 def schedule_crown(session, conn, hours, now=None, quest_ids=None):
-    import clans
-    now = time.time() if now is None else float(now)
-    h = _check_hours(hours)
-    if h is None:
-        return False, f"Pick a start {SCHEDULE_MIN_HOURS}–{SCHEDULE_MAX_HOURS} whole hours from now."
-    if scheduled(conn, ("crown", "acclaim")):
-        return False, "A challenge for the throne is already scheduled."
-    if _cooldown(conn, session.player_id, "crown", now) > 0:
-        return False, "You lost a Crown Challenge this week. Wait out your cooldown."
-    st = state(conn)
-    if st["monarch_kind"] == "player" and int(st["monarch_player_id"]) == int(session.player_id):
-        return False, "You already wear the crown."
-    ok, missing = crown_eligible(session, conn, quest_ids)
-    if not ok:
-        return False, "Not yet: " + "; ".join(missing)
-    import politics
-    fee = politics.crown_fee(conn, CROWN_FEE)
-    if _bank(conn, session.player_id) < fee:
-        return False, f"The challenge fee is {fee:,} from your bank."
-    session.bank_coins = _bank_add(conn, session.player_id, -fee)
-    royal_treasury.credit(conn, "crown_challenge", session.player_id, fee)
-    politics.news(conn, "throne", f"{session.char_name} has called a Crown Challenge, {h} hours from now.", now)
-    cid = clans.clan_of(session.player_id)
-    conn.execute(
-        "INSERT INTO challenges (kind, challenger_id, clan_id, castle_id, scheduled_at, status, created_at) "
-        "VALUES ('crown', ?, ?, ?, ?, 'scheduled', ?)",
-        (session.player_id, cid, KING_CASTLE_ID, now + h * HOUR, now),
+    """Retired: the throne is contested through the War for the Crown."""
+    return False, (
+        "The Crown Challenge is retired. The throne is contested through the "
+        "War for the Crown — a guild Leader uses /siege register attack|defend."
     )
-    log(conn, "crown_scheduled", session.player_id, f"{h}h", now)
-    conn.commit()
-    return True, h
 
 
 def castle_fee(castle_id):
@@ -1001,7 +987,7 @@ def summary_lines(conn, name_of=lambda pid: f"#{pid}"):
 
 
 def can_challenge_king(clan_id):
-    """The King's Castle is never a castle challenge; the throne goes through the Crown Challenge."""
+    """The King's Castle is never a castle challenge; the throne goes through the War for the Crown."""
     return False
 
 

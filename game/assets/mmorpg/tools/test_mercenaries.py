@@ -246,9 +246,13 @@ def test_arena_map_stamped():
     assert data["rows"][128][196] == "s"
     art = Path(ROOT) / "client" / "assets" / "castle_realm" / "arena" / "sprites" / "1x" / "arena_campus.jpg"
     assert art.is_file()
+    # Renderer uses layered ground/back/front (HD), not a legacy pit_floor_1x key.
+    layers = arena.get("layers") or {}
+    assert layers.get("ground") == "sprites/1x/arena_ground.png"
+    ground = Path(ROOT) / "client" / "assets" / "castle_realm" / "arena" / "sprites" / "1x" / "arena_ground.png"
+    assert ground.is_file()
     pit_floor = Path(ROOT) / "client" / "assets" / "castle_realm" / "arena" / "sprites" / "1x" / "arena_pit_floor.png"
-    assert pit_floor.is_file()
-    assert arena.get("pit_floor_1x") == "sprites/1x/arena_pit_floor.png"
+    assert pit_floor.is_file()  # baked sand oval still shipped beside the layers
 
 
 def test_practice_armies_ten_and_formation():

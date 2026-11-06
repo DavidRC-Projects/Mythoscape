@@ -63,6 +63,7 @@ class S:
         self.bank_coins = 0
         self.hp = 5
         self.inv = {}
+        self.quests = {}  # real PlayerSession always has this; tavern.patron_talk reads it
         self.in_combat_with = None
         self.look = {"outfit": None}
 

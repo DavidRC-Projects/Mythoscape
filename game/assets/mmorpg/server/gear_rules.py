@@ -1,21 +1,25 @@
 """Outfits vs armour, the dungeon gear gate and who may fight (David, 17 Oct 2026; revised 23 Oct 2026).
 
-- An outfit is one whole piece. Equipping armour no longer takes it off (David, 23 Oct 2026): partial armour and
-  shields keep the outfit's painted figure (stats apply, the gear isn't drawn); a full matching tier set shows that
-  tier's painted armour figure. Putting an outfit on still takes every armour piece off, into the inventory, or the
-  bank when the inventory is full. Nothing is ever lost. (base_look / OUTFIT_OFF_MSG are kept for that path's tools.)
+- An outfit is one whole piece. Equipping armour no longer takes it off (David, 23 Oct 2026). Body and legs equip
+  independently (29 Oct 2026). Client display (6 Nov 2026): matching body+legs of one tier show that tier's painted
+  set; chest-only shows the chest over white leggings; legs-only shows the legs over a white shirt; mixed tiers show
+  each piece. Shields never force armour art. Putting an outfit on still takes every armour piece off, into the
+  inventory, or the bank when the inventory is full. Nothing is ever lost. (base_look / OUTFIT_OFF_MSG kept for tools.)
 - Weapons and tools are not armour: they can be equipped while wearing an outfit and stay on when one goes on.
-- Dungeons (not the Castle Realm) need only a sword or axe equipped to enter. Nothing is locked on inside.
-- Anyone can fight with partial or no armour, in an outfit or not, but only with a sword or axe equipped.
+- Dungeons (not the Castle Realm) need a sword, axe, or bow equipped to enter. Nothing is locked on inside.
+- Anyone can fight with partial or no armour, in an outfit or not, but only with a sword, axe, or bow equipped.
 """
 import json
 
 ARMOUR_SLOTS = ("helmet", "body", "legs", "shield")   # the pieces that clash with an outfit
-FIGHT_KINDS = ("sword", "axe")
-NO_FIGHT_MSG = "You need a sword or axe equipped to fight. Run!"
-GATE_MSG = "The dungeon gate stays shut. You need a sword or axe equipped to enter."
+FIGHT_KINDS = ("sword", "axe", "bow")
+NO_FIGHT_MSG = "You need a sword, axe, or bow equipped to fight. Run!"
+GATE_MSG = "The dungeon gate stays shut. You need a sword, axe, or bow equipped to enter."
 BASE_TOP = "top_linen_shirt"
 BASE_BOTTOM = {"male": "bottom_work_trousers", "female": "bottom_long_skirt"}
+# Under armour when only chest or only legs are worn (client draws these; not bag items).
+WHITE_TOP = "top_white_shirt"
+WHITE_BOTTOM = "bottom_white_leggings"
 OUTFIT_OFF_MSG = "You take off your outfit and change into your plain base clothes."
 
 
@@ -71,7 +75,7 @@ def can_fight(session, items=None):
 
 
 def gate_missing(session, items=None):
-    return [] if has_fight_weapon(session, items) else ["a sword or axe"]
+    return [] if has_fight_weapon(session, items) else ["a sword, axe, or bow"]
 
 
 def gate_message(missing=None):

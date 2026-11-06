@@ -140,7 +140,8 @@ def verify_password(password: str, stored_hash: str, salt: str) -> tuple[bool, b
 class Database:
     def __init__(self, path=DB_PATH):
         self.path = path
-        self.conn = sqlite3.connect(path, check_same_thread=False)
+        # Wait out a brief lock (backups, a second tool) instead of failing the click.
+        self.conn = sqlite3.connect(path, check_same_thread=False, timeout=10)
         self.conn.row_factory = sqlite3.Row
         try:
             self.conn.execute("PRAGMA journal_mode=WAL")
@@ -360,6 +361,8 @@ class Database:
         _property.ensure_schema(self.conn)
         import mercenaries
         mercenaries.ensure_schema(self.conn)
+        import crown_siege
+        crown_siege.ensure_schema(self.conn)
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS bank ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -587,6 +590,14 @@ class Database:
             "INSERT INTO quest_progress (player_id, quest_id, status, progress) VALUES (?, ?, ?, ?) "
             "ON CONFLICT(player_id, quest_id) DO UPDATE SET status = excluded.status, progress = excluded.progress",
             (player_id, quest_id, status, progress),
+        )
+        self.conn.commit()
+
+    def set_tracked_quest_id(self, player_id, quest_id):
+        """Pin or clear the HUD-tracked quest (empty/None clears). Column migrated in ensure_schema."""
+        self.conn.execute(
+            "UPDATE players SET tracked_quest_id = ? WHERE id = ?",
+            ((quest_id or "") if quest_id is not None else "", int(player_id)),
         )
         self.conn.commit()
 

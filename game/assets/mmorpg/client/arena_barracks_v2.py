@@ -38,7 +38,7 @@ METAL = {
 }
 ART_TIER = {"mythos": "crownforged"}
 
-TABS = (("roster", "Roster"), ("recruit", "Recruit"), ("practice", "Practice"),
+TABS = (("roster", "Roster"), ("formation", "Formation"), ("recruit", "Recruit"), ("practice", "Practice"),
         ("champions", "Champions"), ("ladder", "Ladder"))
 
 # Portrait geometry (spec HARD RULE: art clipped in frame, >= 8px headroom)
@@ -611,13 +611,16 @@ def _draw_recruit(client, s, body, data, rects, scroll, mouse):
             continue
         locked = bool(t.get("locked"))
         _cell(s, card, (70, 62, 50) if locked else (90, 72, 48), (32, 28, 24) if locked else CELL)
+        import arena_barracks_fx as FXB
         _round_frame(s, (card.x + 48, card.centery), BUST_FRAME, BUST_INNER,
-                     _bust_surface(t.get("default_gear") or "bronze", BUST_INNER),
+                     FXB.gladiator_bust(t.get("id"), BUST_INNER, HEADROOM) or _bust_surface(t.get("default_gear") or "bronze", BUST_INNER),
                      rim=(100, 88, 70) if locked else METAL.get(t.get("default_gear"), GOLD), grey=locked,
                      record=client._barracks_portraits)
         tx = card.x + 96
         nr = _txt(s, t["name"], "title", 19, MUTED if locked else GOLD_HI, (tx, card.y + 8))
         _cl_badge(s, nr.right + 12, card.y + 8, t.get("combat_level"))
+        if t.get("role"):
+            role_icon(s, card.x + 78, card.bottom - 16, t["role"], r=8)
         cr = _txt(s, f"{int(t.get('cost') or 0):,}c", "title", 15, MUTED if locked else GOLD_HI, (nr.right + 98, card.y + 11))
         _coin(s, cr.x - 11, cr.centery)
         ab = t.get("ability_label") if t.get("ability_label") not in (None, "—") else "No ability"
@@ -660,7 +663,12 @@ def _house_card(client, s, rects, card, foe, army_cl, remaining, mouse, show_ban
     if show_banner:
         _banner(s, card.x - 52, card.y - 4, card.h + 4, tier, BANNER_COL.get(tier, (36, 48, 88)), dim=not unlocked and not king)
     mc = (card.x + 40, card.centery)
-    if unlocked or king:
+    import arena_barracks_fx as FXB
+    face = FXB.commander_portrait(foe.get("id"), BUST_INNER) if (unlocked or king) else None
+    if face is not None:
+        _round_frame(s, mc, BUST_FRAME, BUST_INNER, face, rim=GLOW2 if king else GOLD)
+        _tag(s, mc[0] - 14, card.bottom - 22, f"T{tier}", GOLD, (36, 30, 24), size=13, light=True)
+    elif unlocked or king:
         _medallion(s, mc, f"T{tier}", crown=king, rim=GLOW2 if king else GOLD)
     else:
         _padlock(s, mc[0] - 13, mc[1] - 14, MUTED, 1.9)
@@ -680,7 +688,14 @@ def _house_card(client, s, rects, card, foe, army_cl, remaining, mouse, show_ban
         _tag(s, tx, card.y + 36, label, col, tuple(int(v * 0.32) for v in col), size=15, light=True)
     else:
         _txt(s, "Beat the previous house to unlock", "body", 15, MUTED, (tx, card.y + 37))
-    _txt(s, reward, "body", 14, MUTED, (tx, card.y + 60), maxw=card.right - ACTION_W - 24 - tx)
+    rw = _txt(s, reward, "body", 14, MUTED, (tx, card.y + 60), maxw=card.right - ACTION_W - 24 - tx)
+    prev_army = foe.get("army_preview") or []
+    if prev_army and unlocked:
+        sz = 22
+        need = min(10, len(prev_army)) * (sz + 2)
+        ax0 = card.right - ACTION_W - 28 - need
+        if ax0 > max(tx + 250, (rw.right if rw else tx) + 12):
+            FXB.army_strip(s, ax0, card.y + 34, prev_army, size=sz)
     ar = pygame.Rect(card.right - ACTION_W - 14, card.centery - 17, ACTION_W, 34)
     if unlocked and remaining > 0:
         button(s, rects, f"practice:{foe['id']}", ar, "Battle", "bronze", ar.collidepoint(mouse))
@@ -905,7 +920,14 @@ def _draw_soldier(client, s, box, data, rects, mouse):
     # niche
     niche = pygame.Rect(card.x + 30, card.y + 72, NICHE[0], NICHE[1])
     tier = sol.get("gear_tier") or "bronze"
-    full = _scaled(f"full_{_tier_art(tier)}", NICHE_INNER)
+    # Try-on: hovering a kit row previews that kit on the soldier (worn kit otherwise).
+    show_tier = tier
+    _gx, _gy = niche.right + 40, card.y + 102
+    for _kit in data.get("kits") or []:
+        if pygame.Rect(_gx, _gy, card.right - 30 - _gx, 40).collidepoint(mouse) and _kit["tier"] != tier:
+            show_tier = _kit["tier"]
+        _gy += 46
+    full = _scaled(f"full_{_tier_art(show_tier)}", NICHE_INNER)
     inner = _square_frame(s, niche, NICHE_INNER, None, rim=GOLD)
     _niche_bg(s, inner)
     if full is not None:
@@ -924,17 +946,30 @@ def _draw_soldier(client, s, box, data, rects, mouse):
         except Exception as e:
             E._log_once("soldier niche fallback", e)
     pygame.draw.rect(s, GOLD_HI, inner.inflate(2, 2), 1)
+    if show_tier != tier:
+        _tag(s, inner.x + 8, inner.y + 8, f"Preview: {show_tier.replace('mythos', 'crownforged').title()} kit",
+             GLOW2, (40, 30, 14), size=14, light=True)
     ly = niche.bottom + 8
     tname = tier.replace("mythos", "crownforged").title()
     _txt(s, f"CL {sol.get('combat_level')} · {tname}", "title", 20, GOLD_HI, (niche.centerx, ly), "midtop")
     ly += 30
     lv = sol.get("levels") or {}
     px = niche.x - 6
+    import arena_barracks_fx as FXB
+    fx = FXB.active(sol.get("id"))
+    up = {g[0].lower(): g for g in (fx[0]["gains"] if fx else [])}
     for short, key in (("Att", "attack"), ("Str", "strength"), ("Def", "defence"), ("HP", "hitpoints")):
         r = pygame.Rect(px, ly, 60, 28)
+        if key in up:
+            FXB.glow_chip(s, r, fx[1])
         _cell(s, r, GOLD, PLAQUE, radius=4)
         _txt(s, f"{short} {lv.get(key)}", "body", 15, TEXT, r.center, "center")
+        if key in up:
+            FXB.float_text(s, _f("title", 14), f"+{up[key][2] - up[key][1]}", (r.right - 4, r.y + 2), fx[1],
+                           col=(150, 240, 130), rise=10)
         px += 65
+    if fx and fx[0]["cl"][1] > fx[0]["cl"][0]:
+        FXB.float_text(s, _f("title", 22), f"Level up! CL {fx[0]['cl'][1]}", (niche.centerx, niche.y + 30), fx[1])
     ly += 36
     daily = sol.get("trains_today") or {}
     cap = int(daily.get("cap") or data.get("daily_train_cap") or 10)
@@ -1132,7 +1167,170 @@ def _scroll(s, body, scroll, content_h, mouse):
 
 
 # ------------------------------------------------------------------ entry
-_DRAW = {"roster": _draw_roster, "recruit": _draw_recruit, "practice": _draw_practice,
+
+
+# ------------------------------------------------------------------ formation tab (5 Nov)
+ROLE_STYLE = {   # role -> (label, colour, glyph)
+    "tank": ("Tank", (96, 140, 196), "shield"), "line": ("Line", (184, 160, 110), "sword"),
+    "fodder": ("Levy", (150, 136, 112), "sword"), "flank": ("Skirmisher", (92, 170, 92), "swords"),
+    "glass": ("Zealot", (206, 96, 70), "axe"), "elite": ("Duelist", (226, 180, 72), "swords"),
+    "support": ("Medic", (226, 226, 226), "cross"),
+}
+
+
+def role_icon(s, cx, cy, role, r=9):
+    """Small heraldic role glyph: shield / sword / bow / axe / crossed swords / cross."""
+    _lab, col, g = ROLE_STYLE.get(role, ("", GOLD, "sword"))
+    pygame.draw.circle(s, (24, 18, 12), (cx, cy), r + 2)
+    pygame.draw.circle(s, col, (cx, cy), r + 2, 2)
+    if g == "shield":
+        pts = [(cx - r * .6, cy - r * .6), (cx + r * .6, cy - r * .6), (cx + r * .6, cy), (cx, cy + r * .75), (cx - r * .6, cy)]
+        pygame.draw.polygon(s, col, pts)
+    elif g == "cross":
+        pygame.draw.rect(s, (200, 40, 40), (cx - 2, cy - r * .65, 4, r * 1.3))
+        pygame.draw.rect(s, (200, 40, 40), (cx - r * .65, cy - 2, r * 1.3, 4))
+    elif g == "bow":
+        pygame.draw.arc(s, col, (cx - r * .7, cy - r * .7, r * 1.4, r * 1.4), -1.4, 1.4, 2)
+        pygame.draw.line(s, col, (cx + 1, cy - r * .7), (cx + 1, cy + r * .7), 1)
+    elif g == "axe":
+        pygame.draw.line(s, col, (cx - r * .5, cy + r * .6), (cx + r * .3, cy - r * .6), 2)
+        pygame.draw.circle(s, col, (int(cx + r * .3), int(cy - r * .35)), int(r * .4))
+    elif g == "swords":
+        pygame.draw.line(s, col, (cx - r * .6, cy + r * .6), (cx + r * .6, cy - r * .6), 2)
+        pygame.draw.line(s, col, (cx + r * .6, cy + r * .6), (cx - r * .6, cy - r * .6), 2)
+    else:
+        pygame.draw.line(s, col, (cx, cy + r * .7), (cx, cy - r * .7), 2)
+        pygame.draw.line(s, col, (cx - r * .4, cy + r * .3), (cx + r * .4, cy + r * .3), 2)
+
+
+def stat_bars(s, x, y, w, levels, h=5):
+    """Att / Str / Def / HP as coloured bars (level / 99)."""
+    for i, (k, col) in enumerate((("attack", (200, 70, 60)), ("strength", (90, 170, 80)),
+                                  ("defence", (90, 130, 200)), ("hitpoints", (220, 190, 80)))):
+        v = int((levels or {}).get(k) or 1)
+        r = pygame.Rect(x, y + i * (h + 2), w, h)
+        pygame.draw.rect(s, (22, 17, 12), r)
+        pygame.draw.rect(s, col, (r.x, r.y, max(2, int(w * min(99, v) / 99)), h))
+
+
+def formation_draft(client, data):
+    """Local editable copy of the saved slots; reset when the server sends a new state."""
+    f = data.get("formation") or {}
+    src = list(f.get("slots") or [])
+    key = tuple(src)
+    if getattr(client, "_formation_src", None) != key or not isinstance(getattr(client, "formation_draft", None), list):
+        client._formation_src = key
+        client.formation_draft = (src + [None] * 10)[:10]
+        client.formation_pick = None
+    return client.formation_draft
+
+
+def _slot_card(client, s, rects, key, r, sol, hot, picked):
+    _cell(s, r, GLOW if picked else (96, 76, 50), CELL_HOT if hot else CELL, width=2 if picked else 1)
+    if picked or hot:
+        _glow(s, r)
+    if sol is None:
+        _txt(s, "empty", "body", 14, MUTED, r.center, "center")
+    else:
+        inner = min(r.w - 20, 60)
+        _round_frame(s, (r.centerx, r.y + 8 + inner // 2 + 4), inner + 8, inner,
+                     _bust_surface(sol.get("gear_tier") or "bronze", inner),
+                     rim=METAL.get(sol.get("gear_tier"), GOLD))
+        role_icon(s, r.right - 14, r.y + 14, sol.get("role"))
+        _txt(s, sol.get("name") or "", "title", 14, GOLD_HI, (r.centerx, r.y + inner + 22), "midtop", maxw=r.w - 8)
+        _txt(s, f"CL {sol.get('combat_level')} · {ROLE_STYLE.get(sol.get('role'), (sol.get('template_name') or '',))[0]}",
+             "body", 12, MUTED, (r.centerx, r.y + inner + 40), "midtop", maxw=r.w - 8)
+        stat_bars(s, r.x + 10, r.bottom - 34, r.w - 20, sol.get("levels"))
+    rects[key] = r
+
+
+def _draw_formation(client, s, body, data, rects, scroll, mouse):
+    y = body.y + 8 - scroll
+    x0, w = body.x + 4, body.w - 24
+    roster = {int(x["id"]): x for x in (data.get("roster") or [])}
+    draft = formation_draft(client, data)
+    pick = getattr(client, "formation_pick", None)
+    f = data.get("formation") or {}
+    head = pygame.Rect(x0, y, w, 52)
+    _cell(s, head, (96, 76, 50), PLAQUE)
+    _txt(s, "Battle formation", "title", 17, TITLE, (head.x + 14, head.y + 6))
+    _txt(s, "Click a soldier, then a slot to place or swap. Front five clash first; rear five hold until a soldier falls.",
+         "body", 13, MUTED, (head.x + 14, head.y + 30), maxw=head.w - 300)
+    for i, (k, lab, st) in enumerate((("formation_save", "Save", "green"), ("formation_reset", "Default", "bronze"))):
+        r = pygame.Rect(head.right - 220 + i * 108, head.y + 12, 100, 28)
+        button(s, rects, k, r, lab, st, r.collidepoint(mouse), size=14)
+    y += 60
+    cw = (w - 4 * 8) // 5
+    ch = 150
+    for rank, (lab, off) in enumerate((("Front rank — clashes first", 0), ("Rear rank — reserves", 5))):
+        _txt(s, lab, "title", 15, (230, 120, 90) if off == 0 else (120, 170, 230), (x0 + 4, y))
+        y += 22
+        for i in range(5):
+            slot = off + i
+            r = pygame.Rect(x0 + i * (cw + 8), y, cw, ch)
+            sid = draft[slot]
+            _slot_card(client, s, rects, f"fslot:{slot}", r, roster.get(sid) if sid is not None else None,
+                       r.collidepoint(mouse), pick == ("slot", slot))
+        y += ch + 10
+    bench = [sid for sid in roster if sid not in draft]
+    _txt(s, f"Not placed ({len(bench)}) — they still fight, after the placed soldiers", "title", 15, TITLE, (x0 + 4, y))
+    y += 22
+    for j, sid in enumerate(bench):
+        r = pygame.Rect(x0 + (j % 5) * (cw + 8), y + (j // 5) * (ch + 8), cw, ch)
+        _slot_card(client, s, rects, f"fbench:{sid}", r, roster[sid], r.collidepoint(mouse), pick == ("bench", sid))
+    if bench:
+        y += ((len(bench) + 4) // 5) * (ch + 8)
+    note = "Mounts and ranged troops are not in the arena yet — every soldier fights on foot in melee."
+    _txt(s, note, "body", 13, MUTED, (x0 + 4, y + 4), maxw=w)
+    saved = "Saved formation in use." if f.get("saved") else "No saved formation — roster order is used."
+    dirty = list(draft) != list((f.get("slots") or []) + [None] * 10)[:10]
+    _txt(s, saved + ("  (unsaved changes)" if dirty else ""), "body", 13, AMBER if dirty else GAIN, (x0 + 4, y + 24))
+    return y + 52 + scroll - body.y
+
+
+def formation_click(client, key) -> bool:
+    """Select-then-place / swap. Returns True when handled. Saving goes to the server."""
+    data = client.barracks or {}
+    draft = formation_draft(client, data)
+    pick = getattr(client, "formation_pick", None)
+    if key == "formation_save":
+        client.net.send("BARRACKS", action="formation_save", slots=list(draft))
+        return True
+    if key == "formation_reset":
+        client.net.send("BARRACKS", action="formation_reset")
+        return True
+    kind, val = key.split(":", 1)
+    val = int(val)
+    here = ("slot", val) if kind == "fslot" else ("bench", val)
+    if pick is None:
+        if kind == "fslot" and draft[val] is None:
+            return True
+        client.formation_pick = here
+        return True
+    if pick == here:
+        client.formation_pick = None
+        return True
+    if pick[0] == "bench" and here[0] == "slot":
+        draft[here[1]] = pick[1]                      # bench -> slot (old occupant to bench)
+    elif pick[0] == "slot" and here[0] == "slot":
+        draft[pick[1]], draft[here[1]] = draft[here[1]], draft[pick[1]]
+    elif pick[0] == "slot" and here[0] == "bench":
+        draft[pick[1]] = here[1]
+    else:
+        client.formation_pick = here
+        return True
+    client.formation_pick = None
+    return True
+
+
+def formation_content_height(data) -> int:
+    n = len(data.get("roster") or [])
+    placed = sum(1 for s in ((data.get("formation") or {}).get("slots") or []) if s is not None)
+    bench = max(0, n - placed)
+    return 60 + 2 * (22 + 160) + 22 + ((bench + 4) // 5) * 158 + 60
+
+
+_DRAW = {"formation": _draw_formation, "roster": _draw_roster, "recruit": _draw_recruit, "practice": _draw_practice,
          "champions": _draw_champions, "ladder": _draw_ladder}
 
 
@@ -1145,6 +1343,11 @@ def draw(client):
     hover = (-1, -1) if blocked else mouse
     client._barracks_tooltip = None
     client._barracks_portraits = []
+    try:
+        import arena_barracks_fx as FXB
+        FXB.update(data)
+    except Exception as exc:  # noqa: BLE001
+        E._log_once("barracks fx update", exc)
     tab = data.get("tab") or "roster"
     if tab in ("kits", "train"):
         tab = data["tab"] = "roster"
@@ -1182,6 +1385,11 @@ def draw(client):
     if getattr(client, "barracks_selected", None) is not None:
         _draw_soldier(client, s, box, data, rects, mouse if getattr(client, "barracks_confirm", None) is None else (-1, -1))
     draw_confirm(client, s, rects, mouse)
+    try:
+        import arena_barracks_fx as FXB
+        FXB.draw_toast(s, _f("title", 17), box)
+    except Exception as exc:  # noqa: BLE001
+        E._log_once("barracks toast", exc)
     if not blocked:
         _tooltip(s, client)
     client.barracks_rects = rects

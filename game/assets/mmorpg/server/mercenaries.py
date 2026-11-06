@@ -469,6 +469,158 @@ def roster_total_cl(soldiers: list[dict]) -> int:
     return sum(int(s["combat_level"]) for s in soldiers)
 
 
+# ------------------------------------------------------------------ saved formation (5 Nov)
+# Ten slots: 0-4 front rank, 5-9 rear rank (rear holds until the first soldier falls).
+# Stored as JSON soldier ids (None = empty). Battle order is front slots then rear
+# slots; empty front slots are filled from the rear so a battle always fields the
+# same soldiers and the same front/rear split rule as before (i < 5 = front).
+FORMATION_SLOTS = ROSTER_MAX
+
+
+def _formation_schema(conn):
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS mercenary_formation ("
+        "player_id INTEGER PRIMARY KEY,"
+        "slots TEXT NOT NULL DEFAULT '[]',"
+        "updated_at REAL NOT NULL DEFAULT 0)"
+    )
+
+
+def get_formation(conn, player_id: int) -> list:
+    """Saved slots (10 entries, soldier id or None), dropping soldiers no longer owned."""
+    import json as _json
+    _formation_schema(conn)
+    row = conn.execute("SELECT slots FROM mercenary_formation WHERE player_id = ?", (player_id,)).fetchone()
+    owned = {int(r["id"]) for r in roster_rows(conn, player_id)}
+    slots = [None] * FORMATION_SLOTS
+    if row:
+        try:
+            raw = _json.loads(row[0] or "[]")
+        except ValueError:
+            raw = []
+        seen = set()
+        for i, sid in enumerate(raw[:FORMATION_SLOTS]):
+            try:
+                sid = int(sid) if sid is not None else None
+            except (TypeError, ValueError):
+                sid = None
+            if sid is not None and sid in owned and sid not in seen:
+                slots[i] = sid
+                seen.add(sid)
+    return slots
+
+
+def has_formation(conn, player_id: int) -> bool:
+    _formation_schema(conn)
+    return conn.execute("SELECT 1 FROM mercenary_formation WHERE player_id = ?", (player_id,)).fetchone() is not None
+
+
+def set_formation(conn, session, slots) -> tuple[bool, str]:
+    """Validate and save. Owned soldier ids only, no duplicates, at most ten slots."""
+    import json as _json
+    import time as _time
+    if not isinstance(slots, (list, tuple)):
+        return False, "Formation must be a list of slots."
+    if len(slots) > FORMATION_SLOTS:
+        return False, f"A formation has at most {FORMATION_SLOTS} slots."
+    owned = {int(r["id"]) for r in roster_rows(conn, session.player_id)}
+    clean, seen = [], set()
+    for sid in slots:
+        if sid is None or sid == "":
+            clean.append(None)
+            continue
+        try:
+            sid = int(sid)
+        except (TypeError, ValueError):
+            return False, "Bad soldier in formation."
+        if sid not in owned:
+            return False, "That soldier is not in your roster."
+        if sid in seen:
+            return False, "A soldier can only stand in one slot."
+        seen.add(sid)
+        clean.append(sid)
+    clean += [None] * (FORMATION_SLOTS - len(clean))
+    _formation_schema(conn)
+    conn.execute(
+        "INSERT INTO mercenary_formation (player_id, slots, updated_at) VALUES (?, ?, ?) "
+        "ON CONFLICT(player_id) DO UPDATE SET slots = excluded.slots, updated_at = excluded.updated_at",
+        (session.player_id, _json.dumps(clean), _time.time()),
+    )
+    conn.commit()
+    front = sum(1 for s in clean[:5] if s is not None)
+    rear = sum(1 for s in clean[5:] if s is not None)
+    return True, f"Formation saved — {front} front, {rear} rear."
+
+
+def clear_formation(conn, session) -> tuple[bool, str]:
+    _formation_schema(conn)
+    conn.execute("DELETE FROM mercenary_formation WHERE player_id = ?", (session.player_id,))
+    conn.commit()
+    return True, "Formation reset — soldiers line up in roster order."
+
+
+def battle_rows(conn, player_id: int) -> list:
+    """Roster rows in battle order: saved front slots, saved rear slots, then the rest.
+
+    No saved formation = old behaviour (roster order). Soldiers outside the
+    formation still fight (in roster order after the placed ones), so saving a
+    formation never benches anyone or changes army size.
+    """
+    rows = list(roster_rows(conn, player_id))
+    if not has_formation(conn, player_id):
+        return rows[:ROSTER_MAX]
+    by_id = {int(r["id"]): r for r in rows}
+    slots = get_formation(conn, player_id)
+    placed = [by_id[s] for s in slots if s is not None]
+    used = {int(r["id"]) for r in placed}
+    rest = [r for r in rows if int(r["id"]) not in used]
+    return (placed + rest)[:ROSTER_MAX]
+
+
+def battle_slots(conn, player_id: int) -> list:
+    """[(row, slot)] for battle staging. slot 0-4 = front rank, 5-9 = rear (held reserve).
+
+    No saved formation: roster order, slot = index (the original 5 front / 5 rear rule).
+    Saved formation: every placed soldier keeps its exact slot, so a soldier saved in
+    the rear deploys in the rear. Soldiers not placed (new recruits since saving) fill
+    the empty slots in slot order, front first. Holes stay holes. Fallback: if the front
+    rank would be empty, the rear soldiers step up into the front in slot order, because
+    a rear rank only joins after the first soldier falls and an army with no front
+    could never start the fight.
+    """
+    rows = list(roster_rows(conn, player_id))
+    if not has_formation(conn, player_id):
+        return [(r, i) for i, r in enumerate(rows[:ROSTER_MAX])]
+    by_id = {int(r["id"]): r for r in rows}
+    slots = get_formation(conn, player_id)
+    out = {i: by_id[sid] for i, sid in enumerate(slots) if sid is not None and sid in by_id}
+    used = {int(r["id"]) for r in out.values()}
+    free = [i for i in range(FORMATION_SLOTS) if i not in out]
+    for r in rows:
+        if int(r["id"]) in used or not free:
+            continue
+        out[free.pop(0)] = r
+    if out and not any(i < 5 for i in out):
+        rear = sorted(out)
+        out = {j: out[i] for j, i in enumerate(rear)}
+    return [(out[i], i) for i in sorted(out)]
+
+
+def formation_payload(conn, player_id: int) -> dict:
+    """Slots as the barracks shows them (saved or the default roster order)."""
+    saved = has_formation(conn, player_id)
+    if saved:
+        slots = get_formation(conn, player_id)
+    else:
+        ids = [int(r["id"]) for r in roster_rows(conn, player_id)][:ROSTER_MAX]
+        slots = ids + [None] * (FORMATION_SLOTS - len(ids))
+    return {"slots": slots, "saved": saved, "front": 5, "rear": 5,
+            "mounts": False, "ranged": False,
+            "note": ("Front five clash first; the rear five hold until the first soldier falls. "
+                     "Soldiers keep their slot. Unplaced soldiers fill empty slots front-first; "
+                     "with no one in front, the rear steps up.")}
+
+
 def practice_highest(conn, player_id: int) -> int:
     row = conn.execute(
         "SELECT highest_tier FROM practice_progress WHERE player_id = ?",
@@ -546,6 +698,7 @@ def recruitable_templates(cmd_lvl: int, roster_rows_list=None) -> list[dict]:
                     best = cand
             upgrade_from = best
         out.append({
+            "role": t.get("role"),
             "id": tid,
             "name": t["name"],
             "cost": t["cost"],
@@ -601,6 +754,8 @@ def practice_board(conn, player_id: int, roster_cl: int) -> list[dict]:
             "command_xp_loss": entry["command_xp_loss"],
             "coin_win": entry["coin_win"],
             "advice": _power_advice(roster_cl, entry["recommend_cl"]),
+            # presentation only: who stands in the house line-up (template, gear)
+            "army_preview": [[t, g] for t, g, _lv in army[:PRACTICE_ARMY_SIZE]],
         })
     return board
 
@@ -1332,6 +1487,9 @@ def unit_public(u: dict) -> dict:
         "boss_id": u.get("boss_id"),
         "stunned": int(u.get("stun") or 0) > 0,
         "duel_player": bool(u.get("duel_player")),
+        "rank": u.get("rank") or "front",
+        "slot": u.get("slot"),
+        "reserve": bool(u.get("held_reserve")),
     }
 
 
@@ -1381,7 +1539,10 @@ def start_live_practice(conn, session, foe_id: str) -> tuple[bool, str, dict | N
     spent, spend_err, daily = consume_daily_fight(conn, session.player_id)
     if not spent:
         return False, spend_err, None
-    rows = roster_rows(conn, session.player_id)[:ROSTER_MAX]
+    placed = battle_slots(conn, session.player_id)
+    rows = [r for r, _ in placed]
+    your_slots = [sl for _, sl in placed]
+    use_slots = has_formation(conn, session.player_id)
     coords = arena_coords()
     x0, y0, x1, y1 = coords["pit"]
     your_fighters = [_fighter_from_row(r) for r in rows]
@@ -1397,15 +1558,28 @@ def start_live_practice(conn, session, foe_id: str) -> tuple[bool, str, dict | N
             f["template_id"] = t
             foe_fighters.append(f)
     n_foe = len(foe_fighters) + (1 if entry.get("boss") else 0)
-    your_spots = _line_up(len(your_fighters), x0, x1, y0, y1, west=True)
-    foe_spots = _line_up(n_foe, x0, x1, y0, y1, west=False)
+    grid_you = _line_up(PRACTICE_ARMY_SIZE, x0, x1, y0, y1, west=True)
+    grid_foe = _line_up(PRACTICE_ARMY_SIZE, x0, x1, y0, y1, west=False)
+    if use_slots:
+        # Saved formation: each soldier stands on its own slot (holes stay open).
+        your_spots = [grid_you[sl] for sl in your_slots]
+    else:
+        your_spots = _line_up(len(your_fighters), x0, x1, y0, y1, west=True)
+        your_slots = list(range(len(your_fighters)))
+    foe_slots = [f.get("slot") for f in foe_fighters]
+    foe_use_slots = (not entry.get("boss") and foe_fighters and all(isinstance(v, int) and 0 <= v < PRACTICE_ARMY_SIZE for v in foe_slots)
+                     and len(set(foe_slots)) == len(foe_slots))
+    foe_spots = ([grid_foe[v] for v in foe_slots] if foe_use_slots
+                 else _line_up(n_foe, x0, x1, y0, y1, west=False))
     units = []
     for i, (f, xy) in enumerate(zip(your_fighters, your_spots)):
         u = _unit_from_fighter(f, "you", xy, f.get("template_id"))
         # Front 5 clash; rear 5 hold until the first soldier falls.
-        u["rank"] = "front" if i < 5 else "rear"
-        u["file"] = i if i < 5 else i - 5
-        u["held_reserve"] = i >= 5
+        sl = your_slots[i]
+        u["rank"] = "front" if sl < 5 else "rear"
+        u["file"] = sl if sl < 5 else sl - 5
+        u["held_reserve"] = sl >= 5
+        u["slot"] = sl
         units.append(u)
     if entry.get("boss"):
         # The champion takes the centre of the front rank; his house fills the rest.
@@ -1420,8 +1594,9 @@ def start_live_practice(conn, session, foe_id: str) -> tuple[bool, str, dict | N
             spread[3] = (spread[3][0], min(y1, spread[3][1] + 2))
         foe_spots = spread[:2] + spread[3:]
     for i, (f, xy) in enumerate(zip(foe_fighters, foe_spots)):
-        slot = i + (1 if entry.get("boss") and i >= 2 else 0)
+        slot = foe_slots[i] if foe_use_slots else i + (1 if entry.get("boss") and i >= 2 else 0)
         u = _unit_from_fighter(f, "foe", xy, f.get("template_id"))
+        u["slot"] = slot
         u["rank"] = "front" if slot < 5 else "rear"
         u["file"] = slot if slot < 5 else slot - 5
         u["held_reserve"] = slot >= 5
@@ -2518,6 +2693,7 @@ def barracks_payload(conn, session) -> dict:
         "deployed_ids": deployed_ids,
         "deployed_count": len(deployed_ids),
         "personal_house": _personal_house_payload(conn, session),
+        "formation": formation_payload(conn, session.player_id),
         "arena": __import__("arena_battles").payload(conn, session),
     }
 

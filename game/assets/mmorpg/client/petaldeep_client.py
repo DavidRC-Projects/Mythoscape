@@ -173,23 +173,14 @@ def draw_tile(client, rect, tile_id, wx, wy, t):
     """Very light wash — plate carries the look; sprites stay readable."""
     if not active(client):
         return False
-    extra = _extra(client)
-    door = {(int(p[0]), int(p[1])) for p in (extra.get("door") or extra.get("arch") or []) if len(p) >= 2}
-    on_door = (int(wx), int(wy)) in door
     if tile_id == wm.WALL:
         # Soft rim only — do not paint a heavy box over the plate.
         veil = pygame.Surface(rect.size, pygame.SRCALPHA)
         veil.fill((14, 8, 20, 55))
         client.screen.blit(veil, rect.topleft)
         return True
-    # Open north arch: gentle pulse so the way deeper is obvious.
-    if on_door:
-        glow = pygame.Surface(rect.size, pygame.SRCALPHA)
-        pulse = 0.55 + 0.45 * math.sin((t or time.time()) * 3.0)
-        glow.fill((180, 90, 255, int(40 + 35 * pulse)))
-        client.screen.blit(glow, rect.topleft, special_flags=pygame.BLEND_ADD)
-        return True
-    # Floor stays almost clear so the plate fills the eye.
+    # Floor and the north arch stay clear. A purple glow used to cover the
+    # carved arch in every hall.
     return True
 
 

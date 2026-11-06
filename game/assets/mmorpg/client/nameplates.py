@@ -45,7 +45,13 @@ def level_band(unit_level, player_level):
 def _font(size, bold=True):
     key = (size, bold)
     if key not in _FONTS:
-        f = pygame.font.SysFont("dejavusans,arial,helvetica", size, bold=bold)
+        path = pygame.font.match_font("arial,helvetica,dejavu sans,segoe ui")
+        if path:
+            f = pygame.font.Font(path, size)
+            if bold:
+                f.set_bold(True)
+        else:
+            f = pygame.font.SysFont(None, size, bold=bold)
         _FONTS[key] = f
     return _FONTS[key]
 
@@ -189,6 +195,11 @@ def _short(n):
     return f"{n / 1000:.1f}k" if n > 9999 else str(n)
 
 
+def _player_plate(p):
+    """A character overhead tag (has a combat level). NPCs and monsters stay smaller."""
+    return p["kind"] == "std" and p["level"] is not None
+
+
 def _layout(client, p, k, dx, dy):
     bw, bh, nh = SIZES[p["kind"]]
     numeric = _numbers_on(p)
@@ -196,16 +207,22 @@ def _layout(client, p, k, dx, dy):
         bh = 6
     if p["kind"] == "std" and not numeric:
         bh = 6
+    player = _player_plate(p)
+    if player:
+        nh = 22
+    name_px = 14 if player else (9 if p["kind"] == "pet" else 11)
+    level_px = 13 if player else 9
     p["bw"], p["bh"], p["nh"] = bw, bh, nh
+    p["name_px"], p["level_px"] = name_px, level_px
     cx = p["cx"] * k + dx
     head = p["head"] * k + dy
     gap = 8 if p["kind"] == "pet" else 10
     bar_bottom = head - gap
-    f = _font(9 if p["kind"] == "pet" else 11)
-    name = _fit(f, p["name"], 160)
+    f = _font(name_px)
+    name = _fit(f, p["name"], 180 if player else 160)
     p["label"] = name
     lvs = str(p["level"]) if p["level"] is not None else None
-    lw = (_font(9).size(lvs)[0] + 8) if lvs else 0
+    lw = (_font(level_px).size(lvs)[0] + (16 if player else 8)) if lvs else 0
     sw = 14 if p["stars"] is not None else 0
     p["lw"], p["sw"] = lw, sw
     pw = int(max(bw, f.size(name)[0] + lw + sw + 14))
@@ -227,10 +244,15 @@ def _numbers_on(p):
 
 def flush(client, k=1.0, dx=0.0, dy=0.0):
     """Lay out + draw every queued unit plate on top of the world (after zoom)."""
-    q = list(getattr(client, "_np_queue", None) or [])
+    raw = list(getattr(client, "_np_queue", None) or [])
     client._np_queue = []
-    if not q:
+    if not raw:
         return []
+    # One plate per unit — a double submit drew two overlapping labels.
+    by_key = {}
+    for p in raw:
+        by_key[p["key"]] = p
+    q = list(by_key.values())
     now = time.time()
     md = mode(client)
     view = pygame.Rect(0, 0, *client.screen.get_size())
@@ -286,18 +308,14 @@ def flush(client, k=1.0, dx=0.0, dy=0.0):
                     r = pygame.Rect(p["rect"].centerx - p["bw"] // 2, p["rect"].bottom - bh, p["bw"], bh)
                     p["collapsed"] = True
             p["pushed"] = pushes > 0
-        p["anchor"] = (p["rect"].centerx, p["rect"].bottom + 2)
+        # Keep the stem target on the pushed rect (old code pointed at the
+        # pre-push rect and drew a stray line under a floating duplicate).
+        p["anchor"] = (r.centerx, r.bottom + 2)
         r.x = max(view.x + 4, min(view.right - 4 - r.w, r.x))
         r.y = max(view.y + 4, min(view.bottom - 4 - r.h, r.y))
         st = _STATE.setdefault(p["key"], {})
-        prev = st.get("pos")
-        if prev and abs(prev[0] - r.x) < 60 and abs(prev[1] - r.y) < 60:
-            nx = prev[0] + (r.x - prev[0]) * 0.25
-            ny = prev[1] + (r.y - prev[1]) * 0.25
-        else:
-            nx, ny = float(r.x), float(r.y)
-        st["pos"] = (nx, ny)
-        r = pygame.Rect(int(round(nx)), int(round(ny)), r.w, r.h)
+        # Snap — the old 0.25 lerp left a ghost plate while the camera moved.
+        st["pos"] = (float(r.x), float(r.y))
         p["rect"] = r
         placed.append(r)
     order = [p for p in plates if not p["targeted"]][::-1] + [p for p in plates if p["targeted"]]
@@ -321,12 +339,9 @@ def flush(client, k=1.0, dx=0.0, dy=0.0):
 def _draw(client, p, now):
     screen = client.screen
     r = p["rect"]
-    alpha = 255 if (p["targeted"] or p["hovered"]) else (209 if (p.get("pushed") or p.get("collapsed")) else 255)
+    alpha = 255
     lay = pygame.Surface((r.w + 8, r.h + 8), pygame.SRCALPHA)
     ox, oy = 4, 4
-    if p.get("pushed"):
-        ax, ay = p["anchor"]
-        pygame.draw.line(screen, (*RIM_TARGET,), (r.centerx, r.bottom), (ax, ay), 1)
     y = oy
     if p["name_on"]:
         nh = p["nh"]
@@ -334,19 +349,24 @@ def _draw(client, p, now):
         pygame.draw.rect(lay, ROW_FILL, row, border_radius=4)
         rim = RIM_TARGET if p["targeted"] else (RIM_HOVER if p["hovered"] else RIM)
         pygame.draw.rect(lay, rim, row, 1, border_radius=4)
-        xx = row.x + 5
+        left = row.x + 5
         if p["stars"] is not None:
-            _star(lay, xx + 5, row.centery, 6, (70, 120, 200) if p["stars"] > 0 else (150, 150, 150), p["stars"])
-            xx += p["sw"]
-        f = _font(9 if p["kind"] == "pet" else 11)
+            _star(lay, left + 5, row.centery, 6, (70, 120, 200) if p["stars"] > 0 else (150, 150, 150), p["stars"])
+            left += p["sw"]
+        # Level chip claims the right edge; centre the name in whatever is left.
+        right = row.right - (p["lw"] + 1 if p["level"] is not None else 5)
+        f = _font(p.get("name_px") or (9 if p["kind"] == "pet" else 11))
         col = p["name_color"] or NAME.get("pet" if p["kind"] == "pet" else p["rel"], NAME["neutral"])
-        _stroke_text(lay, p["label"], f, col, midleft=(xx, row.centery))
+        _stroke_text(lay, p["label"], f, col, center=((left + right) // 2, row.centery))
         if p["level"] is not None:
-            lc = level_band(p["level"], _player_cl(client)) if p["kind"] == "mon" or p["rel"] == "hostile" else CHIP_NEUTRAL
-            chip = pygame.Rect(row.right - 3 - p["lw"] + 2, row.y + 3, p["lw"] - 2, nh - 6)
-            pygame.draw.rect(lay, (0, 0, 0, 200), chip, border_radius=3)
-            pygame.draw.rect(lay, lc, chip, 1, border_radius=3)
-            _stroke_text(lay, str(p["level"]), _font(9), lc, center=chip.center)
+            threat = p["kind"] == "mon" or p["rel"] == "hostile"
+            lc = level_band(p["level"], _player_cl(client)) if threat else (255, 236, 186)
+            player = _player_plate(p)
+            chip_h = nh - (4 if player else 6)
+            chip = pygame.Rect(row.right - 4 - p["lw"] + 2, row.y + (nh - chip_h) // 2, p["lw"] - 2, chip_h)
+            pygame.draw.rect(lay, (36, 26, 12, 235) if player else (0, 0, 0, 200), chip, border_radius=5 if player else 3)
+            pygame.draw.rect(lay, (232, 196, 96) if player else lc, chip, 2 if player else 1, border_radius=5 if player else 3)
+            _stroke_text(lay, str(p["level"]), _font(p.get("level_px") or 9), lc, center=chip.center)
         y += nh + 2
     if p["bar"]:
         bw, bh = p["bw"], p["bh"]

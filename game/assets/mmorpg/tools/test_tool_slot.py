@@ -150,8 +150,10 @@ def test_legacy_weapon_slot_tool_migrates():
 
 
 def test_tutorial_teaches_tools():
+    # TOOLS_STEP was inlined into TOUR; assert the tools pair still teaches the same facts.
     flat = " ".join(" ".join(p) for p in welcome_kit.TOUR)
-    assert welcome_kit.TOOLS_STEP in welcome_kit.TOUR
+    assert any("axe" in " ".join(pair).lower() and "pickaxe" in " ".join(pair).lower()
+               for pair in welcome_kit.TOUR)
     for word in ("equipped", "Equipment", "axe", "pickaxe", "Crypt"):
         assert word in flat, word
 
@@ -160,9 +162,11 @@ def test_equipment_screen_has_tool_slots():
     sys.path.insert(0, os.path.join(ROOT, "client"))
     import pygame
     pygame.init()
+    pygame.display.set_mode((10, 10))
     import equipment_ui_v2 as ui
+    # Layout renamed: wireframe slots live in SLOTS (was DOLL/ANCHOR).
     for key in ("tool_woodcutting", "tool_mining", "tool_fishing"):
-        assert key in ui.DOLL and key in ui.ANCHOR
+        assert key in ui.SLOTS and key in ui.TOOL_SLOTS
     surf = pygame.Surface((46, 46))
     ui._silhouette(surf, "tool_mining", surf.get_rect())
 
@@ -173,7 +177,10 @@ def test_crypt_is_early_quest():
     assert q["requires"] == "rat_problem" and q["target"] == "skeleton"
     miriam = next(n for n in NPCS if n["id"] == "elder_miriam")
     assert "crypt_first_delve" in miriam["quest_ids"]
-    assert "Crypt" in q["description"] and "Tidehollow" in q["description"]
+    # Quest copy is local ("Crypt behind the bank"); Tidehollow is taught in the welcome tour as later content.
+    assert "Crypt" in q["description"]
+    tour = " ".join(" ".join(p) for p in welcome_kit.TOUR)
+    assert "Tidehollow" in tour and "Crypt" in tour
 
 
 if __name__ == "__main__":

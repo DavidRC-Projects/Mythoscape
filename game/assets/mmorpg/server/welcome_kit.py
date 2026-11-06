@@ -43,15 +43,15 @@ FIRST_VISIT = (
 TOUR = (
     ("Walking: click the ground to walk there, or use arrow keys / number pad one tile at a time.",
      "Zoom: mouse wheel over the map, or - and =. Travel: press M. World map: right-click the minimap. H = all controls."),
-    ("Fighting: you need a sword or axe in your hand. Click a monster to attack, or press Space for the nearest "
-     "one.",
+    ("Fighting: you need a sword, axe, or bow in your hand. Click a monster to attack, or press Space for the nearest "
+     "one. A bow shoots arrows and trains Archery.",
      "Nameplates: green = easy, yellow = even, orange = risky, red = leave alone. "
      "Empty-handed? Run. Innkeeper Sarah (south of Miriam) shows you how to eat food."),
     ("Tools: axe, pickaxe and net start equipped — Equipment (E) or the Gathering tab. "
      "Keep your sword on; gathering plays the right tool when you click the resource.",
      "After Miriam's rats, the Crypt behind the bank (The Depths) is your first dungeon. "
      "Tidehollow by the harbour is later."),
-    ("Skills: Tab. Bank: B near a booth. Outfits (Mae) swap off armour into your bag — nothing is lost.",
+    ("Skills: Tab — Charisma grows with talk and quests; Etiquette with work, fees, and tribute to the Crown. Bank: B near a booth. Outfits (Mae) swap off armour into your bag — nothing is lost.",
      "Where next: Elder Miriam NW cottage, then Lira by the well and Elena to the east. "
      "Come back any time for this reminder."),
 )
@@ -175,7 +175,7 @@ def _owned_ids(session):
 
 
 def has_weapon_slot_item(session, items):
-    """Owns something to fight with: a sword or axe (gear_rules). Gathering tools and bows don't count."""
+    """Owns something to fight with: a sword, axe, or bow (gear_rules). Gathering tools don't count."""
     import gear_rules
     return any(gear_rules.weapon_kind(i, items) in gear_rules.FIGHT_KINDS for i in _owned_ids(session))
 

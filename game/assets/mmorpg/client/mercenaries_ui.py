@@ -356,6 +356,9 @@ def click(client, mx, my) -> bool:
         if key.startswith("select:"):
             client.barracks_selected = int(key.split(":", 1)[1])
             return True
+        if key.startswith(("fslot:", "fbench:")) or key in ("formation_save", "formation_reset"):
+            import arena_barracks_v2
+            return arena_barracks_v2.formation_click(client, key)
         if key.startswith("recruit:"):
             client.net.send("BARRACKS", action="recruit", template_id=key.split(":", 1)[1])
             return True
@@ -1366,3 +1369,48 @@ def _draw_practice(client, surf, font, small, body, data, rects, scroll):
             _btn(surf, font, rects, f"practice:{foe['id']}", "Battle",
                  pygame.Rect(row.right - 126, row.y + 22, 110, 36), (70, 50, 20), _SAND, _GOLD)
         y += 88
+
+
+# ---- Colosseum presentation hooks (5 Nov): intro card, victory petals. Visual only.
+def _colosseum_report(client, where, exc):
+    """Visible failure: arena_colosseum.report (stderr traceback + log + chat line);
+    if that module itself cannot load, print the full traceback here."""
+    try:
+        import arena_colosseum
+        arena_colosseum.report(client, where, exc)
+    except Exception:  # noqa: BLE001
+        import traceback
+        traceback.print_exception(type(exc), exc, exc.__traceback__)
+
+_draw_match_hud_base = draw_match_hud
+_draw_match_result_base = draw_match_result
+_click_match_hud_base = click_match_hud
+
+
+def draw_match_hud(client):
+    _draw_match_hud_base(client)
+    try:
+        import arena_colosseum
+        arena_colosseum.draw_intro(client)
+    except Exception as exc:  # noqa: BLE001
+        _colosseum_report(client, "intro", exc)
+
+
+def draw_match_result(client, match: dict):
+    _draw_match_result_base(client, match)
+    try:
+        import arena_colosseum
+        arena_colosseum.draw_result_fx(client, match)
+    except Exception as exc:  # noqa: BLE001
+        _colosseum_report(client, "result", exc)
+
+
+def click_match_hud(client, mx, my) -> bool:
+    if _click_match_hud_base(client, mx, my):
+        return True
+    try:
+        import arena_colosseum
+        return arena_colosseum.click_intro(client, mx, my)
+    except Exception as exc:  # noqa: BLE001
+        _colosseum_report(client, "intro click", exc)
+        return False

@@ -51,6 +51,7 @@ from content import (
     rare_drops_for_monster,
 )  # noqa: E402
 import world_map as wm  # noqa: E402
+import tree_cover  # noqa: E402
 import wolf_pass_client  # noqa: E402
 import sewer_client  # noqa: E402
 import stonehaven_walls_client  # noqa: E402
@@ -127,6 +128,10 @@ ZOOM_LEVELS = tuple(range(ZOOM_MIN, ZOOM_MAX + 1, ZOOM_STEP))
 ZOOM_DEFAULT = ZOOM_MIN
 # Wide "Area view" — not on the zoom bar; toggled by its own button.
 AREA_VIEW_PCT = 50
+# Arena battle view: a modest automatic zoom-out while a practice/ladder bout is staged,
+# so both lines and some stands fit. Any manual zoom/area-view input overrides it, and
+# the pre-battle zoom and camera come back when the bout (and its result card) closes.
+BATTLE_VIEW_PCT = 60
 # Bar zoom keeps TILE at ZOOM_MIN; zooming in is a cheap view-scale of the map.
 TILE = max(8, int(round(TILE_ZOOM_BASE * ZOOM_DEFAULT / 100.0)))
 
@@ -249,28 +254,36 @@ class GameClient(ScreensMixin, CameraYaw):
         self._ember_pitch_bias = 0.0
         self.ember_follow_behind = False
 
-        # Readable UI text (slightly larger after skill/UI growth)
-        ui = pygame.font.match_font("arial,helvetica,segoe ui,dejavu sans") or None
-        mono = pygame.font.match_font("menlo,consolas,monaco,dejavu sans mono") or None
-        self.font = pygame.font.SysFont(ui or mono, 20)
-        self.font_small = pygame.font.SysFont(ui or mono, 18)
-        self.font_big = pygame.font.SysFont(ui or mono, 30, bold=True)
-        self.font_tiny = pygame.font.SysFont(ui or mono, 15)
+        # Readable UI text. match_font returns a file path — use Font(path), not
+        # SysFont(path), or glyphs shrink into muddy bars on macOS.
+        def _ui_font(names, size, bold=False):
+            path = pygame.font.match_font(names)
+            if path:
+                font = pygame.font.Font(path, size)
+                if bold:
+                    font.set_bold(True)
+                return font
+            return pygame.font.SysFont(None, size, bold=bold)
+
+        self.font = _ui_font("arial,helvetica,segoe ui,dejavu sans", 20)
+        self.font_small = _ui_font("arial,helvetica,segoe ui,dejavu sans", 18)
+        self.font_big = _ui_font("arial,helvetica,segoe ui,dejavu sans", 30, bold=True)
+        self.font_tiny = _ui_font("arial,helvetica,segoe ui,dejavu sans", 15)
         # Crisp entity labels (drawn after zoom so they stay sharp)
-        self.font_label = pygame.font.SysFont(ui or mono, 18, bold=True)
+        self.font_label = _ui_font("arial,helvetica,segoe ui,dejavu sans", 18, bold=True)
         self._nameplate_queue = []
         self._badge_queue = []
         self._house_crest_queue = []
         self._defer_nameplates = False
-        self.font_inv = pygame.font.SysFont(ui or mono, 18)  # inventory qty / sidebar hints
+        self.font_inv = _ui_font("arial,helvetica,segoe ui,dejavu sans", 18)  # inventory qty / sidebar hints
         # Fantasy login / register branding (serif)
-        serif = pygame.font.match_font(
+        serif_names = (
             "times new roman,times,georgia,palatino,dejavu serif,liberation serif,serif"
-        ) or ui or mono
-        self.font_title = pygame.font.SysFont(serif, 42, bold=True)
-        self.font_login = pygame.font.SysFont(serif, 20, bold=True)
-        self.font_login_sm = pygame.font.SysFont(serif, 15, bold=True)
-        self.font_login_tiny = pygame.font.SysFont(serif, 13)
+        )
+        self.font_title = _ui_font(serif_names, 42, bold=True)
+        self.font_login = _ui_font(serif_names, 20, bold=True)
+        self.font_login_sm = _ui_font(serif_names, 15, bold=True)
+        self.font_login_tiny = _ui_font(serif_names, 13)
 
         self.net = NetworkClient(SERVER_URI)
         self.net.start()
@@ -301,6 +314,7 @@ class GameClient(ScreensMixin, CameraYaw):
         self.ember_corpses = []
         self.wyrm_death = None
         self.knight_corpses = []  # HD knight death animations [{type, x, y, facing, t0}]
+        self.arena_corpses = []  # pit soldier death falls [{unit dict snapshot, t0}]
         self.player_hit_at = {}  # HD player hit reactions (player_id -> time)
         self.player_death_at = {}  # HD player death animations (player_id -> time)
         self.pets = []       # list of pet public states
@@ -353,6 +367,10 @@ class GameClient(ScreensMixin, CameraYaw):
         self.show_equipment = False
         self.show_forge = False
         self.show_help = False
+        self.show_war_board = False
+        self.war_chip_rect = None
+        self.war_board_rect = None
+        self.war_board_close_rect = None
         self.show_bank = False
         self.sidebar_tab = "inventory"  # inventory | combat | magic | quests
         self.sidebar_action_rects = {}
@@ -612,6 +630,7 @@ class GameClient(ScreensMixin, CameraYaw):
             if self.state in ("GAME", "STAT_ALLOC", "OPENING_COMIC", "THRONE_VISION"):
                 self.login_error = "Disconnected from server."
                 self.opening_comic_pending = False
+                self._awaiting_dungeon_resume = False
                 self.state = "LOGIN"
                 self.net.reconnect()
         elif t == "LOGIN_FAIL":
@@ -643,6 +662,9 @@ class GameClient(ScreensMixin, CameraYaw):
             self.combat_style_prompt = None
             self.login_error = ""
             self.show_leaderboard = False
+            # Hold the first frames when the server will snap us into a dungeon
+            # (King's Realm) so the overworld portal never flashes first.
+            self._awaiting_dungeon_resume = bool(msg.get("resume_dungeon"))
             # New accounts have no saved look. Open the creator after the
             # stat screen and the opening comic, not on top of either.
             self.needs_appearance = not self.player.get("appearance_saved")
@@ -732,6 +754,20 @@ class GameClient(ScreensMixin, CameraYaw):
                     "rooms_total": msg["dungeon"].get("rooms_total", self.dungeon.get("rooms_total")),
                     "rooms_cleared": msg["dungeon"].get("rooms_cleared", self.dungeon.get("rooms_cleared")),
                 })
+                siege_hud = msg["dungeon"].get("crown_siege")
+                if siege_hud is not None:
+                    # Live war / heraldry snapshot from the server tick.
+                    self.dungeon["crown_siege_hud"] = siege_hud
+                    # Keep structure damage overlays in sync when the payload carries them.
+                    if isinstance(siege_hud.get("war"), dict) or siege_hud.get("heraldry") is not None:
+                        blob = self.dungeon.get("crown_siege")
+                        if not isinstance(blob, dict):
+                            blob = {}
+                            self.dungeon["crown_siege"] = blob
+                        if "war" in siege_hud:
+                            blob["war"] = siege_hud.get("war")
+                        if "heraldry" in siege_hud:
+                            blob["heraldry"] = siege_hud.get("heraldry")
                 if self.dungeon.get("v2"):
                     import void_v2_client
                     void_v2_client.on_state(self, msg["dungeon"])
@@ -801,6 +837,8 @@ class GameClient(ScreensMixin, CameraYaw):
         elif t == "REALM_PLANE":
             self._apply_realm_plane(msg)
             self.stair_prompt = None
+        elif t == "SIEGE_UPDATE":
+            self._apply_siege_payload(msg)
         elif t == "STAIR_PROMPT":
             self.stair_prompt = {"tiles": [tuple(tile) for tile in (msg.get("tiles") or [])]}
         elif t == "DUNGEON_EXIT":
@@ -952,9 +990,22 @@ class GameClient(ScreensMixin, CameraYaw):
                     m["hp"] = int(msg["defender_hp"])
                     if msg.get("defender_max_hp") is not None:
                         m["max_hp"] = int(msg["defender_max_hp"])
+                    # Hit reaction: brief recoil so defenders aren't frozen statues.
+                    if msg.get("hit") and int(msg.get("damage") or 0) > 0:
+                        m["_arena_hit"] = 1.0
                 atk = self.monsters.get(msg.get("attacker_id"))
                 if atk is not None:
                     atk["attacking"] = 1.0
+                # Keep arena_match unit mirrors in sync — UPDATE merge used to prefer
+                # stale attacking=0 on the match dict over the live monster swing.
+                match = getattr(self, "arena_match", None)
+                units = (match or {}).get("units") or {}
+                if atk is not None and atk.get("id") in units:
+                    units[atk["id"]]["attacking"] = float(atk.get("attacking") or 0)
+                if m is not None and m.get("id") in units:
+                    units[m["id"]]["hp"] = m.get("hp", units[m["id"]].get("hp"))
+                    if m.get("_arena_hit"):
+                        units[m["id"]]["_arena_hit"] = m["_arena_hit"]
             self.handle_combat_event(msg)
         elif t == "EMBER_CONE":
             now = time.time()
@@ -962,6 +1013,20 @@ class GameClient(ScreensMixin, CameraYaw):
         elif t == "MOVE_DENIED":
             self._undo_refused_step(msg.get("x"), msg.get("y"))
         elif t == "DEATH":
+            # Arena pit soldiers: play a fall before the UPDATE drops them.
+            if msg.get("entity_kind") == "arena":
+                mid = msg.get("entity_id")
+                src = (self.monsters.get(mid) if mid is not None else None)
+                if src is None:
+                    match = getattr(self, "arena_match", None) or {}
+                    src = (match.get("units") or {}).get(mid)
+                if src is not None:
+                    snap = dict(src)
+                    snap["alive"] = False
+                    snap["_arena_death"] = 0.02
+                    snap["_arena_hit"] = 0.0
+                    snap["attacking"] = 0.0
+                    self.arena_corpses.append({"unit": snap, "t0": time.time()})
             # HD knight death corpse tracking
             if msg.get("entity_kind") == "monster":
                 mid = msg.get("entity_id")
@@ -1136,6 +1201,7 @@ class GameClient(ScreensMixin, CameraYaw):
                 center = [(int(pit[0]) + int(pit[2])) // 2, (int(pit[1]) + int(pit[3])) // 2]
             units = list(msg.get("units") or [])
             phase = msg.get("phase") or (msg.get("hud") or {}).get("phase") or "preview"
+            self.arena_corpses = []
             self.arena_match = {
                 "foe_name": msg.get("foe_name"),
                 "foe_id": msg.get("foe_id"),
@@ -1152,7 +1218,8 @@ class GameClient(ScreensMixin, CameraYaw):
             for u in units:
                 if u.get("alive"):
                     self.monsters[u["id"]] = u
-            # Keep the player's zoom — do not force Area View.
+            # Never force Area View; a modest battle view (60%) is applied instead and
+            # undone when the bout closes or the player zooms by hand.
             # Seat the commander on the south ring; camera pans the sand, body stays put.
             if self.player and msg.get("spectator"):
                 sx, sy = msg["spectator"]
@@ -1164,6 +1231,13 @@ class GameClient(ScreensMixin, CameraYaw):
             self.arena_feed_open = False
             if center:
                 self._arena_cam = [float(center[0]), float(center[1])]
+            if not (msg.get("duel") or (msg.get("hud") or {}).get("duel")
+                    or str(msg.get("foe_id") or "").startswith("boss:")):
+                try:
+                    self.enter_battle_view()
+                except Exception as exc:  # noqa: BLE001
+                    import castle_realm_renderer
+                    castle_realm_renderer._colosseum_report(self, "battle view", exc)
             daily = msg.get("daily") or {}
             left = daily.get("remaining")
             extra = f" · {left} fights left today" if left is not None else ""
@@ -1179,12 +1253,17 @@ class GameClient(ScreensMixin, CameraYaw):
                 merged = {}
                 for u in (msg.get("units") or []):
                     uid = u["id"]
-                    # Keep a hotter local swing if the snapshot omitted mid-anim.
-                    old = prev_units.get(uid) or self.monsters.get(uid) or {}
-                    local_swing = float(old.get("attacking") or 0)
-                    if local_swing > float(u.get("attacking") or 0):
+                    # Prefer live monster swing (COMBAT_EVENT) over stale match-unit mirror.
+                    live = self.monsters.get(uid) or {}
+                    mirrored = prev_units.get(uid) or {}
+                    local_swing = max(float(live.get("attacking") or 0), float(mirrored.get("attacking") or 0))
+                    local_hit = max(float(live.get("_arena_hit") or 0), float(mirrored.get("_arena_hit") or 0))
+                    if local_swing > float(u.get("attacking") or 0) or local_hit > 0:
                         u = dict(u)
-                        u["attacking"] = local_swing
+                        if local_swing > float(u.get("attacking") or 0):
+                            u["attacking"] = local_swing
+                        if local_hit > 0:
+                            u["_arena_hit"] = local_hit
                     merged[uid] = u
                 self.arena_match["units"] = merged
                 self.arena_match["hud"] = msg.get("hud") or {}
@@ -1266,12 +1345,15 @@ class GameClient(ScreensMixin, CameraYaw):
                 if "bank_coins" in msg:
                     self.player["bank_coins"] = msg["bank_coins"]
         elif t == "QUEST_LOG":
+            previous = dict(self.quests or {})
             self.quests = msg["quests"]
             if "tracked_quest_id" in msg:
                 # Server-authoritative pin (survives logout / teleport / death).
                 self.tracked_quest_id = msg.get("tracked_quest_id") or None
             # Every active quest gets a golden path to its objective (mine, NPC, hand-in…).
             new_player_guide.sync_quest_guide(self, announce=True)
+            import adventure_guide
+            adventure_guide.on_quest_log(self, previous, self.quests)
         elif t == "ROYAL_STATE":
             self.royal_panel = dict(msg)
         elif t == "NPCS_SYNC":
@@ -1665,8 +1747,13 @@ class GameClient(ScreensMixin, CameraYaw):
         # Arena result / barracks eat input first (result blocks the world).
         if mercenaries_ui.handle_event(self, event):
             return
+        # Seraphine tour before Adventure Guide — an auto-opened journal must not
+        # eat intro "I've played before" / step clicks (module _open persists).
         import guide_tour
         if event.type == pygame.MOUSEBUTTONDOWN and guide_tour.handle_click(self, event):
+            return
+        import adventure_guide
+        if adventure_guide.handle_event(self, event):
             return
         if not guide_tour.active(self) and ui_coach.handle_event(self, event):
             return
@@ -1702,6 +1789,9 @@ class GameClient(ScreensMixin, CameraYaw):
             if event.key == pygame.K_ESCAPE and getattr(self, "royal_panel", None):
                 self.royal_panel = None
                 return
+            if event.key == pygame.K_ESCAPE and getattr(self, "show_war_board", False):
+                self.show_war_board = False
+                return
             # Leave private dungeon before other Esc handlers eat the key
             if event.key == pygame.K_ESCAPE and self.dungeon and not (
                 self.trade_incoming or self.trade_state
@@ -1713,6 +1803,7 @@ class GameClient(ScreensMixin, CameraYaw):
                 or self.pack_prompt or self.log_prompt or self.potion_prompt or self.cook_prompt
                 or self.dungeon_prompt or self.combat_style_prompt or self.show_wish
                 or self.wish_stat_choice
+                or getattr(self, "show_war_board", False)
             ):
                 self.clear_walk()
                 self.net.send("LEAVE_DUNGEON")
@@ -2439,6 +2530,7 @@ class GameClient(ScreensMixin, CameraYaw):
             pass
         # Clear session UI / world caches immediately
         self.state = "LOGIN"
+        self._awaiting_dungeon_resume = False
         self.login_error = ""
         self.login_mode = "login"
         self.player = None
@@ -3681,6 +3773,7 @@ class GameClient(ScreensMixin, CameraYaw):
             self.dungeon["petaldeep"] = dict(msg["petaldeep"])
         if msg.get("deepdelve"):
             self.dungeon["deepdelve"] = dict(msg["deepdelve"])
+        self._apply_siege_payload(msg)
         self.monsters = {m["id"]: m for m in (msg.get("monsters") or [])}
         self.resources = {}
         self.ground_items = {}
@@ -3693,8 +3786,12 @@ class GameClient(ScreensMixin, CameraYaw):
         px = msg.get("player_x", (self.player or {}).get("x", 0))
         py = msg.get("player_y", (self.player or {}).get("y", 0))
         self._snap_local_player(px, py)
-        if msg.get("realm"):
+        self._awaiting_dungeon_resume = False
+        # Fresh portal entry fades in; login resume lands straight on the tile.
+        if msg.get("realm") and not msg.get("resume"):
             self._realm_fade_until = time.time() + 0.45
+        else:
+            self._realm_fade_until = 0
 
     def _exit_dungeon_view(self):
         tiles = self._home_tiles if self._home_tiles is not None else self._overworld_tiles
@@ -3714,6 +3811,65 @@ class GameClient(ScreensMixin, CameraYaw):
         self.clear_walk()
         self._minimap_base = None
 
+    def _apply_siege_payload(self, msg):
+        """Merge War for the Crown structure / war / heraldry into dungeon state."""
+        if self.dungeon is None:
+            return
+        # Enter payload: crown_siege is the public_state blob (structures + war).
+        # Live tick: dungeon.crown_siege is the hud snapshot; SIEGE_UPDATE is flat.
+        raw = msg.get("crown_siege")
+        if raw is None and msg.get("structures") is not None:
+            raw = {
+                "structures": msg.get("structures"),
+                "war": msg.get("war"),
+                "heraldry": msg.get("heraldry"),
+                "breaches": msg.get("breaches"),
+            }
+        if raw is None:
+            return
+        blob = self.dungeon.get("crown_siege")
+        if not isinstance(blob, dict):
+            blob = {}
+            self.dungeon["crown_siege"] = blob
+        if isinstance(raw.get("structures"), dict):
+            blob.update(raw["structures"])
+            blob["war"] = raw.get("war", blob.get("war"))
+            blob["heraldry"] = raw.get("heraldry", blob.get("heraldry"))
+        else:
+            # Flat structure map, or hud snapshot without nested structures.
+            for key, val in raw.items():
+                if key in ("war", "heraldry", "breaches", "side", "eliminated",
+                           "interest_radius", "structures", "board",
+                           "walls_breached", "watchtower_down", "armoury_down",
+                           "depot_down", "keep_down"):
+                    continue
+                if isinstance(val, dict) and "state" in val:
+                    blob[key] = val
+            if "war" in raw:
+                blob["war"] = raw.get("war")
+            if "heraldry" in raw:
+                blob["heraldry"] = raw.get("heraldry")
+        hud = {
+            "war": blob.get("war"),
+            "heraldry": blob.get("heraldry"),
+            "side": raw.get("side"),
+            "eliminated": raw.get("eliminated"),
+            "interest_radius": raw.get("interest_radius"),
+        }
+        for flag in ("walls_breached", "watchtower_down", "armoury_down",
+                     "depot_down", "keep_down", "board"):
+            if raw.get(flag) is not None:
+                hud[flag] = raw.get(flag)
+            elif isinstance(self.dungeon.get("crown_siege_hud"), dict):
+                prev = self.dungeon["crown_siege_hud"].get(flag)
+                if prev is not None:
+                    hud[flag] = prev
+        if isinstance(raw.get("war"), dict) or raw.get("heraldry") is not None:
+            self.dungeon["crown_siege_hud"] = hud
+        if msg.get("breaches") is not None:
+            self.dungeon["siege_breaches"] = list(msg.get("breaches") or [])
+        self.clear_walk()
+
     def _apply_realm_plane(self, msg):
         """Swap Castle Realm planes without rebuilding the overworld backup."""
         tiles = msg.get("tiles") or []
@@ -3729,6 +3885,7 @@ class GameClient(ScreensMixin, CameraYaw):
             self.dungeon["label"] = msg.get("label") or self.dungeon.get("label")
             self.dungeon["exit_x"] = int(msg.get("exit_x", -1))
             self.dungeon["exit_y"] = int(msg.get("exit_y", -1))
+            self._apply_siege_payload(msg)
         px = msg.get("player_x", (self.player or {}).get("x", 0))
         py = msg.get("player_y", (self.player or {}).get("y", 0))
         self._snap_local_player(px, py)
@@ -3791,10 +3948,34 @@ class GameClient(ScreensMixin, CameraYaw):
         path = self.find_path(x, y, {tuple(goal)})
         self.walk_path = path or []
 
+    def _grass_under_trees(self):
+        """Same painted-tree footprint the server refuses to walk on."""
+        tiles = self.tiles
+        cached = getattr(self, "_tree_block_cache", None)
+        if cached is not None and cached[0] is tiles:
+            return cached[1]
+        blocked = tree_cover.grass_blocked(tiles, wm.GRASS) if tiles else frozenset()
+        self._tree_block_cache = (tiles, blocked)
+        return blocked
+
     def tile_walkable(self, x, y):
         if not (0 <= y < len(self.tiles) and 0 <= x < self.world_w):
             return False
-        return self.tiles[y][x] in wm.WALKABLE_TILES
+        tile = self.tiles[y][x]
+        if tile not in wm.WALKABLE_TILES:
+            return False
+        if tile == wm.GRASS and (x, y) in self._grass_under_trees():
+            return False
+        return True
+
+    def tree_chop_goals(self, tx, ty, name):
+        goals = set()
+        for dy in range(-8, 3):
+            for dx in range(-5, 6):
+                nx, ny = tx + dx, ty + dy
+                if self.tile_walkable(nx, ny) and tree_cover.beside(name, tx, ty, nx, ny):
+                    goals.add((nx, ny))
+        return goals
 
     def adjacent_goals(self, tx, ty, include_self=False):
         goals = set()
@@ -4051,6 +4232,10 @@ class GameClient(ScreensMixin, CameraYaw):
         lines.append(" · ".join(f"{h['name']}: {h['band']} ({h['stance']:+d})" for h in st.get("houses") or []))
         pl = st.get("pledge")
         lines.append(f"Your house: {pl['house']}, favour {pl['favour']}/500" if pl else "Your house: none")
+        war = st.get("war")
+        if war:
+            lines.append(str(war))
+            lines.append("War Council: notice board · guild panel · Royal Herald · /siege status")
         ev = st.get("event")
         if ev:
             lines.append(f"Open court matter: {ev.get('title')} - say /court to decide.")
@@ -4318,7 +4503,39 @@ class GameClient(ScreensMixin, CameraYaw):
         """
         if getattr(self, "_area_view", False):
             return AREA_VIEW_PCT
+        if getattr(self, "_battle_view", False):
+            return BATTLE_VIEW_PCT
         return ZOOM_MIN
+
+    def _arena_bout_on_screen(self):
+        m = getattr(self, "arena_match", None)
+        return bool(m and (m.get("active") or m.get("awaiting_result") or m.get("result")))
+
+    def enter_battle_view(self):
+        """Automatic modest zoom-out for an arena bout (not when the player is in Area view)."""
+        if getattr(self, "_area_view", False) or getattr(self, "_battle_view", False):
+            return
+        if getattr(self, "_battle_view_manual", False):
+            return
+        cur = int(getattr(self, "_zoom_goal", self.zoom_pct))
+        self._zoom_before_battle = self._snap_zoom(cur)
+        self._battle_view = True
+        self.zoom_pct = BATTLE_VIEW_PCT
+        self._zoom_goal = BATTLE_VIEW_PCT
+        self._zoom_anim = self._zoom_from = float(BATTLE_VIEW_PCT)
+        self._apply_zoom_tile(BATTLE_VIEW_PCT)
+
+    def exit_battle_view(self, keep_goal=None):
+        """Leave battle view: restore the pre-battle zoom (or the player's new choice)."""
+        if not getattr(self, "_battle_view", False):
+            return
+        self._battle_view = False
+        restore = self._snap_zoom(keep_goal if keep_goal is not None else
+                                  getattr(self, "_zoom_before_battle", ZOOM_DEFAULT))
+        self.zoom_pct = restore
+        self._zoom_goal = restore
+        self._zoom_anim = self._zoom_from = float(restore)
+        self._apply_zoom_tile(restore)
 
     def _apply_zoom_tile(self, pct=None):
         """Rebuild sprites only when the physical tile size actually changes."""
@@ -4355,6 +4572,22 @@ class GameClient(ScreensMixin, CameraYaw):
         import emberdeep_v2_client
         if emberdeep_v2_client.fp_active(self):
             return
+        if getattr(self, "_battle_view", False):
+            if not self._arena_bout_on_screen():
+                self.exit_battle_view()                      # bout + result card closed
+                self._battle_view_manual = False
+                self._arena_cam = None
+                return
+            goal_raw = getattr(self, "_zoom_goal", BATTLE_VIEW_PCT)
+            if goal_raw != BATTLE_VIEW_PCT:                  # wheel / slider during the bout
+                self._battle_view_manual = True
+                self.exit_battle_view(keep_goal=goal_raw)
+                return
+            if self._render_tile(BATTLE_VIEW_PCT) != TILE:
+                self._apply_zoom_tile(BATTLE_VIEW_PCT)
+            return
+        if getattr(self, "_battle_view_manual", False) and not self._arena_bout_on_screen():
+            self._battle_view_manual = False
         if getattr(self, "_area_view", False):
             if self.zoom_pct != AREA_VIEW_PCT or self._render_tile(AREA_VIEW_PCT) != TILE:
                 self.zoom_pct = AREA_VIEW_PCT
@@ -4402,6 +4635,13 @@ class GameClient(ScreensMixin, CameraYaw):
         want = bool(enabled)
         if want == bool(getattr(self, "_area_view", False)) and restore_pct is None:
             return
+        if want and getattr(self, "_battle_view", False):
+            # Area view chosen mid-bout: that is a manual override; Area view's own
+            # restore returns to the pre-battle zoom.
+            self._battle_view_manual = True
+            before = getattr(self, "_zoom_before_battle", ZOOM_DEFAULT)
+            self.exit_battle_view()
+            self._zoom_goal = before
         self._area_view_busy = True
         try:
             msg = "Loading wide view…" if want else "Restoring view…"
@@ -4462,7 +4702,8 @@ class GameClient(ScreensMixin, CameraYaw):
         cx, cy = sx * TILE + TILE / 2.0, sy * TILE + TILE / 2.0
         view = self.screen.subsurface((0, 0, MAP_W, MAP_H)).copy()
         w, h = max(1, int(round(MAP_W * k))), max(1, int(round(MAP_H * k)))
-        scaled = pygame.transform.scale(view, (w, h))
+        # Nearest-neighbour upscale made the whole world look dotted / gritty.
+        scaled = pygame.transform.smoothscale(view, (w, h))
         dx, dy = cx - cx * k, cy - cy * k
         if k < 1.0:
             self.screen.fill((8, 6, 10), (0, 0, MAP_W, MAP_H))
@@ -4567,6 +4808,13 @@ class GameClient(ScreensMixin, CameraYaw):
         living = [u for u in units if u.get("alive") and int(u.get("hp") or 0) > 0]
         if not living:
             c = match.get("center") or self.player_xy()
+            if match.get("awaiting_result") or match.get("result"):
+                try:
+                    import arena_colosseum
+                    return arena_colosseum.frame_camera(self, match, float(c[0]), float(c[1]), [], 8.0)
+                except Exception as exc:  # noqa: BLE001
+                    import castle_realm_renderer
+                    castle_realm_renderer._colosseum_report(self, "camera", exc)
             return float(c[0]), float(c[1])
         cx = sum(u["x"] for u in living) / len(living)
         cy = sum(u["y"] for u in living) / len(living)
@@ -4582,6 +4830,14 @@ class GameClient(ScreensMixin, CameraYaw):
             if c:
                 cx = 0.35 * cx + 0.65 * float(c[0])
                 cy = 0.35 * cy + 0.65 * float(c[1])
+        # Colosseum framing: stands + royal balcony above the line, fighters kept in view.
+        try:
+            import arena_colosseum
+            half_h = (MAP_H / TILE) / max(0.25, float(self._zoom_view_scale())) / 2.0
+            cx, cy = arena_colosseum.frame_camera(self, match, cx, cy, living, half_h)
+        except Exception as exc:  # noqa: BLE001
+            import castle_realm_renderer
+            castle_realm_renderer._colosseum_report(self, "camera", exc)
         return cx, cy
 
     def camera_origin(self):
@@ -4766,7 +5022,9 @@ class GameClient(ScreensMixin, CameraYaw):
         elif kind == "gather":
             gx, gy = int(row["x"]), int(row["y"])
             rtype = self.resources.get(f"{gx},{gy}") or ""
-            if "fishing" in str(rtype) or (
+            if rtype in tree_cover.NAMES:
+                goals = self.tree_chop_goals(gx, gy, rtype)
+            elif "fishing" in str(rtype) or (
                 0 <= gy < len(self.tiles) and 0 <= gx < self.world_w
                 and self.tiles[gy][gx] == wm.WATER
             ):
@@ -5017,17 +5275,39 @@ class GameClient(ScreensMixin, CameraYaw):
             self.handle_fletch_click(mx, my)
             return
         if self.show_skills:
+            # Skills modal sits over the world; the right sidebar stays interactive.
+            if mx >= SIDEBAR_X:
+                self.handle_sidebar_click(mx, my, event.button)
+                return
             box = pygame.Rect(140, 30, 680, 660)
             if not box.collidepoint(mx, my):
                 self.show_skills = False
             return
         if self.show_pets:
+            if mx >= SIDEBAR_X:
+                self.handle_sidebar_click(mx, my, event.button)
+                return
             self.handle_pets_click(mx, my)
             return
         if self.show_travel:
+            if mx >= SIDEBAR_X:
+                self.handle_sidebar_click(mx, my, event.button)
+                return
             self.handle_travel_click(mx, my)
             return
         if self.show_equipment:
+            # Equipment vignette leaves the bag undimmed — bag cells still equip
+            # here; every other sidebar control goes to the HUD click handler.
+            if mx >= SIDEBAR_X:
+                import equipment_ui_v2
+                result = equipment_ui_v2.handle_click(self, mx, my, ITEMS)
+                if result in ("equip", "equip_all", "unequip"):
+                    return
+                # "inside" on an empty bag cell, or "outside" on filters/tabs/…
+                if result == "inside":
+                    return
+                self.handle_sidebar_click(mx, my, event.button)
+                return
             self.handle_equipment_click(mx, my)
             return
         if getattr(self, "royal_panel", None):
@@ -5040,6 +5320,15 @@ class GameClient(ScreensMixin, CameraYaw):
         if mercenaries_ui.active(self):
             mercenaries_ui.click(self, mx, my)
             return
+        if self.dungeon and self.dungeon.get("id") == "castle_realm":
+            try:
+                import castle_realm_renderer
+                if castle_realm_renderer.war_board_click(self, mx, my):
+                    return
+                if castle_realm_renderer.structure_scar_click(self, mx, my):
+                    return
+            except Exception:
+                pass
         arena_btn = getattr(self, "arena_barracks_rect", None)
         if arena_btn and arena_btn.collidepoint(mx, my):
             self.net.send("BARRACKS", action="open")
@@ -5058,6 +5347,10 @@ class GameClient(ScreensMixin, CameraYaw):
             self.toggle_teleport_modal()
             return
         if self.show_help:
+            # Settings / help overlay is on the world side; sidebar buttons still work.
+            if mx >= SIDEBAR_X:
+                self.handle_sidebar_click(mx, my, event.button)
+                return
             box = pygame.Rect(120, 30, 580, 640)
             if not box.collidepoint(mx, my):
                 self.show_help = False
@@ -5276,7 +5569,11 @@ class GameClient(ScreensMixin, CameraYaw):
 
         def _start_gather(gx, gy):
             rtype = self.resources.get(f"{gx},{gy}") or ""
-            if "fishing" in str(rtype) or (
+            if rtype in tree_cover.NAMES:
+                # Stand beside the painted tree. The canopy is wider than the
+                # trunk, so the nearest open tile can be more than one step away.
+                goals = self.tree_chop_goals(gx, gy, rtype)
+            elif "fishing" in str(rtype) or (
                 0 <= gy < len(self.tiles) and 0 <= gx < self.world_w
                 and self.tiles[gy][gx] == wm.WATER
             ):
@@ -5292,9 +5589,14 @@ class GameClient(ScreensMixin, CameraYaw):
                 return
             self.walk_and_act(goals, {"type": "GATHER", "x": gx, "y": gy})
 
-        if exact_resource and gather is not None:
-            _start_gather(*gather)
-            return
+        # A click anywhere on the painted tree chops it. Waiting let a nearby
+        # monster pad, or a walk onto the grass under the canopy, swallow it.
+        if gather is not None:
+            gx, gy = gather
+            rtype = str(self.resources.get(f"{gx},{gy}") or "")
+            if exact_resource or rtype in tree_cover.NAMES:
+                _start_gather(gx, gy)
+                return
 
         # monster? Prefer exact foot tile. Soft radius only if the click isn't a
         # clear walk-away onto empty ground (oversized dragon sprites used to
@@ -5474,7 +5776,11 @@ class GameClient(ScreensMixin, CameraYaw):
             elif kind in ("cave_entrance", "volcano_entrance"):
                 radius = 2
             elif kind == "sewer_grate":
-                radius = 1
+                # Arch plus the grass/path beside it. Tiles further north are
+                # the village rats — clicking them must attack, not enter.
+                radius = 2
+                if ty < int(spot["y"]) - 1:
+                    continue
             else:
                 continue
             d = max(abs(spot["x"] - tx), abs(spot["y"] - ty))
@@ -5484,28 +5790,29 @@ class GameClient(ScreensMixin, CameraYaw):
         return best
 
     def resolve_gather_click(self, tx, ty):
-        """Return (x, y) of a resource under the click, including tall tree canopies."""
+        """Return (x, y) of a resource under the click, including the painted tree."""
         key = f"{tx},{ty}"
         if key in self.resources:
             rtype = self.resources[key]
-            if rtype in ("tree", "oak_tree", "willow_tree", "maple_tree", "yew_tree", "magic_tree"):
-                if self._tree_blocks_building(tx, ty):
-                    pass
-                else:
+            if rtype in tree_cover.NAMES:
+                if not self._tree_blocks_building(tx, ty):
                     return tx, ty
             else:
                 return tx, ty
-        # Tree sprites tower several tiles above the trunk — click on foliage
-        # lands on a tile north of the resource; search south for a trunk.
-        for dy in range(1, 6):
-            for dx in (0, -1, 1):
-                nx, ny = tx + dx, ty + dy
-                rtype = self.resources.get(f"{nx},{ny}")
-                if rtype in ("tree", "oak_tree", "willow_tree", "maple_tree", "yew_tree", "magic_tree"):
-                    if self._tree_blocks_building(nx, ny):
-                        continue
-                    return nx, ny
-        return None
+        # The sprite is wider than the old south-only search, so a click on
+        # the side of the canopy used to walk through the tree instead.
+        nodes = []
+        for rkey, rtype in self.resources.items():
+            if rtype not in tree_cover.NAMES:
+                continue
+            try:
+                rx, ry = (int(p) for p in rkey.split(","))
+            except ValueError:
+                continue
+            if self._tree_blocks_building(rx, ry):
+                continue
+            nodes.append((rx, ry, rtype))
+        return tree_cover.trunk_at(nodes, tx, ty)
 
     def handle_sidebar_click(self, mx, my, button):
         if USE_HUD_DRAWN_PANELS and USE_NEW_HUD:
@@ -6746,6 +7053,9 @@ class GameClient(ScreensMixin, CameraYaw):
         elif self.state == "THRONE_VISION":
             import throne_vision
             throne_vision.draw(self)
+        elif getattr(self, "_awaiting_dungeon_resume", False):
+            # Black hold until DUNGEON_ENTER — avoids the King's Realm portal flash.
+            pass
         else:
             self.draw_game()
             idle_client.draw(self)
@@ -7094,6 +7404,8 @@ class GameClient(ScreensMixin, CameraYaw):
         import guide_tour
         guide_tour.tick(self)
         guide_tour.draw(self)
+        import adventure_guide
+        adventure_guide.draw(self)
 
     def draw_map(self):
         import emberdeep_v2_client
@@ -7110,6 +7422,7 @@ class GameClient(ScreensMixin, CameraYaw):
         self._nameplate_queue = []
         self._badge_queue = []
         self._house_crest_queue = []
+        self._np_drawn_ids = set()
         self._defer_nameplates = True
 
         if self.dungeon and self.dungeon.get("id") == "petaldeep":
@@ -7362,7 +7675,9 @@ class GameClient(ScreensMixin, CameraYaw):
                     else:
                         near = px is not None and max(abs(x - px), abs(y - py)) <= 3
                     color = ORE_LABEL_COLORS.get(rtype, WHITE)
-                    # Ghost canopy when the player walks under / behind the tree.
+                    # Ghost canopy only when the player is behind the tree
+                    # (north of the trunk, under the canopy). Standing in front
+                    # or beside it to chop keeps the tree solid.
                     # Fairy Glade / fairy village trees stay solid (no fade).
                     tree_alpha = 255
                     if rtype in ("tree", "oak_tree", "willow_tree", "maple_tree", "yew_tree", "magic_tree") and px is not None:
@@ -7377,14 +7692,13 @@ class GameClient(ScreensMixin, CameraYaw):
                                     in_fairy = True
                         except Exception:
                             in_fairy = False
-                        if not in_fairy:
-                            dist = max(abs(x - px), abs(y - py))
-                            if dist == 0:
-                                tree_alpha = 95
-                            elif dist == 1:
-                                tree_alpha = 130
-                            elif dist == 2 and y <= py:
-                                tree_alpha = 170
+                        if not in_fairy and py < y:
+                            behind = y - py
+                            side = abs(px - x)
+                            if behind <= 2 and side <= 1:
+                                tree_alpha = 110 if behind == 1 else 160
+                            elif behind == 3 and side == 0:
+                                tree_alpha = 200
 
                     def _draw_res(cx=cx, cy=cy, rtype=rtype, label=label, near=near, color=color, tree_alpha=tree_alpha, x=x, y=y):
                         if not deepdelve_client.draw_rock(self.screen, rtype, cx, cy, TILE, x, y):
@@ -7844,7 +8158,14 @@ class GameClient(ScreensMixin, CameraYaw):
                             import player_hd_client
                             import mercenaries_ui
                             swing = float(m.get("attacking") or 0)
+                            try:
+                                import arena_battles_ui as _abu
+                                _mp = _abu.melee_progress(atk, swing)
+                            except Exception:
+                                _mp = atk if atk > 0 else (1.0 - swing if swing > 0 else 0.0)
                             anim = "melee" if (atk > 0 or swing > 0.15) else ("walk" if draw_moving else "idle")
+                            if float(m.get("_arena_hit") or 0) > 0.05 and anim != "melee":
+                                anim = "idle"  # draw_gladiator/boss promote to hit via _arena_hit
                             # Deployed / arena soldiers: full N/E/S/W walk + combat facing.
                             if m.get("arena_soldier"):
                                 hd_face = self._soldier_cardinal_facing(m, mkey, face)
@@ -8038,6 +8359,41 @@ class GameClient(ScreensMixin, CameraYaw):
                     if hint and hint[0] == "monster" and hint[1] == m["id"]:
                         self.blit_action_hint(hint[2], cx, ny - 42, hint[3])
                 draw_list.append((cy + TILE // 2, 4, _draw_mon))
+
+        # Arena pit soldier death falls (entity_kind=arena; removed from monsters on UPDATE)
+        if getattr(self, "arena_corpses", None):
+            import arena_battles_ui
+            for corpse in list(self.arena_corpses):
+                u = corpse.get("unit") or {}
+                sx, sy = self.world_to_view_offset(int(u.get("x") or 0), int(u.get("y") or 0), cam_x, cam_y)
+                if not (0 <= sx <= vis_w and 0 <= sy <= vis_h):
+                    continue
+                cx, cy = sx * TILE + TILE // 2, sy * TILE + TILE // 2
+                feet = cy + TILE // 2
+                tile_px = int(round(TILE * 1.1))
+                gender = str(u.get("gender") or "male")
+                face = u.get("facing") if u.get("facing") in ("n", "e", "s", "w") else ("e" if u.get("side") == "you" else "w")
+                age = time.time() - float(corpse.get("t0") or 0)
+                u["_arena_death"] = max(0.02, min(1.0, age / 0.85))
+                alpha = 255 if age < 0.85 else int(255 * max(0.0, 1.0 - (age - 0.85) / 0.3))
+
+                def _draw_arena_corpse(u=u, cx=cx, feet=feet, tile_px=tile_px, gender=gender, face=face, alpha=alpha, t=t):
+                    if USE_NEW_CASTLE:
+                        feet = feet  # feet already in view space
+                    eq = u.get("equipment") or {}
+                    if u.get("boss"):
+                        top = arena_battles_ui.draw_boss(self.screen, u, cx, feet, tile_px, t, "idle", 0, 0, face)
+                        if top is None:
+                            self._draw_arena_soldier_hd(u, cx, feet, tile_px, t, "idle", 0, 0, face, eq, gender)
+                    else:
+                        self._draw_arena_soldier_hd(u, cx, feet, tile_px, t, "idle", 0, 0, face, eq, gender)
+                    if alpha < 255:
+                        # Soft fade: veil over the fallen figure.
+                        veil = pygame.Surface((int(tile_px * 2.4), int(tile_px * 3.2)), pygame.SRCALPHA)
+                        veil.fill((0, 0, 0, max(0, 220 - alpha)))
+                        self.screen.blit(veil, (int(cx - tile_px * 1.2), int(feet - tile_px * 2.6)))
+
+                draw_list.append((feet, 4.2, _draw_arena_corpse))
 
         # HD knight corpses (death animations)
         if hasattr(self, 'knight_corpses'):
@@ -8487,6 +8843,7 @@ class GameClient(ScreensMixin, CameraYaw):
         self._blit_zoom_ease(cam_x, cam_y)
         self.flush_nameplates(cam_x, cam_y)
         self._defer_nameplates = False
+        self._np_drawn_ids = set()
         try:
             import weather_fx
             # Full map column (through the chat strip) so rain/season tint
@@ -10336,6 +10693,19 @@ class GameClient(ScreensMixin, CameraYaw):
             swing = float(m.get("attacking") or 0)
             if swing > 0:
                 m["attacking"] = max(0.0, swing - dt * 1.8)
+            hit = float(m.get("_arena_hit") or 0)
+            if hit > 0:
+                m["_arena_hit"] = max(0.0, hit - dt * 3.2)
+        # Advance pit death falls (corpses are drawn separately).
+        keep = []
+        for corpse in getattr(self, "arena_corpses", None) or []:
+            age = time.time() - float(corpse.get("t0") or 0)
+            if age > 1.15:
+                continue
+            u = corpse.get("unit") or {}
+            u["_arena_death"] = max(0.02, min(1.0, age / 0.85))
+            keep.append(corpse)
+        self.arena_corpses = keep
 
     def _soldier_cardinal_facing(self, m, mkey, fallback_face):
         """Map soldier facing to n/e/s/w for HD walk strips (all four directions)."""
@@ -10370,68 +10740,60 @@ class GameClient(ScreensMixin, CameraYaw):
         return "e"
 
     def _draw_arena_soldier_hd(self, m, cx, feet, tile_px, t, anim, atk, swing, hd_face, eq, gender):
-        """Cached HD blit for arena/field dolls — full N/E/S/W walk, no eclipse FX."""
-        try:  # pit soldiers: painted gladiator sheet; this doll is the fallback
-            import arena_battles_ui
-            if arena_battles_ui.draw_gladiator(self.screen, m, cx, feet, tile_px, t, anim, atk, swing, hd_face, gender):
+        """Arena/field dolls.
+
+        Pit gladiators (mapped templates) keep ONE identity across idle/walk/
+        melee/hit/death via arena_battles_ui.draw_gladiator (painted melee poses
+        or a part-rig of the same facing still). player_hd is only for non-glad
+        soldiers whose idle is already the HD equipment doll.
+        """
+        import arena_battles_ui as abu
+        import player_hd_client
+        import mercenaries_ui
+
+        hit_u = float(m.get("_arena_hit") or 0)
+        death_u = float(m.get("_arena_death") or 0)
+
+        try:
+            if abu.draw_gladiator(self.screen, m, cx, feet, tile_px, t, anim, atk, swing, hd_face, gender):
                 return True
         except Exception:
             pass
-        import player_hd_client
-        import mercenaries_ui
-        cache = getattr(self, "_arena_hd_cache", None)
-        if cache is None:
-            cache = {}
-            self._arena_hd_cache = cache
-        tid = m.get("template_id") or "levy"
-        gear = m.get("gear_tier") or "bronze"
+
         if hd_face not in ("n", "e", "s", "w"):
             hd_face = player_hd_client._facing_str(hd_face)
-        # Quantize anim progress so melee/idle reuse a few surfaces.
-        if anim == "melee":
-            prog = atk if atk > 0 else swing
-            frame_i = min(3, int(max(0.0, float(prog or 0)) * 4))
+
+        progress = None
+        draw_anim = "idle"
+        hit_t = -1.0
+        death_t = -1.0
+        if death_u > 0.0:
+            death_t = float(death_u) * 1.2
+            draw_anim = "idle"
+        elif anim == "melee":
+            progress = abu.melee_progress(atk, swing)
+            draw_anim = "melee"
+        elif hit_u > 0.05:
+            hit_t = max(0.0, (1.0 - hit_u) * 0.36)
+            draw_anim = "idle"
         elif anim == "walk":
-            frame_i = int(t * 8) % 8  # match player_hd 8-frame walk strips
-        else:
-            frame_i = int(t * 2) % 2
-        eq_key = tuple(sorted((eq or {}).items()))
-        key = (tid, gear, gender, hd_face, anim, frame_i, tile_px, eq_key)
-        cached = cache.get(key)
-        # Player is drawn with feet at (pad, pad + tile_px // 2) inside the canvas.
-        pad = tile_px * 2
-        feet_in_canvas = pad + tile_px // 2
-        if cached is None:
-            canvas = pygame.Surface((pad * 2, pad * 2), pygame.SRCALPHA)
-            look = player_hd_client.get_default_appearance(gender, starter=False)
-            look["outfit"] = None
-            look["hair_colour"] = mercenaries_ui._HAIR.get(tid, "dark_brown")
-            progress = None
-            if anim == "melee":
-                progress = (frame_i + 0.5) / 4.0
-            elif anim == "walk":
-                progress = (frame_i + 0.5) / 8.0
-            player_hd_client.draw_player(
-                canvas, gender, look,
-                pad, feet_in_canvas, tile_px, float(t),
-                anim=anim, progress=progress,
-                facing=hd_face,
-                equipment=eq,
-                starter=False,
-                fx_seed=None,
-                fx_ctx={"is_self": False, "preview": True},
-            )
-            cached = canvas
-            if len(cache) > 160:
-                for old in list(cache.keys())[:50]:
-                    cache.pop(old, None)
-            cache[key] = cached
-        # Anchor canvas feet to the same world feet used by the team mark/rim.
-        self.screen.blit(
-            cached,
-            (int(cx - pad), int(feet - feet_in_canvas)),
-        )
-        return True
+            draw_anim = "walk"
+
+        look = player_hd_client.get_default_appearance(gender, starter=False)
+        look["outfit"] = None
+        look["hair_colour"] = mercenaries_ui._HAIR.get(m.get("template_id") or "", "dark_brown")
+        return bool(player_hd_client.draw_player(
+            self.screen, gender, look,
+            cx, feet, tile_px, float(t),
+            anim=draw_anim, progress=progress,
+            facing=hd_face,
+            equipment=eq or {},
+            starter=False,
+            hit_t=hit_t, death_t=death_t,
+            fx_seed=None,
+            fx_ctx={"is_self": False, "preview": False},
+        ))
+
 
     def _draw_arena_team_mark(self, cx, feet_y, side):
         """Bold team-colour ring under the soldier so sides read at a glance."""
@@ -10464,6 +10826,11 @@ class GameClient(ScreensMixin, CameraYaw):
                 nameplates.submit(self, ("npc", n.get("id")), cx_i, ty_i + 17, str(text), rel="npc", kind="std",
                                   hovered=bool(_hint and _hint[0] == "npc" and _hint[1] == n.get("id")),
                                   feet=feet)
+                # Mark so a later classic queue cannot redraw the same NPC label.
+                seen = getattr(self, "_np_drawn_ids", None)
+                if seen is None:
+                    seen = self._np_drawn_ids = set()
+                seen.add(n.get("id"))
                 return pygame.Rect(cx_i - 48, ty_i - 13, 96, 20)
             except Exception as _e:
                 print("[nameplates] npc fallback:", _e)
@@ -13380,6 +13747,7 @@ class GameClient(ScreensMixin, CameraYaw):
             "recruits": int(msg.get("recruits") or 0),
             "recruits_active": int(msg.get("recruits_active") or 0),
             "max_recruits": int(msg.get("max_recruits") or 8),
+            "recruit_roster": list(msg.get("recruit_roster") or []),
             "max_members": int(msg.get("max_members") or 25),
             "challenge": msg.get("challenge") or "",
             "challenge_eligible": bool(msg.get("challenge_eligible")),

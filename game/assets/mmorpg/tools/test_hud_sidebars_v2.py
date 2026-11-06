@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "client"))
 sys.path.insert(0, os.path.join(HERE, "..", "server"))
 import pygame
 pygame.init()
+pygame.display.set_mode((10, 10))  # convert()/skin need a video mode
 import hud_skin, hud_v2
 
 fails = []

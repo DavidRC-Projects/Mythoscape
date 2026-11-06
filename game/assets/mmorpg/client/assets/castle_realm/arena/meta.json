@@ -23,8 +23,8 @@
   "hd": {
     "layers": {
       "ground": "sprites/{res}/arena_ground_hd.png",
-      "back": "sprites/{res}/arena_back_hd.png",
-      "front": "sprites/{res}/arena_front_hd.png",
+      "back": "sprites/{res}/arena_back_col_hd.png",
+      "front": "sprites/{res}/arena_front_col_hd.png",
       "gate_closed": "sprites/{res}/arena_gate_closed_hd.png",
       "gate_open": "sprites/{res}/arena_gate_open_hd.png"
     },
@@ -36,6 +36,7 @@
     ],
     "sand_tile": "sprites/{res}/arena_sand_tile_hd.png",
     "ring_tile": "sprites/{res}/arena_ring_tile_hd.png",
-    "note": "Painted HD arena (v3). art_tiles = world-tile rect [x0,y0,x1,y1] the layers cover; the sand maps onto the pit tiles. Old layers = error fallback only. Bake: /workspace/crownfall/ARENA/build/make3.py"
+    "note": "Painted HD arena (v3). art_tiles = world-tile rect [x0,y0,x1,y1] the layers cover; the sand maps onto the pit tiles. Old layers = error fallback only. Bake: /workspace/crownfall/ARENA/build/make3.py",
+    "colosseum_note": "Crowd/royal box/statues baked by grokbot_tmp/col/bake/bake.py from the v3 layers (5 Nov); original v3 layers kept beside them."
   }
 }

@@ -308,14 +308,14 @@ def leaderboard(conn, limit=10):
 # --- Saved rosters / rivals ------------------------------------------------------
 def save_roster(conn, session):
     import mercenaries as merc
-    rows = merc.roster_rows(conn, session.player_id)[:merc.ROSTER_MAX]
-    if not rows:
+    placed = merc.battle_slots(conn, session.player_id)   # saved formation (owned soldiers only)
+    if not placed:
         return
     army = []
-    for r in rows:
+    for r, slot in placed:
         f = merc._fighter_from_row(r)
         army.append({"template_id": r["template_id"], "name": f["name"], "levels": f["levels"],
-                     "gear_tier": f["gear_tier"], "ability": f["ability"]})
+                     "gear_tier": f["gear_tier"], "ability": f["ability"], "slot": int(slot)})
     cl = merc.roster_total_cl(merc.roster_public(conn, session.player_id))
     name = getattr(session, "char_name", None) or getattr(session, "username", None) or f"Commander {session.player_id}"
     conn.execute("INSERT OR REPLACE INTO arena_saved_roster VALUES (?,?,?,?,?)",
@@ -385,6 +385,14 @@ def resolve_foe(conn, session, foe_id):
     return None, None
 
 
+def refresh_saved_roster(conn, session):
+    """Formation changed: re-snapshot the ladder army, but only for commanders who already
+    have one (saving a formation must not enlist anyone on the ladder)."""
+    ensure_schema(conn)
+    if conn.execute("SELECT 1 FROM arena_saved_roster WHERE player_id=?", (session.player_id,)).fetchone():
+        save_roster(conn, session)
+
+
 def build_foe_fighters(entry):
     """Fighters for a rival army (saved levels/gear), or None for template armies."""
     if not entry.get("rival_army"):
@@ -398,7 +406,8 @@ def build_foe_fighters(entry):
         out.append({"name": s["name"], "levels": lv, "gear_tier": s["gear_tier"], "ability": ab,
                     "hp": hp, "max_hp": hp, "first_strike": ab == "first_strike",
                     "guard_left": 1 if ab == "guard" else 0, "medic_left": 1 if ab == "field_dress" else 0,
-                    "side": "foe", "template_id": s["template_id"]})
+                    "side": "foe", "template_id": s["template_id"],
+                    **({"slot": int(s["slot"])} if isinstance(s.get("slot"), int) else {})})
     return out
 
 

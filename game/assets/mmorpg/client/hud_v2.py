@@ -26,9 +26,9 @@ INK = (255, 241, 207)
 MUTED = (176, 160, 128)
 SAFE_GREEN = (72, 180, 110)
 DANGER_RED = (210, 70, 70)
-INK_Q = (43, 33, 24)        # quest parchment ink
-GOLD_Q = (92, 58, 22)       # parchment objective (warm sepia)
-MUTED_Q = (104, 84, 60)
+INK_Q = (28, 20, 14)        # quest parchment ink (darker for contrast)
+GOLD_Q = (72, 44, 16)       # parchment objective (warm sepia)
+MUTED_Q = (86, 68, 48)
 
 _HUD_DIR = os.path.join(os.path.dirname(__file__), "assets", "hud")
 _ART = {}  # path -> Surface
@@ -667,7 +667,7 @@ def _draw_event_banner(client):
 def _draw_sidebar_backdrop(screen, panel):
     try:
         import hud_skin
-        screen.blit(hud_skin._grain(panel.w, panel.h, hud_skin.BASE, seed=21, strength=1.2), panel.topleft)
+        screen.blit(hud_skin._grain(panel.w, panel.h, hud_skin.BASE, seed=21, strength=0.45), panel.topleft)
         hud_skin._inner_shadow(screen, panel, 0, 10, 160)
         rail = pygame.Rect(panel.x, panel.y, 6, panel.h)
         screen.blit(hud_skin._grad(6, panel.h, hud_skin.GOLD, hud_skin._c("#5A4020")), rail.topleft)
@@ -734,7 +734,8 @@ def _portrait_cache_key(client):
 
 def _player_portrait(client, size=56):
     """Circular bust of the player's current look (cached)."""
-    key = (_portrait_cache_key(client), size)
+    # rev 4: face-centroid horizontal crop; vertically centered in the ring.
+    key = (_portrait_cache_key(client), size, 4)
     cached = _PORTRAIT_CACHE.get(key)
     if cached is not None:
         return cached
@@ -760,20 +761,26 @@ def _player_portrait(client, size=56):
         )
         box = canvas.get_bounding_rect()
         if box.w >= 4 and box.h >= 4:
-            # Face + collar only. HD sprites are full-body; the head is the
-            # top ~22% of the figure bounds (shoulders start ~25–30%).
-            head_h = max(12, int(box.h * 0.24))
-            inset = max(0, int(box.w * 0.10))
-            head = pygame.Rect(
-                box.x + inset, box.y,
-                max(8, box.w - inset * 2), head_h,
-            )
+            # Face + helm + collar (top of the figure).
+            head_h = max(14, int(box.h * 0.28))
+            band = pygame.Rect(box.x, box.y, box.w, head_h).clip(canvas.get_rect())
+            sx = n = 0
+            step = 2 if band.w * band.h > 6000 else 1
+            for yy in range(band.y, band.bottom, step):
+                for xx in range(band.x, band.right, step):
+                    if canvas.get_at((xx, yy))[3] > 40:
+                        sx += xx
+                        n += 1
+            face_cx = int(sx / n) if n else (box.x + box.w // 2)
+            # Square crop around the face — not the full (weapon-skewed) body width.
+            side = max(head_h, int(head_h * 1.1))
+            head = pygame.Rect(face_cx - side // 2, box.y, side, head_h)
             head = head.clip(canvas.get_rect())
             bust = canvas.subsurface(head).copy()
-            # Cover the inner medallion; prefer height so the face fills the ring.
+            # Cover the medallion with a little margin inside the rim.
             scale = max(
-                (size * 1.05) / max(1, bust.get_width()),
-                (size * 1.05) / max(1, bust.get_height()),
+                (size * 0.95) / max(1, bust.get_width()),
+                (size * 0.95) / max(1, bust.get_height()),
             )
             nw = max(1, int(bust.get_width() * scale))
             nh = max(1, int(bust.get_height() * scale))
@@ -988,6 +995,19 @@ def _clan(client):
     return getattr(client, "clan_info", None) or {}
 
 
+def _guild_rank(client, clan=None):
+    """Effective guild rank. Falls back to Leader when the live leader name matches."""
+    clan = clan if clan is not None else _clan(client)
+    rank = str(clan.get("rank") or "").strip()
+    if rank:
+        return rank
+    me = str((client.player or {}).get("name") or "").strip().lower()
+    leader = str(clan.get("leader") or "").strip().lower()
+    if me and leader and me == leader:
+        return "Leader"
+    return "Member"
+
+
 def _guild_label(client):
     name = str((_clan(client).get("name") or "")).strip()
     return name if name else "No guild"
@@ -1039,19 +1059,36 @@ _GUILD_PROMPTS = {
         "ok_label": "Leave guild",
         "cancel_label": "Stay",
     },
+    "leader_pick": {
+        "title": "Pass leadership",
+        "hint": "Type a guild member's character name. They become Leader; you become Officer.",
+        "placeholder": "Player name",
+        "cmd": "/guild leader",
+        "max_len": 24,
+        "ok_label": "Continue",
+    },
+    "leader": {
+        "title": "Pass leadership?",
+        "hint": "They become Leader. You become an Officer.",
+        "cmd": "/guild leader",
+        "confirm_only": True,
+        "ok_label": "Pass leadership",
+        "cancel_label": "Keep leading",
+    },
 }
 
 
-def open_guild_prompt(client, kind):
-    """Centered modal for create / invite / deposit / withdraw / leave confirm."""
+def open_guild_prompt(client, kind, target=None):
+    """Centered modal for create / invite / deposit / withdraw / leave / leader confirm."""
     spec = _GUILD_PROMPTS.get(kind)
     if not spec:
         return
     if getattr(client, "chat_typing", False) and hasattr(client, "_end_chat_typing"):
         client._end_chat_typing()
-    # Leave confirm: personalise with the live guild name.
+    # Leave / leader confirms: personalise with the live guild or chosen member.
     title = spec["title"]
     hint = spec["hint"]
+    cmd = spec["cmd"]
     if kind == "leave":
         gname = str((_clan(client).get("name") or "")).strip() or "your guild"
         title = f"Leave {gname}?"
@@ -1061,12 +1098,22 @@ def open_guild_prompt(client, kind):
             "If you are the leader, leadership passes to another member "
             "(or the guild disbands if you are alone)."
         )
+    elif kind == "leader":
+        who = str(target or "").strip()
+        if not who:
+            return
+        title = f"Pass leadership to {who}?"
+        hint = (
+            f"{who} becomes Leader of the guild. You step down to Officer. "
+            "Guild bank, invites, and castle authority move with the title."
+        )
+        cmd = f"/guild leader {who}"
     client.guild_prompt = {
         "kind": kind,
         "title": title,
         "hint": hint,
         "placeholder": spec.get("placeholder") or "",
-        "cmd": spec["cmd"],
+        "cmd": cmd,
         "max_len": int(spec.get("max_len") or 24),
         "numeric": bool(spec.get("numeric")),
         "confirm_only": bool(spec.get("confirm_only")),
@@ -1106,6 +1153,15 @@ def submit_guild_prompt(client):
             client.add_chat("Enter a whole number greater than zero.", color=DANGER_RED)
             return
         raw = str(int(digits))
+    # Name entry for Pass leadership → confirm before the hand-off.
+    if prompt.get("kind") == "leader_pick":
+        me = str((client.player or {}).get("name") or "").strip().lower()
+        if raw.lower() == me:
+            client.add_chat("Pick another guild member to lead.", color=DANGER_RED)
+            return
+        close_guild_prompt(client)
+        open_guild_prompt(client, "leader", target=raw)
+        return
     cmd = f"{prompt.get('cmd')} {raw}"
     close_guild_prompt(client)
     _guild_send(client, cmd)
@@ -1335,38 +1391,65 @@ def _draw_guild_empty(client, x0, yy, w, bottom, rects):
 
 
 def _draw_guild_home(client, clan, x0, yy, w, bottom, rects):
-    rank = clan.get("rank") or "Member"
+    rank = _guild_rank(client, clan)
     can_invite = rank in ("Leader", "Officer")
     can_hire = rank in ("Leader", "Officer")
+    war = clan.get("war") if isinstance(clan.get("war"), dict) else None
+    if war and war.get("line"):
+        _blit(client, client.font_tiny,
+              _fit_text(client.font_tiny, str(war["line"]), w - 8),
+              (x0, yy), (220, 180, 110))
+        yy += 16
+        _blit(client, client.font_tiny,
+              "War Council · /siege status · notice board · Herald",
+              (x0, yy), MUTED)
+        yy += 16
     challenge = str(clan.get("challenge") or "").strip()
     if challenge:
         _blit(client, client.font_tiny,
               _fit_text(client.font_tiny, f"Challenge · {challenge}", w - 8),
               (x0, yy), (160, 190, 140))
         yy += 16
+    active = int(clan.get("recruits_active") or 0)
+    cap = int(clan.get("max_recruits") or 8)
     _blit(client, client.font_tiny,
-          f"Recruits {clan.get('recruits_active', 0)}/{clan.get('max_recruits', 8)}"
-          f"  ·  Bank {int(clan.get('bank_coins') or 0):,}",
+          f"Recruits {active}/{cap}  ·  Bank {int(clan.get('bank_coins') or 0):,}",
           (x0, yy), MUTED)
-    yy += 20
+    yy += 18
+    roster = list(clan.get("recruit_roster") or [])
+    if roster:
+        _blit(client, client.font_tiny, "Hired company", (x0, yy), GOLD)
+        yy += 16
+        for row in roster:
+            if yy + 16 > bottom - 120:
+                _blit(client, client.font_tiny, "…more on /guild recruits", (x0, yy), MUTED)
+                yy += 16
+                break
+            mark = "" if row.get("active", True) else " (idle)"
+            line = f"#{row.get('id')}  {row.get('name')} · {row.get('role')}{mark}"
+            _blit(client, client.font_tiny, _fit_text(client.font_tiny, line, w - 8),
+                  (x0, yy), INK if row.get("active", True) else MUTED)
+            yy += 15
+        yy += 6
+    elif can_hire:
+        _blit(client, client.font_tiny, "No recruits hired yet.", (x0, yy), MUTED)
+        yy += 18
     if can_invite:
         _guild_btn(client, rects, "invite", "Invite player…",
                    pygame.Rect(x0, yy, w, 30), "primary")
         yy += 38
-    if can_hire and yy + 56 < bottom - 36:
-        _blit(client, client.font_tiny, "Hire recruit · 5,000 from bank", (x0, yy), MUTED)
+    if can_hire and yy + 56 < bottom - 8:
+        _blit(client, client.font_tiny, "Hire recruit · 5,000 from guild bank", (x0, yy), MUTED)
         yy += 16
         tw = (w - 16) // 3
         for i, role in enumerate(("Guard", "Squire", "Steward")):
             _guild_btn(client, rects, f"hire_{role.lower()}", role,
                        pygame.Rect(x0 + i * (tw + 8), yy, tw, 26), "secondary")
         yy += 34
-    _blit(client, client.font_tiny, "Members and bank have their own tabs.",
-          (x0, yy), MUTED)
 
 
 def _draw_guild_members(client, clan, x0, yy, w, bottom, rects):
-    rank = clan.get("rank") or "Member"
+    rank = _guild_rank(client, clan)
     can_manage = rank in ("Leader", "Officer")
     members = list(clan.get("members") or [])
     selected = getattr(client, "guild_selected", None)
@@ -1379,8 +1462,11 @@ def _draw_guild_members(client, clan, x0, yy, w, bottom, rects):
     max_scroll = max(0, len(members) - visible)
     scroll = max(0, min(max_scroll, int(getattr(client, "guild_scroll", 0) or 0)))
     client.guild_scroll = scroll
+    me_name = str((client.player or {}).get("name") or "").strip().lower()
     if can_manage:
-        _blit(client, client.font_tiny, "Click a member for officer tools", (x0, yy), MUTED)
+        tip = ("Click a member, then Pass leadership" if rank == "Leader"
+               else "Click a member for officer tools")
+        _blit(client, client.font_tiny, tip, (x0, yy), MUTED)
         yy += 16
     for line in members[scroll:scroll + visible]:
         name = _guild_member_name(line)
@@ -1422,13 +1508,13 @@ def _draw_guild_members(client, clan, x0, yy, w, bottom, rects):
                    pygame.Rect(panel.x + 12 + tw, by, tw, 24), "quiet")
         _guild_btn(client, rects, "kick", "Kick",
                    pygame.Rect(panel.x + 16 + 2 * tw, by, tw, 24), "danger")
-        if rank == "Leader" and selected != (client.player or {}).get("name"):
-            _guild_btn(client, rects, "leader", "Pass leader",
+        if rank == "Leader" and str(selected or "").strip().lower() != me_name:
+            _guild_btn(client, rects, "leader", "Pass leadership",
                        pygame.Rect(panel.x + 8, by + 28, w - 16, 24), "danger")
 
 
 def _draw_guild_bank(client, clan, x0, yy, w, bottom, rects):
-    rank = clan.get("rank") or "Member"
+    rank = _guild_rank(client, clan)
     bank = int(clan.get("bank_coins") or 0)
     card = pygame.Rect(x0, yy, w, 64)
     _panel(client.screen, card, NAVY_CARD, GOLD, radius=8, width=2, ornate=True)
@@ -1522,7 +1608,7 @@ def _draw_guild(client, y, bottom, rects):
         _draw_guild_empty(client, x0, yy, w, bottom, rects)
         return
 
-    rank = clan.get("rank") or "Member"
+    rank = _guild_rank(client, clan)
     count = int(clan.get("count") or 0)
     cap = int(clan.get("max_members") or 25)
     _blit(client, client.font_small,
@@ -1536,7 +1622,9 @@ def _draw_guild(client, y, bottom, rects):
     yy = _draw_guild_tabs(client, x0, yy, w, rects)
 
     tab = getattr(client, "guild_tab", "home") or "home"
-    footer_y = bottom - 30
+    # Leader always gets a Pass leadership footer so the control can't be clipped away.
+    footer_h = 60 if rank == "Leader" else 30
+    footer_y = bottom - footer_h
     body_bottom = footer_y - 6
     if tab == "members":
         _draw_guild_members(client, clan, x0, yy, w, body_bottom, rects)
@@ -1547,6 +1635,10 @@ def _draw_guild(client, y, bottom, rects):
     else:
         _draw_guild_home(client, clan, x0, yy, w, body_bottom, rects)
 
+    if rank == "Leader":
+        _guild_btn(client, rects, "pass_leader", "Pass leadership…",
+                   pygame.Rect(x0, footer_y, w, 26), "danger")
+        footer_y += 30
     bw = (w - 8) // 2
     _guild_btn(client, rects, "leave", "Leave",
                pygame.Rect(x0, footer_y, bw, 26), "danger")
@@ -1577,6 +1669,9 @@ def _guild_click(client, key):
     if key == "invite":
         open_guild_prompt(client, "invite")
         return
+    if key == "pass_leader":
+        open_guild_prompt(client, "leader_pick")
+        return
     if key == "deposit":
         open_guild_prompt(client, "deposit")
         return
@@ -1601,12 +1696,20 @@ def _guild_click(client, key):
     if key == "scroll_down":
         client.guild_scroll = int(getattr(client, "guild_scroll", 0) or 0) + 1
         return
-    if key in ("promote", "demote", "kick", "leader") and selected:
+    if key == "leader" and selected:
+        open_guild_prompt(client, "leader", target=selected)
+        return
+    if key in ("promote", "demote", "kick") and selected:
         _guild_send(client, f"/guild {key} {selected}")
         return
     if key.startswith("hire_"):
         role = key.split("_", 1)[1].title()
         _guild_send(client, f"/guild hire {role}")
+        # Ask the server for a fresh roster so the Home list updates immediately.
+        try:
+            client.net.send("GUILD_SYNC")
+        except Exception:
+            pass
         return
 
 
@@ -1675,7 +1778,7 @@ def _veteran_step(client):
         nxt = _next_open_quest_step(client)
         if nxt:
             return nxt
-    return {"title": "Free to roam", "detail": "Pick any quest in your journal (Q)",
+    return {"title": "No active quest", "detail": "Talk to a quest giver, or press Q to browse quests.",
             "hint": "Press Q for the quest journal · H for controls", "npc": None}
 
 
@@ -1773,22 +1876,65 @@ def _draw_go_button(client, card, rects, npc_id=None, dest=None):
         }
 
 
+_QUEST_FONTS = {}
+
+
+def _quest_ui_font(size, bold=False):
+    """Arial via Font(path) — Cinzel/Garamond were rendering as solid bars on the card."""
+    key = (size, bold)
+    if key not in _QUEST_FONTS:
+        path = pygame.font.match_font("arial,helvetica,segoe ui,dejavu sans")
+        if path:
+            font = pygame.font.Font(path, size)
+            if bold:
+                font.set_bold(True)
+        else:
+            font = pygame.font.SysFont(None, size, bold=bold)
+        _QUEST_FONTS[key] = font
+    return _QUEST_FONTS[key]
+
+
+def _quest_write(screen, font, text, xy, color):
+    """Draw readable ink; skip empty strings so we never leave blank bars."""
+    text = str(text or "").strip()
+    if not text:
+        return 0
+    surf = font.render(text, True, color)
+    # Guard: if a font collapses to a solid slab, fall back to pygame default.
+    if surf.get_width() > 12:
+        sample_y = min(surf.get_height() - 1, max(0, surf.get_height() // 2))
+        xs = list(range(0, surf.get_width(), 2))
+        opaque = sum(1 for x in xs if surf.get_at((x, sample_y))[3] > 200)
+        if xs and opaque / len(xs) > 0.85:
+            font = pygame.font.Font(None, max(16, font.get_height() + 2))
+            surf = font.render(text, True, color)
+    screen.blit(surf, xy)
+    return surf.get_height()
+
+
 def _draw_quest_card(client, y, rects):
-    """Sidebar quest briefing: name, objective progress, and how to finish."""
+    """Sidebar quest briefing: objective, destination, one instruction, Go."""
     _mw, _mh, SIDEBAR_X, SCREEN_W, _sh = _layout()
     x0 = SIDEBAR_X + 12
     w = SCREEN_W - SIDEBAR_X - 22
-    card = pygame.Rect(x0, y + 6, w, 108)
+    card = pygame.Rect(x0, y + 6, w, 122)
     quests_open = client.hud_focus == "quests"
     quest = _current_quest(client)
     INK, GOLD, MUTED = INK_Q, GOLD_Q, MUTED_Q  # dark ink on parchment
+    title_f = _quest_ui_font(17, bold=True)
+    body_f = _quest_ui_font(15)
+    small_f = _quest_ui_font(13)
     try:
         import hud_skin
-        plaque = "NEXT STEP" if not quest else ("READY TO TURN IN" if quest[4] == "ready" else "CURRENT QUEST")
+        plaque = "NO ACTIVE QUEST" if not quest else (
+            "READY TO TURN IN" if quest[4] == "ready" else "CURRENT QUEST"
+        )
         inner = hud_skin.parchment(client.screen, card, plaque)
         if quests_open:
             pygame.draw.rect(client.screen, hud_skin.GLOW, card.inflate(2, 0), 1, border_radius=4)
         pad_x = inner.x - card.x
+        text_x = inner.x
+        text_top = inner.y + 2
         _hdr = False
     except Exception as e:  # pragma: no cover
         print("[hud_skin] quest card fallback:", e)
@@ -1796,77 +1942,87 @@ def _draw_quest_card(client, y, rects):
         _panel_legacy(client.screen, card, NAVY_HI if quests_open else NAVY_CARD,
                       GOLD_BRIGHT if quests_open else GOLD, radius=9, width=2, ornate=True)
         pad_x = 8
+        text_x = card.x + 8
+        text_top = card.y + 14
         _hdr = True
     text_w = w - 64 - pad_x  # leave room for Go
+    go_npc = None
+    go_dest = None
     if not quest:
-        # No active quest — name the next NPC/step so Go can set a path.
-        step = _no_quest_step(client)
+        # No active quest — clear placeholder, then the next concrete step if any.
+        step = _no_quest_step(client) or {}
+        title = (step.get("title") or "").strip() or "No active quest"
+        detail = (step.get("detail") or "").strip() or "Accept a quest from a quest giver."
+        hint = (step.get("hint") or "").strip() or "Press Q to open the quest journal"
+        # Prefer an explicit empty label when the step is only "free to roam".
+        if title.lower() in ("free to roam", "follow the trail"):
+            title = "No active quest"
+            detail = "Talk to a quest giver, or press Q to browse available quests."
         if _hdr:
-            _blit(client, client.font_tiny, "NEXT STEP", (card.x + 8, card.y + 4), GOLD)
-        _blit(client, client.font_small,
-              _fit_text(client.font_small, step["title"], text_w),
-              (card.x + pad_x, card.y + 14), INK)
-        yy = card.y + 36
-        for line in _wrap_text(client.font_tiny, step["detail"], text_w, max_lines=2):
-            _blit(client, client.font_tiny, line, (card.x + pad_x, yy), GOLD)
-            yy += 14
-        _blit(client, client.font_tiny,
-              _fit_text(client.font_tiny, step["hint"], text_w),
-              (card.x + pad_x, card.bottom - 26), MUTED)
-        if step.get("npc"):
-            _draw_go_button(client, card, rects, npc_id=step["npc"])
+            _quest_write(client.screen, small_f, "NO ACTIVE QUEST", (card.x + 8, card.y + 4), GOLD)
+        _quest_write(client.screen, title_f, _fit_text(title_f, title, text_w), (text_x, text_top), INK)
+        yy = text_top + 22
+        for line in _wrap_text(body_f, detail, text_w, max_lines=2):
+            _quest_write(client.screen, body_f, line, (text_x, yy), GOLD)
+            yy += 16
+        _quest_write(client.screen, small_f, _fit_text(small_f, hint, text_w),
+                     (text_x, card.bottom - 28), MUTED)
+        go_npc = step.get("npc")
     else:
         name, _desc, progress, need, status = quest
         qid = _tracked_quest_id(client)
         state = (client.quests or {}).get(qid) or {}
         qdef = QUESTS.get(qid) or {}
-        header = "READY TO TURN IN" if status == "ready" else "CURRENT QUEST"
         if _hdr:
-            _blit(client, client.font_tiny, header, (card.x + 8, card.y + 4), GOLD)
-        _blit(client, client.font_small,
-              _fit_text(client.font_small, name, text_w),
-              (card.x + pad_x, card.y + 14), INK)
+            _quest_write(client.screen, small_f, "CURRENT QUEST", (card.x + 8, card.y + 4), GOLD)
+        _quest_write(client.screen, title_f, _fit_text(title_f, name or "Quest", text_w),
+                     (text_x, text_top), INK)
 
         objective = client._quest_objective_text(qid, state) if qid else _desc
         if status == "ready":
             giver = next((npc for npc in NPCS if npc.get("id") == qdef.get("giver")), {})
             objective = f"Return to {giver.get('name', 'the quest giver')}"
-        # Prefer live objective; fall back to the quest description.
         if not (objective or "").strip():
-            objective = (qdef.get("description") or "").strip()
+            objective = (qdef.get("description") or "").strip() or "Follow the golden trail"
 
-        yy = card.y + 36
-        obj_lines = _wrap_text(client.font_tiny, objective, text_w, max_lines=2)
-        for line in obj_lines:
-            _blit(client, client.font_tiny, line, (card.x + pad_x, yy), GOLD)
-            yy += 14
-        finish = _quest_finish_hint(client, qid, status) if qid else ""
-        if need and status == "active":
-            finish = f"{progress}/{need} · {finish}" if finish else f"Progress {progress}/{need}"
-        _blit(client, client.font_tiny,
-              _fit_text(client.font_tiny, finish, text_w),
-              (card.x + pad_x, card.bottom - 26), MUTED)
-
-        # Go → hand-in NPC, find-NPC target, or objective camp/travel spot.
-        target_id = qdef.get("giver") if status == "ready" else None
-        if qdef.get("type") == "find_npc" and status != "ready":
-            target_id = qdef.get("target")
-        dest = None
+        dest_label = None
         if qid and status in ("active", "ready"):
             try:
                 import new_player_guide
                 spot = new_player_guide.quest_objective_dest(client, qid)
                 if spot:
-                    dest = {"x": spot[0], "y": spot[1], "label": spot[2]}
+                    go_dest = {"x": spot[0], "y": spot[1], "label": spot[2]}
+                    dest_label = spot[2]
             except Exception:
-                dest = None
-        if not dest and qdef.get("type") == "kill" and status != "ready":
+                go_dest = None
+        if not go_dest and qdef.get("type") == "kill" and status != "ready":
             camp = next((d for d in TRAVEL_DESTINATIONS
                          if d.get("kind") == "monster" and d.get("monster") == qdef.get("target")), None)
             if camp:
-                dest = {"x": camp["x"], "y": camp["y"], "label": camp.get("label") or qdef.get("target")}
-        if target_id or dest:
-            _draw_go_button(client, card, rects, npc_id=target_id, dest=dest)
+                go_dest = {"x": camp["x"], "y": camp["y"], "label": camp.get("label") or qdef.get("target")}
+                dest_label = go_dest["label"]
+
+        instruction = _quest_finish_hint(client, qid, status) if qid else ""
+        if need and status == "active":
+            instruction = f"{progress}/{need} · {instruction}" if instruction else f"Progress {progress}/{need}"
+        if not (instruction or "").strip():
+            instruction = "Press Go to set the path"
+
+        yy = text_top + 22
+        _quest_write(client.screen, body_f, _fit_text(body_f, objective, text_w), (text_x, yy), GOLD)
+        yy += 17
+        if dest_label:
+            _quest_write(client.screen, small_f, _fit_text(small_f, f"Next: {dest_label}", text_w),
+                         (text_x, yy), INK)
+            yy += 15
+        _quest_write(client.screen, small_f, _fit_text(small_f, instruction, text_w),
+                     (text_x, card.bottom - 28), MUTED)
+
+        go_npc = qdef.get("giver") if status == "ready" else None
+        if qdef.get("type") == "find_npc" and status != "ready":
+            go_npc = qdef.get("target")
+    if go_npc or go_dest:
+        _draw_go_button(client, card, rects, npc_id=go_npc, dest=go_dest)
     rects["quest_card"] = card
     return card.bottom + 2
 
@@ -2608,7 +2764,15 @@ def _nav_click(client, key):
     if key == "pvp":
         client.net.send("SET_PK")
         return
-    # Re-click the same focus panel (Quests, Guild, …) to return to inventory.
+    if key == "quests":
+        # Adventure Guide parchment journal — not the narrow sidebar list.
+        import adventure_guide
+        adventure_guide.toggle(client)
+        # Keep focus clear so inventory stays usable under the journal.
+        if client.hud_focus == "quests":
+            client.hud_focus = None
+        return
+    # Re-click the same focus panel (Guild, …) to return to inventory.
     if client.hud_focus == key:
         client.hud_focus = None
         client.hud_system = "inventory"

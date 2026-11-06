@@ -84,9 +84,10 @@ class ScreensMixin:
             return
         self.login_mode = mode
         self.login_error = ""
+        # Fresh form when flipping Login <-> Create account (don't carry typed secrets).
+        self.fields = {"username": "", "password": "", "char_name": ""}
+        self.active_field = "username"
         self._login_ui_geom_cache = None  # login/register mockups differ in size
-        if mode == "login" and self.active_field == "char_name":
-            self.active_field = "username"
 
     def login_layout(self):
         """Hitboxes mapped onto login_ui.png / login_ui_register.png mockups."""
@@ -2783,166 +2784,9 @@ class ScreensMixin:
         )
 
     def draw_skills_modal(self):
-        _bind_client_globals()
-        box = pygame.Rect(140, 40, 680, 560)
-        pygame.draw.rect(self.screen, (16, 20, 28), box)
-        pygame.draw.rect(self.screen, (120, 180, 255), box, 2)
-        title = self.font_big.render("Skills", True, WHITE)
-        self.screen.blit(title, (box.x + 20, box.y + 12))
-
-        cmb = self.player_combat_level()
-        tot = self.player_total_level()
-        header = self.font.render(
-            f"Combat level {cmb}    ·    Total level {tot}",
-            True, YELLOW,
-        )
-        self.screen.blit(header, (box.x + 20, box.y + 48))
-        standing = self.font_small.render(
-            f"Standing: {self.player.get('rep_tier', 'Neutral')} ({int(self.player.get('reputation') or 0)})",
-            True, (200, 180, 240),
-        )
-        self.screen.blit(standing, (box.right - standing.get_width() - 24, box.y + 52))
-        # Work & Property (phase 4)
-        work = self.player.get("work") or {}
-        job, prop = work.get("job"), work.get("property")
-        wy = box.y + 72
-        for text in (
-            f"Work: {job['workplace']} {job['today']}/{job['cap']} today · wages {job['last_wages']}"
-            if job else "Work: none",
-            f"Property: {prop['kind']} {prop['workers']}/{prop['slots']} · {prop['fee']}/day"
-            f" · +{prop['last_income']}" if prop else "Property: none",
-        ):
-            surf = self.font_tiny.render(text, True, (190, 210, 180))
-            self.screen.blit(surf, (box.right - surf.get_width() - 24, wy))
-            wy += 13
-        if self.player.get("kingdom"):
-            ksurf = self.font_tiny.render(self.player["kingdom"] + "  (click for details)", True, (200, 180, 240))
-            kpos = (box.x + 20, box.y + 86)
-            self.screen.blit(ksurf, kpos)
-            self._kingdom_rect = pygame.Rect(kpos, ksurf.get_size())
-        hint = self.font_tiny.render(
-            "Scroll wheel / Up-Down / drag bar  ·  Esc / Tab closes",
-            True, GREY,
-        )
-        self.screen.blit(hint, (box.x + 20, box.y + 74))
-
-        header_y = box.y + 98
-        headers = [
-            ("Skill", 20), ("Level", 168), ("XP", 240),
-            ("XP for level", 340), ("To next", 480),
-        ]
-        for text, ox in headers:
-            self.screen.blit(self.font_small.render(text, True, ACCENT), (box.x + ox, header_y))
-        pygame.draw.line(
-            self.screen, PANEL_LINE,
-            (box.x + 16, header_y + 22), (box.right - 16, header_y + 22), 1,
-        )
-
-        levels = self.player.get("levels") or {}
-        xp_map = self.player.get("xp") or {}
-        pot = self.player.get("stat_boosts") or {}
-        row_h = 42
-        skill_rows = ["hitpoints"] + list(XP_SKILLS)
-        n_skills = len(skill_rows)
-        list_top = header_y + 28
-        list_bottom = box.bottom - 34
-        view_h = max(40, list_bottom - list_top)
-        content_h = n_skills * row_h
-        max_scroll = max(0, content_h - view_h)
-        self.skills_scroll = max(0, min(float(self.skills_scroll), max_scroll))
-        self.skills_scroll_meta = {
-            "list_top": list_top, "view_h": view_h, "max_scroll": max_scroll,
-            "track": pygame.Rect(box.right - 22, list_top, 10, view_h),
-        }
-
-        prev_clip = self.screen.get_clip()
-        self.screen.set_clip(pygame.Rect(box.x + 12, list_top, box.w - 40, view_h))
-
-        y = list_top - self.skills_scroll
-        for i, skill in enumerate(skill_rows):
-            row_top = y
-            y += row_h
-            if row_top + row_h < list_top or row_top > list_bottom:
-                continue
-            if skill == "hitpoints":
-                lvl = int((self.player or {}).get("max_hp") or 1)
-                hp_now = int((self.player or {}).get("hp") or 0)
-                tone, _pct = self.hp_tone(hp_now, lvl)
-                row = pygame.Rect(box.x + 16, int(row_top), box.w - 48, row_h - 4)
-                pygame.draw.rect(self.screen, (28, 34, 44), row, border_radius=4)
-                self.screen.blit(self.font.render("Hitpoints", True, WHITE), (row.x + 8, row.y + 8))
-                self.screen.blit(self.font.render(str(lvl), True, tone), (row.x + 156, row.y + 8))
-                self.screen.blit(self.font_small.render(f"{hp_now}/{lvl}", True, tone), (row.x + 228, row.y + 8))
-                self.screen.blit(self.font_small.render("—", True, GREY), (row.x + 340, row.y + 8))
-                self.screen.blit(self.font_small.render("—", True, GREY), (row.x + 480, row.y + 8))
-                continue
-            lvl = int(levels.get(skill, 1))
-            boost = 0
-            buff = pot.get(skill) if skill in ("attack", "strength", "defence") else None
-            if buff:
-                boost = int(buff.get("amount") or 0)
-                until = float(buff.get("until") or 0)
-                if until and until <= time.time():
-                    boost = 0
-            eff = lvl + boost
-            xp = int(xp_map.get(skill, 0))
-            to_next = combat.xp_to_next_level(xp)
-            xp_at_level = combat.xp_for_level(lvl)
-            name = SKILL_DISPLAY_NAMES.get(skill, skill.title())
-            row = pygame.Rect(box.x + 16, int(row_top), box.w - 48, row_h - 4)
-            bg = (28, 34, 44) if i % 2 == 0 else (24, 28, 36)
-            if boost > 0:
-                bg = (36, 48, 32) if i % 2 == 0 else (30, 42, 28)
-            pygame.draw.rect(self.screen, bg, row, border_radius=4)
-
-            bar = pygame.Rect(row.x + 232, row.y + 26, 100, 5)
-            pygame.draw.rect(self.screen, (40, 44, 54), bar, border_radius=3)
-            if to_next > 0:
-                next_thresh = combat.xp_for_level(lvl + 1)
-                span = max(1, next_thresh - xp_at_level)
-                done = max(0, min(1.0, (xp - xp_at_level) / span))
-            else:
-                done = 1.0
-            if done > 0:
-                fill = pygame.Rect(bar.x, bar.y, max(2, int(bar.w * done)), bar.h)
-                pygame.draw.rect(self.screen, (80, 160, 220), fill, border_radius=3)
-
-            self.screen.blit(self.font.render(name, True, WHITE), (row.x + 8, row.y + 8))
-            if boost > 0:
-                lvl_col = (110, 255, 130)
-                self.screen.blit(self.font.render(str(eff), True, lvl_col), (row.x + 156, row.y + 8))
-                self.screen.blit(
-                    self.font_tiny.render(f"+{boost}", True, (255, 200, 90)),
-                    (row.x + 186, row.y + 10),
-                )
-            else:
-                self.screen.blit(self.font.render(str(lvl), True, (220, 230, 245)), (row.x + 156, row.y + 8))
-            self.screen.blit(self.font_small.render(f"{xp:,}", True, (180, 200, 230)), (row.x + 228, row.y + 4))
-            self.screen.blit(
-                self.font_small.render(f"{xp_at_level:,}", True, GREY),
-                (row.x + 340, row.y + 8),
-            )
-            next_txt = "MAX" if to_next <= 0 else f"{to_next:,}"
-            self.screen.blit(self.font_small.render(next_txt, True, GREY), (row.x + 480, row.y + 8))
-
-        self.screen.set_clip(prev_clip)
-
-        if max_scroll > 0:
-            track = self.skills_scroll_meta["track"]
-            pygame.draw.rect(self.screen, (35, 40, 50), track, border_radius=4)
-            thumb_h = max(28, int(view_h * view_h / content_h))
-            thumb_y = list_top + int((view_h - thumb_h) * self.skills_scroll / max_scroll)
-            thumb = pygame.Rect(track.x, thumb_y, track.w, thumb_h)
-            self.skills_scroll_meta["thumb"] = thumb
-            pygame.draw.rect(self.screen, (100, 150, 210), thumb, border_radius=4)
-        else:
-            self.skills_scroll_meta["thumb"] = None
-
-        foot = self.font_tiny.render(
-            "Green levels are potion boosts (temporary).  Combat = Att/Str/Def/HP + Archery.",
-            True, (140, 138, 120),
-        )
-        self.screen.blit(foot, (box.x + 20, box.bottom - 28))
+        """Wood/gold Skills window — see skills_ui_v2 (Equipment-style restyle)."""
+        import skills_ui_v2
+        skills_ui_v2.draw(self)
 
     def draw_pets_modal(self):
         _bind_client_globals()

@@ -301,7 +301,14 @@ def upgrade_requirement(session, set_entry, level, conn=None):
         return False, f"Unlock the {names.get(need_tier, f'tier {need_tier}')} tier to reach {label}."
     if level == 3 and tier + 2 > 7:
         days = reign_days(session, conn)
-        if days < REIGN_DAYS_FOR_REGAL_T7:
+        siege_ok = False
+        if conn is not None and getattr(session, "player_id", None):
+            try:
+                import crown_siege
+                siege_ok = crown_siege.siege_regal_unlocked(conn, session.player_id)
+            except Exception:
+                siege_ok = False
+        if days < REIGN_DAYS_FOR_REGAL_T7 and not siege_ok:
             return False, f"Reign {REIGN_DAYS_FOR_REGAL_T7} days to reach Regal ({days} / {REIGN_DAYS_FOR_REGAL_T7})."
     return True, ""
 
