@@ -630,7 +630,24 @@ class GameClient(ScreensMixin, CameraYaw):
             # listening for a retry: messages queued into a dead socket and the
             # client looked frozen even after the server was started.
             self.net.connected = False
+        elif t == "_LINK_BEHIND":
+            self.login_error = msg.get("message") or "Reconnecting. The link is too far behind."
+            if self.dungeon and self.dungeon.get("id") == "kings_castle_siege":
+                import kcs_client
+                view = kcs_client.view_of(self)
+                view.stale = True
+                view.sync_seq = None
+                view.notice = self.login_error
+                view.error = self.login_error
         elif t == "_DISCONNECTED":
+            if self.dungeon and self.dungeon.get("id") == "kings_castle_siege":
+                import kcs_client
+                view = kcs_client.view_of(self)
+                view.stale = True
+                view.sync_seq = None
+                view.notice = "Connection lost. Reconnecting. Siege actions stay paused until the battle snapshot arrives."
+                view.error = view.notice
+                self.login_error = view.notice
             if self._logging_out:
                 self._logging_out = False
                 self.net.reconnect()
@@ -639,7 +656,8 @@ class GameClient(ScreensMixin, CameraYaw):
                 import throne_vision
                 throne_vision.abort()
             if self.state in ("GAME", "STAT_ALLOC", "OPENING_COMIC", "THRONE_VISION"):
-                self.login_error = "Disconnected from server."
+                if not (self.dungeon and self.dungeon.get("id") == "kings_castle_siege"):
+                    self.login_error = "Disconnected from server."
                 self.opening_comic_pending = False
                 self._awaiting_dungeon_resume = False
                 self.state = "LOGIN"
@@ -744,6 +762,12 @@ class GameClient(ScreensMixin, CameraYaw):
                 # Its coordinates belong to the other map, so ignore them.
                 return
             self.players = {p["id"]: p for p in msg["players"]}
+            if self.dungeon and self.dungeon.get("id") == "kings_castle_siege":
+                import kcs_client
+                gone = getattr(kcs_client.view_of(self), "eliminated", ())
+                for pid in list(self.players):
+                    if pid in gone:
+                        self.players.pop(pid, None)
             self.monsters = {m["id"]: m for m in msg["monsters"]}
             self.pets = msg.get("pets") or []
             self.ground_items = msg.get("ground_items", {})

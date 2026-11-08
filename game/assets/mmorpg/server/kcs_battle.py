@@ -592,12 +592,14 @@ def fire(session, engine_type: str) -> dict:
         splash = _splash_hits(store, war.war_id, cells.get(oid) or [], combat)
         rev = store.write_shot(war.war_id, engine.engine_id, hp, cd, oid, new_hp, state, splash)
         _grant(session.player_id, kcs_balance.xp_shot())
+        aim = (cells.get(oid) or engine.tiles)[0]
         return {
             "ok": True,
             "text": f"{engine_type.replace('_', ' ')} hit {oid.replace('_', ' ')} for {damage}. It is {state}.",
             "opening": {"opening_id": oid, "state": state, "rev": rev, "hp": new_hp,
                         "plane": kcs_siege.PLANE_BATTLEFIELD},
             "engine_id": engine.engine_id,
+            "shot": _shot_line(engine, aim[0], aim[1]),
             "engines": [{"engine_id": engine.engine_id, "hp": hp, "cooldown_until": cd}]
                        + [{"engine_id": eid, "hp": shp} for eid, shp in splash],
         }
@@ -723,18 +725,30 @@ def _defender_shot(session, store, war, engine, spec, combat, now, hp):
             return None
         store.write_engine_action(war.war_id, engine.engine_id, hp, cd, hits)
         _grant(session.player_id, kcs_balance.xp_shot())
+        shot = None
+        if hits:
+            struck = next((e for e in store.engines(war.war_id) if e.engine_id == hits[0][0]), None)
+            if struck is not None:
+                shot = _shot_line(engine, struck.tiles[0][0], struck.tiles[0][1])
+        elif players:
+            foe = next((f for f in foes if f.player_id == players[0]["player_id"]), None)
+            if foe is not None:
+                shot = _shot_line(engine, foe.x, foe.y)
         parts = []
         if hits:
             parts.append(f"{len(hits)} engine" + ("s" if len(hits) != 1 else ""))
         if players:
             parts.append(f"{len(players)} attacker" + ("s" if len(players) != 1 else ""))
-        return {
+        body = {
             "ok": True,
             "text": f"The cauldron douses the apron. It hits {' and '.join(parts)}.",
             "engine_id": engine.engine_id,
             "engines": [shooter] + [{"engine_id": eid, "hp": nhp} for eid, nhp in hits],
             "players": players,
         }
+        if shot is not None:
+            body["shot"] = shot
+        return body
     aimed = kcs_balance.aimed_target(
         engine.tiles, engine.rotation, engine_type,
         [(other.engine_id, other.tiles) for other, _ohp in attackers],
@@ -750,6 +764,7 @@ def _defender_shot(session, store, war, engine, spec, combat, now, hp):
             "ok": True,
             "text": f"Ballista {word} the {other.engine_type.replace('_', ' ')} ({new_hp} hp).",
             "engine_id": engine.engine_id,
+            "shot": _shot_line(engine, other.tiles[0][0], other.tiles[0][1]),
             "engines": [shooter, {"engine_id": eid, "hp": new_hp}],
         }
     aimed = kcs_balance.aimed_target(
@@ -767,8 +782,18 @@ def _defender_shot(session, store, war, engine, spec, combat, now, hp):
         "ok": True,
         "text": f"Ballista hits for {dmg}.",
         "engine_id": engine.engine_id,
+        "shot": _shot_line(engine, foe.x, foe.y),
         "engines": [shooter],
         "players": [{"player_id": foe.player_id, "hp": foe.hp, "killed": foe.hp <= 0, "damage": dmg}],
+    }
+
+
+def _shot_line(engine, tx, ty) -> dict:
+    ox, oy = engine.tiles[0]
+    return {
+        "engine_id": engine.engine_id,
+        "x": int(ox), "y": int(oy),
+        "tx": int(tx), "ty": int(ty),
     }
 
 
@@ -937,6 +962,19 @@ def _finish(store, war_id: int, winner: str, monarch, reason: str, guild=None) -
     try:
         recorded = store.record_result(war_id, winner, guild, monarch, proof)
     except Exception:
+        existing = None
+        try:
+            existing = store.result(war_id)
+        except Exception:
+            existing = None
+        if existing is not None:
+            return {
+                "ok": True,
+                "duplicate": True,
+                "finished": False,
+                "winner": existing.get("winner_side"),
+                "text": f"The siege is already decided for the {existing.get('winner_side')} side.",
+            }
         log.exception("kcs result failed")
         return _fail("The result could not be recorded.")
     projected = None
@@ -988,7 +1026,8 @@ def pack(session, engine_type: str = "") -> dict:
     try:
         store.remove_engine(war.war_id, engine.engine_id, int(session.player_id))
     except Exception as exc:
-        log.exception("kcs pack failed")
+        if exc.__class__.__name__ != "PlacementRejected":
+            log.exception("kcs pack failed")
         return _fail(str(exc) or "That engine stayed where it is.")
     return {"ok": True, "text": f"Packed the {engine.engine_type.replace('_', ' ')}.",
             "engine_id": engine.engine_id}

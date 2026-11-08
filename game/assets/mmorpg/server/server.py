@@ -4149,21 +4149,58 @@ async def _resume_dungeon(session, resume):
     })
 
 
-async def _broadcast_kcs(msg_type, **fields):
-    """Send a siege event only to sessions standing on the siege map."""
+async def _broadcast_kcs(msg_type, *, near=None, events=None, **fields):
+    """Send one siege event to sessions on the siege map.
+
+    ``near`` limits a frequent update to the existing interest radius.
+    A placed engine, a gate, or an elimination leaves ``near`` empty and
+    reaches everyone on the map. Each recipient gets the next sequence
+    number on their own connection. A full socket skips the event and
+    asks for one snapshot instead of growing a queue.
+    """
     import kcs_siege
+    import kcs_sync
+    if events:
+        fields = dict(fields)
+        fields["events"] = events
+        fields.setdefault("kind", events[0].get("kind"))
+    if msg_type == "KCS_DELTA" and fields.get("war_id") is None:
+        try:
+            war = kcs_siege.store().open_war()
+            if war is not None:
+                fields = dict(fields)
+                fields["war_id"] = war.war_id
+        except Exception:
+            log.exception("kcs war id for delta failed")
+    radius = kcs_sync.interest_radius()
     for other in list(WORLD.sessions.values()):
         if not kcs_siege.on_map(other):
             continue
+        if near is not None and not kcs_sync.near(near, (int(other.x), int(other.y)), radius):
+            continue
+        if kcs_sync.write_backlog(other.ws) > kcs_sync.WRITE_BUFFER_LIMIT:
+            other._kcs_resync = True
+            continue
+        payload = dict(fields)
+        payload["seq"] = kcs_sync.bump(other)
         try:
-            await send(other.ws, msg_type, **fields)
+            await send(other.ws, msg_type, **payload)
         except Exception:
             log.exception("kcs broadcast failed")
 
 
-async def _send_kcs_snapshot(session):
+def _kcs_snapshot_body(session):
     import kcs_siege
+    import kcs_sync
     body = kcs_siege.snapshot(session)
+    if body is None:
+        return None
+    body["sync_seq"] = kcs_sync.bump(session)
+    return body
+
+
+async def _send_kcs_snapshot(session):
+    body = _kcs_snapshot_body(session)
     if body is None:
         return
     await send(session.ws, "KCS_SNAPSHOT", **body)
@@ -4179,14 +4216,36 @@ async def apply_kcs_opening(opening_id, state, expected_rev=None):
     return body
 
 
-async def _publish_kcs_combat(result):
+async def _publish_kcs_combat(result, session):
+    """One nearby message for this shot: engine hit points, the bolt, and wounds.
+
+    The gate itself is broadcast separately so a player across the field
+    still sees the breach. Damage numbers stay on the server.
+    """
+    events = []
     for row in (result or {}).get("engines") or []:
         if isinstance(row, dict) and row.get("engine_id") is not None:
-            await _broadcast_kcs(
-                "KCS_DELTA", kind="engine_hp",
-                engine_id=row.get("engine_id"), hp=row.get("hp"),
-                cooldown_until=row.get("cooldown_until"),
-            )
+            events.append({
+                "kind": "engine_hp",
+                "engine_id": row.get("engine_id"),
+                "hp": row.get("hp"),
+                "cooldown_until": row.get("cooldown_until"),
+            })
+    shot = (result or {}).get("shot")
+    if isinstance(shot, dict):
+        events.append({"kind": "shot", **shot})
+    for row in (result or {}).get("players") or []:
+        if isinstance(row, dict) and row.get("player_id") is not None and not row.get("killed"):
+            events.append({
+                "kind": "player_hp",
+                "player_id": row.get("player_id"),
+                "hp": row.get("hp"),
+            })
+    if not events:
+        return
+    await _broadcast_kcs(
+        "KCS_DELTA", near=(int(session.x), int(session.y)), events=events,
+    )
 
 
 async def _resolve_kcs_players(result):
@@ -4374,10 +4433,9 @@ async def handle_kcs_act(session, msg):
         return
     if result.get("opening"):
         await _broadcast_kcs("KCS_DELTA", kind="opening", **result["opening"])
-    await _publish_kcs_combat(result)
+    await _publish_kcs_combat(result, session)
     await _resolve_kcs_players(result)
     await send(session.ws, "CHAT_MSG", **{"from": "King's Castle", "text": result.get("text") or "Fired."})
-    await _send_kcs_snapshot(session)
 
 
 async def handle_kcs_repair(session, msg):
@@ -4411,7 +4469,7 @@ async def handle_kcs_strike(session, msg):
     if not result.get("ok"):
         await send(session.ws, "ERROR", message=result.get("error") or "The swing missed.")
         return
-    await _publish_kcs_combat(result)
+    await _publish_kcs_combat(result, session)
     await send(session.ws, "CHAT_MSG", **{"from": "King's Castle", "text": result.get("text") or "Struck."})
     if result.get("killed"):
         target = WORLD.sessions.get(result.get("target_id"))
@@ -4432,7 +4490,6 @@ async def handle_kcs_pack(session, msg):
         return
     await _broadcast_kcs("KCS_DELTA", kind="engine_removed", engine_id=result.get("engine_id"))
     await send(session.ws, "CHAT_MSG", **{"from": "King's Castle", "text": result.get("text") or "Packed."})
-    await _send_kcs_snapshot(session)
 
 
 async def handle_kcs_claim(session, msg):
@@ -4471,7 +4528,7 @@ async def handle_kcs_snapshot(session, msg):
     if not kcs_siege.on_map(session):
         await send(session.ws, "ERROR", message="You are not deployed in the siege.")
         return
-    body = kcs_siege.snapshot(session)
+    body = _kcs_snapshot_body(session)
     if body is None:
         await send(session.ws, "ERROR", message="The siege can't be reached right now.")
         return
@@ -11343,6 +11400,7 @@ async def _ember_cones():
 async def game_loop():
     while True:
         await asyncio.sleep(TICK_SECONDS)
+        started = time.perf_counter()
         WORLD.tick_count += 1
         expire_ground_items()
         events = []
@@ -11374,6 +11432,7 @@ async def game_loop():
             await flush_quest_logs()
             if WORLD.tick_count % 10 == 0:
                 await _kcs_lifecycle_tick()
+                await _kcs_engine_digest()
             if feature_flags.USE_PLAYER_HOUSING and WORLD.tick_count % 500 == 0:
                 await _housing.tick_leases()
             if WORLD.tick_count % 10 == 0:
@@ -11479,6 +11538,16 @@ async def game_loop():
                                 )
                         except Exception:
                             pass
+                elif d.get("id") == "kings_castle_siege":
+                    alive = []
+                    if getattr(WORLD, "_kcs_pool_tick", None) != WORLD.tick_count:
+                        WORLD._kcs_pool_tick = WORLD.tick_count
+                        WORLD._kcs_pool = _kcs_player_pool()
+                    realm_players = _kcs_visible_players(session, WORLD._kcs_pool)
+                    import kcs_sync
+                    if kcs_sync.write_backlog(session.ws) > kcs_sync.WRITE_BUFFER_LIMIT:
+                        session._kcs_resync = True
+                        continue
                 else:
                     alive = [m.public_state() for m in d["monsters"].values() if m.alive and not getattr(m, "concealed", False)]
                     if d.get("id") == endless_depths.DUNGEON_ID:
@@ -11533,6 +11602,132 @@ async def game_loop():
                     await send(target.ws, ev["type"], **data)
             else:
                 await broadcast_siege_aware(ev["type"], **data)
+        _note_kcs_tick(started)
+
+
+def _kcs_row(session, sides):
+    data = session.dungeon or {}
+    return {
+        "id": session.player_id,
+        "name": session.char_name,
+        "x": int(session.x),
+        "y": int(session.y),
+        "hp": int(session.hp),
+        "max_hp": int(session.max_hp()),
+        "kcs_side": sides.get(int(session.player_id)) or "",
+        "kcs_mode": data.get("mode") or "",
+        "plane": data.get("plane") or "",
+        "hd_player": True,
+        "equipment": session.equipment,
+    }
+
+
+def _kcs_player_pool():
+    import kcs_siege
+    sides = kcs_siege.roster_side_map()
+    pool = []
+    for other in WORLD.sessions.values():
+        data = other.dungeon or {}
+        if data.get("id") != "kings_castle_siege":
+            continue
+        pool.append(_kcs_row(other, sides))
+    return pool
+
+
+def _kcs_visible_players(session, pool):
+    """Nearby fighters on this plane, capped by the existing interest fan-out."""
+    import crown_siege
+    import kcs_sync
+    plane = (session.dungeon or {}).get("plane")
+    here = [row for row in pool or [] if row.get("plane") == plane]
+    me = next((row for row in here if row.get("id") == session.player_id), None)
+    if me is None:
+        me = _kcs_row(session, {})
+        here.append(me)
+    kept = crown_siege.filter_by_interest(
+        me, here, radius=kcs_sync.interest_radius(), cap=kcs_sync.interest_cap(),
+    )
+    out = []
+    for row in kept:
+        if row.get("id") != session.player_id:
+            out.append(row)
+            continue
+        full = session.public_state()
+        full["kcs_side"] = row.get("kcs_side") or ""
+        full["kcs_mode"] = row.get("kcs_mode") or ""
+        out.append(full)
+    return out
+
+
+async def _kcs_engine_digest():
+    """Nearby engine facing and hit points, one message per player, not the map."""
+    import kcs_siege
+    import kcs_sync
+    if not kcs_siege.enabled():
+        return
+    try:
+        store = kcs_siege.store()
+        war = store.open_war()
+    except Exception:
+        log.exception("kcs engine digest failed")
+        return
+    if war is None or war.status != "active":
+        return
+    combat = store.engine_combat_map(war.war_id)
+    rows = []
+    for engine in store.engines(war.war_id):
+        hp, cd = combat.get(engine.engine_id, (None, None))
+        pub = kcs_siege._public_engine(engine)
+        pub["hp"] = hp
+        pub["cooldown_until"] = cd
+        rows.append(pub)
+    radius = kcs_sync.interest_radius()
+    for session in list(WORLD.sessions.values()):
+        if not kcs_siege.on_map(session):
+            continue
+        if getattr(session, "_kcs_resync", False):
+            session._kcs_resync = False
+            await _send_kcs_snapshot(session)
+            continue
+        if kcs_sync.write_backlog(session.ws) > kcs_sync.WRITE_BUFFER_LIMIT:
+            session._kcs_resync = True
+            continue
+        ox, oy = int(session.x), int(session.y)
+        near_rows = []
+        for row in rows:
+            tiles = row.get("tiles") or [(row.get("x"), row.get("y"))]
+            if any(kcs_sync.near((ox, oy), (int(t[0]), int(t[1])), radius) for t in tiles):
+                near_rows.append({
+                    "engine_id": row.get("engine_id"),
+                    "engine_type": row.get("engine_type"),
+                    "x": row.get("x"),
+                    "y": row.get("y"),
+                    "rotation": row.get("rotation"),
+                    "tiles": row.get("tiles"),
+                    "player_id": row.get("player_id"),
+                    "side": row.get("side"),
+                    "rev": row.get("rev"),
+                    "hp": row.get("hp"),
+                    "cooldown_until": row.get("cooldown_until"),
+                })
+        if not near_rows:
+            continue
+        await send(
+            session.ws, "KCS_DELTA",
+            seq=kcs_sync.bump(session), war_id=war.war_id,
+            kind="engine_state", engines=near_rows,
+        )
+
+
+def _note_kcs_tick(started):
+    path = os.environ.get("KCS_TICK_LOG")
+    if not path:
+        return
+    try:
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(f"{time.perf_counter() - started:.4f}\n")
+    except Exception:
+        log.exception("kcs tick log failed")
 
 
 def process_fires():
@@ -11951,6 +12146,13 @@ async def resolve_player_death(session, events, dungeon_tag=None):
             except Exception:
                 log.exception("kcs undurable death notice failed")
             return
+        if outcome.eliminated:
+            try:
+                await _broadcast_kcs(
+                    "KCS_DELTA", kind="eliminated", player_id=int(session.player_id),
+                )
+            except Exception:
+                log.exception("kcs elimination delta failed")
     # A quarter, not everything. Losing the entire purse to one bad
     # fight is the harshest possible outcome, and it hit hardest on a
     # good run (the 65k purse cap means a long session has the most to

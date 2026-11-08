@@ -587,7 +587,15 @@ def snapshot(session) -> Optional[dict]:
                     "tiles": [[int(x), int(y)] for x, y in tiles],
                 })
         engines = [_public_engine(e) for e in guard.store.engines(war.war_id)]
-        body = {"war_id": war.war_id, "openings": openings, "engines": engines}
+        eliminated = [
+            int(row[0]) for row in guard.store.roster_rows(war.war_id) if int(row[3])
+        ]
+        body = {
+            "war_id": war.war_id,
+            "openings": openings,
+            "engines": engines,
+            "eliminated": eliminated,
+        }
         try:
             import kcs_battle
             body = kcs_battle.enrich_snapshot(body, war.war_id)
@@ -779,6 +787,22 @@ def _side(session) -> Optional[str]:
     except Exception:
         log.exception("kcs side lookup failed")
         return None
+
+
+def roster_side_map() -> dict:
+    """player id to side for the open war. Empty when there is no war."""
+    try:
+        guard = _require_guard()
+        war = guard.store.open_war()
+        if war is None:
+            return {}
+        return {
+            int(row[0]): row[1] or ""
+            for row in guard.store.roster_rows(war.war_id)
+        }
+    except Exception:
+        log.exception("kcs roster sides failed")
+        return {}
 
 
 def _eliminated_in_store(player_id: int) -> bool:

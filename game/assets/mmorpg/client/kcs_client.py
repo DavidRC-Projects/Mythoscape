@@ -69,6 +69,12 @@ class SiegeView:
         self.bf_key = None
         self.last_ms = None
         self.buttons = []
+        self.sync_seq = None
+        self.stale = False
+        self.eliminated = set()
+        self.removed = set()
+        self.shots = []
+        self.resync_at = 0.0
 
 
 def active(client) -> bool:
@@ -153,27 +159,35 @@ def on_message(client, kind, msg) -> None:
         view.your_side = msg.get("your_side") or view.your_side
         view.openings = [dict(row) for row in (msg.get("openings") or []) if isinstance(row, dict)]
         view.engines = [dict(row) for row in (msg.get("engines") or []) if isinstance(row, dict)]
+        view.removed = set()
+        view.eliminated = {int(pid) for pid in (msg.get("eliminated") or [])}
+        view.shots = []
+        seq = msg.get("sync_seq")
+        if isinstance(seq, int):
+            view.sync_seq = seq
+        view.stale = False
         view.bf_key = None
+        view.error = ""
         view.notice = "Siege state is the server's snapshot."
+        _hide_eliminated(client, view)
         return
-    if kind == "KCS_DELTA" and msg.get("kind") == "engine" and isinstance(msg.get("engine"), dict):
-        _upsert_engine(view, msg["engine"])
-        view.notice = "The server placed that engine."
-        return
-    if kind == "KCS_DELTA" and msg.get("kind") == "engine_hp":
-        _set_engine_hp(view, msg.get("engine_id"), msg.get("hp"), msg.get("cooldown_until"))
-        return
-    if kind == "KCS_DELTA" and msg.get("kind") == "engine_removed":
-        view.engines = [row for row in view.engines if row.get("engine_id") != msg.get("engine_id")]
-        view.notice = "An engine was packed up."
-        return
-    if kind == "KCS_DELTA" and msg.get("kind") == "opening":
-        _upsert_opening(view, msg)
-        view.bf_key = None
-        view.notice = f"{msg.get('opening_id') or msg.get('id')} is {msg.get('state')}."
+    if kind == "KCS_DELTA":
+        decision = _accept_delta(view, msg)
+        if decision == "gap":
+            _request_snapshot(client, view)
+            return
+        if decision != "apply":
+            return
+        events = msg.get("events")
+        if not isinstance(events, list) or not events:
+            events = [msg]
+        for ev in events:
+            if isinstance(ev, dict):
+                _apply_delta(client, view, ev)
         return
     if kind == "KCS_PLACE_OK" and isinstance(msg.get("engine"), dict):
-        _upsert_engine(view, msg["engine"])
+        if msg["engine"].get("engine_id") not in view.removed:
+            _upsert_engine(view, msg["engine"])
         eng = msg["engine"]
         facing = eng.get("facing") or _face_name(eng.get("rotation") or 0)
         view.notice = f"Placed {str(eng.get('engine_type') or 'engine').replace('_', ' ')} facing {facing}."
@@ -237,6 +251,8 @@ def on_mouse(client, pos) -> bool:
     if not placing:
         _queue_walk(client, int(tx), int(ty))
         return True
+    if _combat_paused(client, view):
+        return True
     _place(client, int(tx), int(ty))
     return True
 
@@ -258,6 +274,7 @@ def draw(client) -> None:
     try:
         surf = _render(client, view, size)
         _paint_facing(surf, client, view)
+        _paint_battle(surf, client, view)
     except Exception as exc:
         surf = pygame.Surface(size)
         surf.fill((24, 18, 16))
@@ -266,6 +283,11 @@ def draw(client) -> None:
         surf.blit(font.render(str(exc)[:110], True, (210, 170, 140)), (16, 58))
         view.error = str(exc)
     _chrome(surf, view)
+    if view.stale or not getattr(getattr(client, "net", None), "connected", True):
+        view.stale = True
+        font = pygame.font.Font(None, 22)
+        banner = "Connection lost. Reconnecting. Siege actions are paused."
+        surf.blit(font.render(banner, True, (255, 214, 150)), (12, HUD_TOP + 8))
     client.screen.blit(surf, (0, 0))
 
 
@@ -570,6 +592,8 @@ def _button(client, action: str) -> None:
         _turn_view(client)
         return
     if action == "pack":
+        if _combat_paused(client, view):
+            return
         _send(client, "KCS_PACK", engine_type=view.engine_type)
         note(client, f"Asking to pack the {ENGINE_SHORT.get(view.engine_type, view.engine_type)}…")
         return
@@ -609,13 +633,19 @@ def _button(client, action: str) -> None:
         note(client, "Asking to begin the siege…")
         return
     if action == "fire":
+        if _combat_paused(client, view):
+            return
         _send(client, "KCS_ACT", engine_type=view.engine_type)
         note(client, f"Asking the {ENGINE_SHORT.get(view.engine_type, view.engine_type)} to fire…")
         return
     if action == "repair":
+        if _combat_paused(client, view):
+            return
         _send(client, "KCS_REPAIR")
         return
     if action == "strike":
+        if _combat_paused(client, view):
+            return
         _send(client, "KCS_STRIKE")
         return
     if action.startswith("side-"):
@@ -639,6 +669,8 @@ def _button(client, action: str) -> None:
         note(client, "SANDBOX ONLY: asking to prepare the next test siege…")
         return
     if action == "claim":
+        if _combat_paused(client, view):
+            return
         _send(client, "KCS_CLAIM")
         note(client, "Asking to claim the throne…")
 
@@ -680,7 +712,120 @@ def _select_type(view, key) -> None:
     view.notice = f"Selected {ENGINE_SHORT.get(kind, kind)}. Nose faces {_face_name(view.rotation)}."
 
 
+def _combat_paused(client, view) -> bool:
+    """Block combat until this connection has a snapshot of the live battle."""
+    connected = getattr(getattr(client, "net", None), "connected", True)
+    if not connected:
+        view.stale = True
+    if (client.dungeon or {}).get("mode") == "spectator":
+        view.notice = "Spectators cannot affect the battle."
+        view.error = view.notice
+        return True
+    if view.stale or view.sync_seq is None:
+        view.stale = True
+        view.notice = "Reconnecting. Siege actions are paused until the battle snapshot arrives."
+        view.error = view.notice
+        return True
+    return False
+
+
+def _accept_delta(view, msg):
+    seq = msg.get("seq")
+    if not isinstance(seq, int):
+        return "drop"
+    war = msg.get("war_id")
+    if war is not None and view.war_id is not None and int(war) != int(view.war_id):
+        return "drop"
+    if view.sync_seq is None or seq > view.sync_seq + 1:
+        view.stale = True
+        view.notice = "Siege updates fell behind. Waiting for a fresh snapshot."
+        view.error = view.notice
+        return "gap"
+    if seq <= view.sync_seq:
+        return "drop"
+    view.sync_seq = seq
+    view.stale = False
+    view.error = ""
+    return "apply"
+
+
+def _request_snapshot(client, view) -> None:
+    now = time.time()
+    if now - view.resync_at < 1.0:
+        return
+    view.resync_at = now
+    if getattr(getattr(client, "net", None), "connected", False):
+        _send(client, "KCS_SNAPSHOT")
+
+
+def _hide_eliminated(client, view) -> None:
+    players = getattr(client, "players", None)
+    if not isinstance(players, dict):
+        return
+    for pid in list(view.eliminated):
+        players.pop(pid, None)
+
+
+def _apply_delta(client, view, msg) -> None:
+    kind = msg.get("kind")
+    if kind == "engine" and isinstance(msg.get("engine"), dict):
+        eid = msg["engine"].get("engine_id")
+        if eid in view.removed:
+            return
+        _upsert_engine(view, msg["engine"])
+        view.notice = "The server placed that engine."
+        return
+    if kind == "engine_hp":
+        _set_engine_hp(view, msg.get("engine_id"), msg.get("hp"), msg.get("cooldown_until"))
+        return
+    if kind == "engine_state":
+        for row in msg.get("engines") or []:
+            if not isinstance(row, dict) or row.get("engine_id") in view.removed:
+                continue
+            if any(existing.get("engine_id") == row.get("engine_id") for existing in view.engines):
+                _set_engine_hp(view, row.get("engine_id"), row.get("hp"), row.get("cooldown_until"))
+                for existing in view.engines:
+                    if existing.get("engine_id") == row.get("engine_id") and row.get("rotation") is not None:
+                        existing["rotation"] = row.get("rotation")
+            else:
+                _upsert_engine(view, row)
+        return
+    if kind == "engine_removed":
+        eid = msg.get("engine_id")
+        view.removed.add(eid)
+        view.engines = [row for row in view.engines if row.get("engine_id") != eid]
+        view.notice = "An engine was packed up."
+        return
+    if kind == "opening":
+        _upsert_opening(view, msg)
+        view.bf_key = None
+        view.notice = f"{msg.get('opening_id') or msg.get('id')} is {msg.get('state')}."
+        return
+    if kind == "shot":
+        shot = dict(msg)
+        shot["until"] = time.time() + 0.45
+        view.shots.append(shot)
+        view.shots = view.shots[-8:]
+        return
+    if kind == "player_hp":
+        pid = msg.get("player_id")
+        if pid in view.eliminated:
+            return
+        players = getattr(client, "players", None)
+        if isinstance(players, dict) and pid in players and msg.get("hp") is not None:
+            players[pid]["hp"] = msg.get("hp")
+        return
+    if kind == "eliminated":
+        pid = msg.get("player_id")
+        if pid is None:
+            return
+        view.eliminated.add(int(pid))
+        _hide_eliminated(client, view)
+
+
 def _set_engine_hp(view, engine_id, hp, cooldown) -> None:
+    if engine_id in view.removed:
+        return
     for row in view.engines:
         if row.get("engine_id") == engine_id:
             if hp is not None:
@@ -692,18 +837,24 @@ def _set_engine_hp(view, engine_id, hp, cooldown) -> None:
 
 def _upsert_engine(view, engine) -> None:
     eid = engine.get("engine_id")
+    if eid in view.removed:
+        return
     view.engines = [row for row in view.engines if row.get("engine_id") != eid]
     view.engines.append(dict(engine))
 
 
 def _upsert_opening(view, msg) -> None:
     oid = msg.get("opening_id") or msg.get("id")
+    new_rev = msg.get("rev")
     found = False
     for row in view.openings:
         if row.get("id") == oid or row.get("opening_id") == oid:
+            old = row.get("rev")
+            if isinstance(new_rev, int) and isinstance(old, int) and new_rev < old:
+                return
             row["state"] = msg.get("state", row.get("state"))
-            if msg.get("rev") is not None:
-                row["rev"] = msg.get("rev")
+            if new_rev is not None:
+                row["rev"] = new_rev
             if msg.get("hp") is not None:
                 row["hp"] = msg.get("hp")
             found = True
@@ -712,9 +863,35 @@ def _upsert_opening(view, msg) -> None:
             "id": oid,
             "plane": msg.get("plane") or "",
             "state": msg.get("state") or "intact",
-            "rev": msg.get("rev") or 0,
+            "rev": new_rev or 0,
             "hp": msg.get("hp"),
         })
+
+
+def _paint_battle(surf, client, view) -> None:
+    """Marks for nearby fighters and a short line for a shot. Not a new renderer."""
+    now = time.time()
+    view.shots = [shot for shot in view.shots if shot.get("until", 0) > now]
+    me = (getattr(client, "player", None) or {}).get("id")
+    font = pygame.font.Font(None, 16)
+    for person in (getattr(client, "players", None) or {}).values():
+        if person.get("id") == me or person.get("id") in view.eliminated:
+            continue
+        spot = tile_to_screen(client, person.get("x", 0), person.get("y", 0))
+        if spot is None:
+            continue
+        side = person.get("kcs_side")
+        color = (190, 70, 60) if side == "attack" else (70, 130, 200) if side == "defend" else (170, 170, 170)
+        pygame.draw.circle(surf, color, spot, 5)
+        label = f"{person.get('hp', '')}"
+        if label:
+            surf.blit(font.render(str(label), True, color), (spot[0] + 7, spot[1] - 8))
+    for shot in view.shots:
+        start = tile_to_screen(client, shot.get("x", 0), shot.get("y", 0))
+        end = tile_to_screen(client, shot.get("tx", 0), shot.get("ty", 0))
+        if start is None or end is None:
+            continue
+        pygame.draw.line(surf, (240, 220, 140), start, end, 2)
 
 
 def _parity_path() -> str:
