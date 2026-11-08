@@ -317,6 +317,12 @@ class KCSStore:
             c.execute(
                 "INSERT OR IGNORE INTO kcs_sovereignty(id, castle_key, rev) VALUES (1, ?, 0)", (CASTLE_KEY,)
             )
+            # started_at is when the battle clock began. Older files only stored
+            # ends_at. Adding the column does not change the schema version, so
+            # the previous build can still open the same file.
+            cols = {row[1] for row in c.execute("PRAGMA table_info(kcs_war_clock)").fetchall()}
+            if "started_at" not in cols:
+                c.execute("ALTER TABLE kcs_war_clock ADD COLUMN started_at REAL")
 
     # ---- wars -------------------------------------------------------------
     def create_war(self, war_key: str) -> War:
@@ -339,6 +345,17 @@ class KCSStore:
     def open_war(self) -> Optional[War]:
         row = self._fetchone("SELECT war_id, war_key, status FROM kcs_wars WHERE open_slot = 1")
         return War(*row) if row else None
+
+    def latest_war(self) -> Optional[War]:
+        row = self._fetchone(
+            "SELECT war_id, war_key, status FROM kcs_wars ORDER BY war_id DESC LIMIT 1")
+        return War(*row) if row else None
+
+    def previous_resolved(self, before_id: int):
+        row = self._fetchone(
+            "SELECT war_id FROM kcs_result WHERE war_id < ? ORDER BY war_id DESC LIMIT 1",
+            (int(before_id),))
+        return None if row is None else int(row[0])
 
     def _transition(self, c, war_id: int, new: str) -> None:
         row = c.execute("SELECT status FROM kcs_wars WHERE war_id=?", (war_id,)).fetchone()
@@ -437,16 +454,34 @@ class KCSStore:
             "SELECT player_id, side, deployed, eliminated FROM kcs_roster WHERE war_id=?",
             (war_id,))]
 
-    def set_clock(self, war_id: int, ends_at: float) -> None:
+    def set_clock(self, war_id: int, ends_at: float, started_at: float = None) -> None:
+        """Set the battle deadline. The start is kept unless a start is passed in.
+
+        The first write records the start as now. A later write that only moves
+        the deadline does not move the start, so the deploy grace does not reset.
+        """
         with self._tx("war_clock") as c:
-            c.execute(
-                "INSERT INTO kcs_war_clock(war_id, ends_at) VALUES (?, ?) "
-                "ON CONFLICT(war_id) DO UPDATE SET ends_at=excluded.ends_at",
-                (int(war_id), float(ends_at)))
+            if started_at is None:
+                c.execute(
+                    "INSERT INTO kcs_war_clock(war_id, ends_at, started_at) VALUES (?, ?, ?) "
+                    "ON CONFLICT(war_id) DO UPDATE SET ends_at=excluded.ends_at",
+                    (int(war_id), float(ends_at), self._clock()))
+            else:
+                c.execute(
+                    "INSERT INTO kcs_war_clock(war_id, ends_at, started_at) VALUES (?, ?, ?) "
+                    "ON CONFLICT(war_id) DO UPDATE SET ends_at=excluded.ends_at, "
+                    "started_at=excluded.started_at",
+                    (int(war_id), float(ends_at), float(started_at)))
 
     def get_clock(self, war_id: int):
         row = self._fetchone("SELECT ends_at FROM kcs_war_clock WHERE war_id=?", (int(war_id),))
         return None if row is None else float(row[0])
+
+    def started_at(self, war_id: int):
+        row = self._fetchone("SELECT started_at FROM kcs_war_clock WHERE war_id=?", (int(war_id),))
+        if row is None or row[0] is None:
+            return None
+        return float(row[0])
 
     def opening_hps(self, war_id: int) -> Dict[str, int]:
         return {row[0]: int(row[1]) for row in self._fetchall(

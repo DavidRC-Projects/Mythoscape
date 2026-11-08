@@ -52,6 +52,8 @@ class SiegeView:
         self.war_id = None
         self.your_side = None
         self.lobby = {}
+        self.status = {}
+        self.prep_side = {}
         self.build = False
         self.engine_type = "ram"
         self.rotation = 0
@@ -109,24 +111,45 @@ def on_exit(client) -> None:
     apply_view_quarter(0)
 
 
+def _take_status(view, msg) -> None:
+    panel = msg.get("status_panel") if isinstance(msg.get("status_panel"), dict) else msg
+    if not isinstance(panel, dict) or "status" not in panel:
+        return
+    view.status = dict(panel)
+    view.lobby = dict(panel)
+    if panel.get("your_side"):
+        view.your_side = panel.get("your_side")
+    if panel.get("war_id"):
+        view.war_id = panel.get("war_id")
+    known = set()
+    for row in panel.get("sandbox_players") or []:
+        if isinstance(row, dict) and row.get("player_id") is not None:
+            known.add(int(row["player_id"]))
+    side = dict(view.prep_side)
+    for pid in list(side):
+        if pid not in known:
+            side.pop(pid, None)
+    for pid in known:
+        side.setdefault(pid, None)
+    view.prep_side = side
+    if panel.get("result") and panel.get("status") in ("resolved", "resolving"):
+        view.build = False
+
+
 def on_message(client, kind, msg) -> None:
     view = view_of(client)
-    if kind == "KCS_LOBBY":
-        view.lobby = dict(msg)
-        view.your_side = msg.get("your_side") or view.your_side
+    if kind in ("KCS_LOBBY", "KCS_STATUS", "KCS_RESULT"):
+        _take_status(view, msg)
         view.notice = msg.get("text") or view.notice
         view.error = ""
-        _say(client, view.notice, (210, 190, 140))
-        return
-    if kind == "KCS_RESULT":
-        view.notice = msg.get("text") or "The siege is decided."
-        view.error = ""
-        _say(client, view.notice, (220, 200, 140))
+        if kind != "KCS_STATUS" or msg.get("result"):
+            _say(client, view.notice, (220, 200, 140) if kind == "KCS_RESULT" else (210, 190, 140))
         return
     if not active(client):
         return
     if kind == "KCS_SNAPSHOT":
-        view.war_id = msg.get("war_id")
+        _take_status(view, msg)
+        view.war_id = msg.get("war_id") or view.war_id
         view.your_side = msg.get("your_side") or view.your_side
         view.openings = [dict(row) for row in (msg.get("openings") or []) if isinstance(row, dict)]
         view.engines = [dict(row) for row in (msg.get("engines") or []) if isinstance(row, dict)]
@@ -246,6 +269,123 @@ def draw(client) -> None:
     client.screen.blit(surf, (0, 0))
 
 
+def _clock(seconds):
+    if not isinstance(seconds, int):
+        return None
+    return f"{max(0, seconds) // 60}:{max(0, seconds) % 60:02d}"
+
+
+def _status_lines(st):
+    if not st:
+        return []
+    phase = st.get("phase") or st.get("status") or "Siege"
+    lines = [f"King's Castle Siege — {phase}"]
+    rem = _clock(st.get("remaining"))
+    if rem:
+        lines.append(f"Time left {rem}")
+    elif st.get("status") == "registration":
+        lines.append("Registration is open. The battle clock starts at Begin.")
+    elif st.get("status") == "resolved":
+        lines.append("The battle clock has stopped.")
+    atk = (
+        f"Attackers: {st.get('attack_enlisted', 0)} enlisted, "
+        f"{st.get('attack_deployed', 0)} on the field, "
+        f"{st.get('attack_absent', 0)} not deployed, "
+        f"{st.get('attack_eliminated', 0)} eliminated"
+    )
+    dfd = (
+        f"Defenders: {st.get('defend_enlisted', 0)} enlisted, "
+        f"{st.get('defend_deployed', 0)} on the field, "
+        f"{st.get('defend_eliminated', 0)} eliminated"
+    )
+    lines.extend((atk, dfd))
+    grace_left = st.get("grace_left")
+    if st.get("status") == "active" and isinstance(grace_left, int):
+        if grace_left > 0:
+            lines.append(f"Deploy grace {_clock(grace_left)} left. Absent attackers still count.")
+        else:
+            lines.append("Deploy grace has ended. Attackers who never deployed are out, not eliminated.")
+    rule = st.get("grace_rule")
+    if rule:
+        lines.append(str(rule))
+    objectives = st.get("objectives") or []
+    if objectives:
+        lines.append(" · ".join(f"{row.get('label')} {row.get('state')}" for row in objectives))
+    result = st.get("result") or {}
+    if result.get("text"):
+        lines.append(f"Result: {result.get('text')}")
+    previous = st.get("previous") or {}
+    if previous.get("text") and st.get("status") != "resolved":
+        lines.append(f"Last finished siege stays closed: {previous.get('text')}")
+    own = st.get("ownership") or {}
+    if own.get("crown_line"):
+        lines.append(own["crown_line"])
+    if own.get("castle_line"):
+        lines.append(own["castle_line"])
+    if st.get("sandbox"):
+        lines.append("SANDBOX ONLY. This control is not part of a normal game.")
+    return lines
+
+
+def _draw_status(client, view) -> None:
+    st = view.status or {}
+    lines = _status_lines(st)
+    if not lines:
+        return
+    import client as game
+    font = pygame.font.Font(None, 16)
+    width = min(640, max(360, game.MAP_W - 24))
+    wrapped = []
+    for line in lines:
+        text = str(line)
+        while text:
+            cut = text
+            while font.size(cut)[0] > width - 16 and len(cut) > 8:
+                cut = cut[:-1]
+            if cut != text and " " in cut:
+                cut = cut.rsplit(" ", 1)[0]
+            wrapped.append(cut)
+            text = text[len(cut):].lstrip()
+    sandbox = bool(st.get("sandbox")) and st.get("status") not in ("locking", "active", "resolving")
+    extra = 0
+    players = list(st.get("sandbox_players") or []) if sandbox else []
+    if sandbox:
+        extra = 28 + 22 * max(1, len(players))
+    height = 8 + 16 * len(wrapped) + extra
+    top = max(96, game.MAP_H - height - 8)
+    box = pygame.Rect(8, top, width, height)
+    pygame.draw.rect(client.screen, (12, 10, 8), box)
+    pygame.draw.rect(client.screen, (196, 164, 84), box, 1)
+    y = box.y + 4
+    for line in wrapped:
+        client.screen.blit(font.render(line, True, (236, 220, 180)), (box.x + 8, y))
+        y += 16
+    if not sandbox:
+        return
+    y += 4
+    if not players:
+        client.screen.blit(font.render("No existing characters to assign.", True, (220, 180, 140)), (box.x + 8, y))
+        return
+    for row in players:
+        if not isinstance(row, dict):
+            continue
+        pid = int(row.get("player_id"))
+        side = view.prep_side.get(pid)
+        word = {"attack": "attacker", "defend": "defender"}.get(side, "not in the next siege")
+        label = f"{row.get('name') or pid}: {word}"
+        rect = pygame.Rect(box.x + 8, y, min(360, font.size(label)[0] + 16), 20)
+        pygame.draw.rect(client.screen, (36, 28, 16), rect)
+        pygame.draw.rect(client.screen, (160, 130, 70), rect, 1)
+        client.screen.blit(font.render(label, True, (240, 220, 180)), (rect.x + 6, rect.y + 2))
+        view.buttons.append((rect, f"side-{pid}"))
+        y += 22
+    prep = pygame.Rect(box.x + 8, y, 280, 22)
+    pygame.draw.rect(client.screen, (64, 28, 18), prep)
+    pygame.draw.rect(client.screen, (220, 140, 70), prep, 1)
+    client.screen.blit(font.render("SANDBOX ONLY: Prepare next test siege", True, (255, 220, 180)), (prep.x + 6, prep.y + 3))
+    view.buttons.append((prep, "prep"))
+
+
 def draw_overlay(client) -> None:
     """Clickable controls above the chat. Number keys still work."""
     if getattr(client, "state", "") != "GAME":
@@ -264,7 +404,8 @@ def draw_overlay(client) -> None:
         ("deploy", "Deploy"),
         ("watch", "Watch"),
     ]
-    if active(client):
+    decided = (view.status or {}).get("status") in ("resolved", "resolving")
+    if active(client) and not decided:
         order = DEFENDER_ORDER if view.your_side == "defend" else ENGINE_ORDER
         specs = [(f"type-{kind}", f"{n} {ENGINE_SHORT[kind]}") for n, kind in enumerate(order, 1)]
         specs += [("turn", "Turn"), ("view", "View"), ("face", "Face wall"), ("fire", "Fire"),
@@ -286,6 +427,7 @@ def draw_overlay(client) -> None:
         bar = pygame.Rect(150, y + 28, 700, 22)
         pygame.draw.rect(client.screen, (16, 14, 12), bar)
         client.screen.blit(font.render(banner[:120], True, (255, 180, 120) if view.error else (210, 190, 150)), (156, bar.y + 3))
+    _draw_status(client, view)
 
 
 def ensure_assets():
@@ -475,6 +617,26 @@ def _button(client, action: str) -> None:
         return
     if action == "strike":
         _send(client, "KCS_STRIKE")
+        return
+    if action.startswith("side-"):
+        try:
+            pid = int(action.split("-", 1)[1])
+        except ValueError:
+            return
+        order = (None, "attack", "defend")
+        current = view.prep_side.get(pid)
+        view.prep_side[pid] = order[(order.index(current) + 1) % len(order)] if current in order else "attack"
+        word = {"attack": "attacker", "defend": "defender"}.get(view.prep_side[pid], "left out")
+        view.notice = f"Sandbox assignment: {word}."
+        return
+    if action == "prep":
+        chosen = [
+            {"player_id": int(pid), "side": side}
+            for pid, side in view.prep_side.items()
+            if side in ("attack", "defend")
+        ]
+        _send(client, "KCS_PREP", assignments=chosen)
+        note(client, "SANDBOX ONLY: asking to prepare the next test siege…")
         return
     if action == "claim":
         _send(client, "KCS_CLAIM")

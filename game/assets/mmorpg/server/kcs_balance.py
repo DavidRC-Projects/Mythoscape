@@ -65,6 +65,24 @@ def war_seconds() -> float:
     return _num("KCS_WAR_SECONDS", 1200)
 
 
+def deploy_grace() -> float:
+    """Seconds after the battle starts that a non-deployed attacker still counts.
+
+    Provisional. An attacker who never takes the field is out once this ends.
+    That is not an elimination, and it does not delete the roster row.
+    """
+    return max(0.0, _num("KCS_DEPLOY_GRACE", 45))
+
+
+def grace_rule() -> str:
+    seconds = int(deploy_grace())
+    return (
+        f"Provisional rule: an attacker who has not deployed within {seconds}s of the "
+        "battle starting is out of the fight. That is not an elimination. Defenders win "
+        "when every attacker who took the field is eliminated, or when time runs out."
+    )
+
+
 def player_hit() -> int:
     return max(1, int(_num("KCS_PLAYER_HIT", 8)))
 

@@ -351,7 +351,10 @@ def _xp_fraction(client):
 
 
 def _title(client):
-    """Deed ribbon under the portrait: guild first, else best completed quest."""
+    """Deed ribbon under the portrait: the crown, else guild, else best quest."""
+    royal = str(((client.player or {}).get("royal_title") or "")).strip()
+    if royal:
+        return royal
     guild = str((_clan(client).get("name") or "")).strip()
     if guild:
         return guild

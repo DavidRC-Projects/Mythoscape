@@ -2448,6 +2448,7 @@ async def handle_login(ws, msg, is_register, peer_ip="unknown"):
         needs_stat_alloc=needs_alloc,
         resume_dungeon=resume_dungeon_id,
     )
+    await _push_kcs_status(session)
     if pruned:
         await send(ws, "CHAT_MSG", **{
             "from": "World",
@@ -2916,7 +2917,7 @@ async def _handle_kcs_move(session, dx, dy):
     import kcs_siege
     try:
         import kcs_battle
-        done = kcs_battle.timeout_if_due()
+        done = kcs_battle.resolution_if_due()
         if done and done.get("finished"):
             await _finish_kcs_victory(done.get("text") or "The siege is over.")
             return
@@ -4001,7 +4002,11 @@ def _apply_kcs_resume(session, resume, reason="reconnect") -> bool:
     if session.dungeon:
         return False
     plane = (resume or {}).get("plane") or kcs_siege.PLANE_BATTLEFIELD
-    decision = kcs_siege.decide(session.player_id, plane, reason)
+    # A spectator reconnects as a spectator. A combatant still needs a live deployment.
+    enter_reason = reason
+    if (resume or {}).get("mode") == "spectator" and reason in ("login", "reconnect"):
+        enter_reason = "spectate"
+    decision = kcs_siege.decide(session.player_id, plane, enter_reason)
     if not decision.allowed:
         if decision.code in kcs_siege.CLEAR_RESUME_CODES:
             _clear_dungeon_resume(session)
@@ -4046,6 +4051,7 @@ async def _resume_kcs(session, resume):
     if session.dungeon:
         await handle_leave_dungeon(session, silent=True)
     if not _apply_kcs_resume(session, resume, reason="reconnect"):
+        await _push_kcs_status(session)
         return
     await _notify_kcs_resume(session)
 
@@ -4198,6 +4204,9 @@ async def handle_kcs_place(session, msg):
         await send(session.ws, "ERROR", message="The siege is closed.")
         return
     result = kcs_siege.propose_placement(session, msg or {})
+    if result.get("finished"):
+        await _finish_kcs_victory(result.get("text") or "The siege is over.")
+        return
     if not result.get("ok"):
         await send(session.ws, "ERROR", message=result.get("error") or "That placement is not valid.")
         return
@@ -4206,12 +4215,127 @@ async def handle_kcs_place(session, msg):
     await send(session.ws, "KCS_PLACE_OK", replayed=bool(result.get("replayed")), engine=result["engine"])
 
 
-async def _finish_kcs_victory(text):
-    """Eject everyone still on the siege map after a durable result. No gold."""
+async def _push_kcs_status(session):
+    """Send the siege panel. Quiet when the feature flag is off."""
     import kcs_siege
+    if not kcs_siege.enabled():
+        return
+    import kcs_battle
+    try:
+        body = kcs_battle.public_status(session)
+    except Exception:
+        log.exception("kcs status failed")
+        return
+    if not body.get("ok"):
+        return
+    await send(session.ws, "KCS_STATUS", **{k: v for k, v in body.items() if k != "ok"})
+
+
+async def _refresh_kcs_crown():
+    """Push the royal title and castle plaques the game already displays."""
+    try:
+        conn = WORLD.db.conn
+    except Exception:
+        return
+    for session in list(WORLD.sessions.values()):
+        try:
+            row = conn.execute(
+                "SELECT royal_title FROM players WHERE id=?", (session.player_id,)).fetchone()
+        except Exception:
+            continue
+        title = None if row is None else row[0]
+        if getattr(session, "royal_title", None) == title:
+            continue
+        session.royal_title = title
+        try:
+            await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+        except Exception:
+            log.exception("kcs crown refresh failed")
+    try:
+        import castle_owners
+        await castle_owners.broadcast()
+    except Exception:
+        log.exception("kcs castle plaque refresh failed")
+
+
+async def _finish_kcs_victory(text):
+    """Stop the battle, show the result, and return everyone to the overworld.
+
+    Combat and building already refuse once the war is no longer active.
+    A second call finds nobody on the map and does not crown anyone again.
+    """
+    import kcs_battle
+    import kcs_siege
+    body = {}
+    try:
+        body = kcs_battle.public_status()
+    except Exception:
+        log.exception("kcs status after victory failed")
+    shown = text or body.get("text") or "The siege is over."
+    await _refresh_kcs_crown()
+    own = body.get("ownership") or {}
+    for line in (own.get("crown_line"), own.get("castle_line")):
+        if line:
+            try:
+                await broadcast("CHAT_MSG", **{"from": "Royal Herald", "text": line})
+            except Exception:
+                log.exception("kcs herald line failed")
     for other in list(WORLD.sessions.values()):
+        try:
+            panel = kcs_battle.public_status(other)
+            payload = {k: v for k, v in panel.items() if k != "ok"}
+        except Exception:
+            log.exception("kcs result status failed")
+            payload = {k: v for k, v in body.items() if k != "ok"}
+        payload["text"] = shown
+        try:
+            await send(other.ws, "KCS_RESULT", **payload)
+            await send(other.ws, "KCS_STATUS", **payload)
+        except Exception:
+            log.exception("kcs result send failed")
         if kcs_siege.on_map(other):
-            await _eject_kcs(other, text=text)
+            await _eject_kcs(other, text=shown)
+
+
+async def _kcs_lifecycle_tick():
+    import kcs_siege
+    if not kcs_siege.enabled():
+        return
+    import kcs_battle
+    try:
+        done = kcs_battle.resolution_if_due()
+    except Exception:
+        log.exception("kcs resolution tick failed")
+        return
+    if done and done.get("finished"):
+        await _finish_kcs_victory(done.get("text") or "The siege is over.")
+        return
+    if WORLD.tick_count % 20 != 0:
+        return
+    for session in list(WORLD.sessions.values()):
+        try:
+            body = kcs_battle.public_status(session)
+        except Exception:
+            log.exception("kcs status tick failed")
+            continue
+        if not body.get("ok"):
+            continue
+        if body.get("status") in (None, "none") and not body.get("sandbox"):
+            continue
+        await send(session.ws, "KCS_STATUS", **{k: v for k, v in body.items() if k != "ok"})
+
+
+async def handle_kcs_prep(session, msg):
+    """Sandbox-only next registration. The server refuses this unless that switch is on."""
+    import kcs_battle
+    result = kcs_battle.prepare_next((msg or {}).get("assignments") or [])
+    if not result.get("ok"):
+        await send(session.ws, "ERROR", message=result.get("error") or "The next test siege was not prepared.")
+        return
+    payload = {k: v for k, v in result.items() if k != "ok"}
+    await send(session.ws, "KCS_LOBBY", **payload)
+    for other in list(WORLD.sessions.values()):
+        await _push_kcs_status(other)
 
 
 async def handle_kcs_enlist(session, msg):
@@ -10855,6 +10979,8 @@ async def handler(ws):
                     await handle_kcs_claim(session, msg)
                 elif mtype == "KCS_PACK":
                     await handle_kcs_pack(session, msg)
+                elif mtype == "KCS_PREP":
+                    await handle_kcs_prep(session, msg)
                 elif mtype == "LEAVE_DUNGEON":
                     await handle_leave_dungeon(session, msg)
                 elif mtype == "SEWER_START":
@@ -11246,6 +11372,8 @@ async def game_loop():
             await process_equip_regen()
             await process_tavern_regen()
             await flush_quest_logs()
+            if WORLD.tick_count % 10 == 0:
+                await _kcs_lifecycle_tick()
             if feature_flags.USE_PLAYER_HOUSING and WORLD.tick_count % 500 == 0:
                 await _housing.tick_leases()
             if WORLD.tick_count % 10 == 0:

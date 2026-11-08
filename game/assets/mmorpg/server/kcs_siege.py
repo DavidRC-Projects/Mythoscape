@@ -447,6 +447,14 @@ def propose_placement(session, msg) -> dict:
         return _place_fail("You cannot place an engine from here.", "wrong_plane")
     if int(getattr(session, "hp", 0) or 0) <= 0:
         return _place_fail("You cannot place an engine right now.", "not_alive")
+    try:
+        import kcs_battle
+        due = kcs_battle.resolution_if_due()
+    except Exception:
+        log.exception("kcs resolution before placement failed")
+        due = None
+    if due and due.get("finished"):
+        return due
     decision = presence_decision(session)
     if not decision.allowed or decision.mode != "combatant":
         return _place_fail(deny_message(decision), decision.code)

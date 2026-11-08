@@ -818,7 +818,7 @@ class GameClient(ScreensMixin, CameraYaw):
             import endless_depths_client
             endless_depths_client.close_entry_prompt(self)
             self._enter_dungeon_view(msg)
-        elif t in ("KCS_SNAPSHOT", "KCS_DELTA", "KCS_PLACE_OK", "KCS_LOBBY", "KCS_RESULT"):
+        elif t in ("KCS_SNAPSHOT", "KCS_DELTA", "KCS_PLACE_OK", "KCS_LOBBY", "KCS_RESULT", "KCS_STATUS"):
             import kcs_client
             kcs_client.on_message(self, t, msg)
         elif t == "DUNGEON_TILES":
@@ -14462,6 +14462,21 @@ class GameClient(ScreensMixin, CameraYaw):
                     sub_txt = f"{where} · {have}/{need} slain · sealed"
             else:
                 sub_txt = f"{d.get('remaining', 0)} left"
+
+        if d.get("id") == "kings_castle_siege":
+            panel = getattr(getattr(self, "kcs_view", None), "status", None) or {}
+            phase = panel.get("phase") or "Siege"
+            title_txt = f"King's Castle · {phase}"
+            rem = panel.get("remaining")
+            if panel.get("result"):
+                sub_txt = str((panel.get("result") or {}).get("text") or "Decided")[:48]
+            elif isinstance(rem, int):
+                sub_txt = (
+                    f"{rem // 60}:{rem % 60:02d} left · "
+                    f"{panel.get('attack_deployed', 0)} atk / {panel.get('defend_deployed', 0)} def"
+                )
+            else:
+                sub_txt = f"{panel.get('attack', 0)} attackers · {panel.get('defend', 0)} defenders"
 
         if self.dungeon_hud_hidden:
             self.dungeon_leave_rect = None

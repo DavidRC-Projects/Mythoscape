@@ -6,7 +6,9 @@ flag is on, writes only the siege database. It does not call throne._crown.
 """
 from __future__ import annotations
 
+import json
 import logging
+import os
 import time
 
 import feature_flags
@@ -44,28 +46,309 @@ def lobby(session) -> dict:
     if not kcs_siege.enabled():
         return _fail("The siege is closed.")
     try:
-        war = _store().open_war()
+        return public_status(session)
     except Exception:
         log.exception("kcs lobby failed")
         return _fail("The siege can't be reached right now.")
+
+
+def public_status(session=None) -> dict:
+    """One status body for the panel, the lobby, and a reconnect."""
+    if not kcs_siege.enabled():
+        return _fail("The siege is closed.")
+    store = _store()
+    war = store.open_war() or store.latest_war()
+    sandbox = os.environ.get("KCS_SANDBOX_PREP") == "1"
     if war is None:
-        return {"ok": True, "status": "none", "text": "No siege is open. Enlist to start one.",
-                "your_side": None, "attack": 0, "defend": 0}
-    rows = _store().roster_rows(war.war_id)
+        body = _empty_status(sandbox)
+        body["ownership"] = _ownership_view()
+        return body
+    rows = store.roster_rows(war.war_id)
     you = None
-    for pid, side, _dep, _elim in rows:
-        if int(pid) == int(session.player_id):
-            you = side
-    return {
+    if session is not None:
+        for pid, side, _dep, _elim in rows:
+            if int(pid) == int(session.player_id):
+                you = side
+    ends = store.get_clock(war.war_id)
+    started = _battle_started(store, war.war_id, ends)
+    now = time.time()
+    remaining = None
+    grace_left = None
+    if war.status == "active":
+        if ends is not None:
+            remaining = max(0, int(ends - now))
+        if started is not None:
+            grace_left = max(0, int(float(started) + kcs_balance.deploy_grace() - now))
+    result = _result_view(store, war.war_id)
+    previous = None
+    if war.status != "resolved":
+        prev = store.previous_resolved(war.war_id)
+        if prev is not None:
+            previous = _result_view(store, prev)
+    counts = _side_counts(rows)
+    phase = {
+        "registration": "Registration",
+        "locking": "Starting",
+        "active": "Battle",
+        "resolving": "Deciding",
+        "resolved": "Finished",
+        "voided": "Archived",
+    }.get(war.status, war.status)
+    if result:
+        text = result["text"]
+    elif sandbox and war.status == "registration":
+        text = (
+            "SANDBOX ONLY: the next test siege is open for registration. "
+            "Previous wars, eliminations, and accounts were kept."
+        )
+    else:
+        text = f"Siege is {war.status}. You are {you or 'not enlisted'}."
+    body = {
         "ok": True,
         "war_id": war.war_id,
         "status": war.status,
+        "phase": phase,
         "your_side": you,
-        "attack": sum(1 for _p, side, _d, elim in rows if side == "attack" and not elim),
-        "defend": sum(1 for _p, side, _d, elim in rows if side == "defend" and not elim),
-        "ends_at": _store().get_clock(war.war_id),
-        "text": f"Siege is {war.status}. You are {you or 'not enlisted'}.",
+        "ends_at": ends,
+        "started_at": started,
+        "remaining": remaining,
+        "grace_seconds": int(kcs_balance.deploy_grace()),
+        "grace_left": grace_left,
+        "grace_rule": kcs_balance.grace_rule(),
+        "objectives": _objectives(store, war.war_id),
+        "result": result,
+        "previous": previous,
+        "ownership": _ownership_view(),
+        "sandbox": sandbox,
+        "text": text,
     }
+    body.update(counts)
+    if sandbox:
+        body["sandbox_players"] = _sandbox_players()
+    return body
+
+
+def _empty_status(sandbox: bool) -> dict:
+    body = {
+        "ok": True,
+        "status": "none",
+        "phase": "No siege",
+        "text": "No siege is open. Enlist to start one.",
+        "your_side": None,
+        "attack": 0,
+        "defend": 0,
+        "attack_enlisted": 0,
+        "defend_enlisted": 0,
+        "attack_deployed": 0,
+        "defend_deployed": 0,
+        "attack_eliminated": 0,
+        "defend_eliminated": 0,
+        "attack_absent": 0,
+        "defend_absent": 0,
+        "ends_at": None,
+        "started_at": None,
+        "remaining": None,
+        "grace_seconds": int(kcs_balance.deploy_grace()),
+        "grace_left": None,
+        "grace_rule": kcs_balance.grace_rule(),
+        "objectives": [],
+        "result": None,
+        "previous": None,
+        "sandbox": sandbox,
+    }
+    if sandbox:
+        body["sandbox_players"] = _sandbox_players()
+    return body
+
+
+def _side_counts(rows) -> dict:
+    out = {}
+    for side in ("attack", "defend"):
+        group = [row for row in rows if row[1] == side]
+        out[side] = sum(1 for row in group if not row[3])
+        out[f"{side}_enlisted"] = len(group)
+        out[f"{side}_deployed"] = sum(1 for row in group if row[2] and not row[3])
+        out[f"{side}_eliminated"] = sum(1 for row in group if row[3])
+        out[f"{side}_absent"] = sum(1 for row in group if not row[2] and not row[3])
+    return out
+
+
+def _objectives(store, war_id: int) -> list:
+    states = store.openings(war_id)
+    hps = store.opening_hps(war_id)
+    named = (("main_gate", "Main gate"), ("keep_doors", "Keep doors"), ("throne_doors", "Throne doors"))
+    lines = []
+    for oid, label in named:
+        if oid not in states and oid not in hps:
+            continue
+        state = states.get(oid, "intact")
+        hp = hps.get(oid)
+        max_hp = kcs_balance.opening_max_hp(oid)
+        if state == "destroyed" or (hp is not None and int(hp) <= 0):
+            shown = "breached"
+        elif hp is not None and int(hp) < max_hp:
+            shown = f"damaged {int(hp)}/{max_hp}"
+        else:
+            shown = "intact"
+        lines.append({"id": oid, "label": label, "state": shown, "hp": hp, "max_hp": max_hp})
+    return lines
+
+
+def _result_view(store, war_id: int):
+    existing = store.result(war_id)
+    if not existing:
+        return None
+    reason = ""
+    try:
+        proof = json.loads(existing.get("proof_json") or "{}")
+        reason = str(proof.get("reason") or "")
+    except (TypeError, ValueError):
+        reason = ""
+    winner = existing.get("winner_side")
+    text = {
+        "claim": "The attackers have taken the throne.",
+        "timeout": "The defenders held the castle until the siege ended.",
+        "attackers_eliminated": "The attackers are eliminated. The defenders hold the castle.",
+    }.get(reason, f"The siege is decided for the {winner} side.")
+    return {
+        "war_id": int(war_id),
+        "winner": winner,
+        "reason": reason,
+        "monarch_player_id": existing.get("monarch_player_id"),
+        "text": text + " Gold is unchanged.",
+    }
+
+
+def _ownership_view() -> dict:
+    """Read the throne and King's Castle rows the rest of the game already uses."""
+    empty = {"crown_line": "", "castle_line": "", "monarch": None, "castle_owner": None, "royal_title": None}
+    try:
+        import server
+        conn = server.WORLD.db.conn
+        tables = {row[0] for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+    except Exception:
+        return empty
+    crown = ""
+    monarch = None
+    title = None
+    if "throne" in tables:
+        try:
+            st = conn.execute(
+                "SELECT monarch_kind, monarch_player_id FROM throne WHERE id=1").fetchone()
+        except Exception:
+            st = None
+        if st is not None and st[0] == "player" and st[1]:
+            who = conn.execute(
+                "SELECT char_name, royal_title FROM players WHERE id=?", (int(st[1]),)).fetchone()
+            if who is not None:
+                monarch = who[0]
+                title = who[1]
+                if title and monarch:
+                    crown = f"{title} {monarch} wears the crown."
+                elif monarch:
+                    crown = f"{monarch} wears the crown."
+        elif st is not None:
+            crown = "The crown is not held by a player."
+    castle = ""
+    owner = None
+    if "castle_ownership" in tables:
+        try:
+            row = conn.execute(
+                "SELECT owner_display_name FROM castle_ownership WHERE castle_id='king'").fetchone()
+        except Exception:
+            row = None
+        if row is not None and row[0]:
+            owner = row[0]
+            castle = f"King's Castle is held by {owner}."
+        else:
+            castle = "King's Castle is held by the crown."
+    return {
+        "crown_line": crown,
+        "castle_line": castle,
+        "monarch": monarch,
+        "castle_owner": owner,
+        "royal_title": title,
+    }
+
+
+def _sandbox_players() -> list:
+    try:
+        import server
+        rows = server.WORLD.db.conn.execute(
+            "SELECT id, char_name FROM players ORDER BY id LIMIT 24").fetchall()
+    except Exception:
+        log.exception("kcs sandbox roster failed")
+        return []
+    return [{"player_id": int(row[0]), "name": row[1] or f"player {row[0]}"} for row in rows]
+
+
+def _battle_started(store, war_id: int, ends):
+    started = store.started_at(war_id)
+    if started is not None:
+        return started
+    if ends is None:
+        return None
+    return float(ends) - kcs_balance.war_seconds()
+
+
+def prepare_next(assignments) -> dict:
+    """Sandbox-only fresh registration. Archives the open registration if it is still only a roster.
+
+    Refuses a battle that has started. Does not delete wars, results, or eliminations,
+    and does not create accounts.
+    """
+    if os.environ.get("KCS_SANDBOX_PREP") != "1":
+        return _fail("Sandbox preparation is not enabled.")
+    if not kcs_siege.enabled():
+        return _fail("The siege is closed.")
+    if not isinstance(assignments, list) or not assignments:
+        return _fail("Choose the test participants and their sides first.")
+    try:
+        import server
+        conn = server.WORLD.db.conn
+        chosen = []
+        seen = set()
+        for item in assignments:
+            if not isinstance(item, dict):
+                return _fail("Choose the test participants and their sides first.")
+            try:
+                pid = int(item.get("player_id"))
+            except (TypeError, ValueError):
+                return _fail("Choose the test participants and their sides first.")
+            side = item.get("side")
+            if side not in ("attack", "defend"):
+                return _fail("Each participant needs an attacker or defender side.")
+            if pid in seen:
+                return _fail("A participant can only be listed once.")
+            seen.add(pid)
+            row = conn.execute("SELECT id FROM players WHERE id=?", (pid,)).fetchone()
+            if row is None:
+                return _fail("That participant is not an existing character. No account was created.")
+            chosen.append((pid, side))
+        store = _store()
+        war = store.open_war()
+        if war is not None and war.status in ("locking", "active", "resolving"):
+            return _fail("A battle is in progress. It was not reset.")
+        if war is not None and war.status == "registration":
+            rows = store.roster_rows(war.war_id)
+            if any(row[3] for row in rows):
+                return _fail("This registration has eliminations. It was not reset.")
+            if any(row[2] for row in rows):
+                return _fail("Someone is already deployed. It was not reset.")
+            store.set_war_status(war.war_id, "voided")
+        fresh = store.create_war(f"kcs-sandbox-{int(time.time())}")
+        for pid, side in chosen:
+            store.enlist(fresh.war_id, pid, side)
+    except Exception as exc:
+        log.exception("kcs sandbox prepare failed")
+        return _fail(str(exc) or "The next test siege was not prepared.")
+    body = public_status()
+    body["text"] = (
+        "SANDBOX ONLY: the next test siege is open for registration. "
+        "Previous wars, eliminations, and accounts were kept."
+    )
+    return body
 
 
 def enlist(session, side: str) -> dict:
@@ -149,6 +432,8 @@ def enrich_snapshot(body: dict, war_id: int) -> dict:
             engine["cooldown_until"] = rec[1] if rec else 0
             engine["facing"] = kcs_balance.FACE_NAME.get(int(engine.get("rotation") or 0), "north")
         body["ends_at"] = store.get_clock(war_id)
+        panel = public_status()
+        body["status_panel"] = {key: value for key, value in panel.items() if key != "ok"}
     except Exception:
         log.exception("kcs snapshot enrich failed")
     return body
@@ -205,6 +490,23 @@ def timeout_if_due():
         return None
 
 
+def _attacker_holds(row, started, now) -> bool:
+    """True when this attacker still stops a defender elimination victory.
+
+    Deployed living attackers hold the field. An enlisted attacker who has not
+    deployed holds it only until the grace ends. Elimination is never flipped
+    on just because they did not deploy.
+    """
+    _pid, _side, deployed, eliminated = row
+    if eliminated:
+        return False
+    if deployed:
+        return True
+    if started is None:
+        return True
+    return now < float(started) + kcs_balance.deploy_grace()
+
+
 def defenders_if_attackers_gone():
     if not kcs_siege.enabled():
         return None
@@ -215,7 +517,12 @@ def defenders_if_attackers_gone():
             return None
         rows = store.roster_rows(war.war_id)
         attackers = [row for row in rows if row[1] == "attack"]
-        if not attackers or any(not row[3] for row in attackers):
+        if not attackers:
+            return None
+        ends = store.get_clock(war.war_id)
+        started = _battle_started(store, war.war_id, ends)
+        now = time.time()
+        if any(_attacker_holds(row, started, now) for row in attackers):
             return None
         return _finish(store, war.war_id, "defend", None, "attackers_eliminated")
     except Exception:
@@ -223,8 +530,16 @@ def defenders_if_attackers_gone():
         return None
 
 
-def fire(session, engine_type: str) -> dict:
+def resolution_if_due():
+    """Timeout first, then an elimination victory once the deploy grace has ended."""
     due = timeout_if_due()
+    if due:
+        return due
+    return defenders_if_attackers_gone()
+
+
+def fire(session, engine_type: str) -> dict:
+    due = resolution_if_due()
     if due:
         return due
     ctx, err = _live(session)
@@ -458,7 +773,7 @@ def _defender_shot(session, store, war, engine, spec, combat, now, hp):
 
 
 def repair(session) -> dict:
-    due = timeout_if_due()
+    due = resolution_if_due()
     if due:
         return due
     ctx, err = _live(session)
@@ -505,7 +820,7 @@ def repair(session) -> dict:
 
 def strike(session) -> dict:
     """Siege-only blow. Does not enable overworld or global PvP."""
-    due = timeout_if_due()
+    due = resolution_if_due()
     if due:
         return due
     ctx, err = _live(session)
@@ -582,7 +897,7 @@ def _strike_engine(store, war_id, px, py, my_side):
 
 
 def claim(session) -> dict:
-    due = timeout_if_due()
+    due = resolution_if_due()
     if due:
         return due
     ctx, err = _live(session)
@@ -645,6 +960,9 @@ def _finish(store, war_id: int, winner: str, monarch, reason: str, guild=None) -
 
 def pack(session, engine_type: str = "") -> dict:
     """Pick up one engine you placed. Someone else's engine stays where it is."""
+    due = resolution_if_due()
+    if due:
+        return due
     ctx, err = _live(session)
     if err:
         return err
