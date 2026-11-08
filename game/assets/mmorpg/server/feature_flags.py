@@ -63,6 +63,13 @@ USE_PLAYER_HOUSING = _on("USE_PLAYER_HOUSING", "1")
 # Set USE_CASTLE_OWNERS=0 to hide sellers and plaques.
 USE_CASTLE_OWNERS = _on("USE_CASTLE_OWNERS", "1") and USE_CASTLE_REALM
 
+# King's Castle Siege: separate versioned battlefield, not the Castle Realm.
+# Default OFF. Independent of USE_CASTLE_REALM and USE_CASTLE_OWNERS.
+# Only the explicit true values enable it; anything else stays off.
+USE_KINGS_CASTLE_SIEGE = os.environ.get("USE_KINGS_CASTLE_SIEGE", "0").strip().lower() in (
+    "1", "true", "yes", "on",
+)
+
 # Larger multi-room castle interiors. Set USE_CASTLE_INTERIORS_V2=0
 # to keep the original floor rows and interior door arrivals.
 USE_CASTLE_INTERIORS_V2 = _on("USE_CASTLE_INTERIORS_V2", "1")
