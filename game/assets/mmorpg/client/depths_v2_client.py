@@ -16,10 +16,21 @@ import rs_style as rs
 
 _ZONES = os.path.join(os.path.dirname(__file__), "assets", "depths", "zones")
 # Bumped when zone / wall / water art changes so a long-lived client drops stale sheets.
-_ART_REV = 8
+_ART_REV = 9
 _plate_cache = {}
 # Water repeats every N tiles so pools read as one continuous surface.
 _WATER_PERIOD = 16
+# Fallback room bounds if the dungeon payload has no zones yet.
+_STYLE_BOUNDS = {
+    "chapel": (13, 2, 45, 16),
+    "ossuary": (5, 17, 59, 34),
+    "catacomb": (1, 35, 59, 51),
+    "tomb": (0, 52, 59, 67),
+    "mausoleum": (12, 68, 52, 80),
+    "wyrm": (1, 68, 11, 78),
+    "arena": (13, 89, 53, 105),
+    "bridge": (12, 79, 54, 91),
+}
 
 FLOOR_PAL = {
     "chapel": ((96, 98, 88), (86, 88, 78), (104, 106, 94), (78, 80, 72)),
@@ -74,9 +85,6 @@ def _glow(surf, cx, cy, r, col, a):
 # Overlay corridors share floor with the room they cross. They must not paint
 # a second background through the middle of an area.
 _OVERLAY_ZONES = {"stair", "bridge"}
-# One mirrored repeat of an area's floor. Small enough that the stone reads as
-# pavement, large enough that the repeat is not a stamp.
-_AREA_PERIOD = 8
 
 
 def style_at(d, x, y):
@@ -486,21 +494,24 @@ def _blit_full(screen, rect, name):
     return True
 
 
-def _fold_tile(i, period):
-    """Mirror a tile index so a repeat turns back on itself instead of cutting."""
-    span = period * 2
-    i = int(i) % span
-    if i < 0:
-        i += span
-    if i >= period:
-        i = span - 1 - i
-    return i
+def _zone_bounds(d, style):
+    """Inclusive world rect for a floor style — one whole AI image maps across it."""
+    style = style or ""
+    for zone in (d or {}).get("zones") or []:
+        if zone.get("id") in _OVERLAY_ZONES:
+            continue
+        if zone.get("style") == style or zone.get("id") == style:
+            rect = zone.get("rect") or ()
+            if len(rect) == 4:
+                return tuple(int(v) for v in rect)
+    return _STYLE_BOUNDS.get(style)
 
 
-def _area_sheet(style, tile_px):
-    """One area's floor, scaled to a short mirrored repeat. Same art everywhere in that area."""
+def _area_sheet(style, tile_px, bounds):
+    """Scale the room plate to cover its full zone in pixels."""
+    x0, y0, x1, y1 = (int(v) for v in bounds)
     tw = max(8, int(tile_px))
-    key = ("area", _ART_REV, style, tw)
+    key = ("room", _ART_REV, style, tw, x0, y0, x1, y1)
     sheet = _plate_cache.get(key)
     if sheet is not None or key in _plate_cache:
         return sheet
@@ -508,40 +519,51 @@ def _area_sheet(style, tile_px):
     if raw is None:
         _plate_cache[key] = None
         return None
-    side = _AREA_PERIOD * tw
-    sw, sh = raw.get_size()
-    scale = side / float(min(sw, sh))
-    dw = max(side, int(round(sw * scale)))
-    dh = max(side, int(round(sh * scale)))
-    big = pygame.transform.smoothscale(raw, (dw, dh))
-    crop = pygame.Rect((dw - side) // 2, (dh - side) // 2, side, side)
-    sheet = big.subsurface(crop).copy()
+    pw = max(tw, (x1 - x0 + 1) * tw)
+    ph = max(tw, (y1 - y0 + 1) * tw)
+    sheet = pygame.transform.smoothscale(raw, (pw, ph))
     _plate_cache[key] = sheet
     return sheet
 
 
-def _blit_area(screen, rect, style, wx, wy):
-    """World-aligned sample of this area's floor. Neighbouring tiles continue it."""
-    sheet = _area_sheet(style, rect.w)
+def _blit_area(screen, rect, style, wx, wy, d=None):
+    """Sample one tile from the room's whole-image floor plate.
+
+    UV is relative to the owning zone rect. Outside the rect (merge lips) we
+    clamp to the plate edge so neighbouring rooms dissolve instead of tiling.
+    """
+    bounds = _zone_bounds(d, style)
+    if not bounds:
+        pal = FLOOR_PAL.get(style)
+        if not pal:
+            return False
+        pygame.draw.rect(screen, pal[0], rect)
+        return True
+    sheet = _area_sheet(style, rect.w, bounds)
     if sheet is None:
         pal = FLOOR_PAL.get(style)
         if not pal:
             return False
         pygame.draw.rect(screen, pal[0], rect)
         return True
-    tw = rect.w
-    sx = _fold_tile(wx, _AREA_PERIOD) * tw
-    sy = _fold_tile(wy, _AREA_PERIOD) * tw
-    screen.blit(sheet, rect.topleft, pygame.Rect(sx, sy, tw, rect.h))
+    x0, y0, x1, y1 = bounds
+    tw, th = rect.w, rect.h
+    sw, sh = sheet.get_size()
+    sx = max(0, min((int(wx) - x0) * tw, sw - tw))
+    sy = max(0, min((int(wy) - y0) * th, sh - th))
+    area = pygame.Rect(sx, sy, tw, th)
+    if not sheet.get_rect().contains(area):
+        return False
+    screen.blit(sheet, rect.topleft, area)
     return True
 
 
-def _blit_area_alpha(screen, rect, style, wx, wy, alpha):
+def _blit_area_alpha(screen, rect, style, wx, wy, alpha, d=None):
     alpha = int(alpha)
     if alpha <= 4:
         return False
     tile = pygame.Surface(rect.size, pygame.SRCALPHA)
-    if not _blit_area(tile, tile.get_rect(), style, wx, wy):
+    if not _blit_area(tile, tile.get_rect(), style, wx, wy, d=d):
         return False
     tile.set_alpha(alpha)
     screen.blit(tile, rect.topleft)
@@ -549,7 +571,7 @@ def _blit_area_alpha(screen, rect, style, wx, wy, alpha):
 
 
 def _merge_areas(screen, rect, wx, wy, d, here):
-    """Dissolve into the next area over a few tiles. The interior of an area stays one floor."""
+    """Soft dissolve into the neighbouring room's whole-image floor."""
     wx, wy = int(wx), int(wy)
     best_style = None
     best_alpha = 0
@@ -571,7 +593,7 @@ def _merge_areas(screen, rect, wx, wy, d, here):
             if best_style and best_alpha == alpha:
                 break
     if best_style:
-        _blit_area_alpha(screen, rect, best_style, wx, wy, best_alpha)
+        _blit_area_alpha(screen, rect, best_style, wx, wy, best_alpha, d=d)
 
 
 def _zone_sheet(style, tile_px):
@@ -595,10 +617,10 @@ def _zone_sheet(style, tile_px):
 
 
 def draw_zone_backdrop(client, cam_x, cam_y, tile):
-    """Dark the panel. Each area's floor is drawn with the tiles, not as a slab per room.
+    """Dark the panel; each room's floor is sampled per-tile from its whole AI plate.
 
     Painting a zone rectangle here is what cut the stair and the silk nest through
-    the rooms as hard bands. Floors now share one texture for the whole area.
+    the rooms as hard bands — keep floors on the tile path with soft merges.
     """
     d = getattr(client, "dungeon", None) or {}
     if d.get("v2") != "depths":
@@ -676,9 +698,9 @@ def draw_tile(client, rect, tile_id, wx, wy, t):
             pygame.draw.rect(client.screen, (230, 190, 100), rect, 3)
         return
 
-    # One floor for the whole area. The next area dissolves in at the join.
+    # One whole-image floor per room. The next room dissolves in at the join.
     area = floor_style(d, wx, wy) or style
-    if not _blit_area(client.screen, rect, area, wx, wy):
+    if not _blit_area(client.screen, rect, area, wx, wy, d=d):
         pygame.draw.rect(client.screen, FLOOR_PAL.get(area, FLOOR_PAL["arena"])[0], rect)
     _merge_areas(client.screen, rect, wx, wy, d, area)
     veil = _plate_cache.get(("floor-veil", rect.size))
@@ -690,6 +712,12 @@ def draw_tile(client, rect, tile_id, wx, wy, t):
     if decor == "shallow":
         _draw_crypt_water(client.screen, rect, wx, wy, t, d, deep=False)
     _prop(client, rect, decor, style, wx, wy, t)
+    if decor in ("pedestal", "pedestal_empty"):
+        mx, my = pygame.mouse.get_pos()
+        if rect.collidepoint(mx, my):
+            label = _hover_label(client, decor, wx, wy)
+            if label:
+                client.blit_nameplate(label, rect.centerx, rect.y - 4, (255, 250, 120))
     if hands:
         draw_grasping_hands(client.screen, rect, t, telegraph=True)
 
@@ -788,17 +816,26 @@ def draw_wall_face(surf, rect, x, y, style, decor, t=0.0):
 
 
 def draw_skull_niche(surf, rect, t=0.0):
+    """Wrong-facing skull — the Tide Key niche in the flooded catacombs."""
     w = rect.w
     nr = rect.inflate(-w // 4, -w // 4)
     pygame.draw.rect(surf, (22, 24, 20), nr)
     pygame.draw.rect(surf, (90, 86, 76), nr, 1)
+    # Bright teal pulse so the wrong-facing skull niche reads in the flooded hall.
+    pulse = 0.55 + 0.45 * math.sin((t or 0.0) * 3.4)
+    glow = pygame.Surface((nr.w + 18, nr.h + 18), pygame.SRCALPHA)
+    pygame.draw.ellipse(glow, (80, 255, 220, int(70 + 90 * pulse)), glow.get_rect())
+    pygame.draw.ellipse(glow, (255, 230, 120, int(35 + 45 * pulse)), glow.get_rect().inflate(-6, -6))
+    surf.blit(glow, glow.get_rect(center=nr.center), special_flags=pygame.BLEND_ADD)
     for k, (fx, fy) in enumerate(((0.3, 0.35), (0.7, 0.35), (0.5, 0.72))):
         sx, sy = rect.x + int(w * fx), rect.y + int(w * fy)
         rr = max(2, w // 9)
         pygame.draw.circle(surf, (224, 214, 188), (sx, sy), rr)
         if k == 2:
-            p = 0.6 + 0.4 * math.sin(t * 3)
-            pygame.draw.circle(surf, (int(255 * p), int(210 * p), 90), (sx + rr // 2, sy - 1), max(1, rr // 3))
+            p = 0.6 + 0.4 * math.sin((t or 0.0) * 3)
+            eye = (sx + rr // 2, sy - 1)
+            pygame.draw.circle(surf, (int(255 * p), int(210 * p), 90), eye, max(2, rr // 2))
+            pygame.draw.circle(surf, (255, 255, 200), eye, max(1, rr // 4))
         else:
             pygame.draw.circle(surf, (30, 26, 22), (sx - rr // 2, sy - 1), max(1, rr // 3))
             pygame.draw.circle(surf, (30, 26, 22), (sx + rr // 2, sy - 1), max(1, rr // 3))
@@ -957,9 +994,19 @@ def _prop(client, rect, decor, style, x, y, t):
     elif decor == "lever":
         pygame.draw.rect(surf, (70, 64, 58), (cx - 3, cy - 2, 6, 10))
         pygame.draw.line(surf, (180, 60, 50), (cx, cy - 2), (cx + tile // 6, cy - tile // 4), 3)
-    elif decor == "pedestal":
-        pygame.draw.rect(surf, (90, 88, 84), (cx - tile // 8, cy - 2, tile // 4, tile // 6))
-        _glow(surf, cx, cy - tile // 5, tile // 2, (120, 200, 190), 40)
+    elif decor in ("pedestal", "pedestal_empty"):
+        import realistic_item_icons
+        d = getattr(client, "dungeon", None) or {}
+        item_id = d.get("pedestal_item") or "depths_tide_key"
+        taken = decor == "pedestal_empty" or bool(d.get("pedestal_taken"))
+        # Always nameplate the Tide Key — flooded catacomb floors bury a quiet icon.
+        plate = getattr(client, "blit_nameplate", None)
+        realistic_item_icons.draw_pedestal_key(
+            surf, rect, item_id, taken=taken, blit_nameplate=plate,
+        )
+        if not taken:
+            _glow(surf, cx, cy - tile // 3, int(tile * 1.4), (120, 255, 220), 90)
+            _glow(surf, cx, cy - tile // 5, tile, (255, 230, 120), 70)
     elif decor == "warning":
         pygame.draw.polygon(surf, (150, 130, 70), [(cx, cy - tile // 5), (cx - tile // 7, cy + tile // 8), (cx + tile // 7, cy + tile // 8)])
     elif decor in ("cache", "cache_open", "loot"):
@@ -1005,6 +1052,10 @@ def _hover_label(client, decor, wx, wy):
     if decor and decor.startswith("seal"):
         key = decor.split(":")[-1]
         return (d.get("door_hints") or {}).get(key) or "Locked"
+    if decor == "pedestal":
+        return "Tide Key — click to take"
+    if decor == "pedestal_empty":
+        return "Empty pedestal"
     return ""
 
 
@@ -1136,6 +1187,10 @@ def minimap_color(client, wx, wy):
         return (168, 48, 48)
     if decor == "shrine":
         return (214, 186, 96)
+    if decor == "pedestal":
+        return (255, 220, 90)
+    if decor == "pedestal_empty":
+        return (140, 140, 130)
     if decor in ("skull", "secret"):
         return (150, 140, 112)
     return None

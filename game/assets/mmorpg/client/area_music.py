@@ -9,7 +9,8 @@ The village playlist (Rising Theme, then The Narrow Way) keeps playing
 across the village, the outfitters, the south fringe, forest, and open
 wilderness. It changes at Wolf Pass, the Deepdelve mine, the fairy village,
 Stonehaven, the harbour, the crypts, and castles. An arena fight swaps to
-Ceremonial Clash until the match ends.
+Arena's First Cry until the match ends. The Endless Depths cycles three
+repo tracks (firstsongnverdung → L'Enfer Infini → ndung).
 
 Untitled.wav (repo /music) plays inside Petaldeep. It does not play
 on the glade itself.
@@ -42,6 +43,10 @@ FAIRY_DUNGEON_TRACK = "Untitled.wav"
 _ALIASES = {
     "deep_mine_pulse": ("Deep Mine Pulse.wav",),
     "ceremonial_clash": ("Ceremonial Clash.wav",),
+    "arena_first_cry": ("Arena's First Cry.wav",),
+    "firstsongnverdung": ("firstsongnverdung.wav",),
+    "enfer_infini": ("L'Enfer Infini.wav",),
+    "ndung": ("ndung.wav",),
     "petaldeep": (FAIRY_DUNGEON_TRACK,),
 }
 
@@ -67,6 +72,8 @@ _ZONE = {
 _PLAYLISTS = {
     # Rising Theme → The Narrow Way → … (village only)
     "village": ("theme", "narrow_way"),
+    # Endless Depths — three-track loop while inside the private room.
+    "endless_depths": ("firstsongnverdung", "enfer_infini", "ndung"),
 }
 
 _current = None          # region key currently selected
@@ -138,7 +145,7 @@ def _key(client):
     if state != "GAME" or not getattr(client, "player", None):
         return None
     if _arena_fighting(client):
-        return "ceremonial_clash"
+        return "arena_first_cry"
     dungeon = getattr(client, "dungeon", None) or {}
     if dungeon.get("id") == "castle_realm":
         return "castle"
@@ -147,6 +154,8 @@ def _key(client):
         return "deep_mine_pulse"
     if dungeon.get("id") == "petaldeep":
         return "petaldeep"
+    if dungeon.get("id") == "endless_depths":
+        return "endless_depths"
     # Void Sanctum + Emberdeep (inside or on the approach) share crypt music.
     if dungeon.get("id") == "emberdeep":
         return "crypt"

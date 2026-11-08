@@ -732,12 +732,42 @@ def draw_rock_node(surf, cx, cy, tile, color, highlight):
 
 
 def draw_fishing_spot(surf, cx, cy, tile, t):
-    r = tile * 0.3
-    phase = t * 4 + cx * 0.1
+    """Bright V-wakes and darting streaks — readable on dark harbour / moat water."""
+    phase = t * 3.4 + cx * 0.08 + cy * 0.05
+    s = max(1.0, tile / 40.0)
+    # Expanding soft rings under the wakes
+    ring = pygame.Surface((tile * 2, tile * 2), pygame.SRCALPHA)
+    mid = tile
     for i in range(3):
-        rr = r * (0.4 + 0.3 * i) + math.sin(phase + i) * 1.5
-        alpha_col = (110 + i * 20, 180, 230)
-        pygame.draw.circle(surf, alpha_col, (cx, cy), max(1, int(rr)), 1)
+        u = (phase * 0.45 + i * 0.33) % 1.0
+        rr = int(tile * (0.10 + 0.32 * u))
+        a = int(110 * (1.0 - u))
+        pygame.draw.ellipse(ring, (200, 230, 255, a), (mid - rr, mid - rr // 2, rr * 2, max(2, rr)), max(1, int(s)))
+    surf.blit(ring, (cx - mid, cy - mid // 2))
+    # Chevron / V wakes (the white ripples from the fishing graphic)
+    for i in range(4):
+        wobble = phase + i * 1.55
+        ox = int(math.sin(wobble) * tile * 0.14)
+        oy = int(math.cos(wobble * 0.9) * tile * 0.09)
+        arm = max(4, int(tile * (0.16 + 0.04 * math.sin(wobble * 2))))
+        tip = (cx + ox, cy + oy - int(2 * s))
+        left = (tip[0] - arm, tip[1] + arm // 2)
+        right = (tip[0] + arm, tip[1] + arm // 2)
+        col = (235, 248, 255) if i % 2 == 0 else (210, 235, 255)
+        pygame.draw.line(surf, col, tip, left, max(1, int(2 * s)))
+        pygame.draw.line(surf, col, tip, right, max(1, int(2 * s)))
+    # Diagonal fish-fin streaks
+    for i in range(3):
+        ang = phase * 1.7 + i * 2.1
+        if math.sin(ang) < 0.15:
+            continue
+        length = max(3, int(tile * 0.18))
+        dx = int(math.cos(ang) * length)
+        dy = int(math.sin(ang) * length * 0.45)
+        px = cx + int(math.sin(ang * 0.7) * tile * 0.12)
+        py = cy + int(math.cos(ang * 0.6) * tile * 0.08)
+        pygame.draw.line(surf, (245, 252, 255), (px - dx, py - dy), (px + dx, py + dy), max(1, int(s)))
+        pygame.draw.circle(surf, (255, 255, 255), (px + dx, py + dy), max(1, int(s)))
 
 
 # ---------------------------------------------------------------------------

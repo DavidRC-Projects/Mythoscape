@@ -2089,14 +2089,19 @@ def _draw_system_body(client, y, bottom, rects):
     if focus == "guild":
         _draw_guild(client, y, bottom, rects)
         return
-    if focus in ("mounts", "party", "events"):
+    if focus == "party":
+        _draw_party(client, y, bottom, rects)
+        return
+    if focus in ("mounts", "events"):
         messages = {
             "mounts": "No mounts yet.",
-            "party": "You are not in a party.",
             "events": "No world event is active.",
         }
         _blit(client, client.font_small, messages[focus], (_body_x() + 8, y + 8), MUTED)
         return
+    # Default sidebar body — bag / crafting / gathering / pouches + Equipment.
+    # (Was accidentally nested under _draw_party, so inventory vanished whenever
+    # Party focus was clear — including after leaving Endless Depths.)
     system = client.hud_system
     if system == "inventory":
         _draw_inventory(client, y, bottom, rects)
@@ -2106,6 +2111,66 @@ def _draw_system_body(client, y, bottom, rects):
         _draw_gathering(client, y, bottom, rects)
     else:
         _draw_bags(client, y, bottom, rects)
+
+
+def _draw_party(client, y, bottom, rects):
+    """Party roster, invite accept/decline, leave — used for Endless Depths groups."""
+    x0 = _body_x()
+    w = _body_w()
+    invite = getattr(client, "party_invite", None)
+    party = getattr(client, "party", None) or {}
+    btns = {}
+    yy = y + 6
+    _blit(client, client.font_small, "Party", (x0, yy), GOLD)
+    yy += 22
+    if invite:
+        banner = pygame.Rect(x0, yy, w, 86)
+        _panel(client.screen, banner, (36, 32, 18), GOLD, radius=8, width=2, ornate=True)
+        who = invite.get("from_name") or "Someone"
+        _blit(client, client.font_small,
+              _fit_text(client.font_small, f"Invite from {who}", w - 20),
+              (banner.x + 10, banner.y + 8), GOLD)
+        _blit(client, client.font_tiny,
+              "Accept to delve the Endless Depths together.",
+              (banner.x + 10, banner.y + 28), MUTED)
+        bw = (w - 28) // 2
+        acc = pygame.Rect(banner.x + 10, banner.bottom - 36, bw, 28)
+        dec = pygame.Rect(banner.x + 18 + bw, banner.bottom - 36, bw, 28)
+        _panel(client.screen, acc, (40, 70, 40), (120, 200, 120), radius=6, width=1)
+        _panel(client.screen, dec, (70, 40, 40), (200, 120, 120), radius=6, width=1)
+        _blit(client, client.font_small, "Accept", (acc.x + 12, acc.y + 6), INK)
+        _blit(client, client.font_small, "Decline", (dec.x + 12, dec.y + 6), INK)
+        btns["accept"] = acc
+        btns["decline"] = dec
+        yy = banner.bottom + 14
+    members = party.get("members") or []
+    if not members:
+        _blit(client, client.font_tiny,
+              "Right-click a nearby player → Invite to party.",
+              (x0, yy), MUTED)
+        yy += 18
+        _blit(client, client.font_tiny,
+              "Stand together at the Endless Depths mouth to enter as a group.",
+              (x0, yy), MUTED)
+    else:
+        _blit(client, client.font_tiny,
+              f"{len(members)} / 4 · enter Endless Depths together at the mouth",
+              (x0, yy), MUTED)
+        yy += 18
+        for m in members:
+            name = m.get("name") or f"#{m.get('id')}"
+            tag = " (leader)" if m.get("leader") else ""
+            online = "" if m.get("online", True) else " · offline"
+            col = (160, 210, 255) if m.get("leader") else INK
+            _blit(client, client.font_small,
+                  _fit_text(client.font_small, f"• {name}{tag}{online}", w - 8),
+                  (x0, yy), col)
+            yy += 18
+        leave = pygame.Rect(x0, min(yy + 8, bottom - 36), w, 28)
+        _panel(client.screen, leave, (70, 40, 40), (200, 120, 120), radius=6, width=1)
+        _blit(client, client.font_small, "Leave party", (leave.x + 12, leave.y + 6), INK)
+        btns["leave"] = leave
+    rects["party_btns"] = btns
 
 
 def _body_x():
@@ -2886,6 +2951,28 @@ def handle_sidebar_click(client, mx, my, button):
             if client.show_equipment:
                 client.show_help = False
             return True
+        return True
+    if client.hud_focus == "party":
+        for key, rect in (rects.get("party_btns") or {}).items():
+            if rect.collidepoint(mx, my):
+                if key == "accept":
+                    client.net.send("PARTY", action="accept")
+                    client.party_invite = None
+                elif key == "decline":
+                    client.net.send("PARTY", action="decline")
+                    client.party_invite = None
+                elif key == "leave":
+                    client.net.send("PARTY", action="leave")
+                return True
+        for key, rect in (rects.get("systems") or {}).items():
+            if rect.collidepoint(mx, my):
+                client.hud_system = key
+                client.hud_focus = None
+                return True
+        for key, rect in (rects.get("nav") or {}).items():
+            if rect.collidepoint(mx, my):
+                _nav_click(client, key)
+                return True
         return True
     if rects.get("header_logout") and rects["header_logout"].collidepoint(mx, my):
         client.logout()

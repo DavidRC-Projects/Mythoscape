@@ -89,6 +89,7 @@ SKIN = {
     "protester_1": "blacksmith_gareth",
     "protester_2": "packer_nell",
     "warden_tamsin": "mine_scout",          # welcome guide by the spawn crossroads
+    "endless_chronicler": "dungeon_hermit",  # Depths Chronicler by Endless mouth
 }
 
 _IMAGES = {}

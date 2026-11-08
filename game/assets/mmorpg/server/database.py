@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS players (
     cooking_xp INTEGER NOT NULL DEFAULT 0,
     firemaking_xp INTEGER NOT NULL DEFAULT 0,
     smithing_xp INTEGER NOT NULL DEFAULT 0,
+    engineering_xp INTEGER NOT NULL DEFAULT 0,
     fletching_xp INTEGER NOT NULL DEFAULT 0,
     archery_xp INTEGER NOT NULL DEFAULT 0,
     karma_xp INTEGER NOT NULL DEFAULT 0,
@@ -199,6 +200,10 @@ class Database:
         if "smithing_xp" not in cols:
             self.conn.execute(
                 "ALTER TABLE players ADD COLUMN smithing_xp INTEGER NOT NULL DEFAULT 0"
+            )
+        if "engineering_xp" not in cols:
+            self.conn.execute(
+                "ALTER TABLE players ADD COLUMN engineering_xp INTEGER NOT NULL DEFAULT 0"
             )
         if "equip_helmet" not in cols:
             self.conn.execute("ALTER TABLE players ADD COLUMN equip_helmet TEXT")
@@ -354,6 +359,8 @@ class Database:
         apprentice.ensure_schema(self.conn)
         import nobility
         nobility.ensure_schema(self.conn)
+        import titles
+        titles.ensure_schema(self.conn)
         import throne
         throne.ensure_schema(self.conn)
         import ruling
@@ -679,6 +686,16 @@ class Database:
 
         # Guild hiscores: sum of member total levels / XP
         boards["guild"] = self._guild_leaderboard(limit, player_totals, guild_of)
+        # Endless Depths — solo deepest floor only (each room = one level).
+        try:
+            import endless_depths as _ed
+            ed_rows = _ed.leaderboard_rows(self.conn, limit=limit)
+            # Annotate guild names like skill boards.
+            for row in ed_rows:
+                row["guild"] = name_guild.get(row.get("name") or "") or ""
+            boards["endless_depths"] = ed_rows
+        except Exception:
+            boards["endless_depths"] = []
         return boards
 
     def _guild_leaderboard(self, limit, player_totals, guild_of):

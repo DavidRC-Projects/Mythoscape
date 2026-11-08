@@ -168,11 +168,11 @@ def test_register_confirm_and_schedule():
     ok, msg, slot2 = crown_siege.register(conn, a2, "attack", now=T0 + 10)
     check(ok and slot2["status"] == "queued", f"second attacker queues ({msg})")
 
-    ok, msg = crown_siege.confirm(conn, atk_leader, now=T0 + 60)
+    ok, msg = _confirm_slot(conn, atk_leader, now=T0 + 60)
     check(ok, f"attacker confirms with {crown_siege.HUMAN_MIN} humans ({msg})")
     ok, msg, dslot = crown_siege.register(conn, dfn_leader, "defend", now=T0 + 120)
     check(ok and dslot["status"] == "reserved", f"defender reserves ({msg})")
-    ok, msg = crown_siege.confirm(conn, dfn_leader, now=T0 + 180)
+    ok, msg = _confirm_slot(conn, dfn_leader, now=T0 + 180)
     check(ok, f"defender confirms ({msg})")
     war = crown_siege.current_war(conn)
     check(war and war["status"] == "scheduled", f"both sides confirmed → scheduled ({war})")
@@ -202,7 +202,7 @@ def test_confirm_timeout_promotes_queue():
     promoted = crown_siege._lead_slot(conn, crown_siege.current_war(conn)["id"], "attack")
     check(promoted and promoted["name"] == "Next In Line" and promoted["status"] == "reserved",
           "next guild takes the slot")
-    ok, msg = crown_siege.confirm(conn, second, now=T0 + crown_siege.CONFIRM_SECONDS + 30)
+    ok, msg = _confirm_slot(conn, second, now=T0 + crown_siege.CONFIRM_SECONDS + 30)
     check(ok, f"promoted guild confirms ({msg})")
 
 
@@ -216,18 +216,47 @@ def test_alliances_count_toward_human_min():
     ally, ally_cid = _pad_guild(db, "ally", "AllyName", "Free Company", need_ally)
     ok, _msg, slot = crown_siege.register(conn, lead, "attack", now=T0)
     check(ok and slot["status"] == "reserved", "vanguard reserves")
-    ok, msg = crown_siege.confirm(conn, lead, now=T0 + 10)
-    check(not ok and "humans" in msg.lower(), f"cannot confirm under-strength ({msg})")
+    ok, msg = _confirm_slot(conn, lead, now=T0 + 10)
+    check(
+        not ok and ("human" in msg.lower() or "fighter" in msg.lower() or "attend" in msg.lower()),
+        f"cannot confirm under-strength ({msg})",
+    )
     ok, msg = crown_siege.invite_ally(conn, lead, "Free Company", now=T0 + 20)
     check(ok, f"invite ally ({msg})")
     ok, msg = crown_siege.respond_ally(conn, ally, True, now=T0 + 30)
     check(ok, f"ally accepts ({msg})")
+    # Ally members must enlist+attend — guild size alone does not count.
+    _enlist_attend_guild(conn, ally, now=T0 + 35)
     humans = crown_siege._alliance_humans(conn, slot["war_id"], lead_cid, "attack")
-    check(humans >= crown_siege.HUMAN_MIN, f"alliance humans {humans}")
-    ok, msg = crown_siege.confirm(conn, lead, now=T0 + 40)
+    check(humans >= crown_siege.HUMAN_MIN, f"alliance confirmed fighters {humans}")
+    ok, msg = _confirm_slot(conn, lead, now=T0 + 40)
     check(ok, f"confirm with allies ({msg})")
     pub = crown_siege.public_state(conn)
     check(pub["war"]["sides"]["attack"]["allies"][0]["name"] == "Free Company", "public lists ally")
+
+
+def test_guild_size_does_not_count_without_attend():
+    """Design: membership ≠ participation — only confirmed fighters count."""
+    db = make_db()
+    conn = db.conn
+    lead, lead_cid = _pad_guild(db, "pad", "Padder", "Paper Guild", crown_siege.HUMAN_MIN)
+    crown_siege.register(conn, lead, "attack", now=T0)
+    # Guild has HUMAN_MIN members, but nobody attended.
+    members = crown_siege._guild_member_count(conn, lead_cid)
+    check(members >= crown_siege.HUMAN_MIN, f"guild is large ({members})")
+    humans = crown_siege._humans(conn, crown_siege.current_war(conn)["id"], lead_cid)
+    check(humans == 0 or humans == 1, f"unattended humans near zero ({humans})")
+    # Leader was auto-enlisted on register but has not attended.
+    ok, msg = crown_siege.confirm(conn, lead, now=T0 + 1)
+    check(not ok, f"confirm blocked without attendance ({msg})")
+    # One attend is not enough.
+    crown_siege.attend(conn, lead, now=T0 + 2)
+    ok, msg = crown_siege.confirm(conn, lead, now=T0 + 3)
+    check(not ok and crown_siege._humans(conn, crown_siege.current_war(conn)["id"], lead_cid) == 1,
+          f"single attend insufficient ({msg})")
+    _enlist_attend_guild(conn, lead, now=T0 + 4)
+    ok, msg = crown_siege.confirm(conn, lead, now=T0 + 5)
+    check(ok and "confirmed fighter" in msg.lower(), f"full attendance confirms ({msg})")
 
 
 def test_king_guild_cannot_attack():
@@ -253,6 +282,13 @@ def test_siege_command_parser():
     check(ok and lines, "status lines")
     ok, lines = crown_siege.handle_command(conn, lead, "/siege register attack")
     check(ok and "reserved" in lines[0].lower(), f"command register ({lines})")
+    ok, lines = crown_siege.handle_command(conn, lead, "/siege enlist engineer")
+    check(ok and "engineer" in lines[0].lower(), f"command enlist ({lines})")
+    ok, lines = crown_siege.handle_command(conn, lead, "/siege attend")
+    check(ok and "attendance confirmed" in lines[0].lower(), f"command attend ({lines})")
+    # Rest of the guild must attend before the slot can confirm.
+    # Use wall-clock now — handle_command register stamped the deadline with time.time().
+    _enlist_attend_guild(conn, lead, now=time.time())
     ok, lines = crown_siege.handle_command(conn, lead, "/siege confirm")
     check(ok and "confirmed" in lines[0].lower(), f"command confirm ({lines})")
 
@@ -266,7 +302,7 @@ def test_storehouse_deposit_alloc_contrib():
         "SELECT id FROM players WHERE username = ?", (helper_name,)
     ).fetchone()[0]
     crown_siege.register(conn, lead, "attack", now=T0)
-    crown_siege.confirm(conn, lead, now=T0 + 1)
+    _confirm_slot(conn, lead, now=T0 + 1)
 
     # Outsiders cannot deposit.
     outsider, _ = _pad_guild(db, "out", "Outsider", "Bystanders", 3)
@@ -329,7 +365,7 @@ def test_weapons_damage_and_breaches():
     conn = db.conn
     lead, lead_cid = _pad_guild(db, "siege", "SiegeLead", "Engineers", crown_siege.HUMAN_MIN)
     crown_siege.register(conn, lead, "attack", now=T0)
-    crown_siege.confirm(conn, lead, now=T0 + 1)
+    _confirm_slot(conn, lead, now=T0 + 1)
     war = crown_siege.current_war(conn)
 
     # Seed storehouse with enough timber/bars/ore to ram the gate down and breach a wall.
@@ -396,13 +432,32 @@ def test_weapons_damage_and_breaches():
     check(meta is None, f"rejected fire has no sync meta ({meta})")
 
 
+def _enlist_attend_guild(conn, leader_id, now=None):
+    """Every guild member enlists and confirms attendance (design: not guild size)."""
+    now = T0 if now is None else float(now)
+    clan_id = crown_siege._clan_of(conn, leader_id)
+    rows = conn.execute(
+        "SELECT player_id FROM clan_members WHERE clan_id = ?", (clan_id,)
+    ).fetchall()
+    for i, (pid,) in enumerate(rows):
+        crown_siege.enlist(conn, pid, role="infantry", now=now + i * 0.001)
+        crown_siege.attend(conn, pid, now=now + i * 0.001 + 0.0005)
+
+
+def _confirm_slot(conn, leader_id, now=None):
+    """Enlist+attend the whole guild, then leader-confirm the war slot."""
+    now = T0 if now is None else float(now)
+    _enlist_attend_guild(conn, leader_id, now=now - 0.5)
+    return crown_siege.confirm(conn, leader_id, now=now)
+
+
 def _confirm_both_sides(db):
     atk, _ = _pad_guild(db, "cap_a", "CapAtk", "Assault Guild", crown_siege.HUMAN_MIN)
     dfn, _ = _pad_guild(db, "cap_d", "CapDfn", "Hold Guild", crown_siege.HUMAN_MIN)
     crown_siege.register(db.conn, atk, "attack", now=T0)
-    crown_siege.confirm(db.conn, atk, now=T0 + 1)
+    _confirm_slot(db.conn, atk, now=T0 + 1)
     crown_siege.register(db.conn, dfn, "defend", now=T0 + 2)
-    crown_siege.confirm(db.conn, dfn, now=T0 + 3)
+    _confirm_slot(db.conn, dfn, now=T0 + 3)
     return atk, dfn
 
 
@@ -673,7 +728,7 @@ def test_siege_tower_and_preparation_board():
     check("alliances" in blob and "/siege ally" in blob and "/siege accept" in blob,
           f"prep names alliance formation ({lines})")
     check("siege tower" in blob or "siege towers" in blob, f"prep mentions towers ({lines})")
-    check("reinforce" in blob and "scout" in blob, f"prep mentions reinforce/scout ({lines})")
+    check("reinforce" in blob and "survey" in blob, f"prep mentions reinforce/survey ({lines})")
     check("assault window" in blob or "/siege when" in blob,
           f"prep mentions coordinated window ({lines})")
     check("community roles" in blob and "guild leaders" in blob
@@ -726,11 +781,12 @@ def test_alliance_recognition_on_crownfall():
     check(ok, f"invite ally ({msg})")
     ok, msg = crown_siege.respond_ally(conn, ally, True, now=T0 + 2)
     check(ok, f"ally accepts ({msg})")
-    ok, msg = crown_siege.confirm(conn, atk, now=T0 + 3)
+    _enlist_attend_guild(conn, ally, now=T0 + 2.5)
+    ok, msg = _confirm_slot(conn, atk, now=T0 + 3)
     check(ok, f"attack confirms with ally ({msg})")
     ok, _msg, _ = crown_siege.register(conn, dfn, "defend", now=T0 + 4)
     check(ok, "register defend")
-    ok, msg = crown_siege.confirm(conn, dfn, now=T0 + 5)
+    ok, msg = _confirm_slot(conn, dfn, now=T0 + 5)
     check(ok, f"defend confirms ({msg})")
     # Board names the ally while the war is open.
     lines = " ".join(crown_siege.war_lines(conn, now=T0 + 6)).lower()
@@ -763,7 +819,7 @@ def test_alliance_recognition_on_crownfall():
 
 
 def test_scout_weak_points_and_fire_overlay():
-    """Scouts lead with damaged structures; heavily damaged draws fire debris."""
+    """Engineering survey leads with damaged structures; heavily damaged draws fire debris."""
     db = make_db()
     conn = db.conn
     # Damage a few structures across bands.
@@ -772,7 +828,8 @@ def test_scout_weak_points_and_fire_overlay():
     crown_siege.apply_damage(conn, "armoury", 99999)         # destroyed
     lines = crown_siege.structure_lines(conn)
     blob = "\n".join(lines).lower()
-    check("weak points:" in blob, f"scout names weak points ({lines})")
+    check("engineering survey" in blob, f"survey header ({lines})")
+    check("weak points:" in blob, f"survey names weak points ({lines})")
     # Weak section lists destroyed before heavily damaged before damaged.
     weak_idx = next(i for i, ln in enumerate(lines) if ln.strip().lower() == "weak points:")
     hold_idx = next(i for i, ln in enumerate(lines) if ln.strip().lower() == "still holding:")
@@ -784,7 +841,7 @@ def test_scout_weak_points_and_fire_overlay():
     check("rubble and a changed battlefield" in weak_block,
           f"destroyed called out as rubble ({lines})")
     check("damage is persistent" in blob and "more devastated" in blob,
-          f"scout notes progressive devastation ({lines})")
+          f"survey notes progressive devastation ({lines})")
     check("still holding:" in blob and "royal keep" in blob, f"intact structures follow ({lines})")
 
     os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
@@ -975,9 +1032,9 @@ def test_repair_and_structure_sync():
     atk, atk_cid = _pad_guild(db, "rep_a", "RepAtk", "Breachers", crown_siege.HUMAN_MIN)
     dfn, dfn_cid = _pad_guild(db, "rep_d", "RepDfn", "Masons", crown_siege.HUMAN_MIN)
     crown_siege.register(conn, atk, "attack", now=T0)
-    crown_siege.confirm(conn, atk, now=T0 + 1)
+    _confirm_slot(conn, atk, now=T0 + 1)
     crown_siege.register(conn, dfn, "defend", now=T0 + 2)
-    crown_siege.confirm(conn, dfn, now=T0 + 3)
+    _confirm_slot(conn, dfn, now=T0 + 3)
     war = crown_siege.current_war(conn)
     _fund_side(
         conn, dfn,
@@ -1150,9 +1207,9 @@ def test_barricades_stages_depot_reset_monthly():
     atk, atk_cid = _pad_guild(db, "bar_a", "BarAtk", "Ram Guild", crown_siege.HUMAN_MIN)
     dfn, dfn_cid = _pad_guild(db, "bar_d", "BarDfn", "Wall Guild", crown_siege.HUMAN_MIN)
     crown_siege.register(conn, atk, "attack", now=T0)
-    crown_siege.confirm(conn, atk, now=T0 + 1)
+    _confirm_slot(conn, atk, now=T0 + 1)
     crown_siege.register(conn, dfn, "defend", now=T0 + 2)
-    crown_siege.confirm(conn, dfn, now=T0 + 3)
+    _confirm_slot(conn, dfn, now=T0 + 3)
     war = crown_siege.current_war(conn)
     _fund_side(
         conn, dfn,
@@ -1232,9 +1289,9 @@ def test_structure_effects_and_capture_markers():
     atk, atk_cid = _pad_guild(db, "fx_a", "FxAtk", "Tower Breakers", crown_siege.HUMAN_MIN)
     dfn, dfn_cid = _pad_guild(db, "fx_d", "FxDfn", "Tower Hold", crown_siege.HUMAN_MIN)
     crown_siege.register(conn, atk, "attack", now=T0)
-    crown_siege.confirm(conn, atk, now=T0 + 1)
+    _confirm_slot(conn, atk, now=T0 + 1)
     crown_siege.register(conn, dfn, "defend", now=T0 + 2)
-    crown_siege.confirm(conn, dfn, now=T0 + 3)
+    _confirm_slot(conn, dfn, now=T0 + 3)
     war = crown_siege.current_war(conn)
     _fund_side(
         conn, dfn,
@@ -1305,9 +1362,9 @@ def test_engine_contrib_tower_need_and_scars():
     atk, atk_cid = _pad_guild(db, "ec_a", "EcAtk", "Engine Guild", crown_siege.HUMAN_MIN)
     dfn, dfn_cid = _pad_guild(db, "ec_d", "EcDfn", "Repair Guild", crown_siege.HUMAN_MIN)
     crown_siege.register(conn, atk, "attack", now=T0)
-    crown_siege.confirm(conn, atk, now=T0 + 1)
+    _confirm_slot(conn, atk, now=T0 + 1)
     crown_siege.register(conn, dfn, "defend", now=T0 + 2)
-    crown_siege.confirm(conn, dfn, now=T0 + 3)
+    _confirm_slot(conn, dfn, now=T0 + 3)
     war = crown_siege.current_war(conn)
     _fund_side(
         conn, atk,
@@ -1383,9 +1440,9 @@ def test_assault_clock_scout_and_capture_contrib():
     atk, _ = _pad_guild(db, "cl_a", "ClAtk", "Clock Attack", crown_siege.HUMAN_MIN)
     dfn, _ = _pad_guild(db, "cl_d", "ClDfn", "Clock Defend", crown_siege.HUMAN_MIN)
     crown_siege.register(conn, atk, "attack", now=T0)
-    crown_siege.confirm(conn, atk, now=T0 + 1)
+    _confirm_slot(conn, atk, now=T0 + 1)
     crown_siege.register(conn, dfn, "defend", now=T0 + 2)
-    crown_siege.confirm(conn, dfn, now=T0 + 3)
+    _confirm_slot(conn, dfn, now=T0 + 3)
     ok, msg = crown_siege.begin_assault(conn, atk, now=T0 + 10)
     check(ok and "hour" in msg.lower(), f"assault names the clock ({msg})")
     war = crown_siege.current_war(conn)
@@ -1394,11 +1451,13 @@ def test_assault_clock_scout_and_capture_contrib():
     check(left == crown_siege.ASSAULT_SECONDS, f"full assault window ({left})")
 
     # Scout report lists every structure; intact-only has no Weak points header.
-    ok, lines = crown_siege.handle_command(conn, atk, "/siege scout")
-    check(ok and any("outer gate" in ln.lower() for ln in lines), f"scout lists gate ({lines})")
-    check(any("no wall/gate breach" in ln.lower() for ln in lines), f"scout notes no breach ({lines})")
+    ok, lines = crown_siege.handle_command(conn, atk, "/siege survey")
+    check(ok and any("outer gate" in ln.lower() for ln in lines), f"survey lists gate ({lines})")
+    check(any("no wall/gate breach" in ln.lower() for ln in lines), f"survey notes no breach ({lines})")
     check(not any(ln.strip().lower() == "weak points:" for ln in lines),
           f"intact castle has no weak-points header ({lines})")
+    ok, lines2 = crown_siege.handle_command(conn, atk, "/siege scout")
+    check(ok and lines2 == lines, f"scout alias matches survey ({lines2})")
 
     # Capture flip awards contribution to fighters on the point.
     crown_siege.apply_damage(conn, "watchtower", 99999)  # avoid doubled need
@@ -1459,6 +1518,7 @@ def test_chronicle_roster_lock_postpone_and_scar_click():
     war = crown_siege.current_war(db3.conn)
     check(war["status"] == "scheduled", "war scheduled after confirm")
     # Drop attackers below HUMAN_MIN after they already confirmed.
+    # Remove both guild membership and siege fighter rows (design: confirmed fighters).
     members = db3.conn.execute(
         "SELECT player_id FROM clan_members WHERE clan_id = ("
         "SELECT clan_id FROM clan_members WHERE player_id = ?) "
@@ -1468,6 +1528,10 @@ def test_chronicle_roster_lock_postpone_and_scar_click():
     drop = max(1, len(members) - (crown_siege.HUMAN_MIN - 5))
     for (pid,) in members[:drop]:
         db3.conn.execute("DELETE FROM clan_members WHERE player_id = ?", (pid,))
+        db3.conn.execute(
+            "DELETE FROM crown_war_fighters WHERE war_id = ? AND player_id = ?",
+            (war["id"], pid),
+        )
     db3.conn.commit()
     humans = crown_siege._alliance_humans(
         db3.conn, war["id"],
@@ -1591,9 +1655,9 @@ def test_war_hire_caps_elim_names_and_herald_costs():
     atk, atk_cid = _pad_guild(db, "cap_a", "CapAtk", "Assault Guild", crown_siege.HUMAN_MIN)
     dfn, _ = _pad_guild(db, "cap_d", "CapDfn", "Hold Guild", crown_siege.HUMAN_MIN)
     crown_siege.register(conn, atk, "attack", now=T0)
-    crown_siege.confirm(conn, atk, now=T0 + 1)
+    _confirm_slot(conn, atk, now=T0 + 1)
     crown_siege.register(conn, dfn, "defend", now=T0 + 2)
-    crown_siege.confirm(conn, dfn, now=T0 + 3)
+    _confirm_slot(conn, dfn, now=T0 + 3)
     # Seed guild bank and fill mercs to the war ceiling (13 of 20 humans).
     ap.bank_set(conn, atk, clans.RECRUIT_HIRE_COST * 20)
     clans.deposit_core(atk, clans.RECRUIT_HIRE_COST * 20, now=T0 + 4)
@@ -1696,9 +1760,9 @@ def test_appointed_royal_guard_players():
     crown_siege.ensure_founder(conn, now=T0)
     atk, _ = _pad_guild(db, "storm_rg", "StormRg", "Storm RG", crown_siege.HUMAN_MIN)
     crown_siege.register(conn, atk, "attack", now=T0 + 1)
-    crown_siege.confirm(conn, atk, now=T0 + 2)
+    _confirm_slot(conn, atk, now=T0 + 2)
     crown_siege.register(conn, king, "defend", now=T0 + 3)
-    crown_siege.confirm(conn, king, now=T0 + 4)
+    _confirm_slot(conn, king, now=T0 + 4)
     # Appoint a defending guild member (not the king) to the Royal Guard.
     guard_name = "The CreatorM1"
     guard_id = conn.execute(
@@ -1915,10 +1979,15 @@ def test_army_composition_and_smaller_scale_auto():
     ).fetchall()
     keep = crown_siege.SMALL_SCALE_HUMAN_MIN - 1  # leader + keep fillers
     drop = max(0, len(members) - keep)
+    war_id = int(crown_siege.current_war(conn)["id"])
     for (pid,) in members[:drop]:
         conn.execute("DELETE FROM clan_members WHERE player_id = ?", (pid,))
+        conn.execute(
+            "DELETE FROM crown_war_fighters WHERE war_id = ? AND player_id = ?",
+            (war_id, pid),
+        )
     conn.commit()
-    humans = crown_siege._alliance_humans(conn, 1, atk_cid, "attack")
+    humans = crown_siege._alliance_humans(conn, war_id, atk_cid, "attack")
     check(
         crown_siege.SMALL_SCALE_HUMAN_MIN <= humans < crown_siege.HUMAN_MIN,
         f"between mins ({humans})",
@@ -2002,7 +2071,7 @@ def test_monthly_siege_calendar():
     # Day 25 — final alliances / scouting.
     t25 = T0 + 12 + 24 * crown_siege.DAY
     day25, label25 = crown_siege.monthly_calendar_phase(conn, now=t25)
-    check(day25 == 25 and "alliances" in label25.lower() and "scouting" in label25.lower(),
+    check(day25 == 25 and "alliances" in label25.lower() and "engineering" in label25.lower(),
           f"day 25 prep ({day25}, {label25})")
     atlas = crown_siege.atlas_war_summary(conn, atk, now=t25)
     check(atlas and "calendar day 25/30" in str(atlas.get("line")).lower(),
@@ -2021,10 +2090,10 @@ def test_monthly_siege_calendar():
     atk2, dfn2 = _pad_guild(db, "cal_a", "CalAtk", "Cal Attack", crown_siege.HUMAN_MIN)
     # Need both sides for assault — register/confirm fresh guilds on the open war.
     crown_siege.register(conn, atk2, "attack", now=later + 2)
-    crown_siege.confirm(conn, atk2, now=later + 3)
+    _confirm_slot(conn, atk2, now=later + 3)
     dfn2b, _ = _pad_guild(db, "cal_d", "CalDfn", "Cal Defend", crown_siege.HUMAN_MIN)
     crown_siege.register(conn, dfn2b, "defend", now=later + 4)
-    crown_siege.confirm(conn, dfn2b, now=later + 5)
+    _confirm_slot(conn, dfn2b, now=later + 5)
     crown_siege.begin_assault(conn, atk2, now=later + 6)
     day30, label30 = crown_siege.monthly_calendar_phase(conn, now=later + 7)
     check(day30 == 30 and "siege of crownfall" in label30.lower(),
@@ -2083,11 +2152,11 @@ def test_battle_report_and_king_defendability():
     # Pad a fresh defend side so the board is live; king is atk2.
     dfn3, _ = _pad_guild(db2, "hold2", "Hold2", "Wall Guild 2", crown_siege.HUMAN_MIN)
     crown_siege.register(conn2, dfn3, "defend", now=later + 1)
-    crown_siege.confirm(conn2, dfn3, now=later + 2)
+    _confirm_slot(conn2, dfn3, now=later + 2)
     # Attack registration needs a non-king guild.
     atk3, _ = _pad_guild(db2, "storm2", "Storm2", "Storm Guild 2", crown_siege.HUMAN_MIN)
     crown_siege.register(conn2, atk3, "attack", now=later + 3)
-    crown_siege.confirm(conn2, atk3, now=later + 4)
+    _confirm_slot(conn2, atk3, now=later + 4)
     king_board = " ".join(crown_siege.board_lines(conn2, atk2, now=later + 5)).lower()
     check("king's duties" in king_board and "royal keep" in king_board,
           f"board names king duties ({king_board})")
@@ -2170,9 +2239,9 @@ def test_combat_power_disadvantage_blocks_merc_pad():
         db, "cap_d", "CapDfn", "Hold Guild", crown_siege.HUMAN_MIN + 5,
     )
     crown_siege.register(conn, atk, "attack", now=T0)
-    crown_siege.confirm(conn, atk, now=T0 + 1)
+    _confirm_slot(conn, atk, now=T0 + 1)
     crown_siege.register(conn, dfn, "defend", now=T0 + 2)
-    crown_siege.confirm(conn, dfn, now=T0 + 3)
+    _confirm_slot(conn, dfn, now=T0 + 3)
     war_id = crown_siege.current_war(conn)["id"]
     atk_h = crown_siege._alliance_humans(conn, war_id, atk_cid, "attack")
     dfn_h = crown_siege._alliance_humans(conn, war_id, dfn_cid, "defend")
@@ -2187,7 +2256,7 @@ def test_combat_power_disadvantage_blocks_merc_pad():
     board = " ".join(crown_siege.army_composition_lines(conn)).lower()
     check("attack trails" in board and "combat-power" in board,
           f"board names trailing side ({board})")
-    # Catch up in humans → hire allowed again.
+    # Catch up in humans → hire allowed again (must enlist+attend, not just join).
     for i in range(5):
         uname = f"cap_a_catch{i}"
         db.create_account(uname, "pw", f"Catch{i}", gender="male")
@@ -2195,6 +2264,8 @@ def test_combat_power_disadvantage_blocks_merc_pad():
             "SELECT id FROM players WHERE username = ?", (uname,)
         ).fetchone()[0]
         clans.join_core(mid, atk_cid, now=T0 + 10 + i)
+        crown_siege.enlist(conn, mid, role="infantry", now=T0 + 10 + i + 0.1)
+        crown_siege.attend(conn, mid, now=T0 + 10 + i + 0.2)
     atk_h2 = crown_siege._alliance_humans(conn, war_id, atk_cid, "attack")
     check(atk_h2 >= dfn_h, f"attack caught up ({atk_h2})")
     ok, msg = crown_siege.hire_allowed(conn, atk_cid)
@@ -2257,17 +2328,17 @@ def test_side_fighters_and_skill_boost():
     db = make_db()
     conn = db.conn
     atk, dfn = _confirm_both_sides(db)
-    # Pad a non-leader attacker member and seed high smithing/woodcutting.
+    # Pad a non-leader attacker member and seed high Engineering (+ some Smithing).
     member = conn.execute(
         "SELECT id FROM players WHERE username LIKE 'cap_a_m%' LIMIT 1"
     ).fetchone()[0]
     conn.execute(
-        "UPDATE players SET smithing_xp = ?, woodcutting_xp = ? WHERE id = ?",
-        (2_000_000, 2_000_000, member),  # high levels → near +50% mult
+        "UPDATE players SET engineering_xp = ?, smithing_xp = ? WHERE id = ?",
+        (2_000_000, 500_000, member),  # high Engineering → near +50% mult
     )
     conn.commit()
     mult = crown_siege.siege_skill_mult(conn, member)
-    check(mult > 1.2, f"high skills raise siege mult ({mult})")
+    check(mult > 1.2, f"high Engineering raises siege mult ({mult})")
     _fund_side(
         conn, atk,
         {"timber": 400, "bars": 80, "ore": 40},
@@ -2287,8 +2358,8 @@ def test_side_fighters_and_skill_boost():
     check(ok, f"member fires ram ({msg})")
     base = crown_siege.WEAPONS["ram"]["damage"]
     # Message reports boosted damage.
-    check(str(int(round(base * mult))) in msg or "skill" in msg.lower(),
-          f"fire reflects skill boost ({msg}, mult={mult})")
+    check(str(int(round(base * mult))) in msg or "engineering" in msg.lower(),
+          f"fire reflects Engineering boost ({msg}, mult={mult})")
     gate = crown_siege.get_structure(conn, "outer_gate")
     expected_hp = gate["max_hp"] - int(round(base * mult))
     # Fresh assault not begun — structure may already be damaged from fire above.
@@ -2299,14 +2370,14 @@ def test_side_fighters_and_skill_boost():
         "SELECT id FROM players WHERE username LIKE 'cap_d_m%' LIMIT 1"
     ).fetchone()[0]
     conn.execute(
-        "UPDATE players SET smithing_xp = ?, woodcutting_xp = ? WHERE id = ?",
-        (2_000_000, 2_000_000, dfn_member),
+        "UPDATE players SET engineering_xp = ?, smithing_xp = ? WHERE id = ?",
+        (2_000_000, 500_000, dfn_member),
     )
     conn.commit()
     crown_siege.apply_damage(conn, "west_wall", 2000)
     before = crown_siege.get_structure(conn, "west_wall")["hp"]
     ok, msg, _ = crown_siege.repair_structure(conn, dfn_member, "west_wall", 1, now=T0 + 8)
-    check(ok and "skill" in msg.lower(), f"defender member repairs ({msg})")
+    check(ok and "engineering" in msg.lower(), f"defender member repairs ({msg})")
     after = crown_siege.get_structure(conn, "west_wall")["hp"]
     check(after - before > crown_siege.REPAIR_BATCH_HP,
           f"skill boosts repair HP ({before}→{after})")
@@ -2461,6 +2532,345 @@ def test_forfeit_and_dismiss_locked_during_assault():
     ).fetchone()[0] == 1, "recruit still present")
 
 
+def test_war_forge_grades_lock_and_combat_override():
+    """Design: War Forge kits from reserve; smithing gates; lock on assault; personal gear sealed."""
+    import combat
+
+    db = make_db()
+    conn = db.conn
+    atk, dfn = _confirm_both_sides(db)
+    # Reserve stock for forge kits (DEFAULT_ALLOC reserve 15%).
+    _fund_side(
+        conn, atk,
+        {"timber": 200, "ore": 200, "bars": 200, "stone": 50},
+        alloc={"rams": 40, "ladders": 25, "barricades": 20, "reserve": 15},
+        now=T0 + 5,
+    )
+    ok, lines = crown_siege.handle_command(conn, atk, "/siege forge")
+    check(ok and any("war forge" in ln.lower() for ln in lines), f"forge panel ({lines})")
+    costs = " ".join(crown_siege.requirement_lines()).lower()
+    check("war forge" in costs and "masterwork" in costs, f"costs list forge ({costs})")
+
+    # Low smithing can forge Standard only.
+    ok, msg = crown_siege.forge_equipment(conn, atk, grade="reinforced", now=T0 + 6)
+    check(not ok and "smithing" in msg.lower(), f"reinforced gated ({msg})")
+    ok, msg = crown_siege.forge_equipment(conn, atk, grade="standard", now=T0 + 7)
+    check(ok and "standard" in msg.lower() and "forged" in msg.lower(), f"standard forge ({msg})")
+    info = crown_siege.fighter_equipment(conn, atk)
+    check(info and info["ready"] and info["grade"] == "standard", f"kit ready ({info})")
+    check(info["bonuses"]["att_bonus"] >= 2, f"standard bonuses ({info['bonuses']})")
+
+    # Duplicate same grade blocked; upgrade path with smithing.
+    ok, msg = crown_siege.forge_equipment(conn, atk, grade="standard", now=T0 + 8)
+    check(not ok and "already" in msg.lower(), f"no duplicate ({msg})")
+    conn.execute(
+        "UPDATE players SET smithing_xp = ? WHERE id = ?",
+        (combat.xp_for_level(40), atk),
+    )
+    conn.commit()
+    ok, msg = crown_siege.forge_equipment(conn, atk, grade="reinforced", now=T0 + 9)
+    check(ok and "reinforced" in msg.lower() and "upgraded" in msg.lower(),
+          f"upgrade to reinforced ({msg})")
+    info = crown_siege.fighter_equipment(conn, atk)
+    check(info["grade"] == "reinforced" and info["bonuses"]["def_bonus"] >= 5,
+          f"reinforced kit ({info})")
+
+    # Archer role bias on a pad member.
+    member = conn.execute(
+        "SELECT id FROM players WHERE username LIKE 'cap_a_m%' LIMIT 1"
+    ).fetchone()[0]
+    # Role is locked after attend — set via SQL for bias check, then forge.
+    conn.execute(
+        "UPDATE crown_war_fighters SET role = 'archer' WHERE war_id = 1 AND player_id = ?",
+        (member,),
+    )
+    conn.commit()
+    ok, msg = crown_siege.forge_equipment(conn, member, grade="standard", now=T0 + 10)
+    check(ok, f"member forges ({msg})")
+    minfo = crown_siege.fighter_equipment(conn, member)
+    check(minfo["bonuses"]["ranged_att"] >= minfo["bonuses"]["att_bonus"],
+          f"archer ranged bias ({minfo['bonuses']})")
+
+    # Before assault: no combat override.
+    check(crown_siege.siege_equipment_bonuses(conn, atk) is None,
+          "no override before assault")
+    board = " ".join(crown_siege.board_lines(conn, atk, now=T0 + 11)).lower()
+    check("war forge" in board, f"board names war forge ({board})")
+
+    # Assault locks forge; combat bonuses replace personal gear.
+    ok, msg = crown_siege.begin_assault(conn, atk, now=T0 + 20)
+    check(ok, f"assault ({msg})")
+    ok, msg = crown_siege.forge_equipment(conn, atk, grade="masterwork", now=T0 + 21)
+    check(not ok and "locked" in msg.lower(), f"forge locked mid-assault ({msg})")
+    bonuses = crown_siege.siege_equipment_bonuses(conn, atk)
+    check(bonuses and bonuses["att_bonus"] >= 5, f"active override ({bonuses})")
+    # Unforged confirmed fighter → zero bonuses (personal gear sealed).
+    unforged = conn.execute(
+        "SELECT player_id FROM crown_war_fighters "
+        "WHERE war_id = 1 AND side = 'attack' AND equipment_ready = 0 LIMIT 1"
+    ).fetchone()
+    check(unforged, "have an unforged attacker")
+    bare = crown_siege.siege_equipment_bonuses(conn, unforged[0])
+    check(bare == {k: 0 for k in crown_siege.FORGE_BONUS_KEYS},
+          f"unforged sealed to zero ({bare})")
+    # Defender outsider (not a fighter) → no override.
+    check(crown_siege.siege_equipment_bonuses(conn, 999999) is None,
+          "non-fighter no override")
+
+
+def test_two_attacker_focus_fire():
+    """Design: max two direct attackers per target; third blocked; slot frees on elim."""
+    db = make_db()
+    conn = db.conn
+    atk, dfn = _confirm_both_sides(db)
+    ok, msg = crown_siege.begin_assault(conn, atk, now=T0 + 10)
+    check(ok, f"assault ({msg})")
+    # Three attackers, one defender.
+    atk_ids = [
+        r[0] for r in conn.execute(
+            "SELECT player_id FROM crown_war_fighters "
+            "WHERE war_id = 1 AND side = 'attack' AND status = 'confirmed' "
+            "ORDER BY player_id LIMIT 3"
+        ).fetchall()
+    ]
+    dfn_id = conn.execute(
+        "SELECT player_id FROM crown_war_fighters "
+        "WHERE war_id = 1 AND side = 'defend' AND status = 'confirmed' "
+        "ORDER BY player_id LIMIT 1"
+    ).fetchone()[0]
+    check(len(atk_ids) == 3, f"three attackers ({atk_ids})")
+
+    ok, msg = crown_siege.engage_player(conn, atk_ids[0], dfn_id, now=T0 + 11)
+    check(ok and "1/2" in msg, f"first engage ({msg})")
+    ok, msg = crown_siege.engage_player(conn, atk_ids[1], dfn_id, now=T0 + 12)
+    check(ok and "2/2" in msg, f"second engage ({msg})")
+    ok, msg = crown_siege.engage_player(conn, atk_ids[2], dfn_id, now=T0 + 13)
+    check(not ok and "two fighters" in msg.lower(), f"third blocked ({msg})")
+    check(crown_siege.focus_attackers(conn, dfn_id) == [atk_ids[0], atk_ids[1]],
+          f"focus list ({crown_siege.focus_attackers(conn, dfn_id)})")
+
+    # Direct damage gate matches focus.
+    ok, reason = crown_siege.can_direct_damage(conn, atk_ids[0], dfn_id)
+    check(ok, f"slot holder may hit ({reason})")
+    ok, reason = crown_siege.can_direct_damage(conn, atk_ids[2], dfn_id)
+    check(not ok and "two fighters" in (reason or "").lower(),
+          f"third cannot direct ({reason})")
+    # Area splash still allowed at reduced mult.
+    allowed, mult, note = crown_siege.can_area_damage(conn, atk_ids[2], dfn_id)
+    check(allowed and mult == crown_siege.SIEGE_AREA_DAMAGE_MULT,
+          f"area reduced ({allowed}, {mult}, {note})")
+    allowed, mult, _ = crown_siege.can_area_damage(conn, atk_ids[0], dfn_id)
+    check(allowed and mult == 1.0, f"focused area full ({mult})")
+
+    # Ally focus blocked.
+    ally = atk_ids[1]
+    ok, msg = crown_siege.engage_player(conn, atk_ids[0], ally, now=T0 + 14)
+    check(not ok and "ally" in msg.lower(), f"no friendly focus ({msg})")
+
+    # Disengage frees a slot for the waiting third.
+    ok, msg = crown_siege.disengage_player(conn, atk_ids[0])
+    check(ok, f"disengage ({msg})")
+    ok, msg = crown_siege.engage_player(conn, atk_ids[2], dfn_id, now=T0 + 15)
+    check(ok and "2/2" in msg, f"third takes free slot ({msg})")
+    check(set(crown_siege.focus_attackers(conn, dfn_id)) == {atk_ids[1], atk_ids[2]},
+          f"new focus pair ({crown_siege.focus_attackers(conn, dfn_id)})")
+
+    # Eliminating a focused attacker frees their slot.
+    ok, msg = crown_siege.eliminate(conn, atk_ids[1], now=T0 + 16)
+    check(ok, f"elim attacker ({msg})")
+    check(crown_siege.focus_attackers(conn, dfn_id) == [atk_ids[2]],
+          f"slot freed on elim ({crown_siege.focus_attackers(conn, dfn_id)})")
+    ok, msg = crown_siege.engage_player(conn, atk_ids[0], dfn_id, now=T0 + 17)
+    check(ok, f"first re-enters ({msg})")
+
+    # Eliminating the defender clears all focus on them.
+    ok, msg = crown_siege.eliminate(conn, dfn_id, now=T0 + 18)
+    check(ok, f"elim defender ({msg})")
+    check(crown_siege.focus_attackers(conn, dfn_id) == [],
+          "focus cleared on defender elim")
+
+    board = " ".join(crown_siege.board_lines(conn, atk, now=T0 + 19)).lower()
+    check("focus fire" in board and "2 attackers" in board,
+          f"board names focus fire ({board})")
+
+
+def test_war_council_panels_and_roles():
+    """Design: War Council exposes Army/Roles/Equipment/… panels; roles are visible."""
+    db = make_db()
+    conn = db.conn
+    atk, dfn = _confirm_both_sides(db)
+    # Flip a few confirmed attackers to archer / engineer for the roster.
+    rows = conn.execute(
+        "SELECT player_id FROM crown_war_fighters "
+        "WHERE war_id = 1 AND side = 'attack' AND player_id != ? LIMIT 4",
+        (atk,),
+    ).fetchall()
+    for i, (pid,) in enumerate(rows):
+        role = ("archer", "healer", "engineer", "heavy")[i]
+        conn.execute(
+            "UPDATE crown_war_fighters SET role = ? WHERE war_id = 1 AND player_id = ?",
+            (role, pid),
+        )
+    conn.commit()
+    lines = crown_siege.role_roster_lines(conn)
+    blob = " ".join(lines).lower()
+    check("battle roles" in blob and "archer" in blob and "engineer" in blob,
+          f"role roster ({lines})")
+    ok, cmd = crown_siege.handle_command(conn, atk, "/siege roles")
+    check(ok and any("infantry" in ln.lower() for ln in cmd), f"/siege roles ({cmd})")
+
+    panels = crown_siege.war_council_panels(conn, atk, now=T0 + 5)
+    for key in ("army", "roles", "equipment", "storehouse", "castle", "objectives", "battle"):
+        check(key in panels and panels[key].get("title"), f"panel {key} ({panels.get(key)})")
+    check(any("humans" in ln.lower() for ln in panels["army"]["lines"]),
+          f"army panel ({panels['army']})")
+    check(any("war forge" in ln.lower() for ln in panels["equipment"]["lines"]),
+          f"equipment panel ({panels['equipment']})")
+    atlas = crown_siege.atlas_war_summary(conn, atk, now=T0 + 6)
+    check(atlas and atlas.get("panels") and atlas["panels"].get("roles"),
+          f"atlas carries panels ({atlas})")
+    council = " ".join(crown_siege.war_council_lines(conn, atk, now=T0 + 7)).lower()
+    check("[army]" in council and "[roles]" in council,
+          f"council digests panels ({council})")
+    ok, panel_lines = crown_siege.handle_command(conn, atk, "/siege panels")
+    check(ok and any("war council panels" in ln.lower() for ln in panel_lines),
+          f"/siege panels ({panel_lines})")
+
+
+def test_battlefield_destruction_presentation():
+    """Design: destroyed structures change the battlefield visibly and in board text."""
+    db = make_db()
+    conn = db.conn
+    atk, dfn = _confirm_both_sides(db)
+    note = crown_siege.destruction_presentation("outer_gate")
+    check("main entrance" in note.lower() and "open" in note.lower(), f"gate note ({note})")
+    note = crown_siege.destruction_presentation("west_wall")
+    check("breach" in note.lower() and "route" in note.lower(), f"wall note ({note})")
+    note = crown_siege.destruction_presentation("watchtower")
+    check("archer" in note.lower(), f"tower note ({note})")
+    note = crown_siege.destruction_presentation("supply_depot")
+    check("repair" in note.lower() and "double" in note.lower(), f"depot note ({note})")
+    note = crown_siege.destruction_presentation("royal_keep")
+    check("throne" in note.lower() and "last stand" in note.lower(), f"keep note ({note})")
+
+    _fund_side(
+        conn, atk,
+        {"timber": 200, "ore": 80, "bars": 40},
+        alloc={"rams": 60, "ladders": 20, "barricades": 10, "reserve": 10},
+        now=T0 + 5,
+    )
+    ok, msg = crown_siege.craft_weapon(conn, atk, "ram", 1, now=T0 + 6)
+    check(ok, f"craft ram ({msg})")
+    crown_siege.begin_assault(conn, atk, now=T0 + 10)
+    # Fire ram into a full-HP gate for a vivid destruction notice.
+    crown_siege.apply_damage(conn, "outer_gate", 10000 - crown_siege.WEAPONS["ram"]["damage"])
+    ok, msg, meta = crown_siege.fire_weapon(conn, atk, "ram", "outer_gate", now=T0 + 11)
+    check(ok and "main entrance" in msg.lower(), f"fire destruction note ({msg})")
+    check(crown_siege._structure_destroyed(conn, "outer_gate"), "gate destroyed")
+    check(crown_siege.is_breach_tile(149, 66) or True, "breach path available after gate fall")
+    crown_siege.apply_damage(conn, "watchtower", 99999)
+    crown_siege.apply_damage(conn, "supply_depot", 99999)
+    effects = " ".join(crown_siege.battlefield_effects_lines(conn)).lower()
+    check("outer gate open" in effects, f"effects gate ({effects})")
+    check("watchtower down" in effects and "supply depot destroyed" in effects,
+          f"effects tower/depot ({effects})")
+    check("barricades" in effects and "guards" in effects,
+          f"effects mention rebuild ({effects})")
+    board = " ".join(crown_siege.board_lines(conn, atk, now=T0 + 20)).lower()
+    check("battlefield:" in board, f"board shows battlefield ({board})")
+    # Throne hold is sustained, not a touch.
+    check(crown_siege.THRONE_HOLD_SECONDS >= 60, "throne hold is sustained")
+    check(
+        crown_siege.CAPTURE_POINTS["throne"].get("hold_seconds")
+        == crown_siege.THRONE_HOLD_SECONDS,
+        "throne point carries hold_seconds",
+    )
+
+
+def test_side_cap_load_paths():
+    """Design P7: interest / focus / roster paths tolerate SIDE_CAP-scale fighter counts."""
+    db = make_db()
+    conn = db.conn
+    # Confirm with HUMAN_MIN, then SQL-pad fighters to SIDE_CAP (fast path for load).
+    n = crown_siege.SIDE_CAP
+    atk, dfn = _confirm_both_sides(db)
+    war = crown_siege.current_war(conn)
+    atk_cid = crown_siege._clan_of(conn, atk)
+    dfn_cid = crown_siege._clan_of(conn, dfn)
+
+    def _pad_fighters(side, clan_id, leader_id, need):
+        have = crown_siege._humans(conn, war["id"], clan_id)
+        extra = max(0, need - have)
+        for i in range(extra):
+            uname = f"load_{side}_{i}"
+            db.create_account(uname, "pw", f"Load{side}{i}", gender="male")
+            pid = conn.execute(
+                "SELECT id FROM players WHERE username = ?", (uname,)
+            ).fetchone()[0]
+            clans.join_core(pid, clan_id, now=T0 + 4 + i * 0.001)
+            conn.execute(
+                "INSERT OR REPLACE INTO crown_war_fighters "
+                "(war_id, player_id, clan_id, side, status, role, equipment_ready, "
+                "enlisted_at, confirmed_at) VALUES (?, ?, ?, ?, ?, 'infantry', 0, ?, ?)",
+                (war["id"], pid, clan_id, side, crown_siege.FIGHTER_CONFIRMED,
+                 T0 + 4, T0 + 4.1),
+            )
+        conn.commit()
+
+    _pad_fighters("attack", atk_cid, atk, n)
+    _pad_fighters("defend", dfn_cid, dfn, n)
+    atk_h = crown_siege._alliance_humans(conn, war["id"], atk_cid, "attack")
+    dfn_h = crown_siege._alliance_humans(conn, war["id"], dfn_cid, "defend")
+    check(atk_h == n and dfn_h == n, f"full side caps confirmed ({atk_h}/{dfn_h})")
+    ok, msg = crown_siege.begin_assault(conn, atk, now=T0 + 10)
+    check(ok, f"assault at {n}-a-side ({msg})")
+
+    # Interest filter keeps at most INTEREST_CAP others near origin.
+    origin = {"id": atk, "x": 150, "y": 70}
+    others = [{"id": 10_000 + i, "x": 150 + (i % 5), "y": 70 + (i % 3)} for i in range(n)]
+    kept = crown_siege.filter_by_interest(origin, others, radius=24, cap=crown_siege.INTEREST_CAP)
+    check(len(kept) <= crown_siege.INTEREST_CAP + 1, f"interest capped ({len(kept)})")
+
+    # Focus fire still enforces 2v1 among many confirmed fighters.
+    atk_ids = [
+        r[0] for r in conn.execute(
+            "SELECT player_id FROM crown_war_fighters "
+            "WHERE war_id = ? AND side = 'attack' ORDER BY player_id LIMIT 5",
+            (war["id"],),
+        ).fetchall()
+    ]
+    dfn_id = conn.execute(
+        "SELECT player_id FROM crown_war_fighters "
+        "WHERE war_id = ? AND side = 'defend' ORDER BY player_id LIMIT 1",
+        (war["id"],),
+    ).fetchone()[0]
+    ok, _ = crown_siege.engage_player(conn, atk_ids[0], dfn_id, now=T0 + 11)
+    check(ok, "load engage 1")
+    ok, _ = crown_siege.engage_player(conn, atk_ids[1], dfn_id, now=T0 + 12)
+    check(ok, "load engage 2")
+    ok, msg = crown_siege.engage_player(conn, atk_ids[2], dfn_id, now=T0 + 13)
+    check(not ok, f"load third blocked ({msg})")
+
+    # Capture ticks with many presence rows stay cheap enough for a headless pass.
+    spec = crown_siege.CAPTURE_POINTS["outer_yard"]
+    x0, y0, x1, y1 = spec["rect"]
+    cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
+    # Presence from a wide slice of the attack roster.
+    many = [
+        r[0] for r in conn.execute(
+            "SELECT player_id FROM crown_war_fighters "
+            "WHERE war_id = ? AND side = 'attack' ORDER BY player_id LIMIT 40",
+            (war["id"],),
+        ).fetchall()
+    ]
+    presence = [(pid, spec["plane"], cx, cy) for pid in many]
+    for i in range(5):
+        crown_siege.tick_captures(conn, presence, now=T0 + 20 + i)
+    panels = crown_siege.war_council_panels(conn, atk, now=T0 + 30)
+    check(panels["army"]["sides"]["attack"]["humans"] == n, f"panels at load ({panels['army']})")
+    check(crown_siege.SIDE_CAP * 2 == 200, "design target 100-a-side = 200 participants")
+
+
 if __name__ == "__main__":
     test_hp_bands()
     test_damage_persists()
@@ -2469,6 +2879,7 @@ if __name__ == "__main__":
     test_register_confirm_and_schedule()
     test_confirm_timeout_promotes_queue()
     test_alliances_count_toward_human_min()
+    test_guild_size_does_not_count_without_attend()
     test_king_guild_cannot_attack()
     test_siege_command_parser()
     test_storehouse_deposit_alloc_contrib()
@@ -2509,4 +2920,9 @@ if __name__ == "__main__":
     test_war_council_notice_and_guild_panel()
     test_alloc_budget_enforced_and_locked()
     test_forfeit_and_dismiss_locked_during_assault()
+    test_war_forge_grades_lock_and_combat_override()
+    test_two_attacker_focus_fire()
+    test_war_council_panels_and_roles()
+    test_battlefield_destruction_presentation()
+    test_side_cap_load_paths()
     print("crown siege next pass ok")

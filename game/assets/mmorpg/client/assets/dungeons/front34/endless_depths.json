@@ -1,0 +1,52 @@
+{
+  "key": "endless_depths",
+  "view": "front34",
+  "azimuth_deg": 0.0,
+  "elevation_deg": 35.0,
+  "projection": "orthographic",
+  "display_scale": 2.6,
+  "sizes": {
+    "128": {
+      "file": "endless_depths_128.png",
+      "w": 128,
+      "h": 179,
+      "metres_per_px": 0.0827,
+      "origin_px": [
+        64.0,
+        118.14
+      ],
+      "door_px": [
+        64.0,
+        128.88
+      ]
+    },
+    "256": {
+      "file": "endless_depths_256.png",
+      "w": 256,
+      "h": 358,
+      "metres_per_px": 0.0413,
+      "origin_px": [
+        128.0,
+        236.28
+      ],
+      "door_px": [
+        128.0,
+        257.76
+      ]
+    },
+    "512": {
+      "file": "endless_depths_512.png",
+      "w": 512,
+      "h": 716,
+      "metres_per_px": 0.0207,
+      "origin_px": [
+        256.0,
+        472.56
+      ],
+      "door_px": [
+        256.0,
+        515.52
+      ]
+    }
+  }
+}

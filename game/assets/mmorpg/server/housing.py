@@ -13,7 +13,7 @@ import royal_treasury
 # (ash, oak, reed, willow) moves up and spreads around the castle grounds.
 _ESTATE_DY = 10  # == world_map.ESTATE_DY (plaza slid south for the forecourt)
 _LAYOUT = {
-    "estate_office": (81, 6),       # NW corner → door (85, 10)
+    "estate_office": (91, 84),      # East of Outfitters → door (95, 88)
     "kings_folly": (2, 109 + _ESTATE_DY),
     "crown_villa": (25, 109 + _ESTATE_DY),
     "cedar_townhouse": (16, 111 + _ESTATE_DY),

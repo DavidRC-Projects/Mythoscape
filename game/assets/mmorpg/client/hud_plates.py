@@ -590,10 +590,12 @@ def _draw_sidebar_body(client, holes):
     if focus == "guild":
         hud_v2._draw_guild(client, grid.y, grid.bottom, client.hud_rects)
         return
-    if focus in ("mounts", "party", "events"):
+    if focus == "party":
+        hud_v2._draw_party(client, grid.y, grid.bottom, client.hud_rects)
+        return
+    if focus in ("mounts", "events"):
         messages = {
             "mounts": "No mounts yet.",
-            "party": "You are not in a party.",
             "events": "No world event is active.",
         }
         _clip_text(client, client.font_small, messages[focus], grid, MUTED)

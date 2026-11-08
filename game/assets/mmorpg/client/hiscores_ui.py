@@ -6,15 +6,16 @@ import pygame
 import hud_skin as S
 
 MODAL = pygame.Rect(60, 52, 1080, 708)
-GROUPS = [("Overall", ["total", "guild"]), ("Combat", ["attack", "strength", "defence", "archery"]),
+GROUPS = [("Overall", ["total", "guild", "endless_depths"]),
+          ("Combat", ["attack", "strength", "defence", "archery"]),
           ("Gathering", ["woodcutting", "mining", "fishing"]), ("Crafting", ["cooking", "smithing", "fletching"]),
           ("Social", ["karma", "charisma", "etiquette", "command"])]
-LABEL = {"total": "Total", "guild": "Guilds"}
+LABEL = {"total": "Total", "guild": "Guilds", "endless_depths": "Endless Depths"}
 SPRITE = {"attack": "bronze_sword", "strength": "strength_potion", "defence": "bronze_shield",
           "archery": "shortbow", "woodcutting": "bronze_axe", "mining": "bronze_pickaxe",
           "fishing": "raw_shrimp", "cooking": "cooked_lobster", "smithing": "bronze_bar",
           "fletching": "arrow_shaft", "charisma": "ruby_ring", "command": "bone_crown"}
-SHAPE = {"guild": "guild", "karma": "moon", "etiquette": "scroll"}
+SHAPE = {"guild": "guild", "karma": "moon", "etiquette": "scroll", "endless_depths": "rune"}
 MEDAL = [(S._c("#F2C14E"), S._c("#8A6418")), (S._c("#D8DCE4"), S._c("#7A808C")), (S._c("#C8814A"), S._c("#6A3A18"))]
 LAUREL = S._c("#6F9A4A"); CREST = S._c("#2B4E8A")
 ROW_A, ROW_B = S._c("#3A2E20"), S._c("#2A2118")
@@ -58,7 +59,8 @@ def skill_order(client):
 
 def sorted_rows(client, skill):
     rows = list((client.leaderboard or {}).get(skill) or [])
-    if skill in ("total", "guild"):  # keep the game's sort: total level, then XP (stable)
+    if skill in ("total", "guild", "endless_depths"):
+        # Level then XP (Endless Depths: level = solo deepest floor / room).
         rows.sort(key=lambda e: (-int(e.get("level") or 0), -int(e.get("xp") or 0)))
     return [(i + 1, e) for i, e in enumerate(rows)]
 
@@ -208,11 +210,24 @@ def draw(client):
     my_rank = next(((rk, e) for rk, e in rows_all if me and str(e.get("name") or "").lower() == me), None) if not guild else None
     # ---- header
     rx = lw.right + 18; rw = MODAL.right - 18 - rx
-    title = "TOTAL RANKINGS" if cur == "total" else ("GUILD RANKINGS" if guild else _label(cur).upper() + " RANKINGS")
+    endless = cur == "endless_depths"
+    title = (
+        "TOTAL RANKINGS" if cur == "total" else
+        "GUILD RANKINGS" if guild else
+        "ENDLESS DEPTHS" if endless else
+        _label(cur).upper() + " RANKINGS"
+    )
     S.text(surf, title, S.font("title", 22), S.GOLD_HI, (rx, MODAL.y + 48))
     n = len(rows_all)
-    sub = ("All skills combined" if cur == "total" else "Combined member levels" if guild else _label(cur) + " level") + \
-        f"  \u00b7  {n} ranked {'guilds' if guild else 'players'}"
+    if cur == "total":
+        sub_core = "All skills combined"
+    elif guild:
+        sub_core = "Combined member levels"
+    elif endless:
+        sub_core = "Solo deepest floor (each room = 1 level)"
+    else:
+        sub_core = _label(cur) + " level"
+    sub = sub_core + f"  \u00b7  {n} ranked {'guilds' if guild else 'players'}"
     sub = sub.replace("\u00b7", "-")  # Mac font: keep ASCII
     S.text(surf, sub, S.font("body", 14), S.MUTED, (rx, MODAL.y + 76), shadow=False)
     # Jump + Find player
@@ -338,7 +353,13 @@ def draw(client):
         rk, e = my_rank
         S.text(surf, f"YOU:  #{rk:,}", S.font("title", 15), S.GLOW, (yb.x + 16, yb.centery), "midleft")
         S.text(surf, str(e.get("name")) + (("  -  " + e["guild"]) if e.get("guild") else ""), S.font("body", 16), S.ACTIVE_TXT, (yb.x + 140, yb.centery), "midleft")
-        S.text(surf, f"{'TOTAL LVL' if cur == 'total' else 'LEVEL'} {int(e.get('level') or 0):,}   {int(e.get('xp') or 0):,} XP", lf, S.GOLD_HI, (yb.right - 16, yb.centery + 1), "midright")
+        if endless:
+            stats = f"FLOOR {int(e.get('level') or 0):,}"
+        elif cur == "total":
+            stats = f"TOTAL LVL {int(e.get('level') or 0):,}   {int(e.get('xp') or 0):,} XP"
+        else:
+            stats = f"LEVEL {int(e.get('level') or 0):,}   {int(e.get('xp') or 0):,} XP"
+        S.text(surf, stats, lf, S.GOLD_HI, (yb.right - 16, yb.centery + 1), "midright")
     else:
         S.text(surf, "YOU:  Unranked" + (f" - not in the top {n}" if me and n else " - log in to see your rank"),
                S.font("title", 14), S.MUTED, (yb.x + 16, yb.centery), "midleft")
@@ -365,6 +386,10 @@ def _columns(hb, guild, cur):
     if guild:
         return [("rank", "RANK", x0 + 34, "c"), ("name", "GUILD", x0 + 74, "l"),
                 ("members", "MEMBERS", x0 + 470, "r"), ("level", "TOTAL LVL", R_ - 190, "r"), ("xp", "TOTAL XP", R_ - 14, "r")]
+    if cur == "endless_depths":
+        # Solo deepest room — one floor = one level; hide redundant XP column.
+        return [("rank", "RANK", x0 + 34, "c"), ("name", "PLAYER", x0 + 74, "l"),
+                ("guild", "GUILD", x0 + 330, "l"), ("level", "FLOOR", R_ - 24, "r")]
     lv = "TOTAL LVL" if cur == "total" else "LEVEL"
     xp = "TOTAL XP" if cur == "total" else "XP"
     return [("rank", "RANK", x0 + 34, "c"), ("name", "PLAYER", x0 + 74, "l"), ("guild", "GUILD", x0 + 330, "l"),

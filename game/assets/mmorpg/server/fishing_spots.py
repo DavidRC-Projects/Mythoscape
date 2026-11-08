@@ -68,18 +68,23 @@ def depart(nodes, pos, tick, ydef=None, rng=None):
     return node
 
 
-def shoreline(grid, x, y, water, walkable):
-    """A water tile with walkable ground beside it (8-neighbours), like the world generator places spots."""
+def shoreline(grid, x, y, water, walkable, ew_only=True):
+    """Walkable land beside a water tile.
+
+    Default east/west only — fishing strips face sideways; north/south casts
+    look wrong and are not used for Harbourreach (or respawns).
+    """
     h, w = len(grid), len(grid[0]) if grid else 0
     if not (0 <= x < w and 0 <= y < h) or grid[y][x] != water:
         return None
-    for dy in (-1, 0, 1):
-        for dx in (-1, 0, 1):
-            if dx == 0 and dy == 0:
-                continue
-            nx, ny = x + dx, y + dy
-            if 0 <= nx < w and 0 <= ny < h and grid[ny][nx] in walkable:
-                return (nx, ny)
+    dirs = ((-1, 0), (1, 0)) if ew_only else (
+        (-1, 0), (1, 0), (0, -1), (0, 1),
+        (-1, -1), (1, -1), (-1, 1), (1, 1),
+    )
+    for dx, dy in dirs:
+        nx, ny = x + dx, y + dy
+        if 0 <= nx < w and 0 <= ny < h and grid[ny][nx] in walkable:
+            return (nx, ny)
     return None
 
 
@@ -111,26 +116,37 @@ def _reachable(grid, start, goal, walkable, limit):
 
 
 def pick_tile(grid, nodes, home, avoid, water, walkable, ydef=None, rng=None):
-    """A shoreline tile 3-6 tiles from home, not `avoid`, clear of other spots, reachable from home's shore."""
+    """A shoreline tile near home, not `avoid`, clear of other spots, reachable from home's shore.
+
+    East/west stands only. Tries the usual 3–6 radius and gap first, then relaxes
+    gap/radius so dense harbour clusters can still respawn.
+    """
     rng = rng or random
     lo, hi = _cfg(ydef, "move_radius", MOVE_RADIUS)
     hx, hy = home
     home_shore = shoreline(grid, hx, hy, water, walkable)
     spots = [p for p, n in nodes.items() if is_spot(n)]
-    cands = []
-    for y in range(hy - hi, hy + hi + 1):
-        for x in range(hx - hi, hx + hi + 1):
-            if not lo <= max(abs(x - hx), abs(y - hy)) <= hi or (x, y) == tuple(avoid):
-                continue
-            if (x, y) in nodes or any(max(abs(x - px), abs(y - py)) < MIN_GAP for px, py in spots):
-                continue
-            shore = shoreline(grid, x, y, water, walkable)
-            if shore:
-                cands.append(((x, y), shore))
-    rng.shuffle(cands)
-    for pos, shore in cands:
-        if home_shore is None or _reachable(grid, home_shore, shore, walkable, hi + 4):
-            return pos
+    avoid = tuple(avoid)
+
+    def _gather(radius_hi, gap):
+        out = []
+        for y in range(hy - radius_hi, hy + radius_hi + 1):
+            for x in range(hx - radius_hi, hx + radius_hi + 1):
+                if not lo <= max(abs(x - hx), abs(y - hy)) <= radius_hi or (x, y) == avoid:
+                    continue
+                if (x, y) in nodes or any(max(abs(x - px), abs(y - py)) < gap for px, py in spots):
+                    continue
+                shore = shoreline(grid, x, y, water, walkable)
+                if shore:
+                    out.append(((x, y), shore))
+        return out
+
+    for radius_hi, gap in ((hi, MIN_GAP), (hi, 1), (hi + 4, 1), (hi + 8, 1)):
+        cands = _gather(radius_hi, gap)
+        rng.shuffle(cands)
+        for pos, shore in cands:
+            if home_shore is None or _reachable(grid, home_shore, shore, walkable, radius_hi + 4):
+                return pos
     return None
 
 

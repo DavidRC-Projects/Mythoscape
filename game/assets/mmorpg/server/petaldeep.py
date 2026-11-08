@@ -118,11 +118,46 @@ def has_key(session):
     return _owns(session, KEY_ID)
 
 
+def is_opened(session):
+    """True once the key has been used — mouth stays open forever after."""
+    import fairy_friendship as FF
+    srv = _srv()
+    d = FF.load(srv.WORLD.db.conn, session.player_id)
+    return bool(d.get("petaldeep_opened"))
+
+
+def can_enter(session):
+    return is_opened(session) or has_key(session)
+
+
+def _strip_all_keys(session):
+    """Remove every Petaldeep Key from inventory and bank."""
+    srv = _srv()
+    while srv.WORLD.count_item(session, KEY_ID) > 0:
+        srv.WORLD.remove_item_qty(session, KEY_ID, srv.WORLD.count_item(session, KEY_ID))
+    bank_n = srv.WORLD.count_item_bank(session, KEY_ID)
+    if bank_n > 0:
+        srv._remove_bank_item_qty(session, KEY_ID, bank_n)
+
+
+def mark_opened(session):
+    """First entry: consume the key and permanently unlock the mouth."""
+    import fairy_friendship as FF
+    srv = _srv()
+    d = FF.load(srv.WORLD.db.conn, session.player_id)
+    d["petaldeep_opened"] = True
+    FF.save(srv.WORLD.db.conn, session.player_id, d)
+    _strip_all_keys(session)
+
+
 def try_grant_key(session):
     import fairy_friendship as FF
     srv = _srv()
     d = FF.load(srv.WORLD.db.conn, session.player_id)
     if not FF.all_maxed(d):
+        return False
+    # Already used the key — mouth stays open; do not mint another.
+    if d.get("petaldeep_opened") or is_opened(session):
         return False
     if _owns(session, KEY_ID):
         return False
@@ -249,6 +284,9 @@ async def _push(session, chat=None):
 
 async def enter(session):
     srv = _srv()
+    first = not is_opened(session)
+    if first:
+        mark_opened(session)
     session._dungeon_return = STAND
     srv.WORLD.db.save_player_position(session.player_id, *STAND)
     srv._clear_dungeon_resume(session)
@@ -256,8 +294,13 @@ async def enter(session):
     srv._bring_pet(session)
     srv._save_dungeon_resume(session)
     hall = HALLS[0]
+    used = (
+        "The black key turns once in the root-mouth and is gone — "
+        "the way stays open to you now. "
+        if first else ""
+    )
     await _push(session, (
-        f"Hall 1 of {len(HALLS)} — {hall['label']}. "
+        f"{used}Hall 1 of {len(HALLS)} — {hall['label']}. "
         f"Combat level {hall['level']}. The north root-arch is open — walk "
         "through to go deeper. South exit leaves to the glade."
     ))

@@ -1014,14 +1014,321 @@ def _defringe_alpha(surf, weak=140, strong=200):
     return out
 
 
+
+def _dilate_mask(mask, radius=2):
+    import numpy as np
+    m = mask.astype(bool)
+    for _ in range(max(0, int(radius))):
+        acc = m.copy()
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            acc |= np.roll(np.roll(m, dx, 0), dy, 1)
+        m = acc
+    return m
+
+
+def _erode_mask(mask, radius=2):
+    import numpy as np
+    m = mask.astype(bool)
+    for _ in range(max(0, int(radius))):
+        acc = m.copy()
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            acc &= np.roll(np.roll(m, dx, 0), dy, 1)
+        m = acc
+    return m
+
+
+def _neckline_frac(ref_a, h):
+    """Y fraction at the base of the head / top of shoulders (below the face)."""
+    import numpy as np
+    widths = (ref_a > 40).sum(axis=0)
+    rows = np.where(widths > 3)[0]
+    if len(rows) < 8:
+        return 0.38
+    y0 = int(rows[0])
+    span = int(rows[-1] - rows[0])
+    fallback = (y0 + max(30, int(span * 0.165))) / float(h)
+    cut = y0 + max(20, int(span * 0.35))
+    wseg = widths[y0:cut].astype(np.float32)
+    if len(wseg) < 10:
+        return fallback
+    kernel = np.ones(5, dtype=np.float32) / 5.0
+    ws = np.convolve(wseg, kernel, mode="same")
+    head_w = float(np.median(ws[: min(14, len(ws))]))
+    if head_w < 8:
+        return fallback
+    for i in range(10, len(ws)):
+        if ws[i] > head_w * 1.45 and ws[i] > head_w + 10:
+            return min(fallback, (y0 + i) / float(h))
+    return fallback
+
+
+def _flood_legs_from_feet(ref_a, split, fr, w, h):
+    """Lower-body mask grown upward from the feet, with thin arm-thigh bridges broken."""
+    import numpy as np
+    ys = np.broadcast_to(np.arange(h, dtype=np.float32) / float(h), (w, h))
+    lower = (ref_a > 40) & (ys >= (split - 0.02))
+    if not lower.any():
+        return lower
+    er = _erode_mask(lower, 2)
+    foot_y0 = int(h * min(0.97, fr["feet"] - 0.02))
+    seeds_x = np.where(er[:, foot_y0:].any(axis=1))[0] if foot_y0 < h else np.array([])
+    if len(seeds_x) == 0:
+        seeds_x = np.where(lower[:, int(h * 0.85):].any(axis=1))[0]
+        er = lower
+    stack = []
+    for x in seeds_x.tolist()[:: max(1, len(seeds_x) // 40 or 1)]:
+        for y in range(h - 1, max(foot_y0 - 1, int(split * h) - 2), -1):
+            if er[x, y]:
+                stack.append((x, y))
+                break
+    seen = np.zeros_like(er)
+    region = np.zeros((w, h), dtype=bool)
+    while stack:
+        x, y = stack.pop()
+        if x < 0 or y < 0 or x >= w or y >= h or seen[x, y] or not er[x, y]:
+            continue
+        x0 = x
+        while x0 > 0 and er[x0 - 1, y] and not seen[x0 - 1, y]:
+            x0 -= 1
+        x1 = x
+        while x1 < w - 1 and er[x1 + 1, y] and not seen[x1 + 1, y]:
+            x1 += 1
+        for xi in range(x0, x1 + 1):
+            seen[xi, y] = True
+            region[xi, y] = True
+            if y > 0 and er[xi, y - 1] and not seen[xi, y - 1]:
+                stack.append((xi, y - 1))
+            if y < h - 1 and er[xi, y + 1] and not seen[xi, y + 1]:
+                stack.append((xi, y + 1))
+    region = _dilate_mask(region, 2) & lower
+    return region if region.any() else lower
+
+
+def _apply_garment_where(dest, garment, keep):
+    import numpy as np
+    if garment is None:
+        return np.zeros(keep.shape, dtype=bool)
+    ga = pygame.surfarray.array_alpha(garment)
+    use = keep & (ga > 24)
+    if not use.any():
+        return use
+    px = pygame.surfarray.pixels3d(dest)
+    aa = pygame.surfarray.pixels_alpha(dest)
+    px[use] = pygame.surfarray.array3d(garment)[use]
+    aa[use] = 255
+    del px, aa
+    return use
+
+
+def _restamp_where(dest, fig, mask):
+    import numpy as np
+    fa = pygame.surfarray.array_alpha(fig)
+    use = mask & (fa > 40)
+    if not use.any():
+        return
+    px = pygame.surfarray.pixels3d(dest)
+    aa = pygame.surfarray.pixels_alpha(dest)
+    px[use] = pygame.surfarray.array3d(fig)[use]
+    aa[use] = fa[use]
+    del px, aa
+
+
+def _fill_missing_cloth(dest, fig, need):
+    """Paint soft cloth only into holes the dedicated garment missed (no whole-plate remap)."""
+    import numpy as np
+    da = pygame.surfarray.array_alpha(dest)
+    fa = pygame.surfarray.array_alpha(fig)
+    miss = need & (fa > 40) & (da < 40)
+    if not miss.any():
+        return
+    rgb = pygame.surfarray.array3d(fig).astype(np.float32)
+    lum = 0.299 * rgb[:, :, 0] + 0.587 * rgb[:, :, 1] + 0.114 * rgb[:, :, 2]
+    t = np.clip((lum - 50.0) / 170.0, 0, 1)
+    cloth = np.stack([178 + t * 56, 178 + t * 54, 174 + t * 50], axis=-1)
+    w, h = dest.get_size()
+    xs = np.linspace(0, 1, w, dtype=np.float32)[:, None]
+    ys = np.linspace(0, 1, h, dtype=np.float32)[None, :]
+    folds = 0.55 * np.sin(xs * 8.0 * np.pi + ys * 1.4) + 0.25 * np.sin(xs * 15.0 * np.pi - ys * 2.0)
+    cloth = np.clip(cloth + folds[..., None] * 12.0, 0, 255)
+    px = pygame.surfarray.pixels3d(dest)
+    aa = pygame.surfarray.pixels_alpha(dest)
+    px[miss] = cloth[miss].astype(np.uint8)
+    aa[miss] = np.maximum(fa[miss], np.uint8(240))
+    del px, aa
+
+
+def _load_partial_cloth(sex, layer, anim, facing, frame_idx, scale_tag, tile, base):
+    """Dedicated shirt/leggings frame; melee_* falls back to the paper-doll melee strip."""
+    attempts = [anim]
+    if str(anim).startswith("melee") and anim != "melee":
+        attempts.append("melee")
+    elif anim == "melee":
+        attempts = ["melee", "melee_sword"]
+    for a in attempts:
+        main, _t, _ps, _pb = _layer_parts(sex, scale_tag, layer, a, facing, frame_idx, tile, base)
+        if main is not None:
+            out = main.copy()
+            aa = pygame.surfarray.pixels_alpha(out)
+            aa[aa > 24] = 255
+            aa[aa <= 24] = 0
+            del aa
+            return out
+    return None
+
+
+
+def _load_armour_skin_hair(sex, tier, anim, facing, frame_idx, scale_tag, tile, base):
+    """Skin/hair masks for the painted armour figure (same scale as the body frame)."""
+    layer = armour_bh_layer(tier)
+    if not _art_present(sex, layer):
+        layer = armour_hd_layer(tier)
+    if not layer:
+        return None, None
+    _main, _t, ps, pb = _layer_parts(sex, scale_tag, layer, anim, facing, frame_idx, tile, base)
+    return (_layer_skin(sex, ps, layer, anim, facing, frame_idx, tile, pb),
+            _layer_hair(sex, ps, layer, anim, facing, frame_idx, tile, pb))
+
+
+def _shirt_protect_masks(ref_a, skin_surf, hair_surf, w, h, facing="s", fig=None):
+    """Hair + face protection.
+
+    Profile uses skin near the scalp only — a rectangular head box shares X with
+    the chest and would wipe the shoulders. South uses a tight, head-width box
+    just below the scalp and restamps opaque painted-figure pixels there, because
+    female south-melee face is absent from the skin layer. The box is capped to
+    head size and bronze plate is excluded below the scalp so pecs/sternum are
+    not restored as a yoke or midriff band. neck_ref stays near the scalp so
+    torso core_start (shoulders) does not drop.
+    """
+    import numpy as np
+    skin = (pygame.surfarray.array_alpha(skin_surf) > 40) if skin_surf is not None else np.zeros((w, h), dtype=bool)
+    hair = (pygame.surfarray.array_alpha(hair_surf) > 40) if hair_surf is not None else np.zeros((w, h), dtype=bool)
+    yy = np.broadcast_to(np.arange(h), (w, h))
+    xx = np.broadcast_to(np.arange(w)[:, None], (w, h))
+    if hair.any():
+        hair_top = int(np.where(hair)[1].min())
+    else:
+        mid = int(h * 0.48)
+        crow = np.where(ref_a[:, mid] > 40)[0]
+        tcx = int(0.5 * (int(crow.min()) + int(crow.max()))) if len(crow) >= 2 else w // 2
+        sl = slice(max(0, tcx - 18), min(w, tcx + 19))
+        rows = np.where((ref_a[sl, :] > 40).any(axis=0))[0]
+        hair_top = int(rows[0]) if len(rows) else int(h * 0.30)
+    neck_ref = hair_top + 26
+    facing_k = str(facing or "s").lower()[:1]
+    if facing_k == "s" and hair.any():
+        scalp = hair & (yy <= (hair_top + 22))
+        if not scalp.any():
+            scalp = hair
+        sxs = np.where(scalp)[0]
+        sys_ = np.where(scalp)[1]
+        hair_cx = int(round(0.5 * (int(sxs.min()) + int(sxs.max()))))
+        scalp_bottom = int(sys_.max())
+        top_w = int(sxs.max() - sxs.min() + 1)
+        half = int(min(15, max(11, top_w // 2 + 2)))
+        face_y1 = min(h - 1, scalp_bottom + 24, hair_top + 40)
+        # Stop at the first row where BOTH sides of the head column meet torso
+        # (shoulders). A raised sword-arm is one-sided, so it will not trip this.
+        xs = np.arange(w)
+        side_pad = 12
+        for y in range(scalp_bottom + 10, face_y1 + 1):
+            row = ref_a[:, y] > 40
+            left = int(np.count_nonzero(row & (xs >= (hair_cx - half - side_pad)) & (xs < (hair_cx - half))))
+            right = int(np.count_nonzero(row & (xs > (hair_cx + half)) & (xs <= (hair_cx + half + side_pad))))
+            if left >= 3 and right >= 3:
+                face_y1 = max(scalp_bottom + 14, y - 2)
+                break
+        col = (xx >= (hair_cx - half)) & (xx <= (hair_cx + half))
+        box = col & (yy >= max(0, hair_top - 2)) & (yy <= face_y1)
+        opa = ref_a > 40
+        upper = box & opa & (yy <= (scalp_bottom + 12))
+        lower = box & opa & (yy > (scalp_bottom + 12))
+        if fig is not None and lower.any():
+            rgb = pygame.surfarray.array3d(fig).astype(np.int16)
+            r = rgb[:, :, 0]
+            g = rgb[:, :, 1]
+            b = rgb[:, :, 2]
+            bronze = (r > 120) & ((r - b) > 85) & (r > (g + 15))
+            lower = lower & ~bronze
+        face = upper | lower
+        face |= skin & _dilate_mask(scalp, 8) & (yy <= (scalp_bottom + 16))
+    else:
+        face = skin & (yy <= neck_ref)
+        if hair.any():
+            face = face & _dilate_mask(hair, 10)
+    head = _dilate_mask(hair | face, 1)
+    hand = skin & (~head) & (yy > (neck_ref + 8))
+    mid_y = int(np.clip(neck_ref + 22, 0, h - 1))
+    crow = np.where(ref_a[:, mid_y] > 40)[0]
+    if len(crow) >= 2:
+        tcx = 0.5 * (float(crow.min()) + float(crow.max()))
+        tw = float(crow.max() - crow.min() + 1)
+        near = np.abs(xx - tcx) < max(10.0, 0.34 * tw)
+        chest = hand & near & (yy < (neck_ref + 58))
+        hand = hand & ~chest
+    hand = _dilate_mask(hand, 1)
+    return head, hand, hair_top / float(h), neck_ref / float(h)
+
+
+def _paint_cloth_on(dest, fig, need):
+    """Write soft cloth onto need pixels even if dest is already opaque plate."""
+    import numpy as np
+    if not need.any():
+        return
+    fa = pygame.surfarray.array_alpha(fig)
+    use = need & (fa > 40)
+    if not use.any():
+        return
+    rgb = pygame.surfarray.array3d(fig).astype(np.float32)
+    lum = 0.299 * rgb[:, :, 0] + 0.587 * rgb[:, :, 1] + 0.114 * rgb[:, :, 2]
+    t = np.clip((lum - 50.0) / 170.0, 0, 1)
+    cloth = np.stack([180 + t * 52, 180 + t * 50, 176 + t * 46], axis=-1)
+    w, h = dest.get_size()
+    xs = np.linspace(0, 1, w, dtype=np.float32)[:, None]
+    ys = np.linspace(0, 1, h, dtype=np.float32)[None, :]
+    folds = 0.5 * np.sin(xs * 8.0 * np.pi + ys * 1.4) + 0.25 * np.sin(xs * 14.0 * np.pi - ys * 2.0)
+    cloth = np.clip(cloth + folds[..., None] * 11.0, 0, 255)
+    existing = pygame.surfarray.array3d(dest).astype(np.float32)
+    ea = pygame.surfarray.array_alpha(dest)
+    already = use & (ea > 200) & (existing[:, :, 0] > 165) & (existing[:, :, 1] > 165) & (
+        np.abs(existing[:, :, 0] - existing[:, :, 2]) < 28)
+    write = use & ~already
+    if not write.any():
+        return
+    px = pygame.surfarray.pixels3d(dest)
+    aa = pygame.surfarray.pixels_alpha(dest)
+    px[write] = cloth[write].astype(np.uint8)
+    aa[write] = 255
+    del px, aa
+
+
+def _shirt_torso_core(ref_a, start_frac, split, w, h):
+    """Sleeveless/cap-sleeve torso: erode thin arms off, restore shoulders."""
+    import numpy as np
+    yy = np.broadcast_to(np.arange(h) / float(h), (w, h))
+    band = (ref_a > 40) & (yy >= start_frac) & (yy <= (split + 0.03))
+    core = _dilate_mask(_erode_mask(band, 7), 8) & (ref_a > 20)
+    shoulder = (yy >= (start_frac - 0.02)) & (yy <= (start_frac + 0.085))
+    core |= _dilate_mask(core, 2) & shoulder & (ref_a > 20)
+    mid = int(np.clip((start_frac + 0.12) * h, 0, h - 1))
+    span = np.where(core[:, mid])[0]
+    if len(span) >= 4:
+        xx = np.broadcast_to(np.arange(w)[:, None], (w, h))
+        core &= (xx >= int(span.min()) - 5) & (xx <= int(span.max()) + 5)
+    return core
+
+
 def compose_partial_armour_hd(sex, appearance, equipment, anim="idle", facing="s", frame_idx=0,
                               scale_tag="2x", tile=80, base=80):
-    """White underclothes registered to the painted HD figure, then clipped to it.
+    """Independent chest/legs: painted armour half + dedicated white shirt/leggings.
 
-    Diagnosis (t456u): paper-doll white strips are pose/coordinate-misaligned to the
-    painted set, so naive blits make elbow blobs, neck blocks, and hip strips.
-    Fix: shift cloth so its band centroid matches the figure band centroid, then
-    keep only cloth pixels that sit on the figure (+1px). Head always restamped.
+    Dedicated top_white_shirt / bottom_white_leggings already live on the same
+    canvas as the painted armour figure. The previous plate-remap (`_to_cloth_region`
+    with a tight torso band) produced slab-shirts and chalk trousers. This compositor
+    clips those garments to the figure: cut the paper-doll neck column below the
+    detected neckline, drop hanging-arm columns on the trousers sheet, erase plate
+    halves so faulds do not become white metal boxes, and only hole-fill next to
+    real garment pixels. Mixed tiers stay a painted-half join with no white blit.
     """
     import numpy as np
     sex = "female" if sex == "female" else "male"
@@ -1033,6 +1340,10 @@ def compose_partial_armour_hd(sex, appearance, equipment, anim="idle", facing="s
     facing = _facing_str(facing)
     if facing == "w":
         facing = "e"
+    fig_anim = anim
+    if anim == "melee":
+        fig_anim = _whole_anim_for(anim, frame_idx, 0.0, eq)[0]
+    cloth_anim = "melee" if str(anim).startswith("melee") else anim
     fr = _partial_waist_fracs(sex)
     canvas = tuple((_load_meta().get("canvas") or {}).get(scale_tag) or (288, 288))
     w, h = canvas
@@ -1246,100 +1557,104 @@ def compose_partial_armour_hd(sex, appearance, equipment, anim="idle", facing="s
         return _defringe_alpha(out)
 
     # --- Body only ---
+    # Chest armour + dedicated white leggings. Erase platelegs first so wide
+    # faulds are not remapped into white metal boxes; clip trousers to columns
+    # that reach the feet so a hanging gauntlet is not bleached.
     if bt and not lt:
-        fig, ref_a = _painted_armour_skinned(sex, bt, appearance, anim, facing, frame_idx, scale_tag, tile, base)
+        fig, ref_a = _painted_armour_skinned(sex, bt, appearance, fig_anim, facing, frame_idx, scale_tag, tile, base)
         if fig is None:
             return None
         head_end = head_frac_from_fig(ref_a, fr["head_end"])
-        split = fr["waist"] + 0.005
-        legs_band = y_band(split - 0.01, fr["feet"] - 0.005, soft=0.02)
-        # Trousers shape bbox-fitted onto fig legs band — excludes dangling hands/pauldrons.
-        legs = cloth_from_pose_on_fig(WHITE_BOTTOM, "bottom_work_trousers", ref_a, legs_band)
-        out = pygame.Surface((w, h), pygame.SRCALPHA)
-        if legs is not None:
-            out.blit(legs, (0, 0))
-        shoes = cloth_from_pose_on_fig(None, "shoes_leather", ref_a, y_band(fr["feet"] - 0.05, 1.0, soft=0.02))
-        if shoes is not None:
-            out.blit(shoes, (0, 0))
+        split = fr["waist"] + 0.008
+        ys = np.broadcast_to(np.arange(h, dtype=np.float32) / float(h), (w, h))
+        neck = _neckline_frac(ref_a, h)
+        pants = _load_partial_cloth(sex, WHITE_BOTTOM, cloth_anim, facing, frame_idx, scale_tag, tile, base)
+        legs = _flood_legs_from_feet(ref_a, split, fr, w, h)
+        foot_rows = ys >= (fr["feet"] - 0.045)
+        leg_cols = ((ref_a > 40) & foot_rows).any(axis=1)
+        for _ in range(5):
+            leg_cols |= np.roll(leg_cols, 1) | np.roll(leg_cols, -1)
+        col_legs = leg_cols[:, None] & (ref_a > 20) & (ys >= (split - 0.03))
+        legs = (legs & col_legs) | (col_legs & (ys >= split))
+        feet = ys >= (fr["feet"] - 0.02)
+        out = fig.copy()
+        clear = legs & ~feet
+        if clear.any():
+            aa = pygame.surfarray.pixels_alpha(out)
+            aa[clear] = 0
+            del aa
+        applied = np.zeros((w, h), dtype=bool)
+        if pants is not None:
+            pa = pygame.surfarray.array_alpha(pants)
+            keep = (pa > 24) & (ys >= (split - 0.05)) & (ys >= (neck + 0.02))
+            keep &= _dilate_mask(ref_a > 20, 3)
+            keep &= col_legs | (ys >= split)
+            keep &= ~((ys < split - 0.012) & (ref_a > 40))
+            applied = _apply_garment_where(out, pants, keep)
+        if applied.any():
+            _fill_missing_cloth(out, fig, clear & _dilate_mask(applied, 3))
         else:
-            # Fallback: keep fig feet/sabatons so legs don't end in white stubs
-            keep_blit(out, fig, y_band(fr["feet"] - 0.02, 1.0, soft=0.01))
-        undersuit = out.copy()
-        upper = _apply_keep_alpha(fig, y_band(0.0, split + 0.045, soft=0.0))
-        aa = pygame.surfarray.pixels_alpha(upper)
-        lo = y_band(split + 0.04, 1.0, soft=0.0)
-        aa[(lo > 0.5) & (aa > 0)] = 0
-        aa[aa > 24] = 255
-        del aa
-        out = rgb_waist_blend(upper, undersuit, split=split + 0.015, feather=0.03)
-        keep_blit(out, fig, y_band(0.0, split - 0.01, soft=0.005))
+            _fill_missing_cloth(out, fig, clear)
+        _restamp_where(out, fig, (ys < (split + 0.042)) | ((~legs) & (ref_a > 40)))
+        _restamp_where(out, fig, ys < (neck + 0.01))
+        _restamp_where(out, fig, feet & (ref_a > 40))
         stamp_head(out, fig, head_end)
-        _gap_fill_seam(out, ref_a, y_band(split - 0.02, split + 0.05, soft=0.0))
+        _gap_fill_seam(out, ref_a, y_band(split - 0.01, split + 0.055, soft=0.0))
         return _defringe_alpha(out)
 
+
     # --- Legs only ---
+    # Dedicated white shirt clipped to an anatomical torso+shoulder core.
+    # Hair/face/hand masks (not a global Y-band) protect the head; thin arms
+    # are eroded off so sleeves cannot reach fingers or weapons. A narrow
+    # profile shirt sprite is extended across that core (not a plate remap).
     if lt and not bt:
-        fig, ref_a = _painted_armour_skinned(sex, lt, appearance, anim, facing, frame_idx, scale_tag, tile, base)
+        fig, ref_a = _painted_armour_skinned(sex, lt, appearance, fig_anim, facing, frame_idx, scale_tag, tile, base)
         if fig is None:
             return None
         head_end = head_frac_from_fig(ref_a, fr["head_end"])
-        split = fr["waist"] + 0.015
-        ys = np.arange(h, dtype=np.float32) / float(h)
-        # Head cut: only the true head top — do not eat shoulders/chest
-        head_cut = np.broadcast_to(ys < (head_end - 0.02), (w, h)).copy()
-        shirt_band = y_band(head_end - 0.03, split + 0.05, soft=0.025)
-        # Fitted linen provides sleeve/torso cloth shape; then fill fig TORSO CORE holes
-        shirt = cloth_from_pose_on_fig(WHITE_TOP, "top_linen_shirt", ref_a, shirt_band, head_cut=head_cut)
-        out = pygame.Surface((w, h), pygame.SRCALPHA)
-        # Stamp head first with NARROW band (face only)
-        keep_blit(out, fig, y_band(0.0, max(0.05, head_end - 0.015), soft=0.0))
+        split = fr["waist"] + 0.012
+        ys = np.broadcast_to(np.arange(h, dtype=np.float32) / float(h), (w, h))
+        skin_surf, hair_surf = _load_armour_skin_hair(
+            sex, lt, fig_anim, facing, frame_idx, scale_tag, tile, base)
+        head, hand, head_top, chin = _shirt_protect_masks(ref_a, skin_surf, hair_surf, w, h, facing, fig)
+        shirt = _load_partial_cloth(sex, WHITE_TOP, cloth_anim, facing, frame_idx, scale_tag, tile, base)
+        core_start = max(head_top + 12.0 / float(h), chin - 0.06)
+        core = _shirt_torso_core(ref_a, core_start, split, w, h)
+        out = fig.copy()
         if shirt is not None:
-            out.blit(shirt, (0, 0))
-        # Torso-core fill: fig pixels in shirt band within x-percentiles of fig — exclude pauldron tips
-        band_m = (shirt_band > 0.4) & (ref_a > 40) & (~head_cut)
-        if band_m.any():
-            bxs = np.where(band_m)[0]
-            x_lo, x_hi = np.percentile(bxs.astype(np.float64), [12, 88])
-            xs = np.broadcast_to(np.arange(w)[:, None], (w, h))
-            core = band_m & (xs >= x_lo) & (xs <= x_hi)
-            sa = pygame.surfarray.array_alpha(shirt) if shirt is not None else np.zeros((w, h), np.uint8)
-            near = _dilate_u8(sa, 8) > 0 if shirt is not None else core
-            fill = core & near & (sa < 30)
-            if fill.any():
-                frgb = pygame.surfarray.array3d(fig).astype(np.float32)
-                flum = 0.299 * frgb[:, :, 0] + 0.587 * frgb[:, :, 1] + 0.114 * frgb[:, :, 2]
-                t = np.clip((flum - 40.0) / 180.0, 0, 1)
-                if shirt is not None and (sa > 40).any():
-                    mean = pygame.surfarray.array3d(shirt).astype(np.float32)[sa > 40].mean(axis=0)
-                else:
-                    mean = np.array([200.0, 198.0, 192.0])
-                shade = 0.82 + 0.30 * t
-                px = pygame.surfarray.pixels3d(out)
-                aa = pygame.surfarray.pixels_alpha(out)
-                px[fill] = np.clip(mean * shade[fill, None], 0, 255).astype(np.uint8)
-                aa[fill] = 255
-                del px, aa
-        undersuit = out.copy()
-        lower = _apply_keep_alpha(fig, y_band(split - 0.02, 1.0, soft=0.0))
-        aa = pygame.surfarray.pixels_alpha(lower)
-        up = y_band(0.0, split - 0.01, soft=0.0)
-        aa[(up > 0.5) & (aa > 0)] = 0
-        aa[aa > 24] = 255
-        del aa
-        out = rgb_waist_blend(undersuit, lower, split=split, feather=0.03)
-        keep_blit(out, fig, y_band(split + 0.01, 1.0, soft=0.005))
-        # Final head stamp — narrow so chest cloth survives
-        keep_blit(out, fig, y_band(0.0, max(0.05, head_end - 0.015), soft=0.0))
-        _gap_fill_seam(out, ref_a, y_band(split - 0.02, split + 0.04, soft=0.0))
+            sa = pygame.surfarray.array_alpha(shirt)
+            keep = (sa > 24) & core & (~head) & (~hand) & (ys <= (split + 0.032))
+            _apply_garment_where(out, shirt, keep)
+        need = core & (ref_a > 40) & (~head) & (~hand) & (ys <= split + 0.01)
+        _paint_cloth_on(out, fig, need)
+        _restamp_where(out, fig, ys >= (split + 0.008))
+        _restamp_where(out, fig, head | hand)
+        fig_rows = np.where((ref_a > 40).any(axis=0))[0]
+        if len(fig_rows):
+            fig_top = int(fig_rows[0])
+            hair_top_px = int(round(head_top * h))
+            if fig_top < hair_top_px - 8:
+                yy = np.broadcast_to(np.arange(h), (w, h))
+                _restamp_where(out, fig, yy < (hair_top_px + 8))
+                extra = (pygame.surfarray.array_alpha(skin_surf) > 40) if skin_surf is not None else np.zeros((w, h), dtype=bool)
+                extra &= (yy <= (hair_top_px + 42))
+                if hair_surf is not None:
+                    extra &= _dilate_mask(pygame.surfarray.array_alpha(hair_surf) > 40, 10)
+                extra = _dilate_mask(extra, 2)
+                _restamp_where(out, fig, extra)
+        stamp_head(out, fig, min(head_end, head_top + 0.08))
+        _gap_fill_seam(out, ref_a, y_band(split - 0.02, split + 0.03, soft=0.0))
         return _defringe_alpha(out)
+
 
     # --- Mixed ---
     fig_b, ref_b = (None, None)
     fig_l, ref_l = (None, None)
     if bt:
-        fig_b, ref_b = _painted_armour_skinned(sex, bt, appearance, anim, facing, frame_idx, scale_tag, tile, base)
+        fig_b, ref_b = _painted_armour_skinned(sex, bt, appearance, fig_anim, facing, frame_idx, scale_tag, tile, base)
     if lt:
-        fig_l, ref_l = _painted_armour_skinned(sex, lt, appearance, anim, facing, frame_idx, scale_tag, tile, base)
+        fig_l, ref_l = _painted_armour_skinned(sex, lt, appearance, fig_anim, facing, frame_idx, scale_tag, tile, base)
     if fig_b is None and fig_l is None:
         return None
     if fig_b is not None and fig_l is not None:

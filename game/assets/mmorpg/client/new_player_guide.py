@@ -530,7 +530,7 @@ def active_trail_target(client):
         return None
     # Seraphine's War for the Crown walk → Royal Herald outside the castle.
     try:
-        import crown_war_guide
+        import crown_war_guide_client as crown_war_guide
         ct = crown_war_guide.trail_target(client)
         if ct:
             return int(ct["x"]), int(ct["y"]), ct.get("label") or "Royal Herald"

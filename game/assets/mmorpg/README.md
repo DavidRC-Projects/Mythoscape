@@ -91,8 +91,8 @@ Registration → Confirm (48h) → Scheduled (assault window) → Active assault
 
 | Phase | What happens |
 | --- | --- |
-| **Registration** | Guild Leaders `/siege register attack` or `defend`. Alliances via `/siege ally`. Deposit supplies, craft engines, scout. |
-| **Confirm** | Each lead has **48 hours** to `/siege confirm` with enough humans (default **20+**). Fail → next guild in queue may take the slot. |
+| **Registration** | Guild Leaders `/siege register attack` or `defend`. Alliances via `/siege ally`. Members `/siege enlist [role]` then `/siege attend`. Deposit supplies, craft engines. |
+| **Confirm** | Each lead has **48 hours** to `/siege confirm` with enough **confirmed fighters** (default **20+**). Guild membership alone does **not** count. Fail → next guild in queue may take the slot. |
 | **Scheduled** | Both sides confirmed. Attack Leader sets when the fight starts (`/siege when <1–72>h`) or `/siege begin` early. Start time is published in **UTC**. |
 | **Active assault** | **3-hour** clock. Breach walls, capture stages, hold the throne. Defenders win if time expires without a successful hold. Roster / merc contracts lock. |
 | **Crownfall** | Attackers who hold the Throne Room long enough crown their lead; defenders who outlast keep the crown. Heraldry / regal robes for the victor. Full `/siege report` afterwards. |
@@ -172,6 +172,9 @@ Common deposit items: logs (all wood tiers) → timber; ores / coal → ore or s
 ```
 /siege status          War board (also Herald / war chip)
 /siege register attack|defend
+/siege enlist [role]   infantry|archer|healer|engineer|heavy
+/siege attend          confirm you will fight (counts as a human)
+/siege role <role>     change role before attend
 /siege confirm | forfeit
 /siege ally <guild> | accept | decline
 /siege store | costs | deposit <item> <qty>

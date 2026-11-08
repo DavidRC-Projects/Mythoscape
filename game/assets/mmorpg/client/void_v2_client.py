@@ -1,10 +1,14 @@
 """Void Sanctum v2 drawing, fog, banners and modals.
 
-Drawers are copied from the design tool so the game does not import it.
-Only used when the dungeon payload has v2 set.
+Each room uses one AI floor image stretched across its zone rect; neighbouring
+rooms dissolve into each other over a few tiles. Walls, abyss and the Narrow
+Way keep their own plates. Procedural palettes remain as fallback if a plate
+is missing. Only used when the dungeon payload has v2 set.
 """
 import math
+import os
 import random
+import sys
 import time
 
 import pygame
@@ -12,6 +16,22 @@ import pygame
 import procedural_sprites_finished as sprites
 import prop_sprites
 import rs_style as rs
+
+_ZONES = os.path.join(os.path.dirname(__file__), "assets", "void", "zones")
+_ART_REV = 2
+_plate_cache = {}
+_OVERLAY_ZONES = {"bridge", "whisper"}
+_LIP_TILES = 3
+# Fallback room bounds (tile inclusive) if the dungeon payload has no zones yet.
+_STYLE_BOUNDS = {
+    "entry": (12, 2, 41, 14),
+    "gallery": (4, 15, 60, 32),
+    "barracks": (2, 33, 56, 48),
+    "crystal": (2, 49, 60, 61),
+    "rift": (10, 62, 64, 72),
+    "arena": (14, 85, 50, 98),
+    "bridge": (12, 73, 52, 84),
+}
 
 FLOOR_PAL = {
     "entry": ((70, 60, 88), (62, 53, 80), (78, 68, 96), (56, 48, 72)),
@@ -46,6 +66,9 @@ def attach(client, msg):
     d["decor"] = dict(msg.get("decor") or {})
     d["zones"] = msg.get("zones") or []
     d["lore"] = msg.get("lore") or {}
+    d["art_style"] = bool(msg.get("art_style", True))
+    if msg.get("chasm"):
+        d["chasm"] = dict(msg["chasm"])
     d["explored"] = set()
     d["banner_until"] = 0.0
     d["banner_text"] = ""
@@ -89,6 +112,20 @@ def style_at(d, x, y):
     return "entry"
 
 
+def floor_style(d, x, y):
+    """Owning floor style — overlay bridge/whisper zones do not cut a new plate."""
+    for zone in (d or {}).get("zones") or []:
+        if zone.get("id") in _OVERLAY_ZONES:
+            continue
+        rect = zone.get("rect") or ()
+        if len(rect) != 4:
+            continue
+        x0, y0, x1, y1 = (int(v) for v in rect)
+        if x0 <= int(x) <= x1 and y0 <= int(y) <= y1:
+            return zone.get("style") or "entry"
+    return None
+
+
 def zone_at(d, x, y):
     found = None
     for zone in d.get("zones") or []:
@@ -102,16 +139,320 @@ def zone_at(d, x, y):
     return found
 
 
+def _load_tex(name):
+    key = ("raw", _ART_REV, name)
+    hit = _plate_cache.get(key)
+    if hit is not None or key in _plate_cache:
+        return hit
+    path = os.path.join(_ZONES, f"{name}.png")
+    if not os.path.isfile(path):
+        _plate_cache[key] = None
+        return None
+    try:
+        raw = pygame.image.load(path).convert()
+    except Exception:
+        _plate_cache[key] = None
+        return None
+    _plate_cache[key] = raw
+    return raw
+
+
+def _zone_bounds(d, style):
+    """Inclusive world rect for a floor style — one whole AI image maps across it."""
+    style = style or ""
+    for zone in (d or {}).get("zones") or []:
+        if zone.get("id") in _OVERLAY_ZONES:
+            continue
+        if zone.get("style") == style or zone.get("id") == style:
+            rect = zone.get("rect") or ()
+            if len(rect) == 4:
+                return tuple(int(v) for v in rect)
+    return _STYLE_BOUNDS.get(style)
+
+
+def _area_sheet(style, tile_px, bounds):
+    """Scale the room plate to cover its full zone in pixels."""
+    x0, y0, x1, y1 = (int(v) for v in bounds)
+    tw = max(8, int(tile_px))
+    key = ("room", _ART_REV, style, tw, x0, y0, x1, y1)
+    sheet = _plate_cache.get(key)
+    if sheet is not None or key in _plate_cache:
+        return sheet
+    raw = _load_tex(style)
+    if raw is None:
+        _plate_cache[key] = None
+        return None
+    pw = max(tw, (x1 - x0 + 1) * tw)
+    ph = max(tw, (y1 - y0 + 1) * tw)
+    sheet = pygame.transform.smoothscale(raw, (pw, ph))
+    _plate_cache[key] = sheet
+    return sheet
+
+
+def _blit_area(screen, rect, style, wx, wy, d=None):
+    """Sample one tile from the room's whole-image floor plate.
+
+    UV is relative to the owning zone rect. Outside the rect (used when a
+    neighbour dissolves in at the lip) we clamp to the plate edge so rooms
+    merge instead of tiling.
+    """
+    bounds = _zone_bounds(d, style)
+    if not bounds:
+        return False
+    sheet = _area_sheet(style, rect.w, bounds)
+    if sheet is None:
+        return False
+    x0, y0, x1, y1 = bounds
+    tw, th = rect.w, rect.h
+    sw, sh = sheet.get_size()
+    sx = max(0, min((int(wx) - x0) * tw, sw - tw))
+    sy = max(0, min((int(wy) - y0) * th, sh - th))
+    area = pygame.Rect(sx, sy, tw, th)
+    if not sheet.get_rect().contains(area):
+        return False
+    screen.blit(sheet, rect.topleft, area)
+    return True
+
+
+def _continuous_cell(name, tile_px, wx, wy):
+    period = 16
+    tw = max(8, int(tile_px))
+    key = ("cont", _ART_REV, name, tw, period)
+    sheet = _plate_cache.get(key)
+    if sheet is None and key not in _plate_cache:
+        raw = _load_tex(name)
+        if raw is None:
+            _plate_cache[key] = None
+            return None
+        sheet = pygame.transform.smoothscale(raw, (tw * period, tw * period))
+        _plate_cache[key] = sheet
+    if sheet is None:
+        return None
+    sx = (int(wx) % period) * tw
+    sy = (int(wy) % period) * tw
+    return sheet.subsurface(pygame.Rect(sx, sy, tw, tw))
+
+
+def _blit_continuous(screen, rect, name, wx, wy):
+    cell = _continuous_cell(name, rect.w, wx, wy)
+    if cell is None:
+        return False
+    screen.blit(cell, rect.topleft)
+    return True
+
+
+def _chasm_bounds(d):
+    chasm = (d or {}).get("chasm") or {}
+    pit = tuple(int(v) for v in (chasm.get("pit") or (12, 72, 52, 84)))
+    deck = tuple(int(v) for v in (chasm.get("deck") or (30, 72, 34, 84)))
+    return pit, deck
+
+
+def _span_sheet(name, tile_px, bounds):
+    x0, y0, x1, y1 = (int(v) for v in bounds)
+    tw = max(8, int(tile_px))
+    key = ("span", _ART_REV, name, tw, x0, y0, x1, y1)
+    sheet = _plate_cache.get(key)
+    if sheet is not None or key in _plate_cache:
+        return sheet
+    raw = _load_tex(name)
+    if raw is None:
+        _plate_cache[key] = None
+        return None
+    pw = max(tw, (x1 - x0 + 1) * tw)
+    ph = max(tw, (y1 - y0 + 1) * tw)
+    sheet = pygame.transform.smoothscale(raw, (pw, ph))
+    _plate_cache[key] = sheet
+    return sheet
+
+
+def _blit_span(screen, rect, name, wx, wy, bounds):
+    x0, y0, x1, y1 = (int(v) for v in bounds)
+    if not (x0 <= int(wx) <= x1 and y0 <= int(wy) <= y1):
+        return False
+    sheet = _span_sheet(name, rect.w, bounds)
+    if sheet is None:
+        return False
+    tw = rect.w
+    sx = (int(wx) - x0) * tw
+    sy = (int(wy) - y0) * tw
+    area = pygame.Rect(sx, sy, tw, rect.h)
+    if not sheet.get_rect().contains(area):
+        return False
+    screen.blit(sheet, rect.topleft, area)
+    return True
+
+
+def _zone_origin(d, style):
+    for zone in (d or {}).get("zones") or []:
+        if zone.get("style") == style or zone.get("id") == style:
+            rect = zone.get("rect") or ()
+            if len(rect) == 4:
+                return int(rect[0]), int(rect[1])
+    return None
+
+
+def _zone_sheet(style, tile_px):
+    tw = max(8, int(tile_px))
+    key = ("zsheet", _ART_REV, style, tw)
+    sheet = _plate_cache.get(key)
+    if sheet is not None or key in _plate_cache:
+        return sheet
+    raw = _load_tex(style)
+    if raw is None:
+        _plate_cache[key] = None
+        return None
+    sw, sh = raw.get_size()
+    dw = 64 * tw
+    dh = max(tw, int(round(dw * (sh / float(sw)))))
+    sheet = pygame.transform.smoothscale(raw, (dw, dh))
+    _plate_cache[key] = sheet
+    return sheet
+
+
+def _blit_zone_tile(screen, rect, style, wx, wy, origin):
+    sheet = _zone_sheet(style, rect.w)
+    if sheet is None or not origin:
+        return False
+    ox, oy = origin
+    sw, sh = sheet.get_size()
+    tw, th = rect.w, rect.h
+    sx = int((int(wx) - ox) * tw) % sw
+    sy = int((int(wy) - oy) * th) % sh
+
+    def chunk(dx, dy, w, h, ssx, ssy):
+        screen.blit(sheet, (rect.x + dx, rect.y + dy), pygame.Rect(ssx, ssy, w, h))
+
+    w1 = min(tw, sw - sx)
+    h1 = min(th, sh - sy)
+    chunk(0, 0, w1, h1, sx, sy)
+    if w1 < tw:
+        chunk(w1, 0, tw - w1, h1, 0, sy)
+    if h1 < th:
+        chunk(0, h1, w1, th - h1, sx, 0)
+    if w1 < tw and h1 < th:
+        chunk(w1, h1, tw - w1, th - h1, 0, 0)
+    return True
+
+
+def _lip_alphas(tile_h, wy, y0, y1):
+    span = _LIP_TILES * tile_h
+    alphas = []
+    for py in range(tile_h):
+        north = (int(wy) - y0) * tile_h + py
+        south = (y1 - int(wy)) * tile_h + (tile_h - 1 - py)
+        near = min(north, south)
+        if near >= span:
+            alphas.append(255)
+        else:
+            t = near / float(span)
+            t = t * t * (3.0 - 2.0 * t)
+            alphas.append(int(255 * t))
+    return alphas
+
+
+def _blit_deck(screen, rect, wx, wy, deck, d):
+    """Narrow Way roadway — ends fade into rift approach and the throne."""
+    x0, y0, x1, y1 = (int(v) for v in deck)
+    alphas = _lip_alphas(rect.h, wy, y0, y1)
+    if min(alphas) >= 255:
+        return _blit_span(screen, rect, "bridge_deck", wx, wy, deck)
+    north = (int(wy) - y0) <= (y1 - int(wy))
+    style = "rift" if north else "arena"
+    if _blit_zone_tile(screen, rect, style, wx, wy, _zone_origin(d, style)):
+        wash = pygame.Surface(rect.size, pygame.SRCALPHA)
+        wash.fill((20, 8, 36, 36))
+        screen.blit(wash, rect.topleft)
+    sheet = _span_sheet("bridge_deck", rect.w, deck)
+    if sheet is None:
+        return False
+    tw = rect.w
+    sx = (int(wx) - x0) * tw
+    sy = (int(wy) - y0) * tw
+    area = pygame.Rect(sx, sy, tw, rect.h)
+    if not sheet.get_rect().contains(area):
+        return False
+    cell = pygame.Surface(rect.size, pygame.SRCALPHA)
+    cell.blit(sheet, (0, 0), area)
+    fade = pygame.Surface(rect.size, pygame.SRCALPHA)
+    for py, alpha in enumerate(alphas):
+        if alpha:
+            pygame.draw.line(fade, (255, 255, 255, alpha), (0, py), (tw - 1, py))
+    cell.blit(fade, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+    screen.blit(cell, rect.topleft)
+    return True
+
+
+def _blit_area_alpha(screen, rect, style, wx, wy, alpha, d=None):
+    alpha = int(alpha)
+    if alpha <= 4:
+        return False
+    tile = pygame.Surface(rect.size, pygame.SRCALPHA)
+    if not _blit_area(tile, tile.get_rect(), style, wx, wy, d=d):
+        return False
+    tile.set_alpha(alpha)
+    screen.blit(tile, rect.topleft)
+    return True
+
+
+def _merge_areas(screen, rect, wx, wy, d, here):
+    """Soft dissolve into the neighbouring room's whole-image floor."""
+    wx, wy = int(wx), int(wy)
+    best_style = None
+    best_alpha = 0
+    for dist in range(1, _LIP_TILES + 1):
+        strength = 1.0 - (dist - 1) / float(_LIP_TILES)
+        alpha = int(150 * strength * strength)
+        if alpha <= best_alpha:
+            continue
+        for dx in range(-dist, dist + 1):
+            for dy in range(-dist, dist + 1):
+                if max(abs(dx), abs(dy)) != dist:
+                    continue
+                other = floor_style(d, wx + dx, wy + dy)
+                if not other or other == here:
+                    continue
+                best_style = other
+                best_alpha = alpha
+                break
+            if best_style and best_alpha == alpha:
+                break
+    if best_style:
+        _blit_area_alpha(screen, rect, best_style, wx, wy, best_alpha, d=d)
+
+
+def draw_zone_backdrop(client, cam_x, cam_y, tile):
+    """Dark the panel; floors come from per-tile plates."""
+    d = getattr(client, "dungeon", None) or {}
+    if not (d.get("v2") is True or d.get("id") == "sanctum" or d.get("art_style")):
+        return False
+    try:
+        import client as client_mod
+        panel_w = int(getattr(client_mod, "MAP_W", 900))
+        panel_h = int(getattr(client_mod, "MAP_H", 640))
+        screen_h = int(getattr(client_mod, "SCREEN_H", panel_h + 80))
+    except Exception:
+        panel_w, panel_h, screen_h = 900, 640, 720
+    client.screen.fill((6, 4, 12), pygame.Rect(0, 0, panel_w, min(panel_h + 40, screen_h)))
+    return True
+
+
 def draw_tile(client, rect, tile_id, wx, wy, t):
     import world_map as wm
     d = client.dungeon
     decor = (d.get("decor") or {}).get(f"{wx},{wy}", "")
     style = style_at(d, wx, wy)
+    pit, deck = _chasm_bounds(d)
     if decor == "abyss" or (tile_id == wm.WALL and decor == "abyss"):
-        draw_abyss(client.screen, rect, wx, wy, t)
+        draw_abyss(client.screen, rect, wx, wy, t, d=d)
+        # Visual rail columns beside the 1-wide Narrow Way.
+        dx0, _dy0, dx1, _dy1 = deck
+        if dx0 <= int(wx) <= dx1 and pit[1] <= int(wy) <= pit[3]:
+            if not _blit_span(client.screen, rect, "bridge_rail", wx, wy, deck):
+                _blit_span(client.screen, rect, "bridge_deck", wx, wy, deck)
         return
     if decor in ("bridge", "anchor"):
-        draw_bridge(client.screen, rect, wx, wy, anchor=(decor == "anchor"), t=t)
+        draw_bridge(client.screen, rect, wx, wy, anchor=(decor == "anchor"), t=t, d=d)
         return
     if tile_id == wm.WALL:
         cracked = decor == "secret"
@@ -132,7 +473,11 @@ def draw_tile(client, rect, tile_id, wx, wy, t):
             if rect.collidepoint(mx, my):
                 client.blit_nameplate("Loose bricks — click or walk into the wall", rect.centerx, rect.y - 4, (220, 210, 255))
         return
-    draw_floor(client.screen, rect, wx, wy, style, t)
+    area = floor_style(d, wx, wy) or style
+    if not _blit_area(client.screen, rect, area, wx, wy, d=d):
+        draw_floor(client.screen, rect, wx, wy, style, t)
+    else:
+        _merge_areas(client.screen, rect, wx, wy, d, area)
     _draw_prop(client, rect, decor, t)
     if client.player:
         px, py = client.player.get("x", 0), client.player.get("y", 0)
@@ -188,9 +533,15 @@ def _draw_prop(client, rect, decor, t):
         pygame.draw.circle(surf, (230, 190, 70), (cx, cy), 4)
     elif decor == "pillar":
         pygame.draw.rect(surf, (70, 64, 84), (cx - 5, cy - 10, 10, 16))
-    elif decor == "pedestal":
-        pygame.draw.rect(surf, (60, 50, 70), (cx - 8, cy - 4, 16, 8))
-        pygame.draw.circle(surf, (160, 170, 190), (cx, cy - 8), 4)
+    elif decor in ("pedestal", "pedestal_empty"):
+        import realistic_item_icons
+        d = getattr(client, "dungeon", None) or {}
+        item_id = d.get("pedestal_item") or "void_key_obsidian"
+        taken = decor == "pedestal_empty" or bool(d.get("pedestal_taken"))
+        plate = getattr(client, "blit_nameplate", None) if not taken else None
+        realistic_item_icons.draw_pedestal_key(
+            surf, rect, item_id, taken=taken, blit_nameplate=plate,
+        )
 
 
 def draw_floor(surf, rect, x, y, style, t):
@@ -210,30 +561,37 @@ def draw_floor(surf, rect, x, y, style, t):
 
 
 def draw_wall_top(surf, rect, x, y, style, cracked=False, t=0.0):
-    base = WALL_PAL.get(style, (40, 34, 52))
-    hi, mid, sh, deep = rs.material(base)
-    pygame.draw.rect(surf, rs.shade(mid, -18), rect)
-    pygame.draw.line(surf, hi, rect.topleft, (rect.right - 1, rect.top))
+    if not _blit_continuous(surf, rect, "wall", x, y):
+        base = WALL_PAL.get(style, (40, 34, 52))
+        hi, mid, sh, deep = rs.material(base)
+        pygame.draw.rect(surf, rs.shade(mid, -18), rect)
+        pygame.draw.line(surf, hi, rect.topleft, (rect.right - 1, rect.top))
     if cracked:
-        pygame.draw.rect(surf, rs.shade(mid, 18), rect.inflate(-3, -3))
+        pygame.draw.rect(surf, (90, 70, 120), rect.inflate(-3, -3), 1)
         pygame.draw.line(surf, (255, 214, 120), (rect.centerx - 2, rect.top + 3), (rect.centerx - 6, rect.bottom - 3), 2)
         pygame.draw.line(surf, (255, 214, 120), (rect.centerx + 4, rect.top + 5), (rect.centerx - 1, rect.bottom - 4), 2)
 
 
-def draw_abyss(surf, rect, x, y, t):
-    pygame.draw.rect(surf, (8, 5, 14), rect)
-    rnd = random.Random(x * 131 + y * 17)
-    for _ in range(2):
-        if rnd.random() < 0.5 and rect.w > 1 and rect.h > 1:
-            surf.set_at((rect.x + rnd.randrange(rect.w), rect.y + rnd.randrange(rect.h)), (160, 120, 255))
+def draw_abyss(surf, rect, x, y, t, d=None):
+    pit, _deck = _chasm_bounds(d)
+    if not _blit_span(surf, rect, "abyss", x, y, pit):
+        pygame.draw.rect(surf, (8, 5, 14), rect)
+        rnd = random.Random(x * 131 + y * 17)
+        for _ in range(2):
+            if rnd.random() < 0.5 and rect.w > 1 and rect.h > 1:
+                surf.set_at((rect.x + rnd.randrange(rect.w), rect.y + rnd.randrange(rect.h)), (160, 120, 255))
 
 
-def draw_bridge(surf, rect, x, y, anchor=False, t=0.0):
-    draw_abyss(surf, rect, x, y, t)
-    slab = rect.inflate(-max(2, rect.w // 6), -2)
-    pygame.draw.rect(surf, (58, 52, 70), slab)
-    if anchor:
-        pygame.draw.circle(surf, (240, 200, 90), slab.center, max(2, rect.w // 5), 2)
+def draw_bridge(surf, rect, x, y, anchor=False, t=0.0, d=None):
+    pit, deck = _chasm_bounds(d)
+    # Abyss underlay so the Narrow Way reads as a span over the rift.
+    if not _blit_span(surf, rect, "abyss", x, y, pit):
+        pygame.draw.rect(surf, (8, 5, 14), rect)
+    if not _blit_deck(surf, rect, x, y, deck, d or {}):
+        if not _blit_span(surf, rect, "bridge_deck", x, y, deck):
+            slab = rect.inflate(-max(2, rect.w // 6), -2)
+            pygame.draw.rect(surf, (58, 52, 70), slab)
+    # Anchors stay wind-safe on the server; no yellow marker rings on the deck.
 
 
 def draw_seal(surf, cx, cy, tile, col, open_, t):
@@ -244,9 +602,8 @@ def draw_seal(surf, cx, cy, tile, col, open_, t):
 
 
 def queue_wall_faces(client, draw_list, cam_x, cam_y, vis_w, vis_h, t):
+    """AI wall plate is the look — only hover hints for seals / cracked secrets."""
     import world_map as wm
-    tile = client.TILE if hasattr(client, "TILE") else None
-    # TILE is a closure in draw_map; the caller passes the live size via the rects.
     for sy in range(vis_h + 1):
         for sx in range(vis_w + 1):
             vx, vy = cam_x + sx, cam_y + sy
@@ -259,22 +616,19 @@ def queue_wall_faces(client, draw_list, cam_x, cam_y, vis_w, vis_h, t):
             if decor == "abyss":
                 continue
             marked = decor == "secret" or (decor or "").startswith("seal")
-            if not marked and (wy + 1 >= len(client.tiles) or client.tiles[wy + 1][wx] == wm.WALL):
+            if not marked:
                 continue
-            style = style_at(client.dungeon, wx, wy)
-            cracked = decor == "secret"
 
-            def _face(sx=sx, sy=sy, style=style, cracked=cracked, decor=decor, wx=wx, wy=wy):
-                tw = client.screen.get_width() and _tile(client)
+            def _hint(sx=sx, sy=sy, decor=decor):
+                tw = _tile(client)
                 rect = pygame.Rect(sx * tw, sy * tw, tw, tw)
-                draw_wall_face(client.screen, rect, style, cracked, t)
                 label = _seal_label(client, decor)
                 if label:
                     mx, my = pygame.mouse.get_pos()
                     if rect.collidepoint(mx, my):
                         client.blit_nameplate(label, rect.centerx, rect.y - 4, (230, 210, 255))
 
-            draw_list.append(((sy + 1) * _tile(client), 2, _face))
+            draw_list.append(((sy + 1) * _tile(client), 2, _hint))
 
 
 def _seal_label(client, decor):
@@ -318,7 +672,7 @@ def handle_click(client, tx, ty):
     decor = (d.get("decor") or {}).get(f"{tx},{ty}", "")
     interesting = decor.startswith("seal") or decor.startswith("sarcophagus") or decor in (
         "secret", "skull", "chest", "chest_open", "cache", "cache_open", "lore",
-        "shrine", "lever", "pedestal", "warning", "sarcophagus",
+        "shrine", "lever", "pedestal", "pedestal_empty", "warning", "sarcophagus",
     )
     if not interesting:
         return False

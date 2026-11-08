@@ -501,6 +501,8 @@ class GameClient(ScreensMixin, CameraYaw):
         self.cook_prompt_rects = {}
         self.dungeon_prompt = None  # True when confirming Tidehollow entry
         self.dungeon_prompt_rects = {}
+        self.endless_entry_prompt = None  # continue vs start-over for Endless Depths
+        self.endless_entry_rects = {}
         self.dungeon_leave_rect = None
         self.dungeon_hud_hidden = False
         self.dungeon_hud_tab = None
@@ -615,7 +617,7 @@ class GameClient(ScreensMixin, CameraYaw):
             import guide_tour
             guide_tour.on_state(self, msg)
         if t == "CROWN_GUIDE_STATE":
-            import crown_war_guide
+            import crown_war_guide_client as crown_war_guide
             crown_war_guide.on_state(self, msg)
             return
         if t == "UI_COACH":
@@ -806,7 +808,15 @@ class GameClient(ScreensMixin, CameraYaw):
         elif t.startswith("MOONPETAL_"):
             if getattr(self, "moon_petal", None):
                 self.moon_petal.on_message(t, msg)
+        elif t == "ENDLESS_ENTRY_PROMPT":
+            import endless_depths_client
+            endless_depths_client.open_entry_prompt(self, msg)
+        elif t == "ENDLESS_BANNER":
+            import endless_depths_client
+            endless_depths_client.open_banner(self, msg)
         elif t == "DUNGEON_ENTER":
+            import endless_depths_client
+            endless_depths_client.close_entry_prompt(self)
             self._enter_dungeon_view(msg)
         elif t == "DUNGEON_TILES":
             if self.dungeon and not self.dungeon.get("v2"):
@@ -1460,6 +1470,16 @@ class GameClient(ScreensMixin, CameraYaw):
         elif t == "TRADE_CANCELLED":
             self.chat_log.append(f"Trade cancelled: {msg.get('reason','')}")
             self.trade_state = None
+        elif t == "PARTY_UPDATE":
+            self.party = msg
+            self.party_member_ids = {
+                int(m["id"]) for m in (msg.get("members") or []) if m.get("id") is not None
+            }
+        elif t == "PARTY_INVITE":
+            self.party_invite = msg
+            who = msg.get("from_name") or "Someone"
+            self.chat_log.append(f"{who} invited you to a party. Open Party (P) to accept.")
+            self.add_chat(f"{who} invited you to a party.", color=(240, 190, 90), highlight=True)
         elif t == "ERROR":
             text = msg.get("message") or "Something went wrong."
             low = text.lower()
@@ -1778,7 +1798,7 @@ class GameClient(ScreensMixin, CameraYaw):
         import guide_tour
         if event.type == pygame.MOUSEBUTTONDOWN and guide_tour.handle_click(self, event):
             return
-        import crown_war_guide
+        import crown_war_guide_client as crown_war_guide
         if crown_war_guide.handle_event(self, event):
             return
         import adventure_guide
@@ -1790,6 +1810,9 @@ class GameClient(ScreensMixin, CameraYaw):
             return
         if event.type == pygame.KEYDOWN:
             if (self.bone_prompt or self.drop_prompt) and self._cm_key(event):
+                return
+            import endless_depths_client
+            if endless_depths_client.handle_entry_prompt_key(self, event):
                 return
             if getattr(self, "guild_prompt", None):
                 import hud_v2
@@ -1938,6 +1961,11 @@ class GameClient(ScreensMixin, CameraYaw):
                     self.potion_prompt = None
                     self.cook_prompt = None
                     self.dungeon_prompt = None
+                    try:
+                        import endless_depths_client
+                        endless_depths_client.close_entry_prompt(self)
+                    except Exception:
+                        self.endless_entry_prompt = None
                     self.show_wish = False
                     self.wish_stat_choice = None
                     self.combat_style_prompt = None
@@ -3805,6 +3833,8 @@ class GameClient(ScreensMixin, CameraYaw):
             self.dungeon["sewer"] = dict(msg["sewer"])
         if msg.get("petaldeep"):
             self.dungeon["petaldeep"] = dict(msg["petaldeep"])
+        if msg.get("endless_depths"):
+            self.dungeon["endless_depths"] = dict(msg["endless_depths"])
         if msg.get("deepdelve"):
             self.dungeon["deepdelve"] = dict(msg["deepdelve"])
         self._apply_siege_payload(msg)
@@ -3844,6 +3874,12 @@ class GameClient(ScreensMixin, CameraYaw):
         self.dungeon = None
         self.clear_walk()
         self._minimap_base = None
+        # Restore the bag / Equipment button after private instances (Endless, etc.).
+        self.show_inventory = True
+        if getattr(self, "hud_system", None) not in ("inventory", "crafting", "gathering", "bags"):
+            self.hud_system = "inventory"
+        if getattr(self, "hud_focus", None) == "party":
+            self.hud_focus = None
 
     def _apply_siege_payload(self, msg):
         """Merge War for the Crown structure / war / heraldry into dungeon state."""
@@ -4058,28 +4094,21 @@ class GameClient(ScreensMixin, CameraYaw):
         return self.tiles[hy][hx] == wm.WATER
 
     def fishing_shore_goals(self, wx, wy):
-        """Walkable land next to a water tile — never stand on WATER or deep pier.
+        """Walkable land east/west of a water tile — never north/south casts.
 
-        Prefer east/west stands so the cast animation faces the water sideways
-        (fish strips are E/W only — north/south casts look wrong).
+        Fish anim strips face sideways only; N/S stands are refused so the
+        player always looks left or right at the water.
         """
-        ew, ns = [], []
-        for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-            nx, ny = wx + dx, wy + dy
+        ew = []
+        for dx in (-1, 1):
+            nx, ny = wx + dx, wy
             if not self.tile_walkable(nx, ny):
                 continue
             if self.tiles[ny][nx] == wm.WATER:
                 continue
-            (ew if dx != 0 else ns).append((nx, ny))
-        goals = ew or ns
-        if not goals:
-            # Diagonals as last resort (still no water / deep pier); prefer E/W-ish
-            for dx, dy in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
-                nx, ny = wx + dx, wy + dy
-                if self.tile_walkable(nx, ny) and self.tiles[ny][nx] != wm.WATER:
-                    goals.append((nx, ny))
-        shore = [g for g in goals if not self._is_deep_pier_tile(*g)]
-        return set(shore or goals)
+            ew.append((nx, ny))
+        shore = [g for g in ew if not self._is_deep_pier_tile(*g)]
+        return set(shore or ew)
 
     def find_path(self, sx, sy, goals):
         """BFS shortest path. Returns list of tiles to step onto (excludes start)."""
@@ -4234,11 +4263,15 @@ class GameClient(ScreensMixin, CameraYaw):
         elif kind == "NEWS_BOARD":
             self.net.send("NEWS_BOARD")
         elif kind == "ENTER_DUNGEON":
-            # Walk-then-enter: go straight in (no confirm popup)
+            # Walk-then-enter: go straight in (Endless Depths may reply with a continue prompt)
             self.dungeon_prompt = None
+            import endless_depths_client
+            endless_depths_client.close_entry_prompt(self)
             kwargs = {}
             if action.get("dungeon_id"):
                 kwargs["dungeon_id"] = action["dungeon_id"]
+            if action.get("endless_mode"):
+                kwargs["endless_mode"] = action["endless_mode"]
             self.net.send("ENTER_DUNGEON", **kwargs)
         elif kind == "LEAVE_DUNGEON":
             self.clear_walk()
@@ -5049,8 +5082,16 @@ class GameClient(ScreensMixin, CameraYaw):
             })
         elif kind == "examine_player":
             self.examine_player(row.get("id"))
+        elif kind == "party_invite":
+            try:
+                self.net.send("PARTY", action="invite", target_id=int(row.get("id")))
+            except Exception:
+                pass
         elif kind == "attack_player":
-            self.add_chat("Player fighting is not open yet — PK mode is for the duelists.")
+            if self.dungeon:
+                self.add_chat("Player killing is only allowed outside dungeons.")
+            else:
+                self.add_chat("Player fighting is not open yet — PK mode is for the duelists.")
         elif kind == "pickup":
             tx, ty = int(row["x"]), int(row["y"])
             pickup = {"type": "PICKUP", "x": tx, "y": ty}
@@ -5160,7 +5201,7 @@ class GameClient(ScreensMixin, CameraYaw):
             return
         crown_tour = getattr(self, "crown_guide_replay_rect", None)
         if self.show_help and crown_tour and crown_tour.collidepoint(mx, my):
-            import crown_war_guide
+            import crown_war_guide_client as crown_war_guide
             crown_war_guide.replay(self)
             return
         replay = getattr(self, "throne_vision_replay_rect", None)
@@ -5172,6 +5213,29 @@ class GameClient(ScreensMixin, CameraYaw):
         follow = getattr(self, "ember_follow_rect", None)
         if self.show_help and follow and follow.collidepoint(mx, my):
             self.ember_follow_behind = not bool(getattr(self, "ember_follow_behind", False))
+            return
+        title_cycle = getattr(self, "title_cycle_rect", None)
+        if self.show_help and title_cycle and title_cycle.collidepoint(mx, my):
+            p = self.player or {}
+            earned = list(p.get("titles") or [])
+            ids = [""] + [t.get("id") for t in earned if t.get("id")]
+            cur = str(p.get("active_title") or "")
+            try:
+                idx = ids.index(cur)
+            except ValueError:
+                idx = 0
+            nxt = ids[(idx + 1) % len(ids)] if ids else ""
+            self.net.send("SET_OPTION", active_title=nxt)
+            return
+        noble_r = getattr(self, "title_noble_rect", None)
+        if self.show_help and noble_r and noble_r.collidepoint(mx, my):
+            on = not bool((self.player or {}).get("show_noble_prefix", True))
+            self.net.send("SET_OPTION", show_noble_prefix=on)
+            return
+        house_r = getattr(self, "title_house_rect", None)
+        if self.show_help and house_r and house_r.collidepoint(mx, my):
+            on = not bool((self.player or {}).get("show_house_suffix", True))
+            self.net.send("SET_OPTION", show_house_suffix=on)
             return
         if self.context_menu and event.button == 1:
             self._click_context_menu(mx, my)
@@ -5251,6 +5315,10 @@ class GameClient(ScreensMixin, CameraYaw):
             return
         if self.dungeon_prompt:
             self.handle_dungeon_prompt_click(mx, my)
+            return
+        import endless_depths_client
+        if endless_depths_client.entry_prompt_active(self):
+            endless_depths_client.handle_entry_prompt_click(self, mx, my)
             return
         if getattr(self, "guild_prompt", None):
             import hud_v2
@@ -5483,6 +5551,10 @@ class GameClient(ScreensMixin, CameraYaw):
                 import petaldeep_client
                 if petaldeep_client.handle_click(self, tx, ty):
                     return
+            if self.dungeon.get("id") == "endless_depths":
+                import endless_depths_client
+                if endless_depths_client.handle_click(self, tx, ty):
+                    return
             if self.dungeon.get("v2") == "depths":
                 import depths_v2_client
                 if depths_v2_client.handle_click(self, tx, ty):
@@ -5634,9 +5706,22 @@ class GameClient(ScreensMixin, CameraYaw):
             else:
                 goals = self.adjacent_goals(gx, gy)
             if event.button == 3:
-                label = str(rtype).replace("_", " ").title() or "resource"
+                if rtype in tree_cover.NAMES:
+                    cut_names = {
+                        "tree": "tree",
+                        "oak_tree": "oak tree",
+                        "willow_tree": "willow tree",
+                        "maple_tree": "maple tree",
+                        "yew_tree": "yew tree",
+                        "magic_tree": "enchanted tree",
+                        "glade_tree": "fairy tree",
+                    }
+                    gather_label = f"Cut {cut_names.get(rtype, 'tree')}"
+                else:
+                    label = str(rtype).replace("_", " ").title() or "resource"
+                    gather_label = f"Gather {label}"
                 self._open_context_menu(mx, my, self._context_rows(
-                    {"label": f"Gather {label}", "kind": "gather", "x": gx, "y": gy},
+                    {"label": gather_label, "kind": "gather", "x": gx, "y": gy},
                     tx, ty,
                 ))
                 return
@@ -5761,12 +5846,16 @@ class GameClient(ScreensMixin, CameraYaw):
                 if event.button == 3:
                     name = p.get("name") or "player"
                     rows = [
+                        {"label": f"Invite {name} to party", "kind": "party_invite", "id": p["id"]},
                         {"label": f"Trade with {name}", "kind": "trade", "id": p["id"],
                          "x": p["x"], "y": p["y"]},
                         {"label": f"Examine {name}", "kind": "examine_player", "id": p["id"]},
                     ]
-                    # PK skull on: offer Attack (PvP wiring later; chat explains for now).
-                    if bool((self.player or {}).get("player_killer")):
+                    # PK only outside dungeons (Crown siege keeps its own rules).
+                    if (
+                        bool((self.player or {}).get("player_killer"))
+                        and not self.dungeon
+                    ):
                         rows.insert(0, {
                             "label": f"Attack {name}",
                             "kind": "attack_player",
@@ -5810,9 +5899,13 @@ class GameClient(ScreensMixin, CameraYaw):
                 # No fish here — just walk to the shore beside the click
                 self.walk_and_act(self.fishing_shore_goals(tx, ty), None)
             return
-        # Empty ground — left click walks. Right click is the action menu.
+        # Empty ground — left click walks. Right click offers Walk here.
         if event.button == 3:
-            self.context_menu = None
+            rows = []
+            if self.tile_walkable(tx, ty):
+                rows.append({"label": "Walk here", "kind": "walk", "x": tx, "y": ty})
+            rows.append({"label": "Cancel", "kind": "cancel"})
+            self._open_context_menu(mx, my, rows)
             return
         if self.tile_walkable(tx, ty):
             self.walk_and_act({(tx, ty)}, None)
@@ -7344,7 +7437,9 @@ class GameClient(ScreensMixin, CameraYaw):
                 fade.fill((8, 6, 12, 140))
                 self.screen.blit(fade, (0, 0))
         if self.dungeon:
-            self.draw_dungeon_hud()
+            # Endless Depths uses its own compact corner HUD — skip the generic box.
+            if self.dungeon.get("id") != "endless_depths":
+                self.draw_dungeon_hud()
             if self.dungeon.get("v2"):
                 now = time.time()
                 if self.dungeon.get("v2") == "depths":
@@ -7356,12 +7451,18 @@ class GameClient(ScreensMixin, CameraYaw):
         if self.dungeon_victory:
             self.draw_dungeon_victory()
         sewer_client.draw_overlay(self, MAP_W, MAP_H)
+        if self.dungeon and self.dungeon.get("id") == "endless_depths":
+            try:
+                import endless_depths_client
+                endless_depths_client.draw_overlay(self, MAP_W, MAP_H)
+            except Exception:
+                pass
         self.draw_teleport_button()
         if self.dialogue:
             self.draw_dialogue()
         # Pointers must draw above the talk box — they used to paint inside draw_map and vanish under dialogue.
         import guide_tour
-        import crown_war_guide
+        import crown_war_guide_client as crown_war_guide
         if not guide_tour.active(self) and not crown_war_guide.active(self):
             ui_coach.draw(self)
         if self.housing_open:
@@ -7407,6 +7508,9 @@ class GameClient(ScreensMixin, CameraYaw):
             self.draw_world_map_modal()
         if self.dungeon_prompt:
             self.draw_dungeon_prompt()
+        import endless_depths_client
+        if endless_depths_client.entry_prompt_active(self):
+            endless_depths_client.draw_entry_prompt(self)
         if self.fire_prompt:
             self.draw_fire_prompt()
         if self.drop_prompt:
@@ -7458,7 +7562,7 @@ class GameClient(ScreensMixin, CameraYaw):
         import guide_tour
         guide_tour.tick(self)
         guide_tour.draw(self)
-        import crown_war_guide
+        import crown_war_guide_client as crown_war_guide
         crown_war_guide.tick(self)
         crown_war_guide.draw(self)
         import adventure_guide
@@ -7488,10 +7592,26 @@ class GameClient(ScreensMixin, CameraYaw):
                 petaldeep_client.draw_room_backdrop(self, cam_x, cam_y, TILE)
             except Exception:
                 pass
+        if self.dungeon and self.dungeon.get("id") == "endless_depths":
+            try:
+                import endless_depths_client
+                endless_depths_client.draw_room_backdrop(self, cam_x, cam_y, TILE)
+            except Exception:
+                pass
         if self.dungeon and self.dungeon.get("v2") == "depths":
             try:
                 import depths_v2_client
                 depths_v2_client.draw_zone_backdrop(self, cam_x, cam_y, TILE)
+            except Exception:
+                pass
+        if self.dungeon and (
+            self.dungeon.get("v2") is True
+            or self.dungeon.get("id") == "sanctum"
+            or self.dungeon.get("art_style")
+        ) and self.dungeon.get("v2") != "depths":
+            try:
+                import void_v2_client
+                void_v2_client.draw_zone_backdrop(self, cam_x, cam_y, TILE)
             except Exception:
                 pass
         for sy in range(vis_h + 1 + strip_rows):
@@ -7515,6 +7635,9 @@ class GameClient(ScreensMixin, CameraYaw):
                         and (
                             self.dungeon.get("id") == "petaldeep"
                             or self.dungeon.get("v2") == "depths"
+                            or self.dungeon.get("v2") is True
+                            or self.dungeon.get("id") == "sanctum"
+                            or self.dungeon.get("art_style")
                         )
                     ):
                         # AI-plate dungeons already painted the panel — keep it.
@@ -7524,6 +7647,9 @@ class GameClient(ScreensMixin, CameraYaw):
                     and (
                         self.dungeon.get("id") == "petaldeep"
                         or self.dungeon.get("v2") == "depths"
+                        or self.dungeon.get("v2") is True
+                        or self.dungeon.get("id") == "sanctum"
+                        or self.dungeon.get("art_style")
                     )
                 ):
                     # Outside view map: void
@@ -7573,6 +7699,11 @@ class GameClient(ScreensMixin, CameraYaw):
                         import petaldeep_client
                         if petaldeep_client.draw_exit(self.screen, cx, cy, TILE):
                             pygame.draw.circle(self.screen, (255, 210, 80), (cx, cy - 6), TILE // 5, 2)
+                            return
+                    if did == "endless_depths":
+                        import endless_depths_client
+                        # Plain "exit" text only — no mouth art / nameplate / marker.
+                        if endless_depths_client.draw_exit(self.screen, cx, cy, TILE):
                             return
                     if did == "emberdeep":
                         sprites.draw_volcano_entrance(self.screen, cx, cy, TILE, t, yaw=yaw)
@@ -7716,7 +7847,10 @@ class GameClient(ScreensMixin, CameraYaw):
             new_player_guide.draw_waypoint(self, cam_x, cam_y, vis_w, vis_h, TILE)
             for key, rtype in self.resources.items():
                 x, y = map(int, key.split(","))
-                # Skip trees that sit on / canopy-cover building shells
+                # Skip trees that sit on / canopy-cover building shells.
+                # Fairy Glade trunks are drawn by fairy_glade_client (not here).
+                if rtype == "glade_tree":
+                    continue
                 if rtype in ("tree", "oak_tree", "willow_tree", "maple_tree", "yew_tree", "magic_tree"):
                     if self._tree_blocks_building(x, y):
                         continue
@@ -7732,9 +7866,8 @@ class GameClient(ScreensMixin, CameraYaw):
                     else:
                         near = px is not None and max(abs(x - px), abs(y - py)) <= 3
                     color = ORE_LABEL_COLORS.get(rtype, WHITE)
-                    # Ghost canopy only when the player is behind the tree
-                    # (north of the trunk, under the canopy). Standing in front
-                    # or beside it to chop keeps the tree solid.
+                    # Ghost the painted canopy when the player stands under it
+                    # (north of the trunk). Chopping from the front/side stays solid.
                     # Fairy Glade / fairy village trees stay solid (no fade).
                     tree_alpha = 255
                     if rtype in ("tree", "oak_tree", "willow_tree", "maple_tree", "yew_tree", "magic_tree") and px is not None:
@@ -7749,13 +7882,15 @@ class GameClient(ScreensMixin, CameraYaw):
                                     in_fairy = True
                         except Exception:
                             in_fairy = False
-                        if not in_fairy and py < y:
+                        if not in_fairy:
+                            under = tree_cover.covers(rtype, x, y, px, py)
                             behind = y - py
                             side = abs(px - x)
-                            if behind <= 2 and side <= 1:
-                                tree_alpha = 110 if behind == 1 else 160
-                            elif behind == 3 and side == 0:
-                                tree_alpha = 200
+                            if under:
+                                # HD canopies cover up to ~5 tiles north — fade hard.
+                                tree_alpha = 95 if behind <= 2 else 125
+                            elif py < y and behind <= 5 and side <= 2:
+                                tree_alpha = 110 if behind <= 2 else (150 if behind <= 4 else 190)
 
                     def _draw_res(cx=cx, cy=cy, rtype=rtype, label=label, near=near, color=color, tree_alpha=tree_alpha, x=x, y=y):
                         if not deepdelve_client.draw_rock(self.screen, rtype, cx, cy, TILE, x, y):
@@ -7782,7 +7917,7 @@ class GameClient(ScreensMixin, CameraYaw):
                 # Tall pack entrances stay drawn when the mouth tile scrolls
                 # off-camera but the sprite body still intersects the view.
                 on_screen = 0 <= sx <= vis_w and 0 <= sy <= vis_h
-                tall_pack = spot.get("pack") in ("dragon_lair", "void_rift")
+                tall_pack = spot.get("pack") in ("dragon_lair", "void_rift", "endless_depths")
                 if not on_screen and tall_pack:
                     prect = dungeon_entrances.sprite_rect(
                         spot["pack"], cx, cy, TILE, yaw=self.camera_yaw,
@@ -7855,11 +7990,22 @@ class GameClient(ScreensMixin, CameraYaw):
                             entrance_top = None
                             pack = spot.get("pack")
                             is_void = pack == "void_rift" or spot.get("dungeon_id") == "sanctum"
+                            is_endless = (
+                                pack == "endless_depths"
+                                or spot.get("dungeon_id") == "endless_depths"
+                            )
                             if is_void:
                                 self.draw_void_sanctum_scenery(cx, cy, TILE, t, layer="back")
+                            if is_endless:
+                                self.draw_endless_depths_scenery(cx, cy, TILE, t, layer="back")
                             if USE_NEW_ENTRANCES and pack:
                                 entrance_top = dungeon_entrances.draw_pack(
                                     self.screen, pack, cx, cy, TILE, yaw=self.camera_yaw,
+                                )
+                            if entrance_top is None and is_endless:
+                                import endless_depths_client
+                                entrance_top = endless_depths_client.draw_mouth(
+                                    self.screen, cx, cy, TILE, t=t,
                                 )
                             if entrance_top is None and not (USE_NEW_ENTRANCES and pack):
                                 # Crypt/house shells already own the recessed mouth —
@@ -7872,7 +8018,12 @@ class GameClient(ScreensMixin, CameraYaw):
                                 entrance_top = cy - TILE - 4
                             if is_void:
                                 self.draw_void_sanctum_scenery(cx, cy, TILE, t, layer="front")
-                            if spot.get("warning") or "Void" in (spot.get("name") or ""):
+                            if is_endless:
+                                self.draw_endless_depths_scenery(cx, cy, TILE, t, layer="front")
+                            if is_endless or spot.get("dungeon_id") == "endless_depths":
+                                self.blit_nameplate("⚠ ENDLESS", cx, entrance_top - 18, (255, 170, 80))
+                                self.blit_nameplate("THE ENDLESS DEPTHS", cx, entrance_top - 4, (255, 210, 120))
+                            elif spot.get("warning") or "Void" in (spot.get("name") or ""):
                                 self.blit_nameplate("⚠ HIGH LEVEL", cx, entrance_top - 18, (255, 120, 100))
                                 self.blit_nameplate("VOID SANCTUM", cx, entrance_top - 4, (200, 140, 255))
                             elif spot.get("dungeon_id") == "castle_realm":
@@ -8003,43 +8154,60 @@ class GameClient(ScreensMixin, CameraYaw):
 
                 def _draw_loot(r=r, items=items, top=top, near_loot=near_loot, hovered=hovered, sx=sx, sy=sy):
                     tile_rect = pygame.Rect(sx * TILE, sy * TILE, TILE, TILE)
+                    item_id = top.get("item_id")
+                    item = ITEMS.get(item_id, {})
+                    is_key = item.get("type") == "key"
                     realistic = False
                     if USE_REALISTIC_ITEM_ICONS:
                         import realistic_item_icons
                         realistic = realistic_item_icons.draw_ground(
-                            self.screen, tile_rect, top.get("item_id"),
+                            self.screen, tile_rect, item_id,
                         )
                     if realistic:
                         pass
-                    elif top.get("item_id") == "coins":
+                    elif item_id == "coins":
                         sprites.draw_ground_item(self.screen, r, t)
                     else:
+                        if is_key:
+                            import realistic_item_icons
+                            realistic_item_icons.draw_key_sparkle(self.screen, tile_rect)
                         icon_r = sprites.draw_ground_loot_pad(self.screen, r, t)
-                        sprites.draw_item_icon(self.screen, icon_r, top["item_id"], ITEMS)
-                    if len(items) > 1 and (realistic or top.get("item_id") != "coins"):
+                        sprites.draw_item_icon(self.screen, icon_r, item_id, ITEMS)
+                        if is_key:
+                            import realistic_item_icons
+                            realistic_item_icons.draw_key_sparkle(self.screen, tile_rect)
+                    if len(items) > 1 and (realistic or item_id != "coins"):
                         n = self.font_tiny.render(f"+{len(items) - 1}", True, YELLOW)
                         badge = pygame.Rect(r.right - n.get_width() - 2, r.y - 2, n.get_width() + 4, 12)
                         pygame.draw.rect(self.screen, (20, 18, 14), badge, border_radius=3)
                         self.screen.blit(n, (badge.x + 2, badge.y))
-                    if near_loot or hovered:
-                        item = ITEMS.get(top.get("item_id"), {})
-                        name = item.get("name", top.get("item_id", "?"))
+                    # Keys always label — crypt floors swallow small icons otherwise.
+                    if near_loot or hovered or is_key:
+                        name = item.get("name", item_id or "?")
                         qty = int(top.get("qty") or 1)
-                        label = f"{name} ×{qty}" if qty > 1 else name
-                        if top.get("item_id") == "coins":
+                        if is_key:
+                            label = f"KEY · {name}"
+                        else:
+                            label = f"{name} ×{qty}" if qty > 1 else name
+                        if item_id == "coins":
                             label = f"{qty} coins" if qty != 1 else "1 coin"
                         if len(items) > 1:
                             label += f"  (+{len(items) - 1})"
-                        self.blit_nameplate(label, r.centerx, r.y - 2, (255, 230, 160))
-                        if hovered or near_loot:
-                            hint = self.font_tiny.render("G pickup · Shift+G all", True, (170, 175, 160))
+                        plate = (255, 250, 120) if is_key else (255, 230, 160)
+                        self.blit_nameplate(label, r.centerx, r.y - 6, plate)
+                        if hovered or near_loot or is_key:
+                            hint = self.font_tiny.render(
+                                "G — pick up key" if is_key else "G pickup · Shift+G all",
+                                True, (255, 230, 140) if is_key else (170, 175, 160),
+                            )
                             hb = pygame.Rect(
                                 r.centerx - hint.get_width() // 2 - 4,
-                                r.y - 26,
+                                r.y - 30,
                                 hint.get_width() + 8,
                                 hint.get_height() + 2,
                             )
-                            pygame.draw.rect(self.screen, (12, 12, 16), hb, border_radius=3)
+                            pygame.draw.rect(self.screen, (18, 14, 8), hb, border_radius=3)
+                            pygame.draw.rect(self.screen, (255, 200, 80) if is_key else (40, 40, 48), hb, 1, border_radius=3)
                             self.screen.blit(hint, (hb.x + 4, hb.y + 1))
                 draw_list.append((r.bottom, 0, _draw_loot))
 
@@ -8756,7 +8924,11 @@ class GameClient(ScreensMixin, CameraYaw):
                             _rel = "self"
                         elif p.get("in_party") or p.get("id") in (getattr(self, "party_member_ids", None) or ()):
                             _rel = "party"
-                        elif p.get("player_killer") and (self.player or {}).get("player_killer"):
+                        elif (
+                            p.get("player_killer")
+                            and (self.player or {}).get("player_killer")
+                            and not self.dungeon
+                        ):
                             _rel = "hostile"
                         else:
                             _rel = "neutral"
@@ -9140,6 +9312,13 @@ class GameClient(ScreensMixin, CameraYaw):
 
     def _tree_blocks_building(self, tx, ty):
         """True if a tree trunk would cover or canopy-overlap a building shell."""
+        # Fairy Glade ring trees stand around the village on purpose — always choppable.
+        try:
+            import fairy_glade as _fg
+            if _fg.is_trunk(tx, ty):
+                return False
+        except Exception:
+            pass
         for b in self.buildings:
             if b.get("kind") == "volcano":
                 continue
@@ -9308,6 +9487,10 @@ class GameClient(ScreensMixin, CameraYaw):
             return
         if self.dungeon and self.dungeon.get("id") == "deepdelve":
             return   # mine instances paint their own rock walls (deepdelve_client)
+        if self.dungeon and self.dungeon.get("id") in ("endless_depths", "petaldeep"):
+            # Theme plates own the walls. Generic dungeon cliff cones on the
+            # sealed north door read as hanging spikes and block the exit read.
+            return
         if self.dungeon and self.dungeon.get("v2") == "depths":
             import depths_v2_client
             depths_v2_client.queue_wall_faces(self, draw_list, cam_x, cam_y, vis_w, vis_h, t)
@@ -9525,6 +9708,10 @@ class GameClient(ScreensMixin, CameraYaw):
         if self.dungeon and self.dungeon.get("id") == "petaldeep":
             import petaldeep_client
             if petaldeep_client.draw_tile(self, rect, tile_id, wx, wy, t):
+                return
+        if self.dungeon and self.dungeon.get("id") == "endless_depths":
+            import endless_depths_client
+            if endless_depths_client.draw_tile(self, rect, tile_id, wx, wy, t):
                 return
         if self.dungeon and self.dungeon.get("v2") == "depths":
             import depths_v2_client
@@ -10738,6 +10925,71 @@ class GameClient(ScreensMixin, CameraYaw):
             ):
                 _blit("void_crystals", cx + dx * tile, cy + dy * tile, max(40, int(tile * h)), flip)
 
+    def _endless_depths_prop(self, name):
+        cache = getattr(self, "_endless_depths_props", None)
+        if not isinstance(cache, dict):
+            cache = self._endless_depths_props = {}
+        if name in cache:
+            return cache[name]
+        path = os.path.join(
+            os.path.dirname(__file__), "assets", "props", "endless_depths", f"{name}.png",
+        )
+        try:
+            cache[name] = pygame.image.load(path).convert_alpha()
+        except Exception:
+            cache[name] = None
+        return cache[name]
+
+    def draw_endless_depths_scenery(self, cx, cy, tile, t=0.0, layer="back"):
+        """Amber apron and rune pillars around the Endless village mouth."""
+        scale_cache = getattr(self, "_endless_prop_scaled", None)
+        if not isinstance(scale_cache, dict):
+            scale_cache = self._endless_prop_scaled = {}
+
+        def _blit(name, px, py, target_h, flip=False):
+            img = self._endless_depths_prop(name)
+            if img is None:
+                return
+            key = (name, target_h, flip)
+            scaled = scale_cache.get(key)
+            if scaled is None:
+                tw = max(16, int(round(img.get_width() * target_h / float(img.get_height()))))
+                scaled = pygame.transform.smoothscale(img, (tw, target_h))
+                if flip:
+                    scaled = pygame.transform.flip(scaled, True, False)
+                scale_cache[key] = scaled
+            self.screen.blit(
+                scaled,
+                (int(px - scaled.get_width() // 2), int(py - scaled.get_height() + tile // 3)),
+            )
+
+        if layer == "back":
+            apron = self._endless_depths_prop("endless_apron")
+            if apron is not None:
+                target_h = max(90, int(round(tile * 5.4)))
+                key = ("endless_apron", target_h, False)
+                scaled = scale_cache.get(key)
+                if scaled is None:
+                    tw = max(80, int(round(apron.get_width() * target_h / float(apron.get_height()))))
+                    scaled = pygame.transform.smoothscale(apron, (tw, target_h))
+                    scale_cache[key] = scaled
+                self.screen.blit(
+                    scaled,
+                    (int(cx - scaled.get_width() // 2), int(cy + tile * 0.35 - scaled.get_height() * 0.5)),
+                )
+            for dx, dy, h, flip in (
+                (-3.2, 0.2, 3.0, False),
+                (3.1, 0.3, 2.9, True),
+            ):
+                _blit("endless_pillar", cx + dx * tile, cy + dy * tile, max(48, int(tile * h)), flip)
+        else:
+            pulse = 0.5 + 0.5 * math.sin(t * 2.4)
+            for dx, dy, h, flip in (
+                (-2.6, 2.2, 2.4 + 0.1 * pulse, False),
+                (2.5, 2.1, 2.3 + 0.1 * pulse, True),
+            ):
+                _blit("endless_pillar", cx + dx * tile, cy + dy * tile, max(40, int(tile * h)), flip)
+
     def _arena_team_colors(self, side):
         """Ally = blue, foe = red — shared by ground mark, rim, and nameplates."""
         if side == "you":
@@ -11445,11 +11697,31 @@ class GameClient(ScreensMixin, CameraYaw):
     def open_war_council_from_map(self):
         """Open the Royal War Council dialogue from the world-map card."""
         summary = getattr(self, "war_council_atlas", None)
-        if isinstance(summary, dict) and summary.get("lines"):
+        if isinstance(summary, dict) and (summary.get("panels") or summary.get("lines")):
+            lines = []
+            panels = summary.get("panels") or {}
+            order = (
+                "army", "roles", "equipment", "storehouse",
+                "castle", "objectives", "battle",
+            )
+            if panels:
+                lines.append("Royal War Council — War for the Crown")
+                if summary.get("line"):
+                    lines.append(str(summary["line"]))
+                for key in order:
+                    panel = panels.get(key) or {}
+                    title = panel.get("title") or key.title()
+                    body = panel.get("lines") or []
+                    if not body:
+                        continue
+                    lines.append(f"— {title} —")
+                    lines.extend(str(ln) for ln in body[:8])
+            else:
+                lines = list(summary.get("lines") or [])
             self.dialogue = {
                 "npc_id": "war_council",
                 "npc_name": "Royal War Council",
-                "lines": list(summary.get("lines") or []),
+                "lines": lines,
             }
             return
         try:

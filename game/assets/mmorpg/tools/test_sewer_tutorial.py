@@ -125,6 +125,117 @@ def test_quest_and_items():
     assert content.MONSTERS["sewer_rat"].get("quest_as") == "giant_rat"
 
 
+def test_nest_hit_aggros():
+    """Hitting the nest must wake spiders (locked) or hatch+aggro spiderlings (cleared)."""
+    class FakeWS:
+        pass
+
+    class FakeDB:
+        def set_quest_progress(self, *a, **k):
+            pass
+
+    class FakeWorld:
+        db = FakeDB()
+
+        def add_item_to_inventory(self, *a):
+            return True
+
+    class FakeSrv:
+        WORLD = FakeWorld()
+        log = type("L", (), {"warning": lambda *a, **k: None})()
+        _id = 500
+        sent = []
+
+        def next_id(self):
+            self._id += 1
+            return self._id
+
+        async def send(self, ws, t, **kw):
+            self.sent.append((t, kw))
+
+        class MonsterInstance:
+            def __init__(self, mid, mtype, x, y, no_respawn=False):
+                self.id = mid
+                self.type = mtype
+                self.x = x
+                self.y = y
+                self.spawn_x = x
+                self.spawn_y = y
+                self.alive = True
+                d = content.MONSTERS[mtype]
+                self.max_hp = d["hp"]
+                self.hp = d["hp"]
+                self.target_player_id = None
+                self.home_room = None
+                self.stats = None
+                self.frozen_until = 0
+                self.next_attack_at = 0
+                self.patrol_steps_left = 0
+                self.patrol_leg = ""
+                self.no_respawn = no_respawn
+
+    srv = FakeSrv()
+    old = S._srv
+    S._srv = lambda: srv
+    try:
+        class Sess:
+            pass
+
+        # Locked nest: room 2 still has spiders — they must aggro on disturb.
+        s = Sess()
+        s.player_id = 1
+        s.ws = FakeWS()
+        s.quests = {S.QUEST_ID: {"status": "active", "progress": S.B_STARTED | S.B_ENTERED | S.B_ROOM1}}
+        s.dungeon = None
+        s.x, s.y = 21, 4
+        s.in_combat_with = None
+        s.inventory = {}
+        s.coins = 0
+        s.hp = 10
+        s.quest_log_dirty = False
+        s.pet_id = None
+        S.build(s)
+        asyncio.get_event_loop().run_until_complete(S._hit_nest(s))
+        spiders = [m for m in s.dungeon["monsters"].values() if m.type == "sewer_spider" and m.alive]
+        assert spiders and all(m.target_player_id == s.player_id for m in spiders)
+        assert s.in_combat_with and s.in_combat_with[0] == "monster"
+        assert s.dungeon["sewer"]["nest_hits"] == 0
+
+        # Cleared nest: first hit hatches spiderlings already targeting the player.
+        s2 = Sess()
+        s2.player_id = 2
+        s2.ws = FakeWS()
+        s2.quests = {
+            S.QUEST_ID: {
+                "status": "active",
+                "progress": S.B_STARTED | S.B_ENTERED | S.B_ROOM1 | S.B_ROOM2,
+            }
+        }
+        s2.dungeon = None
+        s2.x, s2.y = 21, 4
+        s2.in_combat_with = None
+        s2.inventory = {}
+        s2.coins = 0
+        s2.hp = 10
+        s2.quest_log_dirty = False
+        s2.pet_id = None
+        S.build(s2)
+        for m in s2.dungeon["monsters"].values():
+            m.alive = False
+        asyncio.get_event_loop().run_until_complete(S._hit_nest(s2))
+        kids = [m for m in s2.dungeon["monsters"].values() if m.alive and m.type == "spiderling"]
+        assert len(kids) == 2
+        assert all(m.target_player_id == s2.player_id for m in kids)
+        assert s2.in_combat_with and s2.in_combat_with[0] == "monster"
+        assert s2.dungeon["sewer"]["nest_hits"] == 1
+        tiles = s2.dungeon["tiles"]
+        for m in kids:
+            assert S.dungeon_walkable(tiles, m.x, m.y)
+            assert S.in_rect(m.x, m.y, S.ROOM2)
+    finally:
+        S._srv = old
+
+
 STATE = {}
 
 
@@ -230,6 +341,7 @@ def main():
     check("map connectivity + web gate", test_map)
     check("stats beatable by fresh bronze", test_stats_fresh_bronze)
     check("quest, items, wolves 4, mouth tile", test_quest_and_items)
+    check("nest hit aggros spiders / spiderlings", test_nest_hit_aggros)
     check("server: later quest, reward once, death no loss", test_server_rules)
     tmp = STATE.get("tmp")
     if tmp:

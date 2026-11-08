@@ -106,16 +106,15 @@ def placements(client):
             continue
         r = rng.random()
         deep = not near_path(x, y, 1) and not in_fp(x, y, 2)
+        # Decorative "tree" sprites used to look choppable but had no resource
+        # node — woodcutting is on real TREE tiles + hd_trees art instead.
+        # Meadow copses still get bush clumps so the plots do not look bare.
         if deep and r < 0.06 and free(x, y, 3):
-            put("tree", x, y, 2)                        # a small copse: trees with bushes at their feet
-            for _ in range(rng.choice((0, 1, 1, 2))):
-                tx, ty = x + rng.choice((-2, 2)), y + rng.choice((-1, 0, 1))
-                if grass(tx, ty) and (tx, ty) not in blocked and not near_path(tx, ty, 1) and not in_fp(tx, ty, 2):
-                    put("tree", tx, ty, 1)
+            put(rng.choice(("bush_l", "bush_m")), x, y, 2)
             for _ in range(2):
                 bx, by = x + rng.choice((-1, 1)), y + rng.choice((0, 1))
                 if grass(bx, by) and (bx, by) not in blocked:
-                    put(rng.choice(("bush_s", "bush_m")), bx, by, 0, 0.3)
+                    put(rng.choice(("bush_s", "bush_m", "flowers")), bx, by, 0, 0.3)
         elif r < 0.22:
             put(rng.choice(("bush_l", "bush_m", "bush_s")), x, y, 1)
             _buddy(rng, put, grass, blocked, near_path, x, y, ("bush_s", "bush_m", "flowers"))

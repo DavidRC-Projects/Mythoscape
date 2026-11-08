@@ -9,8 +9,10 @@ March of the King → city.wav          Stonehaven
 Welcome to the Hall → harbour.wav     Harbourreach
 Cautious March   → cautious_march.wav Wolf Pass
 Deep Mine Pulse  → Deep Mine Pulse.wav (repo /music)  Deepdelve, when you go down
-Ceremonial Clash → Ceremonial Clash.wav (repo /music) gladiator arena, when the fight starts
+Arena's First Cry → Arena's First Cry.wav (repo /music) gladiator arena, when the fight starts
+Ceremonial Clash → Ceremonial Clash.wav (repo /music) (retired arena cue; file kept)
 Untitled.wav     → Petaldeep (inside the dungeon only; the glade keeps its own song)
+firstsongnverdung / L'Enfer Infini / ndung (repo /music) → Endless Depths playlist loop
 
 The village playlist (Rising Theme → The Narrow Way) continues across the
 village, outfitters, forest, and open wilderness. It changes at Wolf Pass,

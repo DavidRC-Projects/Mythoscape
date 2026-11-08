@@ -209,6 +209,11 @@ def refresh(d):
         decor[key] = "chest_open"
     for key in d.get("caches") or []:
         decor[key] = "cache_open"
+    # Taken Tide Key — bare plinth so the client stops drawing the icon.
+    if d.get("pedestal"):
+        for pos, kind in list(decor.items()):
+            if kind == "pedestal":
+                decor[pos] = "pedestal_empty"
     d["tiles"] = tiles
     d["decor"] = decor
     return tiles
@@ -349,6 +354,8 @@ def client_extra(session):
         "door_hints": d.get("door_hints") or {},
         "opened": list(d.get("opened") or []),
         "keys_held": keys,
+        "pedestal_taken": bool(d.get("pedestal")),
+        "pedestal_item": "depths_tide_key",
         "art_style": True,
         "chasm": {
             "pit": [12, 79, 54, 91],

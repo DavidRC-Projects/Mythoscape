@@ -112,12 +112,29 @@ def title_prefix(rank, gender, royal_title=None):
 
 
 def display_name(session):
-    p = title_prefix(getattr(session, "noble_rank", 0), getattr(session, "gender", "male"),
-                     getattr(session, "royal_title", None))
+    try:
+        import titles as titles_mod
+        show_prefix = titles_mod.show_noble(session)
+        show_house = titles_mod.show_house(session)
+    except Exception:
+        show_prefix = True
+        show_house = True
+    p = ""
+    if show_prefix:
+        p = title_prefix(getattr(session, "noble_rank", 0), getattr(session, "gender", "male"),
+                         getattr(session, "royal_title", None))
     name = getattr(session, "char_name", "") or ""
     full = f"{p} {name}" if p else name
+    # Optional "the Title" from the player's chosen earned title.
+    try:
+        import titles as titles_mod
+        tline = titles_mod.active_label(session)
+        if tline:
+            full = f"{full} the {tline}"
+    except Exception:
+        pass
     suf = getattr(session, "house_suffix", "") or ""
-    if suf:
+    if show_house and suf:
         full = f"{full} {suf}" if suf.startswith("of ") else f"{full}, {suf}"
     return full
 

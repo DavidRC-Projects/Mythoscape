@@ -69,7 +69,7 @@ BONES = ((3, 2), (12, 8), (5, 20), (26, 20))
 ROOM1_MONSTERS = (("sewer_rat", 12, 19), ("sewer_rat", 18, 19), ("sewer_rat", 22, 15))
 ROOM2_MONSTERS = (("sewer_rat", 5, 3), ("sewer_rat", 14, 7),
                   ("sewer_spider", 18, 5), ("sewer_spider", 24, 7))
-SPIDERLINGS = (("spiderling", 20, 4), ("spiderling", 24, 4))
+SPIDERLINGS = (("spiderling", 20, 3), ("spiderling", 23, 3))  # hatch beside the nest
 
 LINES = {
     "go": "Two rats out front, a nest below. Pick one. Click it. Hit it until it stops.",
@@ -513,6 +513,27 @@ async def handle_interact(session, msg):
         return
 
 
+def _aggro(session, monsters):
+    """Wake monsters onto the player (nest disturb / spiderling hatch)."""
+    if not monsters:
+        return
+    pid = session.player_id
+    nearest = None
+    best = 10**9
+    for m in monsters:
+        if not m.alive:
+            continue
+        m.target_player_id = pid
+        m.patrol_steps_left = 0
+        m.patrol_leg = ""
+        dist = max(abs(session.x - m.x), abs(session.y - m.y))
+        if dist < best:
+            best = dist
+            nearest = m
+    if nearest is not None and not session.in_combat_with:
+        session.in_combat_with = ("monster", nearest.id)
+
+
 async def _hit_nest(session):
     srv = _srv()
     st = state(session)
@@ -520,6 +541,12 @@ async def _hit_nest(session):
     if bits & B_NEST or st.get("nest_hits", 0) >= NEST_HITS:
         return
     if not bits & B_ROOM2:
+        # Seraphine's line: the spiders guard the nest — disturb it and they come.
+        guards = [
+            m for m in session.dungeon["monsters"].values()
+            if m.alive and m.type == "sewer_spider" and in_rect(m.spawn_x, m.spawn_y, ROOM2)
+        ]
+        _aggro(session, guards)
         await say(session, "nest_locked")
         return
     now = time.time()
@@ -529,7 +556,8 @@ async def _hit_nest(session):
     st["nest_hits"] = int(st.get("nest_hits") or 0) + 1
     if st["nest_hits"] == 1 and not st.get("spiderlings"):
         st["spiderlings"] = True
-        _spawn(session, SPIDERLINGS, ROOM2)
+        hatched = _spawn(session, SPIDERLINGS, ROOM2)
+        _aggro(session, hatched)
     if st["nest_hits"] >= NEST_HITS:
         if not [m for m in session.dungeon["monsters"].values() if m.alive and m.type == "spiderling"]:
             _save_progress(session, bits | B_NEST)
@@ -561,6 +589,13 @@ async def claim_reward(session):
     _give(session, "cooked_shrimp", REWARD_SHRIMP)
     srv.WORLD.add_coins(session, REWARD_COINS)
     load(session)
+    # Equip Ratcatcher if they have no title chosen yet (can clear/change in Settings).
+    try:
+        import titles as titles_mod
+        if not titles_mod.active_id(session):
+            titles_mod.set_active(session, titles_mod.SEWER_TITLE_ID)
+    except Exception:
+        pass
     await srv.send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     await srv.send(session.ws, "QUEST_LOG", quests={q: srv.quest_status_for(session, q) for q in srv.QUESTS})
     await srv.send(session.ws, "SEWER_REWARD", title=TITLE, items=[[CHARM_ID, 1], ["cooked_shrimp", REWARD_SHRIMP],

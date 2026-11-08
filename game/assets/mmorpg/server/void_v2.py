@@ -125,9 +125,10 @@ def build_grid():
     _put(g, 61, 30, "l"); _put(g, 61, 50, "l")
     # ---- Abyss + the Narrow Way ----
     _rect(g, 12, 72, 52, 84, "~")
-    _rect(g, 32, 72, 32, 84, "=")         # 1-wide bridge, 13 tiles
+    _rect(g, 31, 72, 33, 84, "=")         # 3-wide bridge, 13 tiles long
     for y in (75, 79, 83):
-        _put(g, 32, y, "a"); _put(g, 31, y, "a")   # 2-wide rune anchors
+        for x in (31, 32, 33):
+            _put(g, x, y, "a")            # wind-safe anchors across the span
     # ---- Boss arena ----
     for y in range(85, 98):
         for x in range(15, 50):
@@ -207,7 +208,7 @@ SUPPLY_CACHES = [(25, 12), (30, 45), (30, 53)]   # food + potions, once per visi
 GROUND_LOOT = [(17, 10), (56, 29), (12, 35), (39, 63)]
 SHRINE = (32, 70)
 WARNING_STONE = (30, 71)
-BRIDGE = {"x": 32, "y0": 72, "y1": 84, "anchors": [75, 79, 83]}
+BRIDGE = {"x": 32, "x0": 31, "x1": 33, "y0": 72, "y1": 84, "anchors": [75, 79, 83]}
 BOSS_SPAWN = (32, 92)
 EXIT = (32, 2)
 SPAWN = (32, 4)
@@ -496,11 +497,16 @@ def client_extra(session):
     d = session.dungeon
     return {
         "v2": True,
+        "art_style": True,
         "decor": d.get("decor") or {},
         "zones": d.get("zones") or [],
         "lore": d.get("lore") or {},
         "ground_items": ground_public(d),
         "door_hints": SEAL_HINT,
+        "pedestal_taken": bool(d.get("pedestal")),
+        "pedestal_item": "void_key_obsidian",
+        # Pit = rift chasm; deck = visual Narrow Way (matches 3-wide walkable).
+        "chasm": {"pit": [12, 72, 52, 84], "deck": [30, 72, 34, 84]},
     }
 
 
@@ -519,6 +525,10 @@ def ground_public(d):
 def _refresh(d):
     chars = [list(r) for r in d["chars"]]
     tiles, decor = _bake(chars, set(d["opened"]), set(d["secrets"]), d.get("gate_open"))
+    if d.get("pedestal"):
+        for pos, kind in list(decor.items()):
+            if kind == "pedestal":
+                decor[pos] = "pedestal_empty"
     d["tiles"] = tiles
     d["decor"] = decor
     return tiles

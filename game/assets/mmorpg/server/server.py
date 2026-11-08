@@ -55,6 +55,8 @@ log = logging.getLogger("server")
 import sewer_tutorial
 import deepdelve
 import petaldeep
+import endless_depths
+import party as party_mod
 DUNGEON_MODS = {
     "tidehollow": tidehollow,
     "emberdeep": emberdeep,
@@ -63,6 +65,7 @@ DUNGEON_MODS = {
     "sewer": sewer_tutorial,
     "deepdelve": deepdelve,
     "petaldeep": petaldeep,
+    "endless_depths": endless_depths,
 }
 DUNGEON_META = {
     "sewer": {
@@ -107,6 +110,13 @@ DUNGEON_META = {
         "entrance_kinds": ("dungeon_entrance",),
         "floors_attr": None,
     },
+    "endless_depths": {
+        "name": "The Endless Depths",
+        "chat_from": "Endless Depths",
+        "medal_id": None,
+        "entrance_kinds": ("dungeon_entrance",),
+        "floors_attr": None,
+    },
 }
 
 TICK_SECONDS = 0.6
@@ -129,6 +139,7 @@ import reputation
 import apprentice
 import property as _property
 import nobility
+import titles
 import throne
 import throne_live
 import ruling
@@ -195,10 +206,14 @@ class PlayerSession:
             row["teleport_marks"] if "teleport_marks" in row.keys() else "[]"
         )
         # Already taught before marks existed: keep the spell, seed the starters.
+        # Also backfill any new starter landings (e.g. Fairy Village) onto known casters.
         self._teleport_marks_dirty = False
-        if self.knows_teleport and not self.teleport_marks:
-            self.teleport_marks = list(TELEPORT_STARTER_MARKS)
-            self._teleport_marks_dirty = True
+        if self.knows_teleport:
+            have = set(self.teleport_marks)
+            missing = [m for m in TELEPORT_STARTER_MARKS if m not in have]
+            if missing:
+                self.teleport_marks.extend(missing)
+                self._teleport_marks_dirty = True
         self.player_killer = bool(row["player_killer"]) if "player_killer" in row.keys() else False
         self.pk_kills = int(row["pk_kills"]) if "pk_kills" in row.keys() else 0
         self.pk_locked_until = float(row["pk_locked_until"]) if "pk_locked_until" in row.keys() else 0.0
@@ -211,6 +226,7 @@ class PlayerSession:
             "cooking": row["cooking_xp"] if "cooking_xp" in row.keys() else 0,
             "firemaking": row["firemaking_xp"] if "firemaking_xp" in row.keys() else 0,
             "smithing": row["smithing_xp"] if "smithing_xp" in row.keys() else 0,
+            "engineering": row["engineering_xp"] if "engineering_xp" in row.keys() else 0,
             "fletching": row["fletching_xp"] if "fletching_xp" in row.keys() else 0,
             "archery": row["archery_xp"] if "archery_xp" in row.keys() else 0,
             "karma": row["karma_xp"] if "karma_xp" in row.keys() else 0,
@@ -310,6 +326,13 @@ class PlayerSession:
         self.guide_bronze = bool(row["guide_bronze"]) if "guide_bronze" in row.keys() else True
         self.crown_guide = int(row["crown_guide"]) if "crown_guide" in row.keys() else 0
         self.sewer_choice = (row["sewer_choice"] if "sewer_choice" in row.keys() else "") or ""
+        self.active_title = (row["active_title"] if "active_title" in row.keys() else "") or ""
+        self.show_noble_prefix = bool(
+            int(row["show_noble_prefix"]) if "show_noble_prefix" in row.keys() else 1
+        )
+        self.show_house_suffix = bool(
+            int(row["show_house_suffix"]) if "show_house_suffix" in row.keys() else 1
+        )
         raw_ignore = row["pickup_ignore"] if "pickup_ignore" in row.keys() else "[]"
         try:
             self.pickup_ignore = set(json.loads(raw_ignore or "[]"))
@@ -511,6 +534,23 @@ class PlayerSession:
         return melee_reach()
 
     def weapon_bonuses(self):
+        # Design: during an active War for the Crown assault, confirmed fighters
+        # use War Forge kit only — personal armour and weapons are sealed.
+        try:
+            import crown_siege
+            siege = crown_siege.siege_equipment_bonuses(
+                WORLD.db.conn, self.player_id,
+            )
+            if siege is not None:
+                return {
+                    "att_bonus": int(siege.get("att_bonus") or 0),
+                    "str_bonus": int(siege.get("str_bonus") or 0),
+                    "def_bonus": int(siege.get("def_bonus") or 0),
+                    "ranged_att": int(siege.get("ranged_att") or 0),
+                    "ranged_str": int(siege.get("ranged_str") or 0),
+                }
+        except Exception:
+            pass
         total = {
             "att_bonus": 0, "str_bonus": 0, "def_bonus": 0,
             "ranged_att": 0, "ranged_str": 0,
@@ -1157,16 +1197,23 @@ class PlayerSession:
             "gathering": self.gathering_public(),
             "gender": self.gender,
             "noble_rank": int(getattr(self, "noble_rank", 0) or 0),
-            "noble_title": nobility.title_prefix(getattr(self, "noble_rank", 0), self.gender,
-                                                 getattr(self, "royal_title", None)),
+            "noble_title": (
+                nobility.title_prefix(getattr(self, "noble_rank", 0), self.gender,
+                                      getattr(self, "royal_title", None))
+                if titles.show_noble(self) else ""
+            ),
             "royal_title": getattr(self, "royal_title", None),
-            "house_suffix": getattr(self, "house_suffix", ""),
-            "title_line": sewer_tutorial.title_for(self),
+            "house_suffix": (
+                getattr(self, "house_suffix", "") if titles.show_house(self) else ""
+            ),
+            "title_line": titles.active_label(self),
+            "active_title": titles.active_id(self),
             "personal_house": getattr(self, "personal_house", None),
             "player_killer": bool(self.player_killer),
             "pk_kills": int(self.pk_kills or 0),
             "appearance": self.appearance_state(),
             "hd_player": True,
+            "in_party": bool(party_mod.party_of(self.player_id)),
         }
 
     def total_level(self):
@@ -1196,12 +1243,21 @@ class PlayerSession:
             "rep_tier": reputation.tier(getattr(self, "reputation", 0)),
             "work": _work_state(self.player_id),
             "noble_rank": int(getattr(self, "noble_rank", 0) or 0),
-            "noble_title": nobility.title_prefix(getattr(self, "noble_rank", 0), self.gender,
-                                                 getattr(self, "royal_title", None)),
+            "noble_title": (
+                nobility.title_prefix(getattr(self, "noble_rank", 0), self.gender,
+                                      getattr(self, "royal_title", None))
+                if titles.show_noble(self) else ""
+            ),
             "noble_rank_name": nobility.rank_name(getattr(self, "noble_rank", 0), self.gender),
             "royal_title": getattr(self, "royal_title", None),
-            "house_suffix": getattr(self, "house_suffix", ""),
-            "title_line": sewer_tutorial.title_for(self),
+            "house_suffix": (
+                getattr(self, "house_suffix", "") if titles.show_house(self) else ""
+            ),
+            "title_line": titles.active_label(self),
+            "active_title": titles.active_id(self),
+            "titles": titles.earned(self),
+            "show_noble_prefix": titles.show_noble(self),
+            "show_house_suffix": titles.show_house(self),
             "personal_house": getattr(self, "personal_house", None),
             "kingdom": politics.hud_line(WORLD.db.conn),
             "levels": levels,
@@ -2431,6 +2487,14 @@ async def send_world_join(session, resume=None):
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     import clans
     await clans.on_login(session)
+    try:
+        endless_depths.load(session)
+    except Exception:
+        pass
+    try:
+        await party_mod.handle(session, {"action": "sync"})
+    except Exception:
+        pass
     await send_starter_tips(session)
     await welcome_on_join(session)
     await settle_work(session, login=True)
@@ -2717,8 +2781,11 @@ def enforce_bound_items(session):
 async def handle_leaderboard(ws, msg):
     limit = max(1, min(50, int(msg.get("limit", 50))))
     boards = WORLD.db.get_leaderboards(limit=limit)
-    # Total + Guild ranks first, then individual skills
-    skills = ["total", "guild"] + [s for s in XP_SKILLS if s in boards]
+    # Total + Guild + Endless Depths (solo) first, then individual skills
+    skills = ["total", "guild"]
+    if "endless_depths" in boards:
+        skills.append("endless_depths")
+    skills += [s for s in XP_SKILLS if s in boards]
     await send(ws, "LEADERBOARD", skills=skills, boards=boards)
 
 
@@ -2919,6 +2986,9 @@ async def _handle_move_body(session, msg):
                 return
         if session.dungeon.get("id") == petaldeep.DUNGEON_ID:
             if await petaldeep.on_step(session):
+                return
+        if session.dungeon.get("id") == endless_depths.DUNGEON_ID:
+            if await endless_depths.on_step(session):
                 return
         ex = session.dungeon.get("exit_x")
         ey = session.dungeon.get("exit_y")
@@ -3298,6 +3368,8 @@ def _dungeon_payload(session):
         payload["deepdelve"] = deepdelve.client_extra(session)
     if d.get("id") == petaldeep.DUNGEON_ID:
         payload["petaldeep"] = petaldeep.client_extra(session)
+    if d.get("id") == endless_depths.DUNGEON_ID:
+        payload["endless_depths"] = endless_depths.client_extra(session)
     if d.get("v2") == "depths":
         import depths_v2
         payload.update(depths_v2.client_extra(session))
@@ -3414,6 +3486,8 @@ async def _finish_dungeon_kill(session, monster=None):
                 await deepdelve.on_kill(session, monster)
             if d.get("id") == petaldeep.DUNGEON_ID:
                 await petaldeep.on_kill(session, monster)
+            if d.get("id") == endless_depths.DUNGEON_ID:
+                await endless_depths.on_kill(session, monster)
         return
     await _grant_dungeon_kill_loot(session)
     if d.get("rooms"):
@@ -3859,6 +3933,9 @@ async def _resume_dungeon(session, resume):
     if dungeon_id == petaldeep.DUNGEON_ID:
         await petaldeep.resume(session, resume)
         return
+    if dungeon_id == endless_depths.DUNGEON_ID:
+        await endless_depths.resume(session, resume)
+        return
     if not explore_dungeons.is_explore(dungeon_id) and dungeon_id not in DUNGEON_MODS:
         _clear_dungeon_resume(session)
         return
@@ -3933,10 +4010,13 @@ async def handle_enter_dungeon(session, msg):
         await sewer_tutorial.enter(session)
         return
     if dungeon_id == petaldeep.DUNGEON_ID:
-        if not petaldeep.has_key(session):
+        if not petaldeep.can_enter(session):
             await send(session.ws, "CHAT_MSG", **{"from": "Petaldeep", "text": petaldeep.WARN})
             return
         await petaldeep.enter(session)
+        return
+    if dungeon_id == endless_depths.DUNGEON_ID:
+        await endless_depths.enter(session, msg)
         return
     mod = DUNGEON_MODS.get(dungeon_id, tidehollow)
     meta = _dungeon_meta(dungeon_id)
@@ -4087,6 +4167,8 @@ async def handle_leave_dungeon(session, msg=None, silent=False):
     if session.dungeon.get("v2"):
         import void_v2
         void_v2.strip_keys(session)
+    if session.dungeon.get("id") == endless_depths.DUNGEON_ID:
+        await endless_depths.on_leave(session)
     _clear_dungeon_resume(session)
     dungeon_id = session.dungeon.get("id") or "tidehollow"
     mod = DUNGEON_MODS.get(dungeon_id, tidehollow)
@@ -4345,6 +4427,19 @@ async def handle_set_option(session, msg):
             "from": "Options",
             "text": f"Auto-pickup coins & bones: {state}. Other loot stays on the ground.",
         })
+        changed = True
+    if "active_title" in msg:
+        ok, text = titles.set_active(session, msg.get("active_title"))
+        await send(session.ws, "CHAT_MSG", **{"from": "Titles", "text": text})
+        if ok:
+            changed = True
+    if "show_noble_prefix" in msg:
+        text = titles.set_show_noble(session, bool(msg.get("show_noble_prefix")))
+        await send(session.ws, "CHAT_MSG", **{"from": "Titles", "text": text})
+        changed = True
+    if "show_house_suffix" in msg:
+        text = titles.set_show_house(session, bool(msg.get("show_house_suffix")))
+        await send(session.ws, "CHAT_MSG", **{"from": "Titles", "text": text})
         changed = True
     if changed:
         await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
@@ -4821,11 +4916,7 @@ async def handle_chat(session, msg):
         })
         return
     if channel == "party":
-        await send(session.ws, "CHAT_MSG", **{
-            "from": "Party",
-            "text": "Party chat is not available yet.",
-            "channel": "party",
-        })
+        await party_mod.broadcast_chat(session, text)
         return
     # World: everyone hears it, speech bubble above the head.
     await broadcast(
@@ -5063,6 +5154,19 @@ def adjacent_or_same(ax, ay, bx, by):
     return chebyshev(ax, ay, bx, by) <= 1
 
 
+def pvp_allowed_here(session):
+    """Player-killing / PK duelists only outside dungeons.
+
+    Crown siege (castle_realm) keeps its own assault PvP rules and is exempt.
+    """
+    d = getattr(session, "dungeon", None) or {}
+    if not d:
+        return True
+    if d.get("id") == "castle_realm":
+        return True
+    return False
+
+
 async def handle_attack(session, msg):
     # A downed player must not be able to open a fight. HP only hits zero the
     # instant a killing blow lands, and the death handler resets it on the next
@@ -5088,6 +5192,18 @@ async def handle_attack(session, msg):
     # first meant clicking a monster that had already died told the player
     # "you can't fight dressed like this", which is both wrong and alarming.
     if monster is None or not monster.alive:
+        # Player-vs-player is overworld-only (dungeons are safe from PK).
+        other = None
+        try:
+            other = WORLD.sessions.get(int(target_id)) if target_id is not None else None
+        except (TypeError, ValueError):
+            other = WORLD.sessions.get(target_id)
+        if other is not None and other is not session:
+            if not pvp_allowed_here(session):
+                await send(session.ws, "ERROR", message="Player killing is only allowed outside dungeons.")
+            else:
+                await send(session.ws, "ERROR", message="Player fighting is not open yet — use the duelists.")
+            return
         await send(session.ws, "ERROR", message="That target isn't there.")
         return
     if not gear_rules.can_fight(session, ITEMS):
@@ -5095,6 +5211,9 @@ async def handle_attack(session, msg):
         await send(session.ws, "ERROR", message=gear_rules.NO_FIGHT_MSG)
         return
     mdef = monster.def_stats() or {}
+    if mdef.get("requires_pk") and not pvp_allowed_here(session):
+        await send(session.ws, "ERROR", message="Player-killer duels are only allowed outside dungeons.")
+        return
     if mdef.get("requires_pk") and not session.player_killer:
         lines = mdef.get("pk_tutorial") or [
             "Switch to player killer mode before you can attack me.",
@@ -7275,12 +7394,48 @@ def process_field_soldiers(events):
         )
 
 
+_ENDLESS_GUIDE = {
+    "ed_how": [
+        "The Endless Depths is a private run — one chamber reused forever.",
+        "Foes scale every floor. Clear the room, then take the north door for the next.",
+        "Party mates standing by the mouth can enter with you.",
+    ],
+    "ed_themes": [
+        "Each floor wears a new theme — crypt, frost, volcanic, cosmic, and more.",
+        "Some themes bring hazards. Read the tip when a floor begins.",
+        "First clears of a theme are worth celebrating — keep climbing.",
+    ],
+    "ed_continue": [
+        "Leave by the south exit anytime. Your deepest floor is remembered.",
+        "On return you can continue from that checkpoint, or start fresh from floor 1.",
+        "Choose carefully — a fresh run resets the climb.",
+    ],
+    "ed_leave": [
+        "Walking out south keeps what you carried and ends the run cleanly.",
+        "If you fall inside, the Depths keep the run — you wake outside with your pack.",
+        "Bank valuables before a deep push if you are unsure.",
+    ],
+    "ed_enter": [
+        "The amber threshold is right beside me — step onto it when ready.",
+        "Look for the warning sign and the dark stone mouth east of the Village Bank.",
+    ],
+}
+
+
 async def handle_npc_option(session, msg):
     """Dialogue menu options for apprentice masters and the estate office (phase 4)."""
     npc = NPC_BY_ID.get(msg.get("npc_id"))
     opt = msg.get("option")
     if npc and npc.get("welcome_guide"):
         await welcome_option(session, npc, opt)
+        return
+    if npc and npc.get("id") == "endless_chronicler":
+        lines = _ENDLESS_GUIDE.get(opt) or list(npc.get("lines") or [])
+        await send(
+            session.ws, "DIALOGUE",
+            npc_id=npc["id"], npc_name=npc["name"], lines=lines,
+            options=npc.get("options"),
+        )
         return
     allowed = {o["id"] for o in (_options_for(session, npc) if npc else None) or []}
     if npc and npc.get("id") == "chamberlain_aric":
@@ -7462,7 +7617,7 @@ async def handle_npc_option(session, msg):
         return
     elif opt in ("siege_status", "siege_register_attack", "siege_register_defend",
                  "siege_confirm", "siege_store", "siege_costs", "siege_scout",
-                 "siege_royalguard", "siege_report"):
+                 "siege_survey", "siege_royalguard", "siege_report"):
         import crown_siege
         if opt == "siege_status":
             lines = crown_siege.board_lines(conn, pid)
@@ -7470,7 +7625,7 @@ async def handle_npc_option(session, msg):
             lines = crown_siege.store_lines(conn, pid, include_costs=True)
         elif opt == "siege_costs":
             lines = crown_siege.requirement_lines()
-        elif opt == "siege_scout":
+        elif opt in ("siege_scout", "siege_survey"):
             lines = crown_siege.structure_lines(conn)
         elif opt == "siege_royalguard":
             lines = crown_siege.royal_guard_lines(conn)
@@ -9717,9 +9872,12 @@ async def handle_pickup(session, msg):
             if quest_prop:
                 items_here.insert(idx, entry)
             if not take_all:
-                await send(session.ws, "CHAT_MSG", **{
-                    "from": "World", "text": f"You pick up {ITEMS[item_id]['name']}.",
-                })
+                meta = ITEMS.get(item_id) or {}
+                if meta.get("type") == "key":
+                    text = f"You pick up the {meta.get('name', 'key')} — check your inventory."
+                else:
+                    text = f"You pick up {meta.get('name', item_id)}."
+                await send(session.ws, "CHAT_MSG", **{"from": "World", "text": text})
                 break
         items_here = WORLD.ground_items.get((session.x, session.y))
         if items_here is not None and not items_here:
@@ -10156,6 +10314,8 @@ async def handler(ws):
                 elif mtype == "GUILD_SYNC":
                     import clans
                     await clans._notify(session)
+                elif mtype == "PARTY":
+                    await party_mod.handle(session, msg)
                 elif mtype == "ATTACK":
                     await handle_attack(session, msg)
                 elif mtype == "SET_PK":
@@ -10180,6 +10340,8 @@ async def handler(ws):
                     await sewer_tutorial.handle_interact(session, msg)
                 elif mtype == "DUNGEON_INTERACT" and petaldeep.here(session):
                     await petaldeep.handle_interact(session, msg)
+                elif mtype == "DUNGEON_INTERACT" and endless_depths.here(session):
+                    await endless_depths.handle_interact(session, msg)
                 elif mtype == "DUNGEON_INTERACT":
                     if session.dungeon and session.dungeon.get("v2") == "depths":
                         import depths_v2
@@ -10543,6 +10705,7 @@ async def game_loop():
             await void_v2.tick_sessions()
             import depths_v2
             await depths_v2.tick_sessions()
+            await endless_depths.tick_sessions()
             process_pets(events)
             process_field_soldiers(events)
             await process_arena_matches(events)
@@ -10658,7 +10821,12 @@ async def game_loop():
                             pass
                 else:
                     alive = [m.public_state() for m in d["monsters"].values() if m.alive and not getattr(m, "concealed", False)]
-                    realm_players = [session.public_state()]
+                    if d.get("id") == endless_depths.DUNGEON_ID:
+                        realm_players = [
+                            s.public_state() for s in endless_depths.run_mates(session)
+                        ]
+                    else:
+                        realm_players = [session.public_state()]
                 # Hide the companion while a field squad is out (soldiers take the escort slot).
                 import mercenaries as _merc_pets
                 show_pet = bool(session.pet_id) and not (
@@ -11108,9 +11276,9 @@ async def process_combat(events):
                     # Credit a player killer when Last Stand falls to PvP;
                     # monster deaths eliminate without awarding a siege kill.
                     killer_id = None
-                    combat = getattr(session, "in_combat_with", None)
-                    if combat and combat[0] == "player":
-                        killer_id = int(combat[1])
+                    bout = getattr(session, "in_combat_with", None)
+                    if bout and bout[0] == "player":
+                        killer_id = int(bout[1])
                     elif getattr(session, "last_hit_by_player", None):
                         killer_id = int(session.last_hit_by_player)
                     _elim, siege_elim_msg, siege_herald = crown_siege.on_siege_death(
@@ -11127,6 +11295,7 @@ async def process_combat(events):
             if session.dungeon:
                 v2_kind = session.dungeon.get("v2")
                 realm_death = session.dungeon.get("id") == "castle_realm"
+                endless_death = session.dungeon.get("id") == endless_depths.DUNGEON_ID
                 v2_death = bool(v2_kind)
                 stayed = False
                 if v2_death and session.dungeon.get("checkpoint"):
@@ -11141,6 +11310,8 @@ async def process_combat(events):
                     if v2_death:
                         import void_v2
                         void_v2.strip_keys(session)
+                    if endless_death:
+                        await endless_depths.on_death(session)
                     await handle_leave_dungeon(session, silent=True)
                     if v2_kind == "depths":
                         fall = "You fall in the crypt and wake outside. The dead keep what you carried."
@@ -11148,9 +11319,12 @@ async def process_combat(events):
                         fall = "You fall in the sanctum and wake outside. The dark keeps what you carried."
                     elif realm_death:
                         fall = siege_elim_msg or "You wake outside the King's Realm portal."
+                    elif endless_death:
+                        fall = "You fall in the Endless Depths and wake at the mouth."
                     else:
                         fall = "You fall in the cave and wake outside — the depths reclaim their silence."
-                    await send(session.ws, "CHAT_MSG", **{"from": "Tidehollow", "text": fall})
+                    speaker = "Endless Depths" if endless_death else "Tidehollow"
+                    await send(session.ws, "CHAT_MSG", **{"from": speaker, "text": fall})
             else:
                 session.x, session.y = SPAWN_POINT
                 if session.pet_id:
@@ -11783,6 +11957,8 @@ def process_dungeon_ai():
         # The sewer's first room teaches "two at once".
         did = session.dungeon.get("id")
         if did == petaldeep.DUNGEON_ID:
+            max_pursuers = 3
+        elif did == endless_depths.DUNGEON_ID:
             max_pursuers = 3
         elif did == sewer_tutorial.SEWER_ID:
             max_pursuers = 2

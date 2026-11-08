@@ -2748,7 +2748,10 @@ class ScreensMixin:
             (box.x + 16, box.y + 44),
         )
 
-        tabs = [("all", "All"), ("shafts", "Shafts"), ("bows", "Bows"), ("arrows", "Arrows")]
+        tabs = [
+            ("all", "All"), ("shafts", "Shafts"), ("shortbows", "Short"),
+            ("longbows", "Long"), ("arrows", "Arrows"),
+        ]
         self.fletch_tab_rects = {}
         for i, (key, label) in enumerate(tabs):
             r = pygame.Rect(box.x + 16 + i * 100, box.y + 70, 92, 26)
@@ -2767,15 +2770,19 @@ class ScreensMixin:
                 continue
             name = recipe.get("name", "").lower()
             tab = self.fletch_tab
+            if tab == "bows":
+                tab = "shortbows"  # legacy default
             if tab == "shafts" and "shaft" not in name and "headless" not in name:
                 continue
-            if tab == "bows" and "bow" not in name:
+            if tab == "shortbows" and "shortbow" not in name:
+                continue
+            if tab == "longbows" and "longbow" not in name:
                 continue
             if tab == "arrows" and "arrow" not in name:
                 continue
-            if shown >= 8:
+            if shown >= 10:
                 break
-            row = pygame.Rect(box.x + 16, y, 588, 44)
+            row = pygame.Rect(box.x + 16, y, 588, 40)
             pygame.draw.rect(self.screen, (34, 42, 38), row)
             pygame.draw.rect(self.screen, PANEL_LINE, row, 1)
             self.fletch_recipe_rects.append((row, rid))
@@ -2794,9 +2801,9 @@ class ScreensMixin:
                     f"{need}  ->  {out_qty}x {ITEMS[out_id]['name']}  |  lvl {recipe['level_req']}  +{recipe['xp']} xp",
                     True, (200, 120, 120) if locked else GREY,
                 ),
-                (row.x + 50, row.y + 24),
+                (row.x + 50, row.y + 22),
             )
-            y += 48
+            y += 42
             shown += 1
 
         if shown == 0:
@@ -2977,6 +2984,36 @@ class ScreensMixin:
             pygame.draw.rect(self.screen, (212, 175, 90), r, 1, border_radius=14)
             self.screen.blit(self.font_small.render(txt, True, (232, 226, 210)), (r.x + 12, r.y + 5))
 
+        # Name / title display — cycle earned titles; toggle noble + house suffixes.
+        p = self.player or {}
+        earned = list(p.get("titles") or [])
+        active = str(p.get("active_title") or "")
+        active_label = str(p.get("title_line") or "")
+        title_txt = f"Title: the {active_label}" if active_label else "Title: none"
+        if earned and not active_label:
+            title_txt = "Title: none (click to choose)"
+        self.title_cycle_rect = pygame.Rect(box.x + 16, box.y + 168, 310, 28)
+        pygame.draw.rect(self.screen, (32, 42, 68), self.title_cycle_rect, border_radius=14)
+        pygame.draw.rect(self.screen, (212, 175, 90), self.title_cycle_rect, 1, border_radius=14)
+        self.screen.blit(
+            self.font_small.render(title_txt[:36], True, (232, 226, 210)),
+            (self.title_cycle_rect.x + 12, self.title_cycle_rect.y + 5),
+        )
+        noble_on = bool(p.get("show_noble_prefix", True))
+        house_on = bool(p.get("show_house_suffix", True))
+        self.title_noble_rect = pygame.Rect(box.x + 338, box.y + 168, 220, 28)
+        self.title_house_rect = pygame.Rect(box.x + 16, box.y + 202, 260, 28)
+        for r, txt in (
+            (self.title_noble_rect, f"Noble prefix: {'On' if noble_on else 'Off'}"),
+            (self.title_house_rect, f"House suffix: {'On' if house_on else 'Off'}"),
+        ):
+            pygame.draw.rect(self.screen, (32, 42, 68), r, border_radius=14)
+            pygame.draw.rect(self.screen, (212, 175, 90), r, 1, border_radius=14)
+            self.screen.blit(
+                self.font_small.render(txt, True, (232, 226, 210)),
+                (r.x + 12, r.y + 5),
+            )
+
         sections = [
             ("Start here", [
                 ("First talk", "Elder Miriam, northwest cottage — click her, then A"),
@@ -3104,7 +3141,7 @@ class ScreensMixin:
             ]),
         ]
 
-        list_top = box.y + 170
+        list_top = box.y + 240
         list_bottom = box.bottom - 36
         view_h = max(40, list_bottom - list_top)
         key_w = 150

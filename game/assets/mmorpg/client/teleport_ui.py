@@ -44,6 +44,7 @@ LOCK = (158, 43, 37)
 MED_BG = (40, 31, 24)
 ICONS = {
     "home": "home", "village": "village", "bank": "bank", "outfitters": "outfitters",
+    "fairy_village": "fairy_village",
     "void": "void", "stonehaven": "stonehaven", "keep": "keep", "harbour": "harbour",
     "estate": "estate", "kings_row_south": "kings_row", "realm": "realm",
     # King's Realm castles share the keep medallion; the arena uses the plaza fountain.

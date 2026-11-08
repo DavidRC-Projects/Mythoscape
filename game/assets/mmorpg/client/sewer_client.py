@@ -644,6 +644,20 @@ def queue_props(client, draw_list, cam_x, cam_y, tw, t):
 
 def handle_click(client, tx, ty):
     st = _st(client)
+    # Props first — the exit ladder uses a wide click pad that would otherwise
+    # swallow Seraphine's chest (3 tiles away) and walk you out of the sewer.
+    pts = []
+    for key in ("chest1", "reward_chest"):
+        if st.get(key):
+            pts.append(tuple(st[key]))
+    pts += [tuple(c) for c in st.get("crates") or []]
+    pts += [tuple(n) for n in st.get("nest") or []]
+    if (tx, ty) in pts:
+        goals = client.adjacent_goals(tx, ty)
+        if client.tile_walkable(tx, ty):
+            goals = set(goals) | {(tx, ty)}
+        client.walk_and_act(goals, {"type": "DUNGEON_INTERACT", "x": tx, "y": ty})
+        return True
     # Room-2 exit ladder: generous click pad, then walk onto the tile (on_step leaves).
     ladder2 = st.get("ladder2")
     if ladder2:
@@ -652,19 +666,7 @@ def handle_click(client, tx, ty):
             goals = {(lx, ly)} if client.tile_walkable(lx, ly) else client.adjacent_goals(lx, ly)
             client.walk_and_act(goals, None)
             return True
-    pts = []
-    for key in ("chest1", "reward_chest"):
-        if st.get(key):
-            pts.append(tuple(st[key]))
-    pts += [tuple(c) for c in st.get("crates") or []]
-    pts += [tuple(n) for n in st.get("nest") or []]
-    if (tx, ty) not in pts:
-        return False
-    goals = client.adjacent_goals(tx, ty)
-    if client.tile_walkable(tx, ty):
-        goals = set(goals) | {(tx, ty)}
-    client.walk_and_act(goals, {"type": "DUNGEON_INTERACT", "x": tx, "y": ty})
-    return True
+    return False
 
 
 # ---------------------------------------------------------------- overworld grate

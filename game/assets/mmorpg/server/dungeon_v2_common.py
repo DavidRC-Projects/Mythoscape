@@ -165,9 +165,13 @@ async def handle_interact(session, msg):
             _refresh(d)
             changes = _changes_from(before, d["tiles"])
             await srv.send(session.ws, "DUNGEON_TILES", changes=changes, decor=d["decor"])
-            await srv.send(session.ws, "CHAT_MSG", **{
-                "from": who, "text": "The wall gives way. A hidden room opens.",
-            })
+            tip = "The wall gives way. A hidden room opens."
+            if sid == "reliquary":
+                tip = (
+                    "The wall gives way. A drowned reliquary opens — "
+                    "a Tide Key glows on the pedestal inside."
+                )
+            await srv.send(session.ws, "CHAT_MSG", **{"from": who, "text": tip})
             return True
     if ch == "k" and not d.get("pedestal"):
         if not _revealed(x, y, set(d["secrets"]), spec.get("secrets") or {}):

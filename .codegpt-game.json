@@ -1,0 +1,16 @@
+{
+  "name": "crownfall",
+  "engine": "generic",
+  "launch": {
+    "cmd": "/Users/davidcarr/Mythoscape/game/assets/mmorpg/.venv/bin/python",
+    "args": ["client.py"],
+    "cwd": "/Users/davidcarr/Mythoscape/game/assets/mmorpg/client"
+  },
+  "log": { "stdout": true },
+  "ready": "pygame",
+  "window": "Crownfall",
+  "sourceRoots": [
+    "game/assets/mmorpg/client",
+    "game/assets/mmorpg/server"
+  ]
+}

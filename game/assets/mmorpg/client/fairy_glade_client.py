@@ -156,10 +156,26 @@ def queue(client, draw_list, cam_x, cam_y, tile, t=0.0):
             continue
         if _ring_cut is not None and _ring_cut(x, y):
             continue   # the Crownfall Vale ring's peaks stand here instead (south rim)
+        # Chopped fairy trees leave a stump until they respawn. Live glade trunks
+        # appear in resources as glade_tree; depleted ones are omitted (same as
+        # normal woodcutting). If the server has not registered any glade nodes
+        # yet, keep drawing every tree.
+        res = getattr(client, "resources", None) or {}
+        has_glade = any(v == "glade_tree" for v in res.values())
+        depleted = bool(has_glade and f"{x},{y}" not in res)
         sx, sy = client.world_to_view_offset(x, y, cam_x, cam_y)
         cx = int(sx * tile + tile // 2)
         cy = int(sy * tile + tile // 2)
         if cx < view.left - margin_x or cx > view.right + margin_x or cy < view.top - margin_y_top or cy > view.bottom + margin_y_bot:
+            continue
+        if depleted:
+            def _draw_stump(cx=cx, cy=cy, tile=tile, x=x, y=y):
+                try:
+                    import hd_trees
+                    hd_trees.draw(client.screen, "stump", cx, cy, tile, wx=x, wy=y)
+                except Exception:
+                    pass
+            draw_list.append((cy + tile // 3, 1, _draw_stump))
             continue
         v = _variant(x, y)
         kind = v & 1

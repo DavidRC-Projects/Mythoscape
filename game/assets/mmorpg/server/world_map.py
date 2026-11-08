@@ -342,7 +342,8 @@ def _generate_base_world():
     door_aprons = (
         (14, 14), (42, 14), (14, 43), (56, 65),
         (44, 34), (70, 53), (88, 53), (56, 85),
-        (9, 19), (9, 20), (8, 19), (10, 19),  # Castle Realm portal apron
+        (9, 28), (9, 29), (8, 28), (10, 28),  # Castle Realm portal apron (south of Endless)
+        (11, 22), (11, 23), (10, 23), (12, 23),  # Endless Depths stand apron
     )
     for cx, cy in door_aprons:
         for ox in (-1, 0, 1):
@@ -357,26 +358,12 @@ def _generate_base_world():
         if 0 <= dx < WIDTH and 0 <= dy < HEIGHT and grid[dy][dx] != WALL:
             grid[dy][dx] = PATH
 
-    # --- Starter trees on village fringe (outside the open plaza + ring) ---
-    # Core stays clear so hub sightlines and door approaches stay open.
-    village_fringe = []
-    for y in range(vy0 + 1, vy1):
-        for x in range(vx0 + 1, min(vx1, 90)):
-            if grid[y][x] != GRASS:
-                continue
-            if 6 <= x <= 96 and 2 <= y <= 88:
-                continue
-                village_fringe.append((x, y))
-    rng.shuffle(village_fringe)
+    # Village starter trees are placed late in generate_world (after building /
+    # fairy / vale stamps) so they land on final meadow grass — see
+    # _place_village_starter_trees. Early placement used to be a no-op: the
+    # fringe append sat behind an unreachable `continue`, so the hub only had
+    # painted village_decor trees with no woodcutting nodes.
     tree_positions = []
-    for x, y in village_fringe:
-        if any(max(abs(p[0] - x), abs(p[1] - y)) < 3 for p in tree_positions):
-            continue
-        if len(tree_positions) >= 18:
-            break
-        tile = OAK_TREE if len(tree_positions) >= 14 else TREE
-        grid[y][x] = tile
-        tree_positions.append((x, y))
 
     # --- Forest + lake (west of Wolf Pass; water first, then spaced trees) ---
     fx0, fy0, fx1, fy1 = ZONES["forest"]
@@ -874,7 +861,83 @@ def _generate_base_world():
     # Collision only on the band's cliff bases; every lane, door, NPC and spawn stays clear.
     import vale_ring
     vale_ring.apply(grid, _BUILDING_FOOTPRINTS, WALL)
+    # Last: choppable trees on the finished village meadows (HD art via hd_trees).
+    _place_village_starter_trees(grid)
     return grid
+
+
+def _place_village_starter_trees(grid, count=18, gap=4):
+    """Level-1/10 woodcutting trees on village grass outside the open plaza.
+
+    Must run after building / fairy / vale stamps so trunks sit on final meadow
+    tiles and match the HD sprites the client draws from resource nodes.
+    """
+    import random
+    vx0, vy0, vx1, vy1 = ZONES["village"]
+    # Hub around spawn (28,24) / wishing well (32,22) stays open for sightlines.
+    plaza = (18, 12, 50, 32)
+    rng = random.Random(9137 ^ 0x7EE5)
+    candidates = []
+    for y in range(vy0 + 1, min(vy1, 50)):
+        for x in range(vx0 + 1, min(vx1, 90)):
+            if grid[y][x] != GRASS:
+                continue
+            if plaza[0] <= x <= plaza[2] and plaza[1] <= y <= plaza[3]:
+                continue
+            if any(
+                a - 2 <= x <= c + 2 and b - 2 <= y <= d + 2
+                for a, b, c, d in _BUILDING_FOOTPRINTS
+            ):
+                continue
+            # Keep a tile off roads / door aprons so canopies do not seal paths.
+            near_path = False
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    if dx == 0 and dy == 0:
+                        continue
+                    nx, ny = x + dx, y + dy
+                    if 0 <= ny < HEIGHT and 0 <= nx < WIDTH and grid[ny][nx] == PATH:
+                        near_path = True
+                        break
+                if near_path:
+                    break
+            if near_path:
+                continue
+            candidates.append((x, y))
+    rng.shuffle(candidates)
+    placed = []
+
+    def _try(x, y, tile=TREE):
+        if not (0 <= y < HEIGHT and 0 <= x < WIDTH) or grid[y][x] != GRASS:
+            return False
+        if any(max(abs(px - x), abs(py - y)) < gap for px, py in placed):
+            return False
+        if any(
+            a - 2 <= x <= c + 2 and b - 2 <= y <= d + 2
+            for a, b, c, d in _BUILDING_FOOTPRINTS
+        ):
+            return False
+        # Paths/floors stay walkable under canopy (tree_cover.grass_blocked);
+        # only the trunk tile blocks.
+        grid[y][x] = tile
+        placed.append((x, y))
+        return True
+
+    # Guaranteed short walk from spawn — clear of Endless NW + castle portal roads.
+    for sx, sy in (
+        (26, 33), (17, 26), (30, 36), (36, 36), (40, 36),
+        (29, 11), (33, 11), (42, 38), (48, 36), (52, 36),
+    ):
+        if len(placed) >= count:
+            break
+        _try(sx, sy, TREE)
+
+    for x, y in candidates:
+        if len(placed) >= count:
+            break
+        tile = OAK_TREE if len(placed) >= count - 4 else TREE
+        _try(x, y, tile)
+    return placed
 
 
 # Building footprints — keep in sync with content.BUILDINGS (avoid import cycle)
@@ -883,7 +946,7 @@ _BUILDING_FOOTPRINTS = [
     (8, 3, 25, 13), (37, 3, 49, 13), (8, 30, 23, 42), (51, 54, 65, 64),
     (38, 25, 50, 33), (80, 38, 96, 52), (64, 41, 79, 52),
     (50, 74, 63, 84),  # outfitters
-    (81, 6, 89, 10),   # estate office (door 85, 10)
+    (91, 84, 99, 88),  # estate office — east of Outfitters (door 95, 88)
     (135, 105, 145, 112),
     # harbour
     (172, 6, 182, 14), (172, 20, 182, 28),
@@ -899,6 +962,9 @@ _BUILDING_FOOTPRINTS = [
     (200, 8, 208, 16),
     # crypt graveyard east of the plaza
     (52, 4, 74, 20),
+    # Endless Depths — village NW (west of plaza, north of Castle Realm portal)
+    # y0=16 keeps the shell out of the Elder Hall compact-layout capture box.
+    (5, 16, 17, 21),
 ]
 
 
@@ -1234,6 +1300,7 @@ def stamp_outfitters_shell(grid):
     _stamp_road(grid, x0 - 2, y0 - 1, x0 - 2, y1 + 1)
     _stamp_road(grid, x0 - 2, y1 + 1, door_x + 1, y1 + 1)
     lay_void_sanctum_approach(grid)
+    lay_endless_depths_approach(grid)
     lay_fairy_glade_approach(grid)
     lay_east_village_road(grid)
     _stamp_exterior_door_aprons(grid)
@@ -1501,6 +1568,43 @@ def lay_void_sanctum_approach(grid):
             grid[my][ax] = PATH
 
 
+ENDLESS_MOUTH = (11, 21)
+ENDLESS_RETURN = (11, 23)
+
+
+def lay_endless_depths_approach(grid):
+    """Dark-stone shell + apron on the village NW fringe (west of the plaza).
+
+    Safe to call after capture_and_hide — overwrites GRASS/FLOOR/trees.
+    """
+    mx, my = ENDLESS_MOUTH
+    # Shell matches content.BUILDINGS endless_depths (south door on mouth row).
+    _rect(grid, 5, 16, 17, 21, WALL)
+    _rect(grid, 6, 17, 16, 20, FLOOR)
+    for x in range(5, 18):
+        grid[21][x] = WALL
+    for ax in (mx - 1, mx, mx + 1):
+        if 0 <= ax < WIDTH:
+            grid[my][ax] = PATH
+    # South apron + stand tiles.
+    for ax in range(mx - 2, mx + 3):
+        for ay in (22, 23, 24):
+            if 0 <= ax < WIDTH and 0 <= ay < HEIGHT and grid[ay][ax] not in (WATER,):
+                grid[ay][ax] = PATH
+    # Spur east into the plaza / wishing-well road, and south toward the castle portal.
+    for seg in (
+        (mx - 1, 23, 28, 23),
+        (mx - 1, 24, 28, 24),
+        (mx - 1, 22, mx + 1, my),
+        (8, 24, 10, 28),
+        (9, 24, 11, 28),
+    ):
+        _stamp_road(grid, *seg, also=(FLOOR,))
+    # Keep Chronicler tile walkable.
+    if 0 <= 13 < WIDTH and 0 <= 23 < HEIGHT:
+        grid[23][13] = PATH
+
+
 def _path_spur_to_network(grid, ax, ay, ignore=None, limit=48):
     """Paint a 1-wide PATH spur from (ax,ay) to the nearest network PATH.
 
@@ -1633,7 +1737,8 @@ def _lay_wayfinder_roads(grid):
         (12, 14, 44, 14),       # north lane: Elder ↔ Store aprons
         (12, 43, 80, 43),       # south lane from Inn
         (28, 34, 45, 34),       # plaza → Bank door (south of shell, not through it)
-        (9, 19, 28, 19),        # Castle Realm portal → west hub
+        (9, 28, 28, 28),        # Castle Realm portal → west hub
+        (11, 21, 28, 23),       # Endless Depths mouth → plaza
         (56, 43, 56, 53),       # plaza south (stops north of farm)
         (56, 53, 67, 53),       # jog east around the farm
         (67, 24, 67, 53),       # east spur: hub → Pet / Smithy row
@@ -1645,7 +1750,8 @@ def _lay_wayfinder_roads(grid):
         (56, 85, 56, 86),       # Outfitters door apron
         # Out of village east toward forest / lake / mad scientist.
         (84, 24, 130, 24),
-        (85, 11, 85, 24),       # estate office apron → east hub road
+        (95, 85, 95, 89),       # estate office apron (east of Outfitters)
+        (63, 85, 95, 85),       # Outfitters → estate office
         (100, 23, 100, 25),     # Mad Scientist south-shore plaza
         (96, 23, 112, 23),      # south lake shore connector
         # Forest up to the (west-shifted) pass, across to Harbourreach, Tidehollow.
@@ -1703,6 +1809,7 @@ def _lay_wayfinder_roads(grid):
                 grid[y][x] = PATH
     grid[52][189] = FLOOR
     _stamp_crypt_graveyard(grid)
+    lay_endless_depths_approach(grid)
     # Door aprons + orphan trim run again at end of generate_world (after seals)
     # and in stamp_outfitters_shell (after capture_and_hide).
 
@@ -1928,6 +2035,24 @@ def _harbour_fish_type(x, y):
     return "fishing_spot_trout"
 
 
+# Harbourreach cast hubs — fish group around these so the pier reads as a few
+# busy pools instead of a speckled bay. Spots require an east/west stand tile.
+HARBOUR_FISH_CLUSTERS = (
+    (184, 11), (184, 18), (184, 25),          # west shore of the bay (stand on x=183)
+    (191, 16), (195, 18), (192, 20),          # deck water pockets
+    (196, 24), (198, 21), (195, 27),          # east pier stubs
+)
+
+
+def fish_has_ew_stand(grid, x, y):
+    """True when walkable land sits due east or west — cast faces sideways."""
+    for dx in (-1, 1):
+        nx = x + dx
+        if 0 <= nx < WIDTH and 0 <= y < HEIGHT and grid[y][nx] in WALKABLE_TILES:
+            return True
+    return False
+
+
 def build_resource_nodes(grid):
     """Scan the generated grid and return a dict of resource nodes keyed by (x, y)."""
     nodes = {}
@@ -1964,35 +2089,24 @@ def build_resource_nodes(grid):
         if (_x, _y) in nodes:
             nodes[(_x, _y)]["type"] = _rtype
 
-    # Shoreline fishing — sparse spots, not every water tile
+    # Shoreline fishing — only tiles with an east/west stand (no north/south casts).
     fish_candidates = []
     for y in range(HEIGHT):
         for x in range(WIDTH):
             if grid[y][x] != WATER:
                 continue
-            has_shore = False
-            for dy in (-1, 0, 1):
-                for dx in (-1, 0, 1):
-                    if dx == 0 and dy == 0:
-                        continue
-                    nx, ny = x + dx, y + dy
-                    if 0 <= nx < WIDTH and 0 <= ny < HEIGHT and grid[ny][nx] in WALKABLE_TILES:
-                        has_shore = True
-                        break
-                if has_shore:
-                    break
-            if has_shore:
-                fish_candidates.append((x, y))
+            if not fish_has_ew_stand(grid, x, y):
+                continue
+            fish_candidates.append((x, y))
 
     fish_rng = random.Random(4242)
     fish_rng.shuffle(fish_candidates)
     placed = []
-    for x, y in fish_candidates:
-        zone = get_zone(x, y)
-        # Harbour docks: denser spots so the extended deck has plenty to cast to.
-        min_gap = 1 if zone == "fishing_village" else 2
+
+    def _place(x, y, min_gap):
         if any(max(abs(x - px), abs(y - py)) <= min_gap for px, py in placed):
-            continue
+            return False
+        zone = get_zone(x, y)
         if zone == "fishing_village":
             ftype = _harbour_fish_type(x, y)
         else:
@@ -2001,4 +2115,44 @@ def build_resource_nodes(grid):
             "type": ftype, "depleted": False, "respawn_at": 0, "is_fish_spot": True,
         }
         placed.append((x, y))
+        return True
+
+    # Harbourreach: pack spots into clusters around the pier hubs first.
+    hv0, hvy0, hv1, hvy1 = ZONES["fishing_village"]
+    harbour = [
+        (x, y) for (x, y) in fish_candidates
+        if hv0 <= x <= hv1 and hvy0 <= y <= hvy1
+    ]
+    for cx, cy in HARBOUR_FISH_CLUSTERS:
+        near = sorted(
+            ((max(abs(x - cx), abs(y - cy)), x, y) for x, y in harbour),
+        )
+        n_here = 0
+        for dist, x, y in near:
+            if dist > 2:
+                break
+            # Gap 1 inside a cluster keeps a little room for depleted spots to move.
+            if _place(x, y, min_gap=1):
+                n_here += 1
+            if n_here >= 3:
+                break
+
+    # Everywhere else (and any leftover harbour water): sparse E/W spots.
+    for x, y in fish_candidates:
+        zone = get_zone(x, y)
+        min_gap = 2
+        _place(x, y, min_gap)
+
+    # Fairy Glade glowing ring — trunks are WALL tiles, not TREE tiles, so they
+    # were never woodcutting nodes. Register them so the painted trees chop.
+    try:
+        import fairy_glade as _fg
+        for gx, gy in _fg.tree_cells():
+            if (gx, gy) in nodes:
+                continue
+            nodes[(gx, gy)] = {
+                "type": "glade_tree", "depleted": False, "respawn_at": 0, "glade": True,
+            }
+    except Exception:
+        pass
     return nodes

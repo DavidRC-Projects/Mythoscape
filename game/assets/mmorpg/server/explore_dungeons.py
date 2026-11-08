@@ -108,6 +108,7 @@ def capture_and_hide(grid) -> None:
     try:
         import world_map as wm
         wm.lay_void_sanctum_approach(grid)
+        wm.lay_endless_depths_approach(grid)
         wm.lay_east_village_road(grid)
     except Exception:
         pass

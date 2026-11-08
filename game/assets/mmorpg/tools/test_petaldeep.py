@@ -126,7 +126,14 @@ def test_key_enters_orchard_and_leaves():
         assert s.dungeon is None
         assert is_walkable(W.grid, s.x, s.y)
         assert max(abs(s.x - petaldeep.STAND[0]), abs(s.y - petaldeep.STAND[1])) <= 3
-        assert petaldeep.has_key(s)
+        # First entry consumes the key and permanently opens the mouth.
+        assert not petaldeep.has_key(s)
+        assert petaldeep.is_opened(s)
+        assert petaldeep.can_enter(s)
+        s.x, s.y = petaldeep.MOUTH
+        await server.handle_enter_dungeon(s, {"dungeon_id": "petaldeep"})
+        assert s.dungeon and s.dungeon["id"] == "petaldeep"
+        assert not petaldeep.has_key(s)
         W.sessions.pop(s.player_id, None)
     asyncio.run(go())
 

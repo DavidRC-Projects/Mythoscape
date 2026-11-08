@@ -137,7 +137,28 @@ def test_client_click_matches_server():
     assert tree_cover.beside(name, tx, ty, 28, 24) is False
 
 
+def test_village_has_starter_woodcutting_trees():
+    """Hub meadows must have real TREE tiles — decor-only trees are not choppable."""
+    g = grid()
+    nodes = wm.build_resource_nodes(g)
+    sx, sy = wm.SPAWN_POINT
+    near = [
+        (x, y, n["type"])
+        for (x, y), n in nodes.items()
+        if n["type"] in ("tree", "oak_tree")
+        and max(abs(x - sx), abs(y - sy)) <= 22
+    ]
+    assert len(near) >= 4, near
+    village = [
+        (x, y)
+        for (x, y), n in nodes.items()
+        if n["type"] in ("tree", "oak_tree") and wm.get_zone(x, y) == "village"
+    ]
+    assert len(village) >= 12, len(village)
+
+
 if __name__ == "__main__":
     test_trees_block_their_art_and_can_be_chopped()
     test_client_click_matches_server()
+    test_village_has_starter_woodcutting_trees()
     print("tree cover ok", len(trees()))

@@ -53,7 +53,7 @@ def guide_pages():
         [
             "The month builds toward Day 30 — The Siege of Crownfall.",
             "Days 1–7: recruitment and diplomacy. 8–14: gather wood, stone, ore. "
-            "15–21: craft engines and fortifications. 22–27: alliances and scouting. "
+            "15–21: craft engines and fortifications. 22–27: alliances and Engineering. "
             "28–29: registration. Day 30: the assault.",
             "Contribute all month — deposits into the war storehouse earn recognition even if you never swing a blade.",
         ],
@@ -85,7 +85,7 @@ def guide_pages():
             "Roster: 20–100 fighters a side, mercenaries at most 40%. Contracts lock when the assault begins. "
             "Death eliminates you from this siege only — respawn outside, watch, then /siege report after Crownfall.",
             "Victor's heraldry flies over the King's Castle; Regal robes unlock at Mae's. "
-            "Ask me any time for War for the Crown, storehouse, scout, or the battle report. Fare you well.",
+            "Ask me any time for War for the Crown, storehouse, Engineering survey, or the battle report. Fare you well.",
         ],
     ]
 

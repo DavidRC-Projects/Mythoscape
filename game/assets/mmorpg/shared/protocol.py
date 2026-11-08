@@ -35,7 +35,7 @@ TRADE_OFFER      {items: [{slot_index, qty}]}
 TRADE_CONFIRM    {}
 TRADE_CANCEL     {}
 PICKUP           {}
-SET_OPTION       {auto_pickup_items?}
+SET_OPTION       {auto_pickup_items?, active_title?, show_noble_prefix?, show_house_suffix?}
 THRONE_VISION_SEEN {}                     -- intro film watched / skipped; sets the account's played flag once
 BANK_OPEN        {}
 BANK_DEPOSIT     {slot_index?} | {coins?}

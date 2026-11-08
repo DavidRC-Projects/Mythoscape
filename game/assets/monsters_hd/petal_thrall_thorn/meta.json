@@ -1,0 +1,108 @@
+{
+ "id": "petal_thrall_thorn",
+ "name": "Thorn Choir Fairy",
+ "level": 14,
+ "sex": "-",
+ "region": "Endless Depths",
+ "boss": false,
+ "look": "thorn-choir fairy, bramble wings, rose-blood glow",
+ "content_scale": 1.0,
+ "scale_note": "painted stills pack \u2014 canvas matches batch-1 feet anchors",
+ "canvas": {
+  "1x": [
+   128,
+   144
+  ],
+  "2x": [
+   256,
+   288
+  ],
+  "4x": [
+   512,
+   576
+  ]
+ },
+ "feet_px": {
+  "1x": [
+   64,
+   132
+  ],
+  "2x": [
+   128,
+   264
+  ],
+  "4x": [
+   256,
+   528
+  ]
+ },
+ "facings": {
+  "s": "front / toward camera",
+  "e": "screen right (game facing 1)",
+  "n": "back / away",
+  "w": "screen left (game facing -1)"
+ },
+ "game_facing_map": {
+  "front": "s",
+  "back": "n",
+  "1": "e",
+  "-1": "w"
+ },
+ "combat": {
+  "attack_range": 1,
+  "side_by_side": false,
+  "attack_cooldown": null,
+  "aggro_range": 0,
+  "scale": 1.0
+ },
+ "states": {
+  "idle": {
+   "frames": 4,
+   "loop": true
+  },
+  "walk": {
+   "frames": 8,
+   "loop": true
+  },
+  "attack": {
+   "frames": 6,
+   "loop": false,
+   "frame_starts": [
+    0.0,
+    0.14,
+    0.3,
+    0.42,
+    0.6,
+    0.8
+   ],
+   "impact_frame": 3,
+   "impact_progress": 0.48
+  },
+  "hit": {
+   "frames": 3,
+   "loop": false,
+   "duration_s": 0.36
+  },
+  "death": {
+   "frames": 6,
+   "loop": false,
+   "duration_s": 0.9,
+   "hold_fade_s": 0.6
+  }
+ },
+ "files": "sprite_{1x,2x}/{idle,walk,attack,hit,death}/{s,e,n,w}/fNN.png",
+ "shadow": "soft contact shadow from source stills",
+ "portrait": "portrait_bust_512.png",
+ "anchors_4x": {},
+ "head_top_idle_4x": 360.0,
+ "healthbar_y_offset_1x": -48.0,
+ "impact_reach_tiles": 0.9,
+ "complete": true,
+ "source": "painted_stills",
+ "cloned_from": "petal_thrall",
+ "colour_multiply": [
+  200,
+  255,
+  180
+ ]
+}

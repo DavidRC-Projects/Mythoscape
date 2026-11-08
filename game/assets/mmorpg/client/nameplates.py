@@ -196,8 +196,18 @@ def _short(n):
 
 
 def _player_plate(p):
-    """A character overhead tag (has a combat level). NPCs and monsters stay smaller."""
-    return p["kind"] == "std" and p["level"] is not None
+    """Player character overhead tag (self / other adventurers)."""
+    return p["kind"] == "std" and p["rel"] in ("self", "party", "hostile", "neutral", "friendly") and p.get("level") is not None
+
+
+def _large_plate(p):
+    """Players, monsters, and NPCs share the large readable name/level size."""
+    if p["kind"] == "pet":
+        return False
+    if p["kind"] == "mon":
+        return True
+    # NPCs (rel=npc) and leveled characters.
+    return p["kind"] == "std"
 
 
 def _layout(client, p, k, dx, dy):
@@ -207,11 +217,15 @@ def _layout(client, p, k, dx, dy):
         bh = 6
     if p["kind"] == "std" and not numeric:
         bh = 6
+    large = _large_plate(p)
     player = _player_plate(p)
-    if player:
+    if large:
         nh = 22
-    name_px = 14 if player else (9 if p["kind"] == "pet" else 11)
-    level_px = 13 if player else 9
+        # Monsters get a slightly wider bar so the larger level chip fits.
+        if p["kind"] == "mon":
+            bw = max(bw, 96)
+    name_px = 14 if large else (9 if p["kind"] == "pet" else 11)
+    level_px = 13 if large else 9
     p["bw"], p["bh"], p["nh"] = bw, bh, nh
     p["name_px"], p["level_px"] = name_px, level_px
     cx = p["cx"] * k + dx
@@ -219,10 +233,10 @@ def _layout(client, p, k, dx, dy):
     gap = 8 if p["kind"] == "pet" else 10
     bar_bottom = head - gap
     f = _font(name_px)
-    name = _fit(f, p["name"], 180 if player else 160)
+    name = _fit(f, p["name"], 180 if large else 160)
     p["label"] = name
     lvs = str(p["level"]) if p["level"] is not None else None
-    lw = (_font(level_px).size(lvs)[0] + (16 if player else 8)) if lvs else 0
+    lw = (_font(level_px).size(lvs)[0] + (16 if large else 8)) if lvs else 0
     sw = 14 if p["stars"] is not None else 0
     p["lw"], p["sw"] = lw, sw
     pw = int(max(bw, f.size(name)[0] + lw + sw + 14))
@@ -361,11 +375,18 @@ def _draw(client, p, now):
         if p["level"] is not None:
             threat = p["kind"] == "mon" or p["rel"] == "hostile"
             lc = level_band(p["level"], _player_cl(client)) if threat else (255, 236, 186)
+            large = _large_plate(p)
             player = _player_plate(p)
-            chip_h = nh - (4 if player else 6)
+            chip_h = nh - (4 if large else 6)
             chip = pygame.Rect(row.right - 4 - p["lw"] + 2, row.y + (nh - chip_h) // 2, p["lw"] - 2, chip_h)
-            pygame.draw.rect(lay, (36, 26, 12, 235) if player else (0, 0, 0, 200), chip, border_radius=5 if player else 3)
-            pygame.draw.rect(lay, (232, 196, 96) if player else lc, chip, 2 if player else 1, border_radius=5 if player else 3)
+            pygame.draw.rect(
+                lay,
+                (36, 26, 12, 235) if large else (0, 0, 0, 200),
+                chip,
+                border_radius=5 if large else 3,
+            )
+            rim_col = (232, 196, 96) if player else lc
+            pygame.draw.rect(lay, rim_col, chip, 2 if large else 1, border_radius=5 if large else 3)
             _stroke_text(lay, str(p["level"]), _font(p.get("level_px") or 9), lc, center=chip.center)
         y += nh + 2
     if p["bar"]:

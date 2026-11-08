@@ -29,7 +29,10 @@ KNIGHTS_HD = {
 
 MONSTERS_HD = {
     "giant_rat",
+    "village_rat",
+    "sewer_rat",
     "big_skeleton",
+    "skeleton",
     "giant",
     "wolf",
     "guard",
@@ -51,6 +54,19 @@ MONSTERS_HD = {
     "ash_imp",
     "ember_wolf",
     "crucible_beast",
+    # Endless Depths staples (painted stills + derived packs).
+    # goblin kept on anim-strip / legacy art — player preferred the old look.
+    "spider",
+    "spiderling",
+    "sewer_spider",
+    "dragon",
+    "petal_thrall",
+    "petal_thrall_thorn",
+    "petal_thrall_mirror",
+    "petal_thrall_night",
+    "petal_elite_mirror",
+    "petal_elite_night",
+    "petaldeep_queen",
 }
 
 # Deepdelve Mine pack (painted HD, player proportions) - ships inside the client.

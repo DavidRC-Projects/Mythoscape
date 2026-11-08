@@ -52,6 +52,8 @@ PORTRAIT_FOR = {
     "obsidian_colossi": "void",
     "shadow_knights": "void",
     "void_horror": "void",
+    "endless_depths": "endless",
+    "quest_endless_chronicler": "endless",
     "mountain_pass": "harbour",  # rugged approach — reuse coastal hills tone
     "wolves": "harbour",
     "outfitters": "crossroads",
@@ -60,7 +62,7 @@ PORTRAIT_FOR = {
     "jewelry_shop": "crossroads",
     "bow_shop": "crossroads",
     "pet_shop": "inn",
-    "estate_agent": "stonehaven",
+    "estate_agent": "village",
     "kings_row_homes": "king",
     "mad_scientist": "lake",
     "quest_scout_bren": "harbour",

@@ -179,7 +179,9 @@ ITEMS = {
     "willow_logs":      {"name": "Willow Logs",        "type": "resource", "stackable": True, "value": 12, "equip_slot": None},
     "maple_logs":       {"name": "Maple Logs",         "type": "resource", "stackable": True, "value": 22, "equip_slot": None},
     "yew_logs":         {"name": "Yew Logs",           "type": "resource", "stackable": True, "value": 45, "equip_slot": None},
-    "magic_logs":       {"name": "Magic Logs",         "type": "resource", "stackable": True, "value": 90, "equip_slot": None},
+    "magic_logs":       {"name": "Enchanted Logs",     "type": "resource", "stackable": True, "value": 90, "equip_slot": None},
+    "fairy_logs":       {"name": "Fairy Logs",         "type": "resource", "stackable": True, "value": 160, "equip_slot": None,
+                         "desc": "Pale wood from the Fairy Glade — used to fletch the Fairy Shortbow."},
     "tinderbox":        {"name": "Tinderbox",          "type": "tool",     "stackable": False, "value": 5,  "equip_slot": None, "tool_for": "firemaking"},
     "knife":            {"name": "Knife",              "type": "tool",     "stackable": False, "value": 8,  "equip_slot": None, "tool_for": "fletching",
                          "desc": "Carve logs into shafts and unstrung bows."},
@@ -289,15 +291,59 @@ ITEMS = {
         "weapon_type": "bow", "range": 6, "ranged_att": 38, "ranged_str": 38,
     },
     "magic_shortbow": {
-        "name": "Magic Shortbow", "type": "weapon", "stackable": False, "value": 900, "equip_slot": "weapon",
+        "name": "Enchanted Shortbow", "type": "weapon", "stackable": False, "value": 900, "equip_slot": "weapon",
         "weapon_type": "bow", "range": 7, "ranged_att": 50, "ranged_str": 50,
+    },
+    "fairy_shortbow": {
+        "name": "Fairy Shortbow", "type": "weapon", "stackable": False, "value": 1800, "equip_slot": "weapon",
+        "weapon_type": "bow", "range": 8, "ranged_att": 65, "ranged_str": 65,
+        "desc": "A powerful shortbow carved from Fairy Glade wood.",
+    },
+    # Longbows: same wood tiers, longer arrow range, higher Fletching to carve/string.
+    "longbow": {
+        "name": "Longbow", "type": "weapon", "stackable": False, "value": 40, "equip_slot": "weapon",
+        "weapon_type": "bow", "range": 6, "ranged_att": 8, "ranged_str": 8,
+        "desc": "Longer limbs — arrows travel farther than a shortbow.",
+    },
+    "oak_longbow": {
+        "name": "Oak Longbow", "type": "weapon", "stackable": False, "value": 80, "equip_slot": "weapon",
+        "weapon_type": "bow", "range": 6, "ranged_att": 14, "ranged_str": 14,
+    },
+    "willow_longbow": {
+        "name": "Willow Longbow", "type": "weapon", "stackable": False, "value": 150, "equip_slot": "weapon",
+        "weapon_type": "bow", "range": 7, "ranged_att": 20, "ranged_str": 20,
+    },
+    "maple_longbow": {
+        "name": "Maple Longbow", "type": "weapon", "stackable": False, "value": 300, "equip_slot": "weapon",
+        "weapon_type": "bow", "range": 7, "ranged_att": 28, "ranged_str": 28,
+    },
+    "yew_longbow": {
+        "name": "Yew Longbow", "type": "weapon", "stackable": False, "value": 600, "equip_slot": "weapon",
+        "weapon_type": "bow", "range": 8, "ranged_att": 38, "ranged_str": 38,
+    },
+    "magic_longbow": {
+        "name": "Enchanted Longbow", "type": "weapon", "stackable": False, "value": 1200, "equip_slot": "weapon",
+        "weapon_type": "bow", "range": 9, "ranged_att": 50, "ranged_str": 50,
+    },
+    "fairy_longbow": {
+        "name": "Fairy Longbow", "type": "weapon", "stackable": False, "value": 2200, "equip_slot": "weapon",
+        "weapon_type": "bow", "range": 10, "ranged_att": 65, "ranged_str": 65,
+        "desc": "The longest-reaching bow — Fairy Glade wood drawn to its full span.",
     },
     "unstrung_shortbow":      {"name": "Unstrung Shortbow",      "type": "resource", "stackable": False, "value": 8,  "equip_slot": None},
     "unstrung_oak_shortbow":  {"name": "Unstrung Oak Shortbow",  "type": "resource", "stackable": False, "value": 18, "equip_slot": None},
     "unstrung_willow_shortbow":{"name": "Unstrung Willow Shortbow","type": "resource","stackable": False, "value": 35, "equip_slot": None},
     "unstrung_maple_shortbow":{"name": "Unstrung Maple Shortbow","type": "resource", "stackable": False, "value": 70, "equip_slot": None},
     "unstrung_yew_shortbow":  {"name": "Unstrung Yew Shortbow",  "type": "resource", "stackable": False, "value": 150,"equip_slot": None},
-    "unstrung_magic_shortbow":{"name": "Unstrung Magic Shortbow","type": "resource", "stackable": False, "value": 300,"equip_slot": None},
+    "unstrung_magic_shortbow":{"name": "Unstrung Enchanted Shortbow","type": "resource", "stackable": False, "value": 300,"equip_slot": None},
+    "unstrung_fairy_shortbow":{"name": "Unstrung Fairy Shortbow","type": "resource", "stackable": False, "value": 550,"equip_slot": None},
+    "unstrung_longbow":       {"name": "Unstrung Longbow",       "type": "resource", "stackable": False, "value": 12, "equip_slot": None},
+    "unstrung_oak_longbow":   {"name": "Unstrung Oak Longbow",   "type": "resource", "stackable": False, "value": 28, "equip_slot": None},
+    "unstrung_willow_longbow":{"name": "Unstrung Willow Longbow","type": "resource", "stackable": False, "value": 50, "equip_slot": None},
+    "unstrung_maple_longbow": {"name": "Unstrung Maple Longbow", "type": "resource", "stackable": False, "value": 95, "equip_slot": None},
+    "unstrung_yew_longbow":   {"name": "Unstrung Yew Longbow",   "type": "resource", "stackable": False, "value": 200,"equip_slot": None},
+    "unstrung_magic_longbow": {"name": "Unstrung Enchanted Longbow","type": "resource", "stackable": False, "value": 400,"equip_slot": None},
+    "unstrung_fairy_longbow": {"name": "Unstrung Fairy Longbow", "type": "resource", "stackable": False, "value": 700,"equip_slot": None},
     "copper_ore":       {"name": "Copper Ore",         "type": "resource", "stackable": True, "value": 3,  "equip_slot": None},
     "tin_ore":          {"name": "Tin Ore",            "type": "resource", "stackable": True, "value": 3,  "equip_slot": None},
     "iron_ore":         {"name": "Iron Ore",           "type": "resource", "stackable": True, "value": 7,  "equip_slot": None},
@@ -393,16 +439,16 @@ ITEMS = {
     "petaldeep_key": {
         "name": "Petaldeep Key", "type": "key", "stackable": False, "value": 0, "equip_slot": None,
         "unique": True, "tradeable": False, "sellable": False, "bankable": True,
-        "examine": "Black iron, warm as a living thing. The north-west mouth of the glade answers to it.",
+        "examine": "Black iron, warm as a living thing. Turns once in the north-west mouth, then is gone — the way stays open.",
     },
     "black_petal": {
-        "name": "Black Petal", "type": "quest", "stackable": True, "value": 0, "equip_slot": None,
-        "tradeable": False, "sellable": False,
+        "name": "Black Petal", "type": "misc", "stackable": True, "value": 5, "equip_slot": None,
+        "tradeable": True, "sellable": True, "bankable": True,
         "examine": "A petal that never dries. The deeper halls of Petaldeep will ask for it.",
     },
     "petaldeep_crown": {
         "name": "Crown of Petaldeep", "type": "armor", "stackable": False, "value": 25000,
-        "equip_slot": "helmet", "def_bonus": 18, "tradeable": False, "sellable": False,
+        "equip_slot": "helmet", "def_bonus": 18, "tradeable": True, "sellable": True, "bankable": True,
         "art_as": "bone_crown",  # uses the realistic crown sheet until a unique paint lands
         "examine": "Black iron and living petals. Proof you broke the Queen of Petaldeep.",
     },
@@ -678,6 +724,7 @@ FIRE_LOGS = {
     "maple_logs": {"duration": 120, "level_req": 40, "xp": 135},
     "yew_logs": {"duration": 150, "level_req": 45, "xp": 200},
     "magic_logs": {"duration": 180, "level_req": 50, "xp": 300},
+    "fairy_logs": {"duration": 210, "level_req": 60, "xp": 420},
 }
 
 # Wood types usable by Fletching (knife carving / stringing).
@@ -687,7 +734,8 @@ FLETCH_LOGS = {
     "willow_logs": {"tier": "willow", "shaft_qty": 25},
     "maple_logs": {"tier": "maple", "shaft_qty": 30},
     "yew_logs": {"tier": "yew", "shaft_qty": 35},
-    "magic_logs": {"tier": "magic", "shaft_qty": 40},
+    "magic_logs": {"tier": "enchanted", "shaft_qty": 40},
+    "fairy_logs": {"tier": "fairy", "shaft_qty": 50},
 }
 
 
@@ -1920,7 +1968,9 @@ RESOURCE_YIELDS = {
     "willow_tree":{"skill": "woodcutting", "level_req": 20, "xp": 45, "item": "willow_logs",  "respawn_ticks": 14, "depletion_chance": 0.14},
     "maple_tree": {"skill": "woodcutting", "level_req": 35, "xp": 70, "item": "maple_logs",   "respawn_ticks": 20, "depletion_chance": 0.12},
     "yew_tree":   {"skill": "woodcutting", "level_req": 40, "xp": 110,"item": "yew_logs",     "respawn_ticks": 30, "depletion_chance": 0.10},
-    "magic_tree": {"skill": "woodcutting", "level_req": 50, "xp": 180,"item": "magic_logs",   "respawn_ticks": 45, "depletion_chance": 0.08},
+    "magic_tree": {"skill": "woodcutting", "level_req": 50, "xp": 180,"item": "magic_logs",   "respawn_ticks": 45, "depletion_chance": 0.08},  # Enchanted tree (display)
+    # Fairy Glade ring — glowing painted trees (WALL trunks); yields fairy logs for the Fairy Shortbow.
+    "glade_tree": {"skill": "woodcutting", "level_req": 55, "xp": 220, "item": "fairy_logs", "respawn_ticks": 50, "depletion_chance": 0.08},
     "copper_rock":{"skill": "mining",      "level_req": 1,  "xp": 15, "item": "copper_ore",  "respawn_ticks": 8,  "depletion_chance": 0.20},
     "tin_rock":   {"skill": "mining",      "level_req": 1,  "xp": 15, "item": "tin_ore",     "respawn_ticks": 8,  "depletion_chance": 0.20},
     "iron_rock":  {"skill": "mining",      "level_req": 12, "xp": 35, "item": "iron_ore",    "respawn_ticks": 14, "depletion_chance": 0.15},
@@ -1989,22 +2039,26 @@ WIZARD_TILE = (23, 20)
 # Instant travel. where=overworld leaves any dungeon; where=castle enters the realm.
 # Marks unlock by walking near the landing (see TELEPORT_DISCOVER_RADIUS). After
 # Elowen teaches the spell, village + Castle Realm start unlocked.
-TELEPORT_STARTER_MARKS = ("village", "realm")
+TELEPORT_STARTER_MARKS = ("village", "realm", "fairy_village")
 TELEPORT_DISCOVER_RADIUS = 12  # Chebyshev tiles
 TELEPORT_DESTINATIONS = [
     {"id": "village", "label": "Village", "blurb": "The crossroads", "where": "overworld", "x": 28, "y": 24},
     {"id": "bank", "label": "Village Bank", "blurb": "Store coins and items", "where": "overworld", "x": 66, "y": 48},
     {"id": "outfitters", "label": "Crownfall Outfitters", "blurb": "Hair, clothes & outfits", "where": "overworld", "x": 52, "y": 65},
+    {"id": "fairy_village", "label": "Fairy Village", "blurb": "Moonstone fountain & Moonpetal Inn",
+     "where": "overworld", "x": 28, "y": 66},
     {"id": "void", "label": "Void Sanctum", "blurb": "Outside the sanctum gate", "where": "overworld", "x": 205, "y": 130},
+    {"id": "endless_depths", "label": "Endless Depths", "blurb": "Village NW — west of the plaza",
+     "where": "overworld", "x": 11, "y": 23},
     {"id": "stonehaven", "label": "Stonehaven", "blurb": "Beside the plaza fountain", "where": "overworld", "x": 118, "y": 75},
     {"id": "keep", "label": "Stonehaven Castle", "blurb": "The overworld keep", "where": "overworld", "x": 128, "y": 66},
     {"id": "harbour", "label": "Harbourreach", "blurb": "The docks", "where": "overworld", "x": 176, "y": 18},
-    {"id": "estate", "label": "Estate Agent", "blurb": "Village estate office (north fringe)", "where": "overworld", "x": 85, "y": 11},
+    {"id": "estate", "label": "Estate Agent", "blurb": "East of Crownfall Outfitters", "where": "overworld", "x": 95, "y": 89},
     {"id": "kings_row_south", "label": "King's Row Homes", "blurb": "South-road cottages", "where": "overworld", "x": 27, "y": 151},
     {"id": "realm", "label": "King's Realm", "blurb": "The plaza", "where": "castle", "x": 150, "y": 183},
     {"id": "royal_herald", "label": "Royal Herald",
      "blurb": "Outside the King's Castle approach (King's Realm portal)",
-     "where": "overworld", "x": 12, "y": 21},
+     "where": "overworld", "x": 12, "y": 30},
     {"id": "gothic", "label": "Gothic Castle", "blurb": "Outside the gate", "where": "castle", "x": 52, "y": 78},
     {"id": "king", "label": "King's Castle", "blurb": "Outside the gate", "where": "castle", "x": 152, "y": 78},
     {"id": "arena", "label": "Crownfall Arena", "blurb": "Outside the gate (barracks)",
@@ -2104,7 +2158,7 @@ NPCS = [
 
     # Crownfall phase 7: the paths to the throne
     # Outside the King's Castle approach (King's Realm portal) — Seraphine walks players here.
-    {"id": "royal_herald", "name": "Royal Herald", "x": 12, "y": 21,
+    {"id": "royal_herald", "name": "Royal Herald", "x": 12, "y": 30,
      "lines": [
          "I stand outside the King's Castle approach so every traveller may learn the law.",
          "The throne is contested through the War for the Crown — guilds, a shared storehouse, "
@@ -2221,6 +2275,19 @@ NPCS = [
          "Accept the quest on offer — the gold trail leads inside.",
      ],
      "quest_ids": ["bone_and_blade", "giants_tithe", "adamant_proof"]},
+
+    {"id": "endless_chronicler", "name": "Depths Chronicler", "x": 13, "y": 23,
+     "lines": [
+         "The Endless Depths — one private chamber that never ends. Foes scale every floor; themes shift as you go.",
+         "Ask me how it works, or step onto the amber threshold when you are ready.",
+     ],
+     "options": [
+         {"id": "ed_how", "label": "How does Endless work?"},
+         {"id": "ed_themes", "label": "Themes and floors"},
+         {"id": "ed_continue", "label": "Continue vs start over"},
+         {"id": "ed_leave", "label": "Leaving and death"},
+         {"id": "ed_enter", "label": "Where do I enter?"},
+     ]},
 
     {"id": "elowen_moonwhisper", "name": "Lady Elowen Moonwhisper", "x": 18, "y": 68,
      "lines": ["The Moonwater remembers.", "Speak with me, and I will tell you the oath."],
@@ -2399,6 +2466,8 @@ SHOPS = {
             "shortbow": {"price": 30, "qty": 12},
             "oak_shortbow": {"price": 90, "qty": 6},
             "willow_shortbow": {"price": 180, "qty": 4},
+            "longbow": {"price": 45, "qty": 8},
+            "oak_longbow": {"price": 120, "qty": 4},
             "bronze_arrow": {"price": 4, "qty": 400},
             "iron_arrow": {"price": 8, "qty": 200},
             "steel_arrow": {"price": 16, "qty": 100},
@@ -2420,6 +2489,10 @@ SHOPS = {
             "mithril_arrowtips", "adamant_arrowtips",
             "unstrung_shortbow", "unstrung_oak_shortbow", "unstrung_willow_shortbow",
             "unstrung_maple_shortbow", "unstrung_yew_shortbow", "unstrung_magic_shortbow",
+            "unstrung_fairy_shortbow", "fairy_logs",
+            "unstrung_longbow", "unstrung_oak_longbow", "unstrung_willow_longbow",
+            "unstrung_maple_longbow", "unstrung_yew_longbow", "unstrung_magic_longbow",
+            "unstrung_fairy_longbow",
         ),
         "sell_rate": 0.55,
     },
@@ -3142,6 +3215,9 @@ XP_SKILLS = [
     "attack", "strength", "defence", "archery",
     "woodcutting", "mining", "fishing", "cooking", "smithing", "fletching", "karma",
     "charisma", "etiquette", "command",
+    # Design: War for the Crown — Engineering runs engines, repairs, barricades
+    # (not Construction). Trained by siege craft / repair work.
+    "engineering",
 ]
 
 # Trained combat skills. Hitpoints is derived and has no experience.
@@ -3154,6 +3230,7 @@ SKILL_DISPLAY_NAMES = {
     "fishing": "Fishing", "cooking": "Cooking", "firemaking": "Firemaking",
     "smithing": "Smithing", "fletching": "Fletching", "karma": "Karma",
     "charisma": "Charisma", "etiquette": "Etiquette", "command": "Command",
+    "engineering": "Engineering",
 }
 
 # Karma blesses worn gear. Level 2 weapons get +2 attack (matches L).
@@ -3369,6 +3446,8 @@ TRAVEL_DESTINATIONS = [
      "x": 140, "y": 113, "blurb": "Store coins & items", "action": {"type": "BANK"}},
     {"id": "outfitters", "kind": "place", "label": "Crownfall Outfitters",
      "x": 52, "y": 65, "blurb": "Hair, clothes & outfits"},
+    {"id": "fairy_village", "kind": "place", "label": "Fairy Village",
+     "x": 28, "y": 66, "blurb": "Moonstone fountain · Moonpetal Inn · Petaldeep"},
     {"id": "general_store", "kind": "place", "label": "General Store",
      "x": 45, "y": 8, "blurb": "Shopkeeper Joe"},
     {"id": "bag_shop", "kind": "place", "label": "Nell's Bags",
@@ -3405,7 +3484,7 @@ TRAVEL_DESTINATIONS = [
     {"id": "stonehaven", "kind": "place", "label": "Stonehaven City",
      "x": 118, "y": 74, "blurb": "Stone plazas & castle"},
     {"id": "estate_agent", "kind": "place", "label": "Estate Agent Mira",
-     "x": 85, "y": 11, "blurb": "Village estate office — buy homes & plots"},
+     "x": 95, "y": 89, "blurb": "Estate office east of Outfitters — buy homes & plots"},
     {"id": "kings_row_homes", "kind": "place", "label": "King's Row Homes",
      "x": 27, "y": 151, "blurb": "South meadow player houses (King's Row cottages)"},
     {"id": "emberdeep", "kind": "place", "label": "Emberdeep",
@@ -3421,6 +3500,11 @@ TRAVEL_DESTINATIONS = [
      "x": 38, "y": 84, "blurb": "Chest near the gate", "action": {"type": "BANK"}},
     {"id": "void_sanctum", "kind": "place", "label": "Void Sanctum",
      "x": 205, "y": 128, "blurb": "⚠ High-level mystical dungeon (SE)"},
+    {"id": "endless_depths", "kind": "place", "label": "The Endless Depths",
+     "x": 11, "y": 23, "blurb": "⚠ Endless scaled dungeon — village NW, west of the plaza",
+     "action": {"type": "ENTER_DUNGEON", "dungeon_id": "endless_depths"}},
+    {"id": "quest_endless_chronicler", "kind": "place", "label": "Depths Chronicler",
+     "x": 13, "y": 23, "blurb": "Guide to The Endless Depths — by the NW mouth"},
     # Quest givers
     {"id": "quest_scout_bren", "kind": "place", "label": "Scout Bren",
      "x": 121, "y": 16, "blurb": "Quest: Wolves on the Pass"},
@@ -3744,6 +3828,14 @@ INTERACTABLES = [
     {"id": "void_candle_b", "kind": "candle", "name": "Void Candle", "x": 209, "y": 127},
     {"id": "void_altar", "kind": "bookshelf", "name": "Forbidden Tomes", "x": 200, "y": 125},
 
+    # Endless Depths — village NW (west of the plaza).
+    {"id": "endless_depths_mouth", "kind": "dungeon_entrance", "name": "The Endless Depths",
+     "x": 11, "y": 21, "stand": [11, 23], "dungeon_id": "endless_depths",
+     "warning": True, "pack": "endless_depths",
+     "blurb": "One chamber forever — scaled foes, new themes each floor."},
+    {"id": "endless_warning", "kind": "warning_sign", "name": "⚠ ENDLESS — Floors never stop",
+     "x": 8, "y": 23},
+
 ]
 
 # Enterable buildings — roofs hide when the local player stands on the floor.
@@ -3848,6 +3940,12 @@ BUILDINGS = [
         "material": "dark_stone",
         "x0": 199, "y0": 122, "x1": 211, "y1": 128,
         "floor_x0": 200, "floor_y0": 123, "floor_x1": 210, "floor_y1": 127,
+    },
+    {
+        "id": "endless_depths", "name": "The Endless Depths", "kind": "crypt", "style": 1,
+        "material": "dark_stone",
+        "x0": 5, "y0": 16, "x1": 17, "y1": 21,
+        "floor_x0": 6, "floor_y0": 17, "floor_x1": 16, "floor_y1": 20,
     },
 ]
 
@@ -4204,8 +4302,12 @@ CRAFT_RECIPES = {
         "inputs": {"yew_logs": 1}, "output": ("arrow_shaft", 35),
     },
     "fletch_shafts_magic": {
-        "name": "Arrow Shafts (Magic)", "category": "fletch", "skill": "fletching", "level_req": 50, "xp": 60,
+        "name": "Arrow Shafts (Enchanted)", "category": "fletch", "skill": "fletching", "level_req": 50, "xp": 60,
         "inputs": {"magic_logs": 1}, "output": ("arrow_shaft", 40),
+    },
+    "fletch_shafts_fairy": {
+        "name": "Arrow Shafts (Fairy)", "category": "fletch", "skill": "fletching", "level_req": 60, "xp": 90,
+        "inputs": {"fairy_logs": 1}, "output": ("arrow_shaft", 50),
     },
     "fletch_unstrung_shortbow": {
         "name": "Unstrung Shortbow", "category": "fletch", "skill": "fletching", "level_req": 5, "xp": 15,
@@ -4228,8 +4330,40 @@ CRAFT_RECIPES = {
         "inputs": {"yew_logs": 1}, "output": ("unstrung_yew_shortbow", 1),
     },
     "fletch_unstrung_magic_shortbow": {
-        "name": "Unstrung Magic Shortbow", "category": "fletch", "skill": "fletching", "level_req": 50, "xp": 180,
+        "name": "Unstrung Enchanted Shortbow", "category": "fletch", "skill": "fletching", "level_req": 50, "xp": 180,
         "inputs": {"magic_logs": 1}, "output": ("unstrung_magic_shortbow", 1),
+    },
+    "fletch_unstrung_fairy_shortbow": {
+        "name": "Unstrung Fairy Shortbow", "category": "fletch", "skill": "fletching", "level_req": 60, "xp": 260,
+        "inputs": {"fairy_logs": 1}, "output": ("unstrung_fairy_shortbow", 1),
+    },
+    "fletch_unstrung_longbow": {
+        "name": "Unstrung Longbow", "category": "fletch", "skill": "fletching", "level_req": 10, "xp": 25,
+        "inputs": {"logs": 1}, "output": ("unstrung_longbow", 1),
+    },
+    "fletch_unstrung_oak_longbow": {
+        "name": "Unstrung Oak Longbow", "category": "fletch", "skill": "fletching", "level_req": 20, "xp": 45,
+        "inputs": {"oak_logs": 1}, "output": ("unstrung_oak_longbow", 1),
+    },
+    "fletch_unstrung_willow_longbow": {
+        "name": "Unstrung Willow Longbow", "category": "fletch", "skill": "fletching", "level_req": 30, "xp": 70,
+        "inputs": {"willow_logs": 1}, "output": ("unstrung_willow_longbow", 1),
+    },
+    "fletch_unstrung_maple_longbow": {
+        "name": "Unstrung Maple Longbow", "category": "fletch", "skill": "fletching", "level_req": 45, "xp": 110,
+        "inputs": {"maple_logs": 1}, "output": ("unstrung_maple_longbow", 1),
+    },
+    "fletch_unstrung_yew_longbow": {
+        "name": "Unstrung Yew Longbow", "category": "fletch", "skill": "fletching", "level_req": 50, "xp": 160,
+        "inputs": {"yew_logs": 1}, "output": ("unstrung_yew_longbow", 1),
+    },
+    "fletch_unstrung_magic_longbow": {
+        "name": "Unstrung Enchanted Longbow", "category": "fletch", "skill": "fletching", "level_req": 55, "xp": 230,
+        "inputs": {"magic_logs": 1}, "output": ("unstrung_magic_longbow", 1),
+    },
+    "fletch_unstrung_fairy_longbow": {
+        "name": "Unstrung Fairy Longbow", "category": "fletch", "skill": "fletching", "level_req": 65, "xp": 320,
+        "inputs": {"fairy_logs": 1}, "output": ("unstrung_fairy_longbow", 1),
     },
     "fletch_string_shortbow": {
         "name": "Shortbow", "category": "fletch", "skill": "fletching", "level_req": 5, "xp": 10,
@@ -4252,8 +4386,40 @@ CRAFT_RECIPES = {
         "inputs": {"unstrung_yew_shortbow": 1, "bow_string": 1}, "output": ("yew_shortbow", 1),
     },
     "fletch_string_magic_shortbow": {
-        "name": "Magic Shortbow", "category": "fletch", "skill": "fletching", "level_req": 50, "xp": 110,
+        "name": "Enchanted Shortbow", "category": "fletch", "skill": "fletching", "level_req": 50, "xp": 110,
         "inputs": {"unstrung_magic_shortbow": 1, "bow_string": 1}, "output": ("magic_shortbow", 1),
+    },
+    "fletch_string_fairy_shortbow": {
+        "name": "Fairy Shortbow", "category": "fletch", "skill": "fletching", "level_req": 60, "xp": 160,
+        "inputs": {"unstrung_fairy_shortbow": 1, "bow_string": 1}, "output": ("fairy_shortbow", 1),
+    },
+    "fletch_string_longbow": {
+        "name": "Longbow", "category": "fletch", "skill": "fletching", "level_req": 10, "xp": 15,
+        "inputs": {"unstrung_longbow": 1, "bow_string": 1}, "output": ("longbow", 1),
+    },
+    "fletch_string_oak_longbow": {
+        "name": "Oak Longbow", "category": "fletch", "skill": "fletching", "level_req": 20, "xp": 30,
+        "inputs": {"unstrung_oak_longbow": 1, "bow_string": 1}, "output": ("oak_longbow", 1),
+    },
+    "fletch_string_willow_longbow": {
+        "name": "Willow Longbow", "category": "fletch", "skill": "fletching", "level_req": 30, "xp": 50,
+        "inputs": {"unstrung_willow_longbow": 1, "bow_string": 1}, "output": ("willow_longbow", 1),
+    },
+    "fletch_string_maple_longbow": {
+        "name": "Maple Longbow", "category": "fletch", "skill": "fletching", "level_req": 45, "xp": 75,
+        "inputs": {"unstrung_maple_longbow": 1, "bow_string": 1}, "output": ("maple_longbow", 1),
+    },
+    "fletch_string_yew_longbow": {
+        "name": "Yew Longbow", "category": "fletch", "skill": "fletching", "level_req": 50, "xp": 105,
+        "inputs": {"unstrung_yew_longbow": 1, "bow_string": 1}, "output": ("yew_longbow", 1),
+    },
+    "fletch_string_magic_longbow": {
+        "name": "Enchanted Longbow", "category": "fletch", "skill": "fletching", "level_req": 55, "xp": 140,
+        "inputs": {"unstrung_magic_longbow": 1, "bow_string": 1}, "output": ("magic_longbow", 1),
+    },
+    "fletch_string_fairy_longbow": {
+        "name": "Fairy Longbow", "category": "fletch", "skill": "fletching", "level_req": 65, "xp": 200,
+        "inputs": {"unstrung_fairy_longbow": 1, "bow_string": 1}, "output": ("fairy_longbow", 1),
     },
     "fletch_headless_arrow": {
         "name": "Headless Arrows", "category": "fletch", "skill": "fletching", "level_req": 1, "xp": 15,
@@ -4324,7 +4490,8 @@ RESOURCE_LABELS = {
     "willow_tree": "Willow",
     "maple_tree": "Maple",
     "yew_tree": "Yew",
-    "magic_tree": "Magic",
+    "magic_tree": "Enchanted",
+    "glade_tree": "Fairy tree",
     "fishing_spot_shrimp": "Shrimp",
     "fishing_spot_sardine": "Sardine",
     "fishing_spot_trout": "Trout",
@@ -4338,7 +4505,8 @@ RESOURCE_LABELS = {
 def is_bow(item_id):
     """True if the item is a ranged bow weapon."""
     item = ITEMS.get(item_id) or {}
-    return item.get("weapon_type") == "bow" or "shortbow" in (item_id or "")
+    iid = item_id or ""
+    return item.get("weapon_type") == "bow" or "shortbow" in iid or "longbow" in iid
 
 
 def bow_attack_range(item_id):
@@ -4554,6 +4722,13 @@ def _apply_village_compact_layout():
         ent["enter_x"], ent["enter_y"] = ex, ey
         ent["exit_x"], ent["exit_y"] = ox, oy
 
+    for ent in INTERACTABLES:
+        if ent.get("id") == "endless_depths_mouth":
+            ent["x"], ent["y"] = 11, 21
+            ent["stand"] = [11, 23]
+        elif ent.get("id") == "endless_warning":
+            ent["x"], ent["y"] = 8, 23
+
     travel_pins = {
         "bank": (44, 34),
         "outfitters": (56, 85),
@@ -4566,8 +4741,10 @@ def _apply_village_compact_layout():
         "pet_shop": (70, 50),
         "inn_hearth": (12, 36),
         # Outside the smithy capture box — pin so compact layout cannot drag them.
-        "estate_agent": (85, 11),
+        "estate_agent": (95, 89),
         "kings_row_homes": (27, 151),
+        "endless_depths": (11, 23),
+        "quest_endless_chronicler": (13, 23),
     }
     for ent in TRAVEL_DESTINATIONS:
         if ent.get("id") in travel_pins:
@@ -4578,8 +4755,10 @@ def _apply_village_compact_layout():
         elif ent.get("id") == "outfitters":
             ent["x"], ent["y"] = 56, 85
         elif ent.get("id") == "estate":
-            # Door apron of Estate Agent Mira (NW fringe). Must not ride the smithy slide.
-            ent["x"], ent["y"] = 85, 11
+            # Door apron of Estate Agent Mira (east of Outfitters).
+            ent["x"], ent["y"] = 95, 89
+        elif ent.get("id") == "endless_depths":
+            ent["x"], ent["y"] = 11, 23
         elif ent.get("id") == "kings_row_south":
             # South meadow housing gate — walkable path by the cottages.
             ent["x"], ent["y"] = 27, 151
@@ -4594,6 +4773,12 @@ def _apply_village_compact_layout():
             b.update({
                 "x0": 50, "y0": 74, "x1": 63, "y1": 84,
                 "floor_x0": 51, "floor_y0": 75, "floor_x1": 62, "floor_y1": 83,
+            })
+        elif b.get("id") == "endless_depths":
+            # Pin after Elder Hall slide so the NW mouth stays put.
+            b.update({
+                "x0": 5, "y0": 16, "x1": 17, "y1": 21,
+                "floor_x0": 6, "floor_y0": 17, "floor_x1": 16, "floor_y1": 20,
             })
 
 
@@ -4747,6 +4932,17 @@ def _pin_visible_npcs():
         "tumbleroot": (38, 72),
         "pip_dewdrop": (32, 82),
         "dungeon_hermit": (44, 86),
+        "endless_chronicler": (13, 23),
+        "royal_herald": (12, 30),
+        # Keep plaza knights clear of the Endless Depths shell.
+        "mythos_knight_1": (22, 18),
+        "mythos_knight_2": (24, 18),
+        # Lake shore — must stay clear of the smithy shell after buildings_v2.
+        "old_fisherman_pete": (94, 16),
+        # Farmhouse south apron (58,66 became Fairy Village WALL).
+        "farmer_tom": (58, 68),
+        # North of Petaldeep mouth — old (44,86) is dungeon WALL.
+        "dungeon_hermit": (44, 83),
         # Moved 6 tiles in from the Crownfall Vale mountain ring (31 Oct 2026).
         "merchant_wanderer": (88, 28),
         "mysterious_traveler": (89, 14),
@@ -4771,7 +4967,7 @@ def _castle_realm_portal():
         "kind": "dungeon_entrance",
         "name": "King's Realm",
         "x": 9,
-        "y": 19,
+        "y": 28,
         "dungeon_id": "castle_realm",
         "action": {"type": "ENTER_DUNGEON", "dungeon_id": "castle_realm"},
     })
@@ -4780,8 +4976,8 @@ def _castle_realm_portal():
         "kind": "place",
         "label": "King's Realm",
         "x": 9,
-        "y": 19,
-        "blurb": "Gold portal west of the wishing well",
+        "y": 28,
+        "blurb": "Gold portal south-west of the plaza (below Endless Depths)",
         "action": {"type": "ENTER_DUNGEON", "dungeon_id": "castle_realm"},
     })
     TRAVEL_DESTINATIONS.append({
@@ -4789,7 +4985,7 @@ def _castle_realm_portal():
         "kind": "place",
         "label": "Royal Herald",
         "x": 12,
-        "y": 21,
+        "y": 30,
         "blurb": "Outside the King's Castle approach — War for the Crown guide",
     })
 

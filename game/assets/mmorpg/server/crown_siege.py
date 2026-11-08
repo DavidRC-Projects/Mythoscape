@@ -18,11 +18,74 @@ DAY = 86400
 
 # ---- milestone 2: declaration / registration ---------------------------------
 CONFIRM_SECONDS = 48 * HOUR
-HUMAN_MIN = 20                 # humans required to confirm a reserved slot
+HUMAN_MIN = 20                 # confirmed human fighters required to confirm a reserved slot
 # Design: under-strength wars are postponed or run at a smaller scale.
 SMALL_SCALE_HUMAN_MIN = max(1, HUMAN_MIN // 2)
 SIDE_CAP = 100                 # milestone 8: max fighters per side (humans + mercs)
 MERC_MAX_FRACTION = 0.40       # mercenaries may not exceed 40% of a side
+# Design: guild membership is not participation — each human enlists, picks a role, confirms.
+BATTLE_ROLES = ("infantry", "archer", "healer", "engineer", "heavy")
+BATTLE_ROLE_LABELS = {
+    "infantry": "Infantry",
+    "archer": "Archer",
+    "healer": "Healer",
+    "engineer": "Engineer",
+    "heavy": "Heavy fighter",
+}
+FIGHTER_ENLISTED = "enlisted"
+FIGHTER_CONFIRMED = "confirmed"
+# Design: War Forge — siege-only armour/weapons; personal gear unavailable in the assault.
+# Smithing gates quality. Equipment locks when the assault begins.
+FORGE_GRADES = {
+    "standard": {
+        "name": "Standard",
+        "smithing_req": 1,
+        "cost": {"bars": 5, "ore": 5, "timber": 5},
+        "base": {
+            "att_bonus": 2, "str_bonus": 2, "def_bonus": 2,
+            "ranged_att": 2, "ranged_str": 2,
+        },
+        "contrib": 3,
+    },
+    "reinforced": {
+        "name": "Reinforced",
+        "smithing_req": 40,
+        "cost": {"bars": 12, "ore": 10, "timber": 8},
+        "base": {
+            "att_bonus": 5, "str_bonus": 5, "def_bonus": 5,
+            "ranged_att": 5, "ranged_str": 5,
+        },
+        "contrib": 8,
+    },
+    "masterwork": {
+        "name": "Masterwork",
+        "smithing_req": 70,
+        "cost": {"bars": 22, "ore": 18, "timber": 12, "stone": 5},
+        "base": {
+            "att_bonus": 9, "str_bonus": 9, "def_bonus": 9,
+            "ranged_att": 9, "ranged_str": 9,
+        },
+        "contrib": 15,
+    },
+}
+# Role bias on top of grade base (never drops a bonus below 0).
+FORGE_ROLE_BIAS = {
+    "infantry": {},
+    "archer": {
+        "ranged_att": 2, "ranged_str": 2, "att_bonus": -1, "str_bonus": -1,
+    },
+    "healer": {"def_bonus": 3, "att_bonus": -1, "str_bonus": -1},
+    "engineer": {"def_bonus": 1, "att_bonus": -1, "str_bonus": -1},
+    "heavy": {
+        "def_bonus": 3, "str_bonus": 2, "att_bonus": -1,
+        "ranged_att": -2, "ranged_str": -2,
+    },
+}
+FORGE_BONUS_KEYS = ("att_bonus", "str_bonus", "def_bonus", "ranged_att", "ranged_str")
+# Design: max two active attackers vs one player — server-enforced focus fire.
+SIEGE_MAX_ATTACKERS = 2
+# Area attacks may still hit crowded tiles, but at reduced direct effect.
+SIEGE_AREA_DAMAGE_MULT = 0.50
 INTEREST_RADIUS = 24           # tiles: combat / state interest during an active war
 INTEREST_RADIUS_BREACHED = 36  # after the watchtower falls, the battlefield opens up
 # Milestone 8: interest fan-out keeps at most SIDE_CAP other fighters (profiled for 100-a-side).
@@ -38,7 +101,7 @@ MONTHLY_CALENDAR = (
     (1, 7, "Days 1–7 — Royal announcements, guild recruitment and diplomacy"),
     (8, 14, "Days 8–14 — Gathering wood, stone, ore and supplies"),
     (15, 21, "Days 15–21 — Crafting weapons, siege engines and fortifications"),
-    (22, 27, "Days 22–27 — Final alliances, scouting and military preparation"),
+    (22, 27, "Days 22–27 — Final alliances, Engineering and military preparation"),
     (28, 29, "Days 28–29 — War registration and battle assignments"),
     (30, 30, "Day 30 — The Siege of Crownfall"),
 )
@@ -417,6 +480,43 @@ def ensure_schema(conn):
         "appointed_at REAL NOT NULL,"
         "PRIMARY KEY (war_id, player_id))"
     )
+    # Design: each human explicitly registers, chooses a role, and confirms attendance.
+    # Guild membership alone must not count toward the human minimum / merc balance.
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS crown_war_fighters ("
+        "war_id INTEGER NOT NULL,"
+        "player_id INTEGER NOT NULL,"
+        "clan_id INTEGER NOT NULL,"
+        "side TEXT NOT NULL,"
+        "status TEXT NOT NULL,"
+        "role TEXT NOT NULL DEFAULT 'infantry',"
+        "equipment_ready INTEGER NOT NULL DEFAULT 0,"
+        "enlisted_at REAL NOT NULL,"
+        "confirmed_at REAL,"
+        "PRIMARY KEY (war_id, player_id))"
+    )
+    fighter_cols = {r[1] for r in conn.execute("PRAGMA table_info(crown_war_fighters)")}
+    if "equipment_grade" not in fighter_cols:
+        conn.execute(
+            "ALTER TABLE crown_war_fighters ADD COLUMN equipment_grade TEXT"
+        )
+    if "equipment_forged_at" not in fighter_cols:
+        conn.execute(
+            "ALTER TABLE crown_war_fighters ADD COLUMN equipment_forged_at REAL"
+        )
+    # Design: two-attacker focus lock during the assault.
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS crown_war_focus ("
+        "war_id INTEGER NOT NULL,"
+        "defender_id INTEGER NOT NULL,"
+        "attacker_id INTEGER NOT NULL,"
+        "engaged_at REAL NOT NULL,"
+        "PRIMARY KEY (war_id, attacker_id))"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_crown_war_focus_def "
+        "ON crown_war_focus (war_id, defender_id)"
+    )
     conn.commit()
 
 
@@ -471,6 +571,78 @@ def public_state(conn):
     out["war"] = war_public(conn, war) if war else None
     out["heraldry"] = castle_heraldry(conn)
     return out
+
+
+def destruction_presentation(structure_id, structure=None):
+    """Player-facing line when a structure falls (design: visible battlefield change)."""
+    spec = _BY_ID.get(structure_id) or {}
+    name = (structure or {}).get("name") or spec.get("name") or structure_id
+    effect = (structure or {}).get("effect") or spec.get("effect") or ""
+    if structure_id == "outer_gate":
+        return (
+            f"The {name} is destroyed — the main entrance stands open. "
+            "Attackers can pour through the gateway."
+        )
+    if structure_id in ("west_wall", "east_wall"):
+        return (
+            f"The {name} collapses — a breach opens an alternate route into the castle."
+        )
+    if structure_id == "watchtower":
+        return (
+            f"The {name} falls — defensive archers lose their vantage. "
+            "Realm capture work is no longer doubled."
+        )
+    if structure_id == "supply_depot":
+        return (
+            f"The {name} burns — defender repairs now cost double materials."
+        )
+    if structure_id == "armoury":
+        return (
+            f"The {name} is ruined — defender engine crafts cost double."
+        )
+    if structure_id == "royal_keep":
+        return (
+            f"The {name} is breached — the final route to the throne chamber opens. "
+            "Last Stand: Royal Guard fortifies the Throne Room."
+        )
+    if effect:
+        return f"The {name} is destroyed — {effect}."
+    return f"The {name} is destroyed."
+
+
+def battlefield_effects_lines(conn):
+    """Active assault presentation: breaches, depot, tower, throne hold."""
+    war = current_war(conn)
+    if not war or war.get("status") != "active":
+        return []
+    lines = ["Battlefield:"]
+    if _structure_destroyed(conn, "outer_gate"):
+        lines.append("  Outer Gate open — main entrance breached.")
+    for wall, label in (("west_wall", "West Wall"), ("east_wall", "East Wall")):
+        if _structure_destroyed(conn, wall):
+            lines.append(f"  {label} breach — alternate route open.")
+    if _structure_destroyed(conn, "watchtower"):
+        lines.append("  Watchtower down — no archer cover bonus for defenders.")
+    else:
+        lines.append("  Watchtower standing — defensive archers double realm capture work.")
+    if _structure_destroyed(conn, "supply_depot"):
+        lines.append("  Supply Depot destroyed — repairs cost double.")
+    if _structure_destroyed(conn, "armoury"):
+        lines.append("  Armoury destroyed — defender crafts cost double.")
+    if _structure_destroyed(conn, "royal_keep"):
+        lines.append(
+            "  Royal Keep down — throne chamber is the final confrontation "
+            f"(hold {THRONE_HOLD_SECONDS}s, not a single touch)."
+        )
+    throne = next((p for p in capture_state(conn, war["id"]) if p["id"] == "throne"), None)
+    if throne and throne.get("owner") == "attack" and throne.get("hold_started_at"):
+        held = max(0, int(time.time() - float(throne["hold_started_at"])))
+        need = int(throne.get("hold_seconds") or THRONE_HOLD_SECONDS)
+        lines.append(f"  Throne hold in progress: {held}s / {need}s — defend or break it.")
+    lines.append(
+        "Defenders can rebuild temporary barricades and post guards on capture points."
+    )
+    return lines
 
 
 def apply_damage(conn, structure_id, amount, now=None):
@@ -667,7 +839,8 @@ def _rank_of(conn, player_id):
     return row[0] or "Member"
 
 
-def _humans(conn, clan_id):
+def _guild_member_count(conn, clan_id):
+    """Raw guild size — not a siege participation count."""
     if not clan_id:
         return 0
     row = conn.execute(
@@ -676,16 +849,43 @@ def _humans(conn, clan_id):
     return int(row[0] if row else 0)
 
 
+def _humans(conn, war_id, clan_id):
+    """Confirmed human siege participants in this clan for this war.
+
+    Design: guild membership must not count — only fighters who enlisted and
+    confirmed attendance count toward the human minimum and merc balance.
+    """
+    if not clan_id or not war_id:
+        return 0
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM crown_war_fighters "
+            "WHERE war_id = ? AND clan_id = ? AND status = ?",
+            (int(war_id), int(clan_id), FIGHTER_CONFIRMED),
+        ).fetchone()
+        return int(row[0] if row else 0)
+    except Exception:
+        return 0
+
+
 def _alliance_humans(conn, war_id, lead_clan_id, side):
-    total = _humans(conn, lead_clan_id)
+    total = _humans(conn, war_id, lead_clan_id)
     rows = conn.execute(
         "SELECT ally_clan_id FROM crown_war_allies WHERE war_id = ? AND lead_clan_id = ? "
         "AND side = ? AND status = 'accepted'",
         (int(war_id), int(lead_clan_id), side),
     ).fetchall()
     for (ally,) in rows:
-        total += _humans(conn, ally)
+        total += _humans(conn, war_id, ally)
     return total
+
+
+def _side_confirmed_humans(conn, war_id, side):
+    """All confirmed human fighters on a side (any clan in the alliance)."""
+    lead = _lead_slot(conn, war_id, side)
+    if not lead:
+        return 0
+    return _alliance_humans(conn, war_id, lead["clan_id"], side)
 
 
 def _sides_meet_human_min(conn, war_id, min_humans=None):
@@ -730,7 +930,10 @@ def army_composition_lines(conn, war=None, now=None):
         lock = " — locked for the assault"
     else:
         lock = " — visible to both leaders; locks when the assault begins"
-    lines = ["Army composition: " + " · ".join(bits) + lock]
+    lines = [
+        "Army composition (confirmed fighters only — /siege enlist · /siege attend): "
+        + " · ".join(bits) + lock
+    ]
     atk_h = counts.get("attack")
     dfn_h = counts.get("defend")
     if atk_h is not None and dfn_h is not None and atk_h != dfn_h:
@@ -973,7 +1176,7 @@ def _promote_next(conn, war_id, side, now):
     conn.execute(
         "UPDATE crown_war_slots SET status = 'reserved', reserved_at = ?, confirm_deadline = ?, "
         "human_count = ? WHERE id = ?",
-        (now, deadline, _humans(conn, nxt["clan_id"]), nxt["id"]),
+        (now, deadline, _humans(conn, war_id, nxt["clan_id"]), nxt["id"]),
     )
     conn.commit()
     try:
@@ -981,7 +1184,7 @@ def _promote_next(conn, war_id, side, now):
         politics.news(
             conn, "siege",
             f"{nxt['name']} now holds the {side} slot for the War for the Crown "
-            f"(confirm within 48 hours).",
+            f"(confirm with {HUMAN_MIN}+ confirmed fighters within 48 hours).",
             now,
         )
     except Exception:
@@ -1026,7 +1229,7 @@ def tick_wars(conn, now=None):
                     continue
                 conn.execute(
                     "UPDATE crown_war_slots SET status = 'forfeited', human_count = ? WHERE id = ?",
-                    (_humans(conn, slot["clan_id"]), slot["id"]),
+                    (_humans(conn, war["id"], slot["clan_id"]), slot["id"]),
                 )
                 conn.commit()
                 msg = (
@@ -1240,22 +1443,25 @@ def register(conn, player_id, side, now=None):
     if ally:
         return False, "Your guild is already tied to this war as an ally."
     lead = _lead_slot(conn, war["id"], side)
-    humans = _humans(conn, clan_id)
+    humans = _humans(conn, war["id"], clan_id)
     if lead is None:
         deadline = now + CONFIRM_SECONDS
-        cur = conn.execute(
+        conn.execute(
             "INSERT INTO crown_war_slots (war_id, clan_id, side, status, registered_at, "
             "reserved_at, confirm_deadline, human_count) VALUES (?, ?, ?, 'reserved', ?, ?, ?, ?)",
             (war["id"], clan_id, side, now, now, deadline, humans),
         )
         conn.commit()
         name = _clan_name(conn, clan_id)
+        # Leader still must /siege attend; enlist them so the next step is clear.
+        enlist(conn, player_id, role="infantry", now=now)
         try:
             import politics
             politics.news(
                 conn, "siege",
                 f"{name} reserved the {side} slot. Confirm within 48 hours "
-                f"with at least {HUMAN_MIN} humans.",
+                f"with at least {HUMAN_MIN} confirmed fighters "
+                f"(/siege enlist · /siege attend).",
                 now,
             )
         except Exception:
@@ -1265,9 +1471,10 @@ def register(conn, player_id, side, now=None):
             (war["id"], clan_id),
         ).fetchone()
         return True, (
-            f"{name} reserved the {side} slot. Confirm within 48 hours "
-            f"once you field at least {HUMAN_MIN} humans "
-            f"(you have {humans} now). Use /siege confirm."
+            f"{name} reserved the {side} slot. Members /siege enlist [role] then "
+            f"/siege attend. Confirm with /siege confirm once {HUMAN_MIN}+ fighters "
+            f"have confirmed attendance (you have {humans} now; "
+            f"deadline in {CONFIRM_SECONDS // HOUR}h)."
         ), get_slot(conn, int(row[0])) if row else None
     # Slot held — queue behind them.
     conn.execute(
@@ -1277,18 +1484,516 @@ def register(conn, player_id, side, now=None):
     )
     conn.commit()
     name = _clan_name(conn, clan_id)
+    enlist(conn, player_id, role="infantry", now=now)
     row = conn.execute(
         "SELECT id FROM crown_war_slots WHERE war_id = ? AND clan_id = ?",
         (war["id"], clan_id),
     ).fetchone()
     return True, (
         f"{name} joined the {side} queue behind {lead['name']}. "
-        "If they fail to confirm within 48 hours, the next guild takes the slot."
+        "Members /siege enlist [role] then /siege attend. "
+        "If the lead guild fails to confirm within 48 hours, the next guild takes the slot."
     ), get_slot(conn, int(row[0])) if row else None
 
 
+def enlist(conn, player_id, role="infantry", now=None):
+    """Explicitly register as a human siege participant for your guild's side."""
+    now = time.time() if now is None else float(now)
+    role = str(role or "infantry").lower().strip()
+    if role not in BATTLE_ROLES:
+        return False, (
+            "Choose a battle role: "
+            + ", ".join(BATTLE_ROLES)
+            + "."
+        )
+    clan_id = _clan_of(conn, player_id)
+    if not clan_id:
+        return False, "Join a guild before enlisting for the war."
+    tick_wars(conn, now)
+    war = current_war(conn)
+    if not war or war["status"] not in ("registration", "scheduled"):
+        return False, "No War for the Crown is open for enlistment."
+    if war.get("status") == "active":
+        return False, "The roster is locked for the assault."
+    side, _lead = _player_war_side(conn, war["id"], clan_id)
+    if not side:
+        return False, "Your guild must register or accept an alliance first."
+    existing = conn.execute(
+        "SELECT status, role FROM crown_war_fighters WHERE war_id = ? AND player_id = ?",
+        (war["id"], int(player_id)),
+    ).fetchone()
+    if existing:
+        # Allow role change while still only enlisted (not yet attended).
+        if existing[0] == FIGHTER_CONFIRMED:
+            if existing[1] == role:
+                return False, "You are already confirmed for this war."
+            return False, "Attendance is confirmed — role is locked. (Leaders: wait for War Forge.)"
+        conn.execute(
+            "UPDATE crown_war_fighters SET role = ?, clan_id = ?, side = ? "
+            "WHERE war_id = ? AND player_id = ?",
+            (role, int(clan_id), side, war["id"], int(player_id)),
+        )
+        conn.commit()
+        return True, (
+            f"Enlisted as {BATTLE_ROLE_LABELS[role]}. "
+            "Confirm attendance with /siege attend."
+        )
+    conn.execute(
+        "INSERT INTO crown_war_fighters "
+        "(war_id, player_id, clan_id, side, status, role, equipment_ready, enlisted_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, 0, ?)",
+        (war["id"], int(player_id), int(clan_id), side, FIGHTER_ENLISTED, role, now),
+    )
+    conn.commit()
+    return True, (
+        f"Enlisted for the {side} as {BATTLE_ROLE_LABELS[role]}. "
+        "Confirm attendance with /siege attend when you will fight."
+    )
+
+
+def attend(conn, player_id, now=None):
+    """Confirm attendance — only confirmed fighters count as humans for the war."""
+    now = time.time() if now is None else float(now)
+    tick_wars(conn, now)
+    war = current_war(conn)
+    if not war or war["status"] not in ("registration", "scheduled"):
+        return False, "No War for the Crown is open."
+    if war.get("status") == "active":
+        return False, "The roster is locked for the assault."
+    row = conn.execute(
+        "SELECT status, role, side FROM crown_war_fighters WHERE war_id = ? AND player_id = ?",
+        (war["id"], int(player_id)),
+    ).fetchone()
+    if not row:
+        return False, "Enlist first with /siege enlist [role]."
+    if row[0] == FIGHTER_CONFIRMED:
+        return False, "Your attendance is already confirmed."
+    conn.execute(
+        "UPDATE crown_war_fighters SET status = ?, confirmed_at = ? "
+        "WHERE war_id = ? AND player_id = ?",
+        (FIGHTER_CONFIRMED, now, war["id"], int(player_id)),
+    )
+    # Refresh cached human_count on the guild slot.
+    clan_id = _clan_of(conn, player_id)
+    if clan_id:
+        humans = _humans(conn, war["id"], clan_id)
+        conn.execute(
+            "UPDATE crown_war_slots SET human_count = ? WHERE war_id = ? AND clan_id = ?",
+            (humans, war["id"], clan_id),
+        )
+    conn.commit()
+    side_h = _side_confirmed_humans(conn, war["id"], row[2])
+    return True, (
+        f"Attendance confirmed as {BATTLE_ROLE_LABELS.get(row[1], row[1])} — "
+        f"you count toward the {row[2]} human roster "
+        f"({side_h} confirmed on your side)."
+    )
+
+
+def set_fighter_role(conn, player_id, role, now=None):
+    """Change battle role before attendance is confirmed / assault locks."""
+    return enlist(conn, player_id, role=role, now=now)
+
+
+def is_confirmed_fighter(conn, player_id, war_id=None):
+    """True when this player enlisted and confirmed attendance for the war."""
+    war = current_war(conn) if war_id is None else {"id": int(war_id)}
+    if not war:
+        return False
+    row = conn.execute(
+        "SELECT 1 FROM crown_war_fighters WHERE war_id = ? AND player_id = ? AND status = ?",
+        (int(war["id"]), int(player_id), FIGHTER_CONFIRMED),
+    ).fetchone()
+    return bool(row)
+
+
+def fighter_role(conn, player_id, war_id=None):
+    war = current_war(conn) if war_id is None else {"id": int(war_id)}
+    if not war:
+        return None
+    row = conn.execute(
+        "SELECT role FROM crown_war_fighters WHERE war_id = ? AND player_id = ?",
+        (int(war["id"]), int(player_id)),
+    ).fetchone()
+    return row[0] if row else None
+
+
+def forge_locked(conn, war=None):
+    """True once the assault has begun — War Forge kits cannot change."""
+    war = war or current_war(conn)
+    return bool(war and war.get("status") == "active")
+
+
+def _forge_bonuses_for(grade, role):
+    """Combine grade base with role bias; bonuses never drop below 0."""
+    spec = FORGE_GRADES.get(grade) or FORGE_GRADES["standard"]
+    bias = FORGE_ROLE_BIAS.get(role) or {}
+    out = {k: 0 for k in FORGE_BONUS_KEYS}
+    for k in FORGE_BONUS_KEYS:
+        out[k] = max(0, int(spec["base"].get(k, 0)) + int(bias.get(k, 0)))
+    return out
+
+
+def fighter_equipment(conn, player_id, war_id=None):
+    """Return forged kit info for a fighter, or None if not enlisted."""
+    war = current_war(conn) if war_id is None else {"id": int(war_id)}
+    if not war:
+        return None
+    row = conn.execute(
+        "SELECT role, status, equipment_ready, equipment_grade, equipment_forged_at "
+        "FROM crown_war_fighters WHERE war_id = ? AND player_id = ?",
+        (int(war["id"]), int(player_id)),
+    ).fetchone()
+    if not row:
+        return None
+    role, status, ready, grade, forged_at = row
+    grade = (grade or "").lower().strip() or None
+    bonuses = _forge_bonuses_for(grade, role) if ready and grade else {
+        k: 0 for k in FORGE_BONUS_KEYS
+    }
+    return {
+        "role": role,
+        "status": status,
+        "ready": bool(ready),
+        "grade": grade,
+        "grade_name": (FORGE_GRADES.get(grade) or {}).get("name") if grade else None,
+        "forged_at": float(forged_at) if forged_at else None,
+        "bonuses": bonuses,
+    }
+
+
+def siege_equipment_bonuses(conn, player_id):
+    """Combat bonuses for an active-siege confirmed fighter.
+
+    Returns a bonus dict (possibly all zeros if unforged) when personal gear
+    must be replaced by War Forge kit; None when the player is not under siege rules.
+    """
+    war = current_war(conn)
+    if not war or war.get("status") != "active":
+        return None
+    if not is_confirmed_fighter(conn, player_id, war["id"]):
+        return None
+    info = fighter_equipment(conn, player_id, war["id"])
+    if not info:
+        return {k: 0 for k in FORGE_BONUS_KEYS}
+    return dict(info["bonuses"])
+
+
+def forge_equipment(conn, player_id, grade="standard", now=None):
+    """Craft siege-only armour and weapons from the lead guild's reserve stock.
+
+    Personal gear is unavailable during the assault — fighters must forge here.
+    Equipment locks when the assault begins.
+    """
+    now = time.time() if now is None else float(now)
+    grade = str(grade or "standard").lower().strip()
+    if grade not in FORGE_GRADES:
+        return False, (
+            "Unknown War Forge grade. Choose: "
+            + ", ".join(FORGE_GRADES)
+            + "."
+        )
+    spec = FORGE_GRADES[grade]
+    war, lead_id, err = _side_operator(conn, player_id)
+    if err:
+        return False, err
+    if forge_locked(conn, war):
+        return False, (
+            "War Forge is locked — equipment was sealed when the assault began. "
+            "You cannot change kit mid-battle."
+        )
+    if war["status"] not in ("registration", "scheduled"):
+        return False, "War Forge opens during registration and preparation."
+    if not is_confirmed_fighter(conn, player_id, war["id"]):
+        return False, (
+            "Confirm attendance with /siege enlist and /siege attend "
+            "before forging battle equipment."
+        )
+    smith = _player_skill_level(conn, player_id, "smithing")
+    if smith < int(spec["smithing_req"]):
+        return False, (
+            f"{spec['name']} kit needs Smithing {spec['smithing_req']} "
+            f"(you have {smith}). Forge a lower grade or train Smithing."
+        )
+    row = conn.execute(
+        "SELECT role, equipment_ready, equipment_grade FROM crown_war_fighters "
+        "WHERE war_id = ? AND player_id = ?",
+        (war["id"], int(player_id)),
+    ).fetchone()
+    role = row[0] if row else "infantry"
+    already_ready = bool(row and row[1])
+    already_grade = (row[2] or "").lower().strip() if row else ""
+    if already_ready and already_grade == grade:
+        return False, (
+            f"You already forged a {spec['name']} kit for this war. "
+            "Upgrade with /siege forge reinforced or /siege forge masterwork "
+            "before the assault locks equipment."
+        )
+    # Higher grades may replace a lower kit (full cost; war economy sink).
+    if already_ready and already_grade:
+        order = list(FORGE_GRADES.keys())
+        if order.index(grade) < order.index(already_grade):
+            return False, (
+                f"You already have {FORGE_GRADES[already_grade]['name']} kit — "
+                "War Forge does not downgrade. Wait for the next war."
+            )
+    cost = dict(spec["cost"])
+    ok, msg = _spend_store(conn, war["id"], lead_id, cost, bucket="reserve")
+    if not ok:
+        return False, msg
+    bonuses = _forge_bonuses_for(grade, role)
+    conn.execute(
+        "UPDATE crown_war_fighters SET equipment_ready = 1, equipment_grade = ?, "
+        "equipment_forged_at = ? WHERE war_id = ? AND player_id = ?",
+        (grade, now, war["id"], int(player_id)),
+    )
+    pts = max(1, int(spec.get("contrib") or 1))
+    _credit_points(conn, war["id"], player_id, pts)
+    conn.commit()
+    role_label = BATTLE_ROLE_LABELS.get(role, role)
+    bonus_bits = ", ".join(
+        f"{k.replace('_bonus', '').replace('_', ' ')}+{v}"
+        for k, v in bonuses.items() if v
+    )
+    verb = "Upgraded to" if already_ready else "Forged"
+    return True, (
+        f"{verb} {spec['name']} War Forge kit for {role_label} "
+        f"(spent " + ", ".join(f"{v} {k}" for k, v in cost.items())
+        + f"). Bonuses: {bonus_bits or 'none'}. "
+        f"Personal armour and weapons are sealed for the assault. (+{pts} contrib)"
+    )
+
+
+def forge_lines(conn, player_id=None, now=None):
+    """War Forge panel: grades, smithing gates, and this fighter's kit."""
+    now = time.time() if now is None else float(now)
+    lines = [
+        "War Forge — siege-only armour and weapons",
+        "Personal gear is unavailable during the assault. "
+        "Forge here before the battle locks equipment.",
+    ]
+    for gid, spec in FORGE_GRADES.items():
+        cost = ", ".join(f"{v} {k}" for k, v in spec["cost"].items())
+        lines.append(
+            f"  {spec['name']}: Smithing {spec['smithing_req']}+ · "
+            f"cost {cost} (from reserve allocation)"
+        )
+    lines.append(
+        "Roles shape the kit (Infantry balanced · Archer ranged · "
+        "Healer tougher · Engineer modest · Heavy armoured)."
+    )
+    war = current_war(conn)
+    if not war:
+        lines.append("No War for the Crown is open.")
+        return lines
+    if forge_locked(conn, war):
+        lines.append("Equipment is locked for the assault.")
+    else:
+        lines.append(
+            "Craft with /siege forge [standard|reinforced|masterwork] "
+            "after /siege attend. Kits lock when the assault begins."
+        )
+    if player_id:
+        info = fighter_equipment(conn, player_id, war["id"])
+        if info and info["status"] == FIGHTER_CONFIRMED:
+            if info["ready"]:
+                lines.append(
+                    f"Your kit: {info['grade_name']} "
+                    f"({BATTLE_ROLE_LABELS.get(info['role'], info['role'])})."
+                )
+            else:
+                smith = _player_skill_level(conn, player_id, "smithing")
+                lines.append(
+                    f"You are confirmed ({BATTLE_ROLE_LABELS.get(info['role'], info['role'])}) "
+                    f"but unforged — Smithing {smith}. /siege forge to outfit."
+                )
+        elif info:
+            lines.append("Enlist and /siege attend before forging.")
+        else:
+            lines.append("You are not enlisted for this war.")
+    # Side readiness summary.
+    for side in SIDES:
+        lead = _lead_slot(conn, war["id"], side)
+        if not lead:
+            continue
+        ready_n = conn.execute(
+            "SELECT COUNT(*) FROM crown_war_fighters "
+            "WHERE war_id = ? AND side = ? AND status = ? AND equipment_ready = 1",
+            (war["id"], side, FIGHTER_CONFIRMED),
+        ).fetchone()[0]
+        total_n = _side_confirmed_humans(conn, war["id"], side)
+        lines.append(
+            f"{side.title()} forged: {int(ready_n)}/{int(total_n)} confirmed fighters."
+        )
+    return lines
+
+
+def focus_attackers(conn, defender_id, war_id=None):
+    """Player IDs currently allowed to deal direct damage to this defender."""
+    war = current_war(conn) if war_id is None else {"id": int(war_id)}
+    if not war or not defender_id:
+        return []
+    rows = conn.execute(
+        "SELECT attacker_id FROM crown_war_focus "
+        "WHERE war_id = ? AND defender_id = ? ORDER BY engaged_at, attacker_id",
+        (int(war["id"]), int(defender_id)),
+    ).fetchall()
+    return [int(r[0]) for r in rows]
+
+
+def _clear_attacker_focus(conn, war_id, attacker_id):
+    conn.execute(
+        "DELETE FROM crown_war_focus WHERE war_id = ? AND attacker_id = ?",
+        (int(war_id), int(attacker_id)),
+    )
+
+
+def _clear_defender_focus(conn, war_id, defender_id):
+    conn.execute(
+        "DELETE FROM crown_war_focus WHERE war_id = ? AND defender_id = ?",
+        (int(war_id), int(defender_id)),
+    )
+
+
+def clear_war_focus(conn, war_id):
+    conn.execute("DELETE FROM crown_war_focus WHERE war_id = ?", (int(war_id),))
+    conn.commit()
+
+
+def disengage_player(conn, attacker_id, now=None):
+    """Drop this attacker's focus lock (frees a slot on their former target)."""
+    war = current_war(conn)
+    if not war or not attacker_id:
+        return False, "No active war."
+    _clear_attacker_focus(conn, war["id"], attacker_id)
+    conn.commit()
+    return True, "You break off the engagement."
+
+
+def engage_player(conn, attacker_id, defender_id, now=None):
+    """Claim a direct-damage focus slot on a defender (max SIEGE_MAX_ATTACKERS).
+
+    Returns (ok, message). Re-engaging the same target refreshes the lock.
+    Switching targets releases the previous defender slot.
+    """
+    now = time.time() if now is None else float(now)
+    war = current_war(conn)
+    if not war or war.get("status") != "active":
+        return False, "Focus fire only applies during the assault."
+    if not attacker_id or not defender_id:
+        return False, "Need both fighters."
+    if int(attacker_id) == int(defender_id):
+        return False, "You cannot engage yourself."
+    if is_eliminated(conn, attacker_id, war["id"]):
+        return False, "You are eliminated from this siege."
+    if is_eliminated(conn, defender_id, war["id"]):
+        return False, "That fighter is already eliminated."
+    if not is_confirmed_fighter(conn, attacker_id, war["id"]):
+        return False, "Only confirmed fighters may engage in the assault."
+    if not is_confirmed_fighter(conn, defender_id, war["id"]):
+        return False, "That player is not a confirmed fighter in this war."
+    a_side = player_side(conn, attacker_id, war["id"])
+    d_side = player_side(conn, defender_id, war["id"])
+    if not a_side or not d_side:
+        return False, "Both fighters must still be in the war."
+    if a_side == d_side:
+        return False, "You cannot focus-fire an ally."
+    # Already holding this target — refresh timestamp.
+    row = conn.execute(
+        "SELECT defender_id FROM crown_war_focus WHERE war_id = ? AND attacker_id = ?",
+        (war["id"], int(attacker_id)),
+    ).fetchone()
+    if row and int(row[0]) == int(defender_id):
+        conn.execute(
+            "UPDATE crown_war_focus SET engaged_at = ? "
+            "WHERE war_id = ? AND attacker_id = ?",
+            (now, war["id"], int(attacker_id)),
+        )
+        conn.commit()
+        return True, "You keep pressure on your target."
+    current = focus_attackers(conn, defender_id, war["id"])
+    if int(attacker_id) not in current and len(current) >= SIEGE_MAX_ATTACKERS:
+        return False, (
+            f"Two fighters are already engaged with that target "
+            f"(cap {SIEGE_MAX_ATTACKERS}). Wait for a slot to open."
+        )
+    _clear_attacker_focus(conn, war["id"], attacker_id)
+    conn.execute(
+        "INSERT INTO crown_war_focus (war_id, defender_id, attacker_id, engaged_at) "
+        "VALUES (?, ?, ?, ?)",
+        (war["id"], int(defender_id), int(attacker_id), now),
+    )
+    conn.commit()
+    n = len(focus_attackers(conn, defender_id, war["id"]))
+    return True, (
+        f"You engage the target ({n}/{SIEGE_MAX_ATTACKERS} attackers on them)."
+    )
+
+
+def can_direct_damage(conn, attacker_id, defender_id):
+    """True when this attacker may deal direct player damage to the defender.
+
+    Outside an active siege, always allowed (normal world rules apply).
+    During the assault, the attacker must hold a focus slot (max two per target).
+    """
+    war = current_war(conn)
+    if not war or war.get("status") != "active":
+        return True, None
+    if not is_confirmed_fighter(conn, attacker_id, war["id"]):
+        return True, None  # non-siege participants use normal world rules
+    if not is_confirmed_fighter(conn, defender_id, war["id"]):
+        return True, None
+    a_side = player_side(conn, attacker_id, war["id"])
+    d_side = player_side(conn, defender_id, war["id"])
+    if not a_side or not d_side or a_side == d_side:
+        return False, "You cannot strike that fighter."
+    if is_eliminated(conn, attacker_id, war["id"]) or is_eliminated(conn, defender_id, war["id"]):
+        return False, "That bout is over."
+    current = focus_attackers(conn, defender_id, war["id"])
+    if int(attacker_id) in current:
+        return True, None
+    if len(current) >= SIEGE_MAX_ATTACKERS:
+        return False, (
+            f"Two fighters are already engaged with that target "
+            f"(cap {SIEGE_MAX_ATTACKERS})."
+        )
+    # Auto-claim a free slot on the first successful strike attempt.
+    ok, msg = engage_player(conn, attacker_id, defender_id)
+    if not ok:
+        return False, msg
+    return True, None
+
+
+def can_area_damage(conn, attacker_id, defender_id):
+    """Area effects may hit players beyond the two-attacker lock, at reduced power.
+
+    Returns (allowed, damage_multiplier, message).
+    """
+    war = current_war(conn)
+    if not war or war.get("status") != "active":
+        return True, 1.0, None
+    if not is_confirmed_fighter(conn, attacker_id, war["id"]):
+        return True, 1.0, None
+    if not is_confirmed_fighter(conn, defender_id, war["id"]):
+        return True, 1.0, None
+    a_side = player_side(conn, attacker_id, war["id"])
+    d_side = player_side(conn, defender_id, war["id"])
+    if not a_side or not d_side or a_side == d_side:
+        return False, 0.0, "Friendly fire blocked."
+    if is_eliminated(conn, defender_id, war["id"]):
+        return False, 0.0, "Already eliminated."
+    ok, _ = can_direct_damage(conn, attacker_id, defender_id)
+    if ok:
+        return True, 1.0, None
+    # Beyond the two-attacker lock — splash still applies at half effect.
+    return True, SIEGE_AREA_DAMAGE_MULT, (
+        f"Area hit at {int(SIEGE_AREA_DAMAGE_MULT * 100)}% — "
+        f"direct focus is capped at {SIEGE_MAX_ATTACKERS} attackers."
+    )
+
+
 def confirm(conn, player_id, now=None):
-    """Confirm a reserved slot once the alliance reaches the human minimum."""
+    """Confirm a reserved slot once enough fighters have confirmed attendance."""
     now = time.time() if now is None else float(now)
     if not _is_leader(conn, player_id):
         return False, "Only a guild Leader can confirm the war slot."
@@ -1328,13 +2033,19 @@ def confirm(conn, player_id, now=None):
     name = _clan_name(conn, clan_id)
     try:
         import politics
-        politics.news(conn, "siege", f"{name} confirmed the {side} slot for the War for the Crown.", now)
+        politics.news(
+            conn, "siege",
+            f"{name} confirmed the {side} slot for the War for the Crown "
+            f"with {humans} confirmed fighters.",
+            now,
+        )
     except Exception:
         pass
     tick_wars(conn, now)
     return True, (
-        f"{name} confirmed the {side} slot with {humans} humans"
+        f"{name} confirmed the {side} slot with {humans} confirmed fighters"
         + (f" and {mercs} mercenaries." if mercs else ".")
+        + " (Guild membership alone does not count — only /siege attend.)"
     )
 
 
@@ -1362,13 +2073,14 @@ def _alliance_mercs(conn, war_id, lead_clan_id, side):
 
 
 def roster_caps_ok(humans, mercs=0):
-    """Milestone 8 roster rules: human min, side cap, 40% mercenary ceiling."""
+    """Milestone 8 roster rules: confirmed human min, side cap, 40% mercenary ceiling."""
     humans = max(0, int(humans))
     mercs = max(0, int(mercs))
     if humans < HUMAN_MIN:
         return False, (
-            f"Need at least {HUMAN_MIN} humans in the lead guild plus accepted allies "
-            f"(you have {humans})."
+            f"Need at least {HUMAN_MIN} confirmed fighters "
+            f"(/siege enlist · /siege attend) across the lead guild and accepted allies "
+            f"(you have {humans}). Guild membership alone does not count."
         )
     total = humans + mercs
     if total > SIDE_CAP:
@@ -1643,7 +2355,8 @@ HERALD_SIEGE_OPTIONS = [
     {"id": "siege_confirm", "label": "Confirm our war slot"},
     {"id": "siege_store", "label": "War storehouse"},
     {"id": "siege_costs", "label": "Siege resource costs"},
-    {"id": "siege_scout", "label": "Scout the castle walls"},
+    {"id": "siege_scout", "label": "Survey damage (Engineering)"},
+    {"id": "siege_survey", "label": "Engineering survey"},
     {"id": "siege_royalguard", "label": "Royal Guard"},
     {"id": "siege_report", "label": "Battle report"},
 ]
@@ -1761,16 +2474,32 @@ def _skill_bonus_mult(level):
 
 
 def siege_skill_mult(conn, player_id):
-    """Skilled humans operate engines/repairs better (design: smith / timber craft).
+    """Engineering operates engines, repairs and barricades (design: not Construction).
 
-    Construction is not a live skill — smithing (mechanisms) and woodcutting
-    (timber engines) stand in.
+    Smithing still helps slightly with mechanisms; Engineering is the primary skill.
     """
     if not player_id:
         return 1.0
+    eng = _player_skill_level(conn, player_id, "engineering")
     smith = _player_skill_level(conn, player_id, "smithing")
-    wood = _player_skill_level(conn, player_id, "woodcutting")
-    return _skill_bonus_mult((smith + wood) / 2.0)
+    blended = eng * 0.75 + smith * 0.25
+    return _skill_bonus_mult(blended)
+
+
+def _grant_engineering_xp(conn, player_id, amount):
+    """Award Engineering XP for siege craft / repair / deploy work."""
+    amount = max(0, int(amount or 0))
+    if not player_id or amount <= 0:
+        return 0
+    try:
+        conn.execute(
+            "UPDATE players SET engineering_xp = COALESCE(engineering_xp, 0) + ? WHERE id = ?",
+            (amount, int(player_id)),
+        )
+        conn.commit()
+        return amount
+    except Exception:
+        return 0
 
 
 def deposit_skill_mult(conn, player_id, resource):
@@ -1977,17 +2706,20 @@ def craft_weapon(conn, player_id, weapon_id, qty=1, now=None):
     )
     conn.commit()
     have = weapon_stock(conn, war["id"], lead_id)[weapon_id]
-    # Skilled smiths earn a little extra contribution for outfitting the army.
+    # Engineering (and a little Smithing) improves craft contribution.
     mult = siege_skill_mult(conn, player_id)
     craft_pts = max(1, int(round(2 * qty * mult)))
     _credit_points(conn, war["id"], player_id, craft_pts)
+    eng_xp = _grant_engineering_xp(conn, player_id, max(8, 6 * qty))
     note = (
         f"Crafted {qty}× {spec['name']} (spent "
         + ", ".join(f"{v} {k}" for k, v in cost.items())
-        + f"). Ready: {have}. (+{craft_pts} contrib)"
+        + f"). Ready: {have}. (+{craft_pts} contrib"
+        + (f", +{eng_xp} Engineering XP" if eng_xp else "")
+        + ")"
     )
     if mult > 1.0:
-        note += f" [skill ×{mult:.2f}]"
+        note += f" [Engineering ×{mult:.2f}]"
     if side == "defend" and armoury_gone:
         note += " Armoury destroyed — paid double."
     return True, note
@@ -2011,7 +2743,9 @@ def fire_weapon(conn, player_id, weapon_id, structure_id, now=None):
     war, lead_id, err = _side_operator(conn, player_id)
     if err:
         return False, err, None
-    # Any side fighter may operate a crafted engine from the shared stock.
+    if war.get("status") == "active" and not is_confirmed_fighter(conn, player_id, war["id"]):
+        return False, "Only confirmed fighters may operate siege engines in the assault.", None
+    # Any confirmed side fighter may operate a crafted engine from the shared stock.
     row = conn.execute(
         "SELECT qty FROM crown_war_weapons WHERE war_id = ? AND clan_id = ? AND weapon_id = ?",
         (war["id"], lead_id, weapon_id),
@@ -2033,13 +2767,19 @@ def fire_weapon(conn, player_id, weapon_id, structure_id, now=None):
     if pts:
         pts = max(1, int(round(pts * mult)))
         _credit_points(conn, war["id"], player_id, pts)
+    eng_xp = _grant_engineering_xp(conn, player_id, 10)
+    extras = []
+    if pts:
+        extras.append(f"+{pts} contrib")
+    if eng_xp:
+        extras.append(f"+{eng_xp} Engineering XP")
     note = (
         f"{spec['name']} strikes the {updated['name']} for {dmg} damage "
         f"({updated['hp']}/{updated['max_hp']}, {updated['state']})"
-        + (f" (+{pts} contrib)." if pts else ".")
+        + (f" ({', '.join(extras)})." if extras else ".")
     )
     if mult > 1.0:
-        note += f" [skill ×{mult:.2f}]"
+        note += f" [Engineering ×{mult:.2f}]"
     # Design: banners burn, siege towers catch fire as the castle is pressed.
     if weapon_id == "tower":
         note += " The siege tower catches fire as it presses the walls!"
@@ -2049,7 +2789,7 @@ def fire_weapon(conn, player_id, weapon_id, structure_id, now=None):
         note += " Banners burn amid the fire and debris."
     breached = bool(before and before["state"] != "destroyed" and updated["state"] == "destroyed")
     if breached:
-        note += " The structure collapses — a breach is open."
+        note += " " + destruction_presentation(structure_id, updated)
         try:
             import politics
             politics.news(conn, "siege", note, now)
@@ -2105,12 +2845,16 @@ def repair_structure(conn, player_id, structure_id, batches=1, now=None):
             pass
     pts = max(1, int(round(REPAIR_CONTRIB_PER_BATCH * batches * mult)))
     _credit_points(conn, war["id"], player_id, pts)
+    eng_xp = _grant_engineering_xp(conn, player_id, max(6, 5 * batches))
     note = (
         f"Repaired the {updated['name']} by {amount} HP "
-        f"({updated['hp']}/{updated['max_hp']}, {updated['state']}) (+{pts} contrib)."
+        f"({updated['hp']}/{updated['max_hp']}, {updated['state']}) "
+        f"(+{pts} contrib"
+        + (f", +{eng_xp} Engineering XP" if eng_xp else "")
+        + ")."
     )
     if mult > 1.0:
-        note += f" [skill ×{mult:.2f}]"
+        note += f" [Engineering ×{mult:.2f}]"
     return True, note, {"structure": updated, "breached": False, "sync": True}
 
 
@@ -2876,6 +3620,9 @@ def tick_captures(conn, presence, now=None):
     for player_id, plane, x, y in presence:
         if is_eliminated(conn, player_id, war["id"]):
             continue
+        # Design: only confirmed siege participants fight for capture points.
+        if not is_confirmed_fighter(conn, player_id, war["id"]):
+            continue
         side = player_side(conn, player_id, war["id"])
         if side not in SIDES:
             continue
@@ -3090,6 +3837,7 @@ def resolve_war(conn, winner="attack", now=None):
         (now, note, war["id"]),
     )
     conn.commit()
+    clear_war_focus(conn, war["id"])
     if crowned_pid:
         try:
             grant_siege_heraldry(conn, crowned_pid, war_id=war["id"], now=now)
@@ -3267,6 +4015,9 @@ def eliminate(conn, player_id, now=None, killer_id=None):
         "INSERT OR REPLACE INTO crown_war_elim (war_id, player_id, eliminated_at) VALUES (?, ?, ?)",
         (war["id"], int(player_id), now),
     )
+    # Free focus slots: this fighter no longer attacks or absorbs focus fire.
+    _clear_attacker_focus(conn, war["id"], player_id)
+    _clear_defender_focus(conn, war["id"], player_id)
     conn.commit()
     # Credit opposite-side player kills only (not monsters / friendly fire).
     if killer_id and int(killer_id) != int(player_id):
@@ -3445,7 +4196,7 @@ def monthly_calendar_lines(conn, now=None):
     elif war.get("status") in ("registration", "scheduled"):
         lines.append(
             "Battle assignments are open — form alliances, deposit supplies, craft engines, "
-            "scout, and set the coordinated assault window."
+            "run Engineering surveys, and set the coordinated assault window."
         )
     elif war.get("status") == "active":
         lines.append(
@@ -3604,6 +4355,176 @@ def king_defend_lines(conn, player_id=None, war=None, now=None):
     return lines
 
 
+def role_roster(conn, war_id, side=None):
+    """Confirmed fighter counts by battle role (optionally one side)."""
+    counts = {r: 0 for r in BATTLE_ROLES}
+    forged = {r: 0 for r in BATTLE_ROLES}
+    sql = (
+        "SELECT role, equipment_ready, COUNT(*) FROM crown_war_fighters "
+        "WHERE war_id = ? AND status = ?"
+    )
+    args = [int(war_id), FIGHTER_CONFIRMED]
+    if side in SIDES:
+        sql += " AND side = ?"
+        args.append(side)
+    sql += " GROUP BY role, equipment_ready"
+    for role, ready, n in conn.execute(sql, args).fetchall():
+        role = str(role or "infantry")
+        if role not in counts:
+            counts[role] = 0
+            forged[role] = 0
+        counts[role] += int(n)
+        if ready:
+            forged[role] += int(n)
+    return {"counts": counts, "forged": forged}
+
+
+def role_roster_lines(conn, war=None):
+    """Readable battle-role breakdown for the War Council / /siege roles."""
+    war = war or current_war(conn)
+    if not war:
+        return ["No War for the Crown is open."]
+    lines = [
+        "Battle roles (confirmed fighters) — "
+        "/siege enlist <role> · /siege role <role> before /siege attend:",
+    ]
+    for side in SIDES:
+        roster = role_roster(conn, war["id"], side=side)
+        bits = []
+        for role in BATTLE_ROLES:
+            n = int(roster["counts"].get(role) or 0)
+            if n <= 0:
+                continue
+            ready = int(roster["forged"].get(role) or 0)
+            label = BATTLE_ROLE_LABELS.get(role, role)
+            bits.append(f"{label} {n} ({ready} forged)")
+        if not bits:
+            bits = ["none confirmed"]
+        lines.append(f"  {side.title()}: " + " · ".join(bits))
+    lines.append(
+        "Roles: Infantry (frontline) · Archer (ranged/walls) · Healer (restore) · "
+        "Engineer (engines/repairs) · Heavy (armoured)."
+    )
+    return lines
+
+
+def war_council_panels(conn, player_id=None, now=None):
+    """Structured War Council panels for the graphical / atlas UI.
+
+    Panels: Army, Roles, Equipment, Storehouse, Castle, Objectives, Battle.
+    """
+    now = time.time() if now is None else float(now)
+    tick_wars(conn, now)
+    war = current_war(conn)
+    panels = {
+        "army": {"title": "Army", "lines": [], "sides": {}},
+        "roles": {"title": "Roles", "lines": []},
+        "equipment": {"title": "Equipment", "lines": []},
+        "storehouse": {"title": "Storehouse", "lines": []},
+        "castle": {"title": "Castle", "lines": []},
+        "objectives": {"title": "Objectives", "lines": []},
+        "battle": {"title": "Battle", "lines": []},
+    }
+    if not war:
+        panels["army"]["lines"] = ["No war open."]
+        notes = recent_war_notes(conn, limit=1)
+        if notes:
+            panels["battle"]["lines"] = [notes[0]["note"], " /siege report for the full tally."]
+        return panels
+
+    pub = war_public(conn, war) or {}
+    for side in SIDES:
+        lead = ((pub.get("sides") or {}).get(side) or {}).get("lead") or {}
+        humans = int(lead.get("humans") or 0)
+        mercs = int(lead.get("mercs") or 0)
+        name = lead.get("name") or "—"
+        panels["army"]["sides"][side] = {
+            "name": name, "humans": humans, "mercs": mercs,
+        }
+        panels["army"]["lines"].append(
+            f"{side.title()}: {name} — {humans} humans / {mercs} mercs"
+        )
+
+    panels["roles"]["lines"] = role_roster_lines(conn, war)[1:]  # skip header
+    panels["roles"]["by_side"] = {
+        side: role_roster(conn, war["id"], side=side) for side in SIDES
+    }
+
+    for side in SIDES:
+        ready_n = conn.execute(
+            "SELECT COUNT(*) FROM crown_war_fighters "
+            "WHERE war_id = ? AND side = ? AND status = ? AND equipment_ready = 1",
+            (war["id"], side, FIGHTER_CONFIRMED),
+        ).fetchone()[0]
+        total_n = _side_confirmed_humans(conn, war["id"], side)
+        panels["equipment"]["lines"].append(
+            f"{side.title()} War Forge: {int(ready_n)}/{int(total_n)} ready "
+            f"(/siege forge)"
+        )
+    if player_id:
+        info = fighter_equipment(conn, player_id, war["id"])
+        if info and info.get("ready"):
+            panels["equipment"]["lines"].append(
+                f"Your kit: {info.get('grade_name')} "
+                f"({BATTLE_ROLE_LABELS.get(info.get('role'), info.get('role'))})"
+            )
+        elif info and info.get("status") == FIGHTER_CONFIRMED:
+            panels["equipment"]["lines"].append(
+                "You are confirmed but unforged — /siege forge before the assault."
+            )
+
+    for side in SIDES:
+        lead = ((pub.get("sides") or {}).get(side) or {}).get("lead")
+        stock = ((pub.get("sides") or {}).get(side) or {}).get("store") or {}
+        if not lead:
+            continue
+        panels["storehouse"]["lines"].append(
+            f"{side.title()} ({lead.get('name')}): "
+            + " · ".join(f"{stock.get(r, 0)} {r}" for r in STORE_RESOURCES)
+        )
+
+    for s in list_structures(conn):
+        if not s:
+            continue
+        panels["castle"]["lines"].append(
+            f"{s['name']}: {s['state']} ({s['hp']}/{s['max_hp']})"
+        )
+
+    if war["status"] in ("active", "scheduled"):
+        for p in capture_state(conn, war["id"]):
+            stage_bit = ""
+            if p["id"] in CAPTURE_STAGES:
+                num, label = CAPTURE_STAGES[p["id"]]
+                stage_bit = f"Stage {num} — {label}: "
+            panels["objectives"]["lines"].append(
+                f"{stage_bit}{p['name']}: {p['owner']} ({p['progress']}/{p['need']})"
+            )
+    else:
+        panels["objectives"]["lines"].append(
+            "Capture stages unlock when the assault begins."
+        )
+
+    elim_n = conn.execute(
+        "SELECT COUNT(*) FROM crown_war_elim WHERE war_id = ?", (war["id"],)
+    ).fetchone()[0]
+    alive = max(0, _side_confirmed_humans(conn, war["id"], "attack")
+                + _side_confirmed_humans(conn, war["id"], "defend") - int(elim_n))
+    panels["battle"]["lines"].append(
+        f"Status: {war['status']} · confirmed alive ~{alive} · eliminated {int(elim_n)}"
+    )
+    board = contrib_board(conn, war["id"], limit=3)
+    if board:
+        panels["battle"]["lines"].append(
+            "Top contribution: "
+            + " · ".join(f"{e['name']} {e['points']}pts" for e in board)
+        )
+    if war["status"] == "active":
+        panels["battle"]["lines"].append(
+            "Eliminated fighters may spectate — /siege report after Crownfall."
+        )
+    return panels
+
+
 def war_council_lines(conn, player_id=None, now=None):
     """Notice-board / War Council blurb — public contribution board when a war is open."""
     now = time.time() if now is None else float(now)
@@ -3647,9 +4568,15 @@ def war_council_lines(conn, player_id=None, now=None):
     # Compact status + both sides so the board shows community contribution at a glance.
     for ln in board_lines(conn, player_id, now=now)[:6]:
         lines.append(ln)
+    panels = war_council_panels(conn, player_id, now=now)
+    # Panel digest — Army / Roles / Equipment at a glance.
+    for key in ("army", "roles", "equipment", "battle"):
+        panel = panels.get(key) or {}
+        for ln in (panel.get("lines") or [])[:3]:
+            lines.append(f"[{panel.get('title', key)}] {ln}")
     lines.append(
-        "Herald at the castle · /siege status · /siege store · /siege costs · "
-        "world map War Council"
+        "Herald at the castle · /siege status · /siege roles · /siege forge · "
+        "/siege store · world map War Council"
     )
     return lines
 
@@ -3662,6 +4589,7 @@ def atlas_war_summary(conn, player_id=None, now=None):
     now = time.time() if now is None else float(now)
     tick_wars(conn, now)
     lines = war_council_lines(conn, player_id, now=now)
+    panels = war_council_panels(conn, player_id, now=now)
     war = current_war(conn)
     if war:
         pub = war_public(conn, war) or {}
@@ -3684,6 +4612,7 @@ def atlas_war_summary(conn, player_id=None, now=None):
             "status": war["status"],
             "line": line,
             "lines": lines,
+            "panels": panels,
         }
     if not lines:
         return None
@@ -3712,6 +4641,7 @@ def atlas_war_summary(conn, player_id=None, now=None):
         "line": line,
         "next_war_days": days,
         "lines": lines,
+        "panels": panels,
     }
 
 
@@ -4020,12 +4950,12 @@ def contrib_board(conn, war_id=None, limit=10):
 
 
 def structure_lines(conn):
-    """Scout report — design: scouts reveal defensive weak points.
+    """Engineering survey — design: Engineers reveal defensive weak points.
 
     Damaged / heavily damaged / destroyed structures are listed first so the
-    assault window and Herald scout call out soft spots before the full roster.
+    assault window and Herald Engineering survey call out soft spots.
     """
-    lines = ["Siege scout — Crownfall structure report:"]
+    lines = ["Engineering survey — Crownfall structure report:"]
     structs = [s for s in list_structures(conn) if s]
     order = {"destroyed": 0, "heavily_damaged": 1, "damaged": 2, "intact": 3}
     weak = [s for s in structs if s["state"] != "intact"]
@@ -4089,9 +5019,15 @@ def requirement_lines():
         + ", ".join(f"{v} {k}" for k, v in REPAIR_COST.items())
         + " (defenders)"
     )
+    lines.append("War Forge kits (personal gear sealed for the assault; spend reserve):")
+    for _gid, spec in FORGE_GRADES.items():
+        cost = ", ".join(f"{v} {k}" for k, v in spec["cost"].items())
+        lines.append(
+            f"  {spec['name']}: Smithing {spec['smithing_req']}+ · {cost}"
+        )
     lines.append(
-        "Any fighter on your side may craft, fire, repair, or deploy. "
-        "High Smithing and Woodcutting operate engines and repairs more effectively. "
+        "Any fighter on your side may craft, fire, repair, forge, or deploy. "
+        "Engineering (with some Smithing) operates engines and repairs more effectively. "
         "Mining, Woodcutting, and Smithing raise contribution when you deposit matching supplies."
     )
     return lines
@@ -4117,19 +5053,20 @@ def board_lines(conn, player_id=None, now=None):
     # Design: siege preparation — register, alliances form, deposit, craft, reinforce, scout.
     if war and war["status"] in ("registration", "scheduled"):
         lines.append(
-            "Preparation: guilds register · Leaders form alliances "
-            "(/siege ally <guild>, /siege accept) · deposit war supplies · "
+            "Preparation: guilds register · fighters /siege enlist + /siege attend · "
+            "Leaders form alliances (/siege ally <guild>, /siege accept) · "
+            "deposit war supplies · War Forge kits (/siege forge) · "
             "craft rams, ladders, siege towers · defenders reinforce gates/walls "
-            "(/siege repair) · /siege scout for weak points · "
+            "(/siege repair) · Engineers /siege survey weak points · "
             f"attack Leader sets the coordinated assault window "
             f"(/siege when <{ASSAULT_WINDOW_MIN_H}-{ASSAULT_WINDOW_MAX_H}>h)."
         )
         # Design: community roles — guild leaders organise; non-PvP players still matter.
         lines.append(
             "Community roles: Guild leaders organise attack or defence · "
-            "Warriors fight · Archers hold walls · "
-            "Miners gather ore/stone · Smiths craft engines · "
-            "Woodcutters supply timber · Scouts reveal weak points."
+            "Infantry, Archers, Healers, Engineers, Heavy fighters · "
+            "Miners gather ore/stone · Smiths forge kits and engines · "
+            "Woodcutters supply timber · War Forge locks when the assault begins."
         )
     if war and war["status"] in ("registration", "scheduled", "active"):
         # Design: human/mercenary numbers visible to both leaders before roster locks.
@@ -4143,6 +5080,11 @@ def board_lines(conn, player_id=None, now=None):
                 "Recruit contracts are locked for the assault — "
                 "no new hires or dismissals until Crownfall."
             )
+            lines.append(
+                f"Focus fire: at most {SIEGE_MAX_ATTACKERS} attackers may deal "
+                "direct damage to one fighter. Area hits still splash at reduced power."
+            )
+            lines.extend(battlefield_effects_lines(conn))
         if str(war.get("scale") or "") == "small":
             lines.append(
                 f"Smaller-scale war — human minimum {SMALL_SCALE_HUMAN_MIN} per side "
@@ -4285,6 +5227,39 @@ def handle_command(conn, player_id, text):
     if sub == "confirm":
         ok, msg = confirm(conn, player_id)
         return ok, [msg]
+    if sub in ("enlist", "signup", "joinfight"):
+        role = parts[2].lower() if len(parts) > 2 else "infantry"
+        ok, msg = enlist(conn, player_id, role=role)
+        return ok, [msg]
+    if sub in ("attend", "ready", "here"):
+        ok, msg = attend(conn, player_id)
+        return ok, [msg]
+    if sub == "role":
+        if len(parts) < 3:
+            return False, [
+                "Usage: /siege role <"
+                + "|".join(BATTLE_ROLES)
+                + ">  (before you /siege attend)"
+            ]
+        ok, msg = set_fighter_role(conn, player_id, parts[2].lower())
+        return ok, [msg]
+    if sub in ("forge", "warforge", "kit", "outfit"):
+        # /siege forge → panel; /siege forge reinforced → craft
+        if len(parts) < 3 or parts[2].lower() in ("info", "panel", "help"):
+            return True, forge_lines(conn, player_id)
+        ok, msg = forge_equipment(conn, player_id, grade=parts[2].lower())
+        return ok, [msg]
+    if sub in ("roles", "rolelist", "rosterroles"):
+        return True, role_roster_lines(conn)
+    if sub in ("panels", "councilpanels"):
+        panels = war_council_panels(conn, player_id)
+        lines = ["War Council panels:"]
+        for key in ("army", "roles", "equipment", "storehouse", "castle", "objectives", "battle"):
+            panel = panels.get(key) or {}
+            lines.append(f"— {panel.get('title', key)} —")
+            for ln in panel.get("lines") or ["(empty)"]:
+                lines.append(f"  {ln}")
+        return True, lines
     if sub == "forfeit":
         ok, msg = forfeit(conn, player_id)
         return ok, [msg]
@@ -4458,7 +5433,8 @@ def handle_command(conn, player_id, text):
             ]
         ok, msg = set_assault_window(conn, player_id, hours)
         return ok, [msg]
-    if sub in ("scout", "structures", "damage", "weak"):
+    if sub in ("scout", "survey", "structures", "damage", "weak", "engineering"):
+        # /siege scout kept as alias; Engineering survey is the design name.
         return True, structure_lines(conn)
     if sub in ("barricade", "barricades", "fortify"):
         if len(parts) < 3:
@@ -4522,12 +5498,15 @@ def handle_command(conn, player_id, text):
             "Regal robes unlock at Mae's for the victor."
         ]
     return False, [
-        "Usage: /siege [status|register attack|register defend|confirm|forfeit|"
+        "Usage: /siege [status|register attack|register defend|"
+        "enlist [role]|attend|role <"
+        + "|".join(BATTLE_ROLES)
+        + ">|roles|forge [standard|reinforced|masterwork]|panels|confirm|forfeit|"
         "ally <guild>|accept|decline|open|store|costs|report|deposit <item> <qty>|"
         "alloc rams=.. ladders=.. barricades=.. reserve=..|contrib|"
         "craft <weapon> [qty]|fire <weapon> <structure>|barricade <point>|"
         "guard <point>|royalguard <name>|royalguard dismiss <name>|"
-        "repair <structure>|scout|weapons|begin|roster|"
+        "repair <structure>|survey|weapons|begin|roster|"
         f"when <{ASSAULT_WINDOW_MIN_H}-{ASSAULT_WINDOW_MAX_H}>h|captures|council|heraldry]"
     ]
 

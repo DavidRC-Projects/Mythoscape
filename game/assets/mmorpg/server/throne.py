@@ -103,7 +103,8 @@ HERALD_OPTIONS = [
     {"id": "siege_confirm", "label": "Confirm our war slot"},
     {"id": "siege_store", "label": "War storehouse"},
     {"id": "siege_costs", "label": "Siege resource costs"},
-    {"id": "siege_scout", "label": "Scout the castle walls"},
+    {"id": "siege_scout", "label": "Survey damage (Engineering)"},
+    {"id": "siege_survey", "label": "Engineering survey"},
     {"id": "siege_royalguard", "label": "Royal Guard"},
     {"id": "siege_report", "label": "Battle report"},
 ]
