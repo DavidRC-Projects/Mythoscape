@@ -36,7 +36,15 @@ KEEP_H = 22.0
 GATE_H = 13.4
 MERLON_H = 1.25
 PLAYER_W, PLAYER_H = 0.74, 1.88
-ENGINE_H = {"ram": 1.7, "trebuchet": 3.6, "siege_tower": 6.2, "ladder": 3.4}
+ENGINE_H = {"ram": 1.7, "trebuchet": 3.6, "siege_tower": 6.2, "ladder": 3.4,
+            "ballista": 2.2, "cauldron": 1.6}
+_SPRITE_ALIAS = {"ballista": "trebuchet"}
+
+
+def _baked_name(kind: str):
+    """Reuse the trebuchet plate for a ballista. No new art pass."""
+    name = _SPRITE_ALIAS.get(kind, kind)
+    return name if (BAKED_DIR / f"{name}.png").is_file() else None
 
 LAST_METRICS: Dict[str, float] = {}
 
@@ -1296,7 +1304,7 @@ def render_world(
         rec = eng.rect()
         cx = (rec[0] + rec[2] + 1) / 2.0
         cy = (rec[1] + rec[3] + 1) / 2.0
-        sprite = eng.engine_type if (BAKED_DIR / f"{eng.engine_type}.png").is_file() else None
+        sprite = _baked_name(eng.engine_type)
         if sprite:
             blit_baked(world, sprite, cx, cy, origin, scale, screen_o)
     if ghosts:
@@ -1308,8 +1316,9 @@ def render_world(
             x0, y0, x1, y1 = min(xs), min(ys), max(xs) + 1, max(ys) + 1
             cx, cy = (x0 + x1) / 2.0, (y0 + y1) / 2.0
             tint = (40, 180, 70) if ok else (200, 40, 36)
-            if (BAKED_DIR / f"{kind}.png").is_file():
-                blit_baked(world, kind, cx, cy, origin, scale, screen_o, tint=tint)
+            baked = _baked_name(kind)
+            if baked:
+                blit_baked(world, baked, cx, cy, origin, scale, screen_o, tint=tint)
             cols = [(x0, y0, 0.05), (x1, y0, 0.05), (x1, y1, 0.05), (x0, y1, 0.05)]
             sp = [P.project(*c, origin, scale, screen_o)[:2] for c in cols]
             color = (70, 210, 90) if ok else (210, 60, 55)

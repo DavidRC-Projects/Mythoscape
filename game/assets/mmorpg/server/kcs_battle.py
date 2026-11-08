@@ -140,7 +140,9 @@ def enrich_snapshot(body: dict, war_id: int) -> dict:
                 opening["hp"] = hps[oid]
         combat = store.engine_combat_map(war_id)
         for engine in body.get("engines") or []:
-            spec = kcs_balance.ENGINES.get(engine.get("engine_type") or "", {})
+            kind = engine.get("engine_type") or ""
+            spec = kcs_balance.engine_spec(kind) if (
+                kind in kcs_balance.ENGINES or kind in kcs_balance.DEFENDER_ENGINES) else {}
             rec = combat.get(int(engine.get("engine_id")))
             engine["max_hp"] = int(spec.get("hp") or 1)
             engine["hp"] = rec[0] if rec else engine["max_hp"]
@@ -229,7 +231,10 @@ def fire(session, engine_type: str) -> dict:
     if err:
         return err
     store, war = ctx
-    if _side(session) != "attack":
+    side = _side(session)
+    if side == "defend":
+        return _fire_defender(session, store, war, engine_type)
+    if side != "attack":
         return _fail("Only attackers fire siege engines.")
     if engine_type not in kcs_balance.ENGINES:
         return _fail("Choose a ram, trebuchet, siege tower, or ladder.")
@@ -269,7 +274,8 @@ def fire(session, engine_type: str) -> dict:
         new_hp = max(0, int(current) - int(damage))
         state = kcs_balance.state_for_hp(new_hp, max_hp)
         cd = now + kcs_balance.ENGINES[engine_type]["cooldown"] * kcs_balance.cooldown_scale()
-        rev = store.write_shot(war.war_id, engine.engine_id, hp, cd, oid, new_hp, state)
+        splash = _splash_hits(store, war.war_id, cells.get(oid) or [], combat)
+        rev = store.write_shot(war.war_id, engine.engine_id, hp, cd, oid, new_hp, state, splash)
         _grant(session.player_id, kcs_balance.xp_shot())
         return {
             "ok": True,
@@ -277,8 +283,178 @@ def fire(session, engine_type: str) -> dict:
             "opening": {"opening_id": oid, "state": state, "rev": rev, "hp": new_hp,
                         "plane": kcs_siege.PLANE_BATTLEFIELD},
             "engine_id": engine.engine_id,
+            "engines": [{"engine_id": engine.engine_id, "hp": hp, "cooldown_until": cd}]
+                       + [{"engine_id": eid, "hp": shp} for eid, shp in splash],
         }
     return _fail(refusal)
+
+
+def _splash_hits(store, war_id, gate_tiles, combat):
+    """Defender engines standing on the opening an attacker just hit."""
+    amount = kcs_balance.opening_splash()
+    if amount <= 0 or not gate_tiles:
+        return []
+    hits = []
+    for engine in store.engines(war_id):
+        if engine.side != "defend" or engine.engine_type not in kcs_balance.DEFENDER_ENGINES:
+            continue
+        near = any(
+            max(abs(int(tx) - int(gx)), abs(int(ty) - int(gy))) <= 1
+            for tx, ty in engine.tiles for gx, gy in gate_tiles
+        )
+        if not near:
+            continue
+        spec = kcs_balance.DEFENDER_ENGINES[engine.engine_type]
+        hp = combat.get(engine.engine_id, (spec["hp"], 0.0))[0]
+        if hp <= 0:
+            continue
+        hits.append((engine.engine_id, max(0, int(hp) - amount)))
+    return hits
+
+
+def _foes(session):
+    me = _side(session)
+    try:
+        import server
+        sessions = list(server.WORLD.sessions.values())
+    except Exception:
+        sessions = []
+    found = []
+    plane = (session.dungeon or {}).get("plane")
+    for other in sessions:
+        if other is session or not kcs_siege.on_map(other):
+            continue
+        if (other.dungeon or {}).get("plane") != plane:
+            continue
+        if _side(other) == me or _side(other) not in ("attack", "defend"):
+            continue
+        if int(getattr(other, "hp", 0) or 0) <= 0:
+            continue
+        found.append(other)
+    return found
+
+
+def _fire_defender(session, store, war, engine_type: str) -> dict:
+    if (session.dungeon or {}).get("plane") != kcs_siege.PLANE_BATTLEFIELD:
+        return _fail("Defensive engines are used from the walls.")
+    roster = store.roster_status(war.war_id, int(session.player_id))
+    if roster.side != "defend" or not roster.deployed or roster.eliminated:
+        return _fail("You cannot operate siege equipment.")
+    if engine_type not in kcs_balance.DEFENDER_ENGINES:
+        return _fail("Choose a ballista or a cauldron.")
+    spec = kcs_balance.DEFENDER_ENGINES[engine_type]
+    label = engine_type.replace("_", " ")
+    owned = [
+        e for e in store.engines(war.war_id)
+        if e.player_id == int(session.player_id) and e.engine_type == engine_type and e.side == "defend"
+    ]
+    if not owned:
+        return _fail(f"You have no {label} on the wall.")
+    px, py = int(session.x), int(session.y)
+    beside = [e for e in owned if kcs_balance.beside(px, py, e.tiles)]
+    if not beside:
+        return _fail(f"Stand beside your {label} to use it.")
+    combat = store.engine_combat_map(war.war_id)
+    now = time.time()
+    refusal = "That engine cannot fire."
+    for engine in beside:
+        hp, ready = combat.get(engine.engine_id, (spec["hp"], 0.0))
+        if hp <= 0:
+            refusal = "That engine is wrecked."
+            continue
+        if ready > now:
+            refusal = "That engine is still reloading."
+            continue
+        outcome = _defender_shot(session, store, war, engine, spec, combat, now, hp)
+        if outcome is None:
+            refusal = "Nothing is in front of that engine."
+            continue
+        return outcome
+    return _fail(refusal)
+
+
+def _defender_shot(session, store, war, engine, spec, combat, now, hp):
+    engine_type = engine.engine_type
+    cd = now + spec["cooldown"] * kcs_balance.cooldown_scale()
+    attackers = []
+    for other in store.engines(war.war_id):
+        if other.side != "attack" or other.engine_type not in kcs_balance.ENGINES:
+            continue
+        ohp = combat.get(other.engine_id, (kcs_balance.ENGINES[other.engine_type]["hp"], 0.0))[0]
+        if ohp <= 0:
+            continue
+        attackers.append((other, int(ohp)))
+    foes = _foes(session)
+    shooter = {"engine_id": engine.engine_id, "hp": hp, "cooldown_until": cd}
+    if engine_type == "cauldron":
+        cells = []
+        for tiles in _opening_cells().values():
+            cells.extend(tiles)
+        zone = kcs_balance.cauldron_zone(engine.tiles, cells, spec["range"])
+        hits = []
+        for other, ohp in attackers:
+            if any((int(tx), int(ty)) in zone for tx, ty in other.tiles):
+                hits.append((other.engine_id, max(0, ohp - int(spec["engine"]))))
+        players = []
+        for foe in foes:
+            if (int(foe.x), int(foe.y)) not in zone:
+                continue
+            dmg = int(spec["player"])
+            foe.hp = max(0, int(foe.hp) - dmg)
+            players.append({
+                "player_id": foe.player_id, "hp": foe.hp, "killed": foe.hp <= 0, "damage": dmg,
+            })
+        if not hits and not players:
+            return None
+        store.write_engine_action(war.war_id, engine.engine_id, hp, cd, hits)
+        _grant(session.player_id, kcs_balance.xp_shot())
+        parts = []
+        if hits:
+            parts.append(f"{len(hits)} engine" + ("s" if len(hits) != 1 else ""))
+        if players:
+            parts.append(f"{len(players)} attacker" + ("s" if len(players) != 1 else ""))
+        return {
+            "ok": True,
+            "text": f"The cauldron douses the apron. It hits {' and '.join(parts)}.",
+            "engine_id": engine.engine_id,
+            "engines": [shooter] + [{"engine_id": eid, "hp": nhp} for eid, nhp in hits],
+            "players": players,
+        }
+    aimed = kcs_balance.aimed_target(
+        engine.tiles, engine.rotation, engine_type,
+        [(other.engine_id, other.tiles) for other, _ohp in attackers],
+    )
+    if aimed is not None:
+        eid = aimed[0]
+        other, ohp = next(item for item in attackers if item[0].engine_id == eid)
+        new_hp = max(0, ohp - int(spec["engine"]))
+        store.write_engine_action(war.war_id, engine.engine_id, hp, cd, [(eid, new_hp)])
+        _grant(session.player_id, kcs_balance.xp_shot())
+        word = "wrecked" if new_hp <= 0 else "damaged"
+        return {
+            "ok": True,
+            "text": f"Ballista {word} the {other.engine_type.replace('_', ' ')} ({new_hp} hp).",
+            "engine_id": engine.engine_id,
+            "engines": [shooter, {"engine_id": eid, "hp": new_hp}],
+        }
+    aimed = kcs_balance.aimed_target(
+        engine.tiles, engine.rotation, engine_type,
+        [(foe.player_id, [(int(foe.x), int(foe.y))]) for foe in foes],
+    )
+    if aimed is None:
+        return None
+    foe = next(item for item in foes if item.player_id == aimed[0])
+    dmg = int(spec["player"])
+    foe.hp = max(0, int(foe.hp) - dmg)
+    store.write_engine_action(war.war_id, engine.engine_id, hp, cd, [])
+    _grant(session.player_id, kcs_balance.xp_shot())
+    return {
+        "ok": True,
+        "text": f"Ballista hits for {dmg}.",
+        "engine_id": engine.engine_id,
+        "engines": [shooter],
+        "players": [{"player_id": foe.player_id, "hp": foe.hp, "killed": foe.hp <= 0, "damage": dmg}],
+    }
 
 
 def repair(session) -> dict:
@@ -370,20 +546,21 @@ def strike(session) -> dict:
         foe.hp = max(0, int(foe.hp) - dmg)
         return {"ok": True, "text": f"You strike for {dmg}.", "target_id": foe.player_id,
                 "target_hp": foe.hp, "killed": foe.hp <= 0}
-    if me == "defend":
-        wreck = _strike_engine(store, war.war_id, px, py)
-        if wreck:
-            return wreck
+    wreck = _strike_engine(store, war.war_id, px, py, me)
+    if wreck:
+        return wreck
     return _fail("Nobody is in reach.")
 
 
-def _strike_engine(store, war_id, px, py):
+def _strike_engine(store, war_id, px, py, my_side):
     combat = store.engine_combat_map(war_id)
     nearest = None
     for engine in store.engines(war_id):
-        if engine.side != "attack":
+        if engine.side == my_side or engine.side not in ("attack", "defend"):
             continue
-        hp = combat.get(engine.engine_id, (kcs_balance.ENGINES[engine.engine_type]["hp"], 0))[0]
+        if engine.engine_type not in kcs_balance.ENGINES and engine.engine_type not in kcs_balance.DEFENDER_ENGINES:
+            continue
+        hp = combat.get(engine.engine_id, (kcs_balance.engine_spec(engine.engine_type)["hp"], 0))[0]
         if hp <= 0:
             continue
         dist = min(max(abs(px - tx), abs(py - ty)) for tx, ty in engine.tiles)
@@ -392,11 +569,16 @@ def _strike_engine(store, war_id, px, py):
     if nearest is None:
         return None
     engine, hp = nearest[1], nearest[2]
-    new_hp = max(0, hp - 12)
+    new_hp = max(0, hp - kcs_balance.strike_damage())
     store.damage_engine_hp(war_id, engine.engine_id, new_hp)
     word = "wrecked" if new_hp <= 0 else "damaged"
-    return {"ok": True, "text": f"You {word} the {engine.engine_type.replace('_', ' ')} ({new_hp} hp).",
-            "engine_id": engine.engine_id, "engine_hp": new_hp}
+    return {
+        "ok": True,
+        "text": f"You {word} the {engine.engine_type.replace('_', ' ')} ({new_hp} hp).",
+        "engine_id": engine.engine_id,
+        "engine_hp": new_hp,
+        "engines": [{"engine_id": engine.engine_id, "hp": new_hp}],
+    }
 
 
 def claim(session) -> dict:
@@ -462,19 +644,27 @@ def _finish(store, war_id: int, winner: str, monarch, reason: str, guild=None) -
 
 
 def pack(session, engine_type: str = "") -> dict:
-    """Pick up one of your own engines. Defenders have none to pack."""
+    """Pick up one engine you placed. Someone else's engine stays where it is."""
     ctx, err = _live(session)
     if err:
         return err
     store, war = ctx
-    if _side(session) != "attack":
+    side = _side(session)
+    if side not in ("attack", "defend"):
         return _fail("Only the side that placed an engine can pack it.")
-    owned = [e for e in store.engines(war.war_id) if e.player_id == int(session.player_id)]
+    owned = [
+        e for e in store.engines(war.war_id)
+        if e.player_id == int(session.player_id) and e.side == side
+    ]
     if engine_type:
         owned = [e for e in owned if e.engine_type == engine_type]
     if not owned:
         return _fail("You have no engine of that kind to pack.")
     px, py = int(session.x), int(session.y)
+    if side == "defend":
+        owned = [e for e in owned if kcs_balance.beside(px, py, e.tiles)]
+        if not owned:
+            return _fail("Stand beside your engine to pack it.")
     owned.sort(key=lambda e: min(max(abs(px - tx), abs(py - ty)) for tx, ty in e.tiles))
     engine = owned[0]
     try:

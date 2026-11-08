@@ -13,14 +13,15 @@ that has not been confirmed yet leaves the player off the siege map.
 What is stored, and what is not playable yet
 --------------------------------------------
 * Attackers may place the approved engine footprints (ram, trebuchet, siege
-  tower, ladder) on open exterior ground around the whole curtain. There is
-  no engine-count cap. Placement rules come from the approved layout module.
+  tower, ladder) on open exterior ground around the whole curtain. Defenders
+  may place a ballista or a cauldron on the wall-walk, facing outward.
+  There is no engine-count cap. Placement rules come from the layout module.
 * Each gate and breach has its own persisted state. Changing one opening
   changes only that opening's tiles. The client cannot set damage, resources,
   or ownership.
 * Not playable yet, and intentionally not invented here: engine firing, engine
   HP, gate HP, a damage formula, resource costs, currencies, engineering XP,
-  packing up or destroying an engine, defender engines, spectate entry, PvP,
+  packing up or destroying an engine, spectate entry, PvP,
   and any projection onto the live throne. ``commit_opening`` is the server
   seam a future damage model would call. It is not bound to a client message.
 """
@@ -440,6 +441,8 @@ def propose_placement(session, msg) -> dict:
     if not on_map(session):
         return _place_fail("You are not deployed in the siege.", "not_on_map")
     data = session.dungeon or {}
+    if data.get("mode") == "spectator":
+        return _place_fail("Spectators cannot place an engine.", "wrong_plane")
     if data.get("plane") != PLANE_BATTLEFIELD or data.get("mode") != "combatant":
         return _place_fail("You cannot place an engine from here.", "wrong_plane")
     if int(getattr(session, "hp", 0) or 0) <= 0:
@@ -466,8 +469,12 @@ def propose_placement(session, msg) -> dict:
             if war is None:
                 return _place_fail("There is no siege to build in.", "no_open_war")
             roster = guard.store.roster_status(war.war_id, int(session.player_id))
-            if roster.side != "attack" or not roster.deployed or roster.eliminated:
+            if not roster.deployed or roster.eliminated or roster.side not in ("attack", "defend"):
                 return _place_fail("You cannot place an engine.", "team_denied")
+            import kcs_balance
+            allowed = kcs_balance.ENGINES if roster.side == "attack" else kcs_balance.DEFENDER_ENGINES
+            if engine_type not in allowed:
+                return _place_fail("You cannot place that engine.", "team_denied")
             for prior in guard.store.engines(war.war_id):
                 if prior.player_id != int(session.player_id) or prior.request_key != request_id:
                     continue
@@ -482,6 +489,8 @@ def propose_placement(session, msg) -> dict:
             result = placement.validate_placement(bf, engine_type, x, y, rotation, existing)
             if not result.ok:
                 return _place_fail(result.reason, "invalid_placement")
+            if roster.side == "defend" and not kcs_balance.beside(int(session.x), int(session.y), result.tiles):
+                return _place_fail("Stand on the wall to build that.", "too_far")
             proposed = placement.PlacedEngine("proposed", engine_type, x, y, rotation)
             sp = bf.plane.spawn
             if not placement.ring_still_clear(

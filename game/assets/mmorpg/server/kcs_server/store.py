@@ -40,7 +40,12 @@ _TRANSITIONS = {
 SIDES = ("attack", "defend")
 # Assault engines from the approved placement spec. Not a count cap.
 ENGINE_TYPES = ("ram", "trebuchet", "siege_tower", "ladder")
-# Defender engines are not in that spec, so only the attack side may place these.
+DEFENDER_ENGINE_TYPES = ("ballista", "cauldron")
+# Each side may place only its own equipment. A defender cannot store a ram.
+PLACEMENT_TYPES = {
+    "attack": ENGINE_TYPES,
+    "defend": DEFENDER_ENGINE_TYPES,
+}
 PLACEMENT_SIDE = "attack"
 _REQUEST_KEY = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
 LIVE_WAR = ("locking", "active")
@@ -465,14 +470,23 @@ class KCSStore:
                 (int(war_id), opening_id, state, now))
 
     def write_shot(self, war_id: int, engine_id: int, engine_hp: int, cooldown_until: float,
-                   opening_id: str, opening_hp: int, state: str) -> int:
-        """Land one shot: engine cooldown and opening hp/state commit together."""
+                   opening_id: str, opening_hp: int, state: str, engine_hits=None) -> int:
+        """Land one shot: engine cooldown, opening hp, and splash commit together."""
         now = self._clock()
         with self._tx("engine_shot") as c:
             c.execute(
                 "INSERT INTO kcs_engine_combat(war_id, engine_id, hp, cooldown_until) VALUES (?, ?, ?, ?) "
                 "ON CONFLICT(war_id, engine_id) DO UPDATE SET hp=excluded.hp, cooldown_until=excluded.cooldown_until",
                 (int(war_id), int(engine_id), int(engine_hp), float(cooldown_until)))
+            for eid, hp in engine_hits or ():
+                row_cd = c.execute(
+                    "SELECT cooldown_until FROM kcs_engine_combat WHERE war_id=? AND engine_id=?",
+                    (int(war_id), int(eid))).fetchone()
+                victim_cd = 0.0 if row_cd is None else float(row_cd[0])
+                c.execute(
+                    "INSERT INTO kcs_engine_combat(war_id, engine_id, hp, cooldown_until) VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT(war_id, engine_id) DO UPDATE SET hp=excluded.hp",
+                    (int(war_id), int(eid), int(hp), victim_cd))
             row = c.execute(
                 "SELECT rev FROM kcs_openings WHERE war_id=? AND opening_id=?",
                 (int(war_id), opening_id)).fetchone()
@@ -507,6 +521,24 @@ class KCSStore:
                 "ON CONFLICT(war_id, opening_id) DO UPDATE SET hp=excluded.hp",
                 (int(war_id), opening_id, int(hp)))
             return new_rev
+
+    def write_engine_action(self, war_id: int, engine_id: int, engine_hp: int,
+                             cooldown_until: float, hits=None) -> None:
+        """Commit one defender shot: shooter cooldown and target engine hp together."""
+        with self._tx("engine_action") as c:
+            c.execute(
+                "INSERT INTO kcs_engine_combat(war_id, engine_id, hp, cooldown_until) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(war_id, engine_id) DO UPDATE SET hp=excluded.hp, cooldown_until=excluded.cooldown_until",
+                (int(war_id), int(engine_id), int(engine_hp), float(cooldown_until)))
+            for eid, hp in hits or ():
+                row_cd = c.execute(
+                    "SELECT cooldown_until FROM kcs_engine_combat WHERE war_id=? AND engine_id=?",
+                    (int(war_id), int(eid))).fetchone()
+                victim_cd = 0.0 if row_cd is None else float(row_cd[0])
+                c.execute(
+                    "INSERT INTO kcs_engine_combat(war_id, engine_id, hp, cooldown_until) VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT(war_id, engine_id) DO UPDATE SET hp=excluded.hp",
+                    (int(war_id), int(eid), int(hp), victim_cd))
 
     def damage_engine_hp(self, war_id: int, engine_id: int, hp: int) -> None:
         with self._tx("engine_hp") as c:
@@ -562,10 +594,9 @@ class KCSStore:
         this method does not trust a client tile list on its own because only
         the bridge computes tiles from the approved spec.
         """
-        if side != PLACEMENT_SIDE:
-            raise PlacementRejected("this side cannot place siege engines")
-        if engine_type not in ENGINE_TYPES:
-            raise PlacementRejected(f"unknown engine type {engine_type!r}")
+        allowed = PLACEMENT_TYPES.get(side)
+        if not allowed or engine_type not in allowed:
+            raise PlacementRejected("this side cannot place that engine")
         if int(rotation) not in (0, 90, 180, 270):
             raise PlacementRejected("rotation must be a quarter turn")
         if not isinstance(request_key, str) or _REQUEST_KEY.fullmatch(request_key) is None:
@@ -581,7 +612,7 @@ class KCSStore:
             roster = c.execute(
                 "SELECT side, deployed, eliminated FROM kcs_roster WHERE war_id=? AND player_id=?",
                 (war_id, int(player_id))).fetchone()
-            if roster is None or roster[0] != PLACEMENT_SIDE or not roster[1] or roster[2]:
+            if roster is None or roster[0] != side or not roster[1] or roster[2]:
                 raise PlacementRejected("player cannot place an engine")
             existing = c.execute(
                 "SELECT engine_id, player_id, side, engine_type, x, y, rotation, tiles_json, rev, request_key "

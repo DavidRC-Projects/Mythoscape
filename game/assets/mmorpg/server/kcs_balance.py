@@ -29,6 +29,15 @@ ENGINES = {
     "ladder": {"hp": 40, "range": 2, "min_range": 0, "cooldown": 3.0, "gate": 6, "breach": 14},
 }
 
+# Defender equipment is provisional too. A ballista sits on the wall-walk and
+# shoots outward. A cauldron sits on the walk over a gate or breach and dumps
+# onto the apron. ``engine`` damages an attacker engine; ``player`` damages
+# an attacker. Override with the KCS_* variables read below.
+DEFENDER_ENGINES = {
+    "ballista": {"hp": 70, "range": 28, "min_range": 0, "cooldown": 5.0, "engine": 22, "player": 10},
+    "cauldron": {"hp": 48, "range": 5, "min_range": 0, "cooldown": 6.0, "engine": 34, "player": 12},
+}
+
 OPENING_HP = {
     "main_gate": 140,
     "keep_doors": 100,
@@ -85,7 +94,85 @@ def repair_amount() -> int:
 
 
 def engine_spec(engine_type: str) -> dict:
-    return dict(ENGINES[engine_type])
+    if engine_type in ENGINES:
+        return dict(ENGINES[engine_type])
+    return dict(DEFENDER_ENGINES[engine_type])
+
+
+def operate_range() -> int:
+    """How far a defender may stand from equipment to build, fire, or pack it."""
+    return max(1, int(_num("KCS_OPERATE_RANGE", 3)))
+
+
+def opening_splash() -> int:
+    """Damage an attacker shot also does to a defender engine on that opening."""
+    return max(0, int(_num("KCS_OPENING_SPLASH", 16)))
+
+
+def strike_damage() -> int:
+    return max(1, int(_num("KCS_STRIKE_ENGINE", 12)))
+
+
+def outward_rotation(cx: float, cy: float, wall_box) -> int:
+    """Quarter turn that points off the nearest curtain, away from the bailey."""
+    ww, wn, we, ws = wall_box
+    dists = [
+        (abs(float(cy) - ws), 180),
+        (abs(float(cy) - wn), 0),
+        (abs(float(cx) - ww), 270),
+        (abs(float(cx) - we), 90),
+    ]
+    dists.sort(key=lambda item: (item[0], item[1]))
+    return int(dists[0][1])
+
+
+def beside(px: int, py: int, tiles, reach: int = None) -> bool:
+    limit = operate_range() if reach is None else int(reach)
+    return min(max(abs(int(px) - int(tx)), abs(int(py) - int(ty))) for tx, ty in tiles) <= limit
+
+
+def aimed_target(tiles, rotation: int, engine_type: str, targets):
+    """Nearest target in front of a defender engine.
+
+    ``targets`` is a sequence of ``(key, points)``. Returns ``(key, distance)``
+    or None. Pure: no database and no gold.
+    """
+    spec = DEFENDER_ENGINES[engine_type]
+    fx, fy = front_point(tiles, rotation)
+    fdx, fdy = FACE[int(rotation) % 360]
+    best = None
+    for key, points in targets:
+        points = list(points)
+        if not points:
+            continue
+        nearest = min(points, key=lambda t: (t[0] - fx) ** 2 + (t[1] - fy) ** 2)
+        vx, vy = nearest[0] - fx, nearest[1] - fy
+        dist = (vx * vx + vy * vy) ** 0.5
+        if dist < spec["min_range"] or dist > spec["range"]:
+            continue
+        if dist > 0 and (vx * fdx + vy * fdy) / dist < 0.15:
+            continue
+        if best is None or dist < best[0]:
+            best = (dist, key)
+    if best is None:
+        return None
+    return best[1], best[0]
+
+
+def cauldron_zone(tiles, gate_cells, radius: int):
+    """Tiles a pot drenches around the gate or breach it sits on."""
+    covered = []
+    for gx, gy in gate_cells:
+        if any(max(abs(gx - tx), abs(gy - ty)) <= 1 for tx, ty in tiles):
+            covered.append((int(gx), int(gy)))
+    zone = set()
+    radius = max(0, int(radius))
+    for gx, gy in covered:
+        for dx in range(-radius, radius + 1):
+            for dy in range(-radius, radius + 1):
+                if max(abs(dx), abs(dy)) <= radius:
+                    zone.add((gx + dx, gy + dy))
+    return zone
 
 
 def opening_max_hp(opening_id: str) -> int:

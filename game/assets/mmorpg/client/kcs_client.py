@@ -31,7 +31,18 @@ ENGINE_KEYS = {
     pygame.K_KP4: "ladder",
 }
 ENGINE_ORDER = ("ram", "trebuchet", "siege_tower", "ladder")
-ENGINE_SHORT = {"ram": "Ram", "trebuchet": "Trebuchet", "siege_tower": "Tower", "ladder": "Ladder"}
+DEFENDER_KEYS = {
+    pygame.K_1: "ballista",
+    pygame.K_2: "cauldron",
+    pygame.K_KP1: "ballista",
+    pygame.K_KP2: "cauldron",
+}
+DEFENDER_ORDER = ("ballista", "cauldron")
+ENGINE_SHORT = {
+    "ram": "Ram", "trebuchet": "Trebuchet", "siege_tower": "Tower", "ladder": "Ladder",
+    "ballista": "Ballista", "cauldron": "Cauldron",
+}
+SPRITE_ALIAS = {"ballista": "trebuchet"}
 
 
 class SiegeView:
@@ -80,7 +91,11 @@ def note(client, text, error=False) -> None:
 
 def on_enter(client) -> None:
     view = view_of(client)
-    view.notice = "Deployed. 1 Ram, 2 Trebuchet, 3 Tower, 4 Ladder. Rotate until the nose points at the wall."
+    if view.your_side == "defend":
+        view.engine_type = "ballista"
+        view.notice = "Deployed. 1 Ballista, 2 Cauldron. Stand on the wall-walk and face them outward."
+    else:
+        view.notice = "Deployed. 1 Ram, 2 Trebuchet, 3 Tower, 4 Ladder. Rotate until the nose points at the wall."
     view.error = ""
 
 
@@ -122,6 +137,13 @@ def on_message(client, kind, msg) -> None:
         _upsert_engine(view, msg["engine"])
         view.notice = "The server placed that engine."
         return
+    if kind == "KCS_DELTA" and msg.get("kind") == "engine_hp":
+        _set_engine_hp(view, msg.get("engine_id"), msg.get("hp"), msg.get("cooldown_until"))
+        return
+    if kind == "KCS_DELTA" and msg.get("kind") == "engine_removed":
+        view.engines = [row for row in view.engines if row.get("engine_id") != msg.get("engine_id")]
+        view.notice = "An engine was packed up."
+        return
     if kind == "KCS_DELTA" and msg.get("kind") == "opening":
         _upsert_opening(view, msg)
         view.bf_key = None
@@ -145,11 +167,8 @@ def on_keydown(client, event) -> bool:
             return True
         return False
     view = view_of(client)
-    if event.key in ENGINE_KEYS:
-        view.engine_type = ENGINE_KEYS[event.key]
-        view.build = True
-        view.error = ""
-        view.notice = f"Selected {ENGINE_SHORT.get(view.engine_type, view.engine_type)}. Nose faces {_face_name(view.rotation)}."
+    if event.key in ENGINE_KEYS or event.key in DEFENDER_KEYS:
+        _select_type(view, event.key)
         return True
     if event.key == pygame.K_F6:
         view.build = not view.build
@@ -184,9 +203,13 @@ def on_mouse(client, pos) -> bool:
     apply_view_quarter(view.view_quarter)
     from kings_castle_siege_map.angled_proj import pick_tile
     tx, ty = pick_tile(x, y - HUD_TOP, view.origin, view.scale, view.screen_o)
-    placing = view.build and view.your_side == "attack" and (client.dungeon or {}).get("mode") != "spectator"
+    placing = (
+        view.build
+        and view.your_side in ("attack", "defend")
+        and (client.dungeon or {}).get("mode") != "spectator"
+    )
     if view.build and not placing:
-        note(client, "Defenders and spectators do not place engines.", error=True)
+        note(client, "Spectators do not place engines.", error=True)
         return True
     if not placing:
         _queue_walk(client, int(tx), int(ty))
@@ -242,7 +265,8 @@ def draw_overlay(client) -> None:
         ("watch", "Watch"),
     ]
     if active(client):
-        specs = [(f"type-{kind}", f"{n} {ENGINE_SHORT[kind]}") for n, kind in enumerate(ENGINE_ORDER, 1)]
+        order = DEFENDER_ORDER if view.your_side == "defend" else ENGINE_ORDER
+        specs = [(f"type-{kind}", f"{n} {ENGINE_SHORT[kind]}") for n, kind in enumerate(order, 1)]
         specs += [("turn", "Turn"), ("view", "View"), ("face", "Face wall"), ("fire", "Fire"),
                   ("pack", "Pack"), ("repair", "Repair"), ("strike", "Strike"), ("claim", "Claim throne")]
     for action, label in specs:
@@ -415,10 +439,16 @@ def _button(client, action: str) -> None:
         px, py = _player_tile(client)
         if view.bf is not None:
             import kcs_balance
-            view.rotation = kcs_balance.rotation_toward_wall(px, py, view.bf.wall_box)
+            if view.your_side == "defend":
+                view.rotation = kcs_balance.outward_rotation(px, py, view.bf.wall_box)
+            else:
+                view.rotation = kcs_balance.rotation_toward_wall(px, py, view.bf.wall_box)
         view.build = True
         view.error = ""
-        view.notice = f"Nose faces {_face_name(view.rotation)}, toward the nearest wall."
+        if view.your_side == "defend":
+            view.notice = f"Nose faces {_face_name(view.rotation)}, out from the wall."
+        else:
+            view.notice = f"Nose faces {_face_name(view.rotation)}, toward the nearest wall."
         return
     if action == "deploy":
         _send(client, "ENTER_DUNGEON", dungeon_id=DUNGEON_ID)
@@ -471,6 +501,31 @@ def _place(client, tx, ty) -> None:
         _say(client, view.notice, (210, 190, 140))
     except Exception:
         view.error = "Could not send the placement."
+
+
+def _select_type(view, key) -> None:
+    table = DEFENDER_KEYS if view.your_side == "defend" else ENGINE_KEYS
+    kind = table.get(key)
+    if kind is None and view.your_side == "defend":
+        view.notice = "Defenders build a ballista (1) or a cauldron (2)."
+        view.error = ""
+        return
+    if kind is None:
+        return
+    view.engine_type = kind
+    view.build = True
+    view.error = ""
+    view.notice = f"Selected {ENGINE_SHORT.get(kind, kind)}. Nose faces {_face_name(view.rotation)}."
+
+
+def _set_engine_hp(view, engine_id, hp, cooldown) -> None:
+    for row in view.engines:
+        if row.get("engine_id") == engine_id:
+            if hp is not None:
+                row["hp"] = hp
+            if cooldown is not None:
+                row["cooldown_until"] = cooldown
+            return
 
 
 def _upsert_engine(view, engine) -> None:
@@ -594,9 +649,13 @@ def _paint_facing(surf, client, view) -> None:
         sfx, sfy, _z = project(fx + 0.5, fy + 0.5, 0, view.origin, view.scale, view.screen_o)
         scx, scy = int(scx), int(scy + HUD_TOP)
         sfx, sfy = int(sfx), int(sfy + HUD_TOP)
-        if sprite:
+        if sprite == "cauldron":
+            pygame.draw.circle(surf, (92, 56, 36), (scx, scy), 12)
+            pygame.draw.circle(surf, (186, 112, 58), (scx, scy), 8)
+        art = SPRITE_ALIAS.get(sprite, sprite)
+        if sprite != "cauldron" and art:
             try:
-                img, _meta = load_baked(sprite)
+                img, _meta = load_baked(art)
                 angle = {0: 0, 90: -90, 180: 180, 270: 90}.get(int(rotation) % 360, 0)
                 if angle:
                     img = pygame.transform.rotate(img, angle)

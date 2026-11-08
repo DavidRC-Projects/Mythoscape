@@ -35,6 +35,8 @@ class EngineSpec:
     setback_max: int = 99
     operating_margin: int = 1
     note: str = ""
+    stance: str = "assault"
+    covers_opening: bool = False
 
 
 SPECS: Dict[str, EngineSpec] = {
@@ -56,7 +58,21 @@ SPECS: Dict[str, EngineSpec] = {
         operating_margin=0,
         note="Needs wall contact; small footprint.",
     ),
+    "ballista": EngineSpec(
+        "ballista", "Ballista", 2, 1, wall_contact=False,
+        operating_margin=0, stance="defense",
+        note="Sits on the wall-walk and must face out.",
+    ),
+    "cauldron": EngineSpec(
+        "cauldron", "Cauldron", 2, 1, wall_contact=False,
+        operating_margin=0, stance="defense", covers_opening=True,
+        note="Sits on the wall-walk over a gate or breach and faces out.",
+    ),
 }
+
+# Same quarter-turns as kcs_balance.FACE. Kept here so the map module does not
+# import the server.
+_OUT = {0: (0, -1), 90: (1, 0), 180: (0, 1), 270: (-1, 0)}
 
 
 def rotated_size(spec: EngineSpec, rotation: int) -> Tuple[int, int]:
@@ -144,6 +160,49 @@ def _touches_wall(bf: Battlefield, tiles: Sequence[Coord]) -> bool:
     return False
 
 
+def _faces_outward(bf: Battlefield, tiles: Sequence[Coord], rotation: int) -> bool:
+    rec = bf.interior_rect
+    mx = (rec[0] + rec[2]) / 2.0
+    my = (rec[1] + rec[3]) / 2.0
+    cx = sum(t[0] for t in tiles) / len(tiles)
+    cy = sum(t[1] for t in tiles) / len(tiles)
+    fdx, fdy = _OUT[int(rotation) % 360]
+    return (cx - mx) * fdx + (cy - my) * fdy > 0
+
+
+def _covers_opening(bf: Battlefield, tiles: Sequence[Coord]) -> bool:
+    for x, y in tiles:
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                if (x + dx, y + dy) in bf.gate_tiles:
+                    return True
+    return False
+
+
+def _padded_overlap(x, y, w, h, margin, existing) -> bool:
+    proposed = set(footprint(x - margin, y - margin, w + margin * 2, h + margin * 2))
+    for other in existing or ():
+        if proposed & set(other.padded_tiles()):
+            return True
+    return False
+
+
+def _validate_defense(bf, spec, x, y, rotation, tiles, existing) -> PlacementResult:
+    w, h = rotated_size(spec, rotation)
+    for tx, ty in tiles:
+        if (tx, ty) in bf.build_exclusion or _inside_keep(bf, tx, ty):
+            return PlacementResult(False, "Defensive engines sit on the wall-walk.", tiles)
+        if bf.plane.cell(tx, ty) != "H":
+            return PlacementResult(False, "Defensive engines sit on the wall-walk.", tiles)
+    if int(rotation) % 360 not in _OUT or not _faces_outward(bf, tiles, rotation):
+        return PlacementResult(False, f"{spec.name} must face out from the wall.", tiles)
+    if spec.covers_opening and not _covers_opening(bf, tiles):
+        return PlacementResult(False, f"{spec.name} must sit on the wall-walk over a gate or breach.", tiles)
+    if _padded_overlap(x, y, w, h, spec.operating_margin, existing):
+        return PlacementResult(False, "Overlaps another engine or its operating space.", tiles)
+    return PlacementResult(True, "Valid placement.", tiles)
+
+
 def validate_placement(
     bf: Battlefield,
     engine_type: str,
@@ -159,6 +218,8 @@ def validate_placement(
     tiles = footprint(x, y, w, h)
     if any(tx < 0 or ty < 0 or tx >= WIDTH or ty >= HEIGHT for tx, ty in tiles):
         return PlacementResult(False, "Out of bounds.", tiles)
+    if spec.stance == "defense":
+        return _validate_defense(bf, spec, x, y, rotation, tiles, existing)
     for tx, ty in tiles:
         if _inside_keep(bf, tx, ty):
             return PlacementResult(False, "Cannot build on the keep.", tiles)

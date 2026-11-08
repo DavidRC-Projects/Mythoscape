@@ -4173,6 +4173,25 @@ async def apply_kcs_opening(opening_id, state, expected_rev=None):
     return body
 
 
+async def _publish_kcs_combat(result):
+    for row in (result or {}).get("engines") or []:
+        if isinstance(row, dict) and row.get("engine_id") is not None:
+            await _broadcast_kcs(
+                "KCS_DELTA", kind="engine_hp",
+                engine_id=row.get("engine_id"), hp=row.get("hp"),
+                cooldown_until=row.get("cooldown_until"),
+            )
+
+
+async def _resolve_kcs_players(result):
+    for row in (result or {}).get("players") or []:
+        if not isinstance(row, dict) or not row.get("killed"):
+            continue
+        target = WORLD.sessions.get(row.get("player_id"))
+        if target is not None and int(getattr(target, "hp", 1) or 0) <= 0:
+            await resolve_player_death(target, [])
+
+
 async def handle_kcs_place(session, msg):
     import kcs_siege
     if not kcs_siege.enabled():
@@ -4231,6 +4250,8 @@ async def handle_kcs_act(session, msg):
         return
     if result.get("opening"):
         await _broadcast_kcs("KCS_DELTA", kind="opening", **result["opening"])
+    await _publish_kcs_combat(result)
+    await _resolve_kcs_players(result)
     await send(session.ws, "CHAT_MSG", **{"from": "King's Castle", "text": result.get("text") or "Fired."})
     await _send_kcs_snapshot(session)
 
@@ -4266,6 +4287,7 @@ async def handle_kcs_strike(session, msg):
     if not result.get("ok"):
         await send(session.ws, "ERROR", message=result.get("error") or "The swing missed.")
         return
+    await _publish_kcs_combat(result)
     await send(session.ws, "CHAT_MSG", **{"from": "King's Castle", "text": result.get("text") or "Struck."})
     if result.get("killed"):
         target = WORLD.sessions.get(result.get("target_id"))
@@ -4284,6 +4306,7 @@ async def handle_kcs_pack(session, msg):
     if not result.get("ok"):
         await send(session.ws, "ERROR", message=result.get("error") or "Could not pack that.")
         return
+    await _broadcast_kcs("KCS_DELTA", kind="engine_removed", engine_id=result.get("engine_id"))
     await send(session.ws, "CHAT_MSG", **{"from": "King's Castle", "text": result.get("text") or "Packed."})
     await _send_kcs_snapshot(session)
 
