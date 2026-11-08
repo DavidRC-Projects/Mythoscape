@@ -501,7 +501,9 @@ class ScreensMixin:
         # If the socket is down (server was not running at launch), open a
         # fresh one now. Otherwise the Login press queues into a dead socket
         # and the player sees nothing happen even after starting the server.
-        if not self.net.connected:
+        if not self.net.connected and not self.net._thread.is_alive():
+            # The socket thread is already running while the handshake finishes.
+            # Joining it here waits forever on a live connection.
             self.net.reconnect()
         if self.login_mode == "register":
             if not c:

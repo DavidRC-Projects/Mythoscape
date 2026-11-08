@@ -227,6 +227,10 @@ __marimo__/
 # Raw Suno / source music drops (converted copies live under game/.../assets/music)
 /music/
 
+# King's Castle visual fixtures are external and test-only.
+/kings_castle_siege/
+game/assets/mmorpg/server/kcs_parity/assets
+
 # MMORPG local runtime / player saves (recreated on server start)
 *.db
 *.db-journal

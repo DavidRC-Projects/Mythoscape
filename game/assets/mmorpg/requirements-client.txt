@@ -4,3 +4,6 @@ pygame>=2.5
 pillow==12.3.0
 numpy>=1.26
 argon2-cffi>=23.1.0
+# King's Castle siege view only. The game does not load it unless the server
+# admits the player to that map. The angled renderer imports OpenCV.
+opencv-python-headless>=4.8

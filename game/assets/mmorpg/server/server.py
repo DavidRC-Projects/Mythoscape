@@ -2437,6 +2437,11 @@ async def handle_login(ws, msg, is_register, peer_ip="unknown"):
     if resume and resume.get("id") == "castle_realm":
         if _apply_castle_realm_resume(session, resume):
             resume_dungeon_id = "castle_realm"
+    elif resume and resume.get("id") == "kings_castle_siege":
+        # Login restore for the new siege map only. Fail closed: a denial
+        # leaves the player on the overworld coordinates already loaded.
+        if _apply_kcs_resume(session, resume, reason="login"):
+            resume_dungeon_id = "kings_castle_siege"
     await send(
         ws, "LOGIN_OK",
         player=session.full_state(),
@@ -2482,6 +2487,8 @@ async def send_world_join(session, resume=None):
     # used to run first and the client painted the overworld portal for those frames.
     if session.dungeon and session.dungeon.get("id") == "castle_realm":
         await _notify_castle_realm_resume(session)
+    elif session.dungeon and session.dungeon.get("id") == "kings_castle_siege":
+        await _notify_kcs_resume(session)
     elif resume:
         await _resume_dungeon(session, resume)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
@@ -2900,6 +2907,62 @@ def _combat_locked(session):
     return 0 < rounds < COMBAT_LOCK_ROUNDS
 
 
+async def _handle_kcs_move(session, dx, dy):
+    """Step on the siege map. A failed presence check removes the player.
+
+    A blow that has not reached the journal or the siege database does not
+    eject. Ejecting here would clear the resume before the elimination exists.
+    """
+    import kcs_siege
+    decision = kcs_siege.presence_decision(session)
+    if not decision.allowed:
+        if (decision.code == "elimination_pending"
+                and not kcs_siege.death_intent_durable(session.player_id)):
+            await send(session.ws, "CHAT_MSG", **{
+                "from": "King's Castle",
+                "text": "The blow landed, but the siege has not recorded it yet.",
+            })
+            return
+        await _eject_kcs(session, text=kcs_siege.deny_message(decision))
+        return
+    nx, ny = session.x + dx, session.y + dy
+    if not kcs_siege.walkable(session, nx, ny):
+        return
+    session.x, session.y = nx, ny
+    session.gathering_node = None
+    _release_monster_fight_on_step(session)
+    dest = kcs_siege.transition_at(session.dungeon.get("plane"), session.x, session.y)
+    if dest:
+        await _kcs_change_plane(session, dest)
+        return
+    _pet_keep_up(session, dx, dy)
+    _save_dungeon_resume(session)
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+
+
+async def _kcs_change_plane(session, dest_plane):
+    """The only in-map plane change. Re-checks the guard for the destination."""
+    import kcs_siege
+    if dest_plane not in kcs_siege.SIEGE_PLANES:
+        await _eject_kcs(session, text="You can't enter that place.")
+        return
+    reason = "spectate" if (session.dungeon or {}).get("mode") == "spectator" else "reconnect"
+    decision = kcs_siege.decide(session.player_id, dest_plane, reason)
+    if not decision.allowed:
+        await _eject_kcs(session, text=kcs_siege.deny_message(decision))
+        return
+    try:
+        kcs_siege.retarget(session, dest_plane, decision.mode)
+    except Exception:
+        log.exception("kcs plane change failed")
+        await _eject_kcs(session, text="The siege can't be reached right now.")
+        return
+    _bring_pet(session)
+    _save_dungeon_resume(session)
+    await send(session.ws, "DUNGEON_ENTER", **kcs_siege.payload(session))
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+
+
 async def handle_move(session, msg):
     """Apply one step. If the tile is refused, tell the client so it can undo a predicted step."""
     origin = (session.x, session.y)
@@ -2927,6 +2990,9 @@ async def _handle_move_body(session, msg):
         return
     session.last_move_tick = WORLD.tick_count
     nx, ny = session.x + dx, session.y + dy
+    if session.dungeon and session.dungeon.get("id") == "kings_castle_siege":
+        await _handle_kcs_move(session, dx, dy)
+        return
     if session.dungeon and session.dungeon.get("id") == "castle_realm":
         import castle_realm
         if not castle_realm.walkable(session.dungeon.get("plane"), nx, ny):
@@ -3755,6 +3821,9 @@ def _resume_payload(session):
             "return_x": d.get("return_x"),
             "return_y": d.get("return_y"),
         }
+    if d.get("id") == "kings_castle_siege":
+        import kcs_siege
+        return kcs_siege.resume_blob(session)
     return {
         "id": d.get("id") or "tidehollow",
         "x": int(session.x),
@@ -3898,6 +3967,106 @@ def _apply_castle_realm_resume(session, resume) -> bool:
     return True
 
 
+def _apply_kcs_resume(session, resume, reason="reconnect") -> bool:
+    """Restore King's Castle Siege only when the shared guard allows it.
+
+    ``reason`` is ``login`` from the login handler and ``reconnect`` from the
+    world-join resume. Both restore a deployed living member or deny.
+    Any error leaves the session off the siege map.
+    """
+    import kcs_siege
+    if session.dungeon and session.dungeon.get("id") == kcs_siege.DUNGEON_ID:
+        # Already attached is not a fresh grant. Re-check before leaving them there.
+        attached = kcs_siege.presence_decision(session)
+        if attached.allowed:
+            return True
+        # Same window as movement: no resume wipe until the death is durable.
+        if (attached.code == "elimination_pending"
+                and not kcs_siege.death_intent_durable(session.player_id)):
+            return True
+        kcs_siege.force_clear(session)
+        try:
+            _clear_dungeon_resume(session)
+        except Exception:
+            log.exception("kcs resume clear after a failed re-check failed")
+        return False
+    if session.dungeon:
+        return False
+    plane = (resume or {}).get("plane") or kcs_siege.PLANE_BATTLEFIELD
+    decision = kcs_siege.decide(session.player_id, plane, reason)
+    if not decision.allowed:
+        if decision.code in kcs_siege.CLEAR_RESUME_CODES:
+            _clear_dungeon_resume(session)
+        return False
+    try:
+        kcs_siege.attach(session, decision, resume)
+    except Exception:
+        log.exception("kcs resume attach failed")
+        kcs_siege.force_clear(session)
+        return False
+    # A death can land between the decision and the attach. Do not stay.
+    if not kcs_siege.presence_decision(session).allowed:
+        kcs_siege.force_clear(session)
+        try:
+            _clear_dungeon_resume(session)
+        except Exception:
+            log.exception("kcs resume clear after lost race failed")
+        return False
+    _bring_pet(session)
+    _save_dungeon_resume(session)
+    return True
+
+
+async def _notify_kcs_resume(session):
+    """Tell the client they are already on the siege map. No Castle Realm payload."""
+    import kcs_siege
+    await send(session.ws, "DUNGEON_ENTER", **kcs_siege.payload(session, resume=True))
+    await _send_kcs_snapshot(session)
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    await send(session.ws, "CHAT_MSG", **{
+        "from": "King's Castle",
+        "text": "You return to the siege where you left off.",
+    })
+
+
+async def _resume_kcs(session, resume):
+    """Reconnect path: world join restoring a saved siege plane."""
+    import kcs_siege
+    if session.dungeon and session.dungeon.get("id") == kcs_siege.DUNGEON_ID:
+        await _notify_kcs_resume(session)
+        return
+    if session.dungeon:
+        await handle_leave_dungeon(session, silent=True)
+    if not _apply_kcs_resume(session, resume, reason="reconnect"):
+        return
+    await _notify_kcs_resume(session)
+
+
+async def _eject_kcs(session, text=None):
+    """Remove siege presence. Safe to call when the player is not on the map."""
+    import kcs_siege
+    if not kcs_siege.on_map(session):
+        return
+    try:
+        kcs_siege.leave(session)
+    except Exception:
+        log.exception("kcs eject failed")
+        kcs_siege.force_clear(session)
+    try:
+        WORLD.db.save_player_position(session.player_id, session.x, session.y)
+    except Exception:
+        log.exception("kcs eject could not save the overworld position")
+    try:
+        _clear_dungeon_resume(session)
+    except Exception:
+        log.exception("kcs eject could not clear the resume")
+    _bring_pet(session)
+    await send(session.ws, "DUNGEON_EXIT", x=session.x, y=session.y)
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    if text:
+        await send(session.ws, "CHAT_MSG", **{"from": "King's Castle", "text": text})
+
+
 async def _notify_castle_realm_resume(session):
     """Tell the client they are already standing in the King's Realm."""
     import castle_realm
@@ -3929,6 +4098,9 @@ async def _resume_dungeon(session, resume):
     dungeon_id = resume.get("id")
     if dungeon_id == "castle_realm":
         await _resume_castle_realm(session, resume)
+        return
+    if dungeon_id == "kings_castle_siege":
+        await _resume_kcs(session, resume)
         return
     if dungeon_id == petaldeep.DUNGEON_ID:
         await petaldeep.resume(session, resume)
@@ -3963,12 +4135,128 @@ async def _resume_dungeon(session, resume):
     })
 
 
+async def _broadcast_kcs(msg_type, **fields):
+    """Send a siege event only to sessions standing on the siege map."""
+    import kcs_siege
+    for other in list(WORLD.sessions.values()):
+        if not kcs_siege.on_map(other):
+            continue
+        try:
+            await send(other.ws, msg_type, **fields)
+        except Exception:
+            log.exception("kcs broadcast failed")
+
+
+async def _send_kcs_snapshot(session):
+    import kcs_siege
+    body = kcs_siege.snapshot(session)
+    if body is None:
+        return
+    await send(session.ws, "KCS_SNAPSHOT", **body)
+
+
+async def apply_kcs_opening(opening_id, state, expected_rev=None):
+    """Server authority for one gate or breach. Not reachable from a client message."""
+    import kcs_siege
+    if not kcs_siege.enabled():
+        raise RuntimeError("feature_disabled")
+    body = kcs_siege.commit_opening(opening_id, state, expected_rev)
+    await _broadcast_kcs("KCS_DELTA", kind="opening", **body)
+    return body
+
+
+async def handle_kcs_place(session, msg):
+    import kcs_siege
+    if not kcs_siege.enabled():
+        await send(session.ws, "ERROR", message="The siege is closed.")
+        return
+    result = kcs_siege.propose_placement(session, msg or {})
+    if not result.get("ok"):
+        await send(session.ws, "ERROR", message=result.get("error") or "That placement is not valid.")
+        return
+    if not result.get("replayed"):
+        await _broadcast_kcs("KCS_DELTA", kind="engine", engine=result["engine"])
+    await send(session.ws, "KCS_PLACE_OK", replayed=bool(result.get("replayed")), engine=result["engine"])
+
+
+async def handle_kcs_opening(session, msg):
+    """Client structure, damage, resource, and ownership claims are never applied."""
+    del msg
+    await send(session.ws, "ERROR", message="The siege does not take structure orders from the client.")
+
+
+async def handle_kcs_snapshot(session, msg):
+    import kcs_siege
+    if not kcs_siege.enabled():
+        await send(session.ws, "ERROR", message="The siege is closed.")
+        return
+    if isinstance(msg, dict) and kcs_siege.PLACE_REJECT_KEYS.intersection(msg):
+        await send(session.ws, "ERROR", message="The siege does not accept that.")
+        return
+    if not kcs_siege.on_map(session):
+        await send(session.ws, "ERROR", message="You are not deployed in the siege.")
+        return
+    body = kcs_siege.snapshot(session)
+    if body is None:
+        await send(session.ws, "ERROR", message="The siege can't be reached right now.")
+        return
+    await send(session.ws, "KCS_SNAPSHOT", **body)
+
+
+async def _handle_enter_kcs(session, msg):
+    """Deploy onto the new siege map. The guard is the only way in."""
+    import kcs_siege
+    try:
+        plane = kcs_siege.deploy_plane(msg or {})
+    except ValueError:
+        await send(session.ws, "ERROR", message="The siege does not accept that.")
+        return
+    if plane not in kcs_siege.SIEGE_PLANES:
+        await send(session.ws, "ERROR", message="You can't enter that place.")
+        return
+    decision = kcs_siege.decide(session.player_id, plane, "deploy")
+    if not decision.allowed:
+        await send(session.ws, "ERROR", message=kcs_siege.deny_message(decision))
+        return
+    ox, oy = int(session.x), int(session.y)
+    try:
+        kcs_siege.attach(session, decision, {
+            "plane": plane,
+            "return_x": ox,
+            "return_y": oy,
+        })
+    except Exception:
+        log.exception("kcs deploy attach failed")
+        kcs_siege.force_clear(session)
+        await send(session.ws, "ERROR", message="The siege can't be reached right now.")
+        return
+    if not kcs_siege.presence_decision(session).allowed:
+        kcs_siege.force_clear(session)
+        await send(session.ws, "ERROR", message="You are eliminated from this siege.")
+        return
+    rx = int(session.dungeon.get("return_x"))
+    ry = int(session.dungeon.get("return_y"))
+    WORLD.db.save_player_position(session.player_id, rx, ry)
+    _save_dungeon_resume(session)
+    _bring_pet(session)
+    await send(session.ws, "DUNGEON_ENTER", **kcs_siege.payload(session))
+    await _send_kcs_snapshot(session)
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    await send(session.ws, "CHAT_MSG", **{
+        "from": "King's Castle",
+        "text": "You deploy into the siege.",
+    })
+
+
 async def handle_enter_dungeon(session, msg):
     if session.dungeon:
         meta = _dungeon_meta(session.dungeon.get("id") or "tidehollow")
         await send(session.ws, "ERROR", message=f"You are already inside {meta['name']}.")
         return
     preferred = msg.get("dungeon_id")
+    if preferred == "kings_castle_siege":
+        await _handle_enter_kcs(session, msg)
+        return
     if preferred == "castle_realm" and feature_flags.USE_CASTLE_REALM:
         spot, dungeon_id = _find_dungeon_entrance(session, preferred_id=preferred)
         if dungeon_id != "castle_realm":
@@ -3998,6 +4286,7 @@ async def handle_enter_dungeon(session, msg):
             "text": "You step through the portal into the King's Realm. The return portal stands south of the plaza.",
         })
         return
+
     spot, dungeon_id = _find_dungeon_entrance(session, preferred_id=preferred)
     if not dungeon_id:
         await send(session.ws, "ERROR", message="Stand at a dungeon entrance.")
@@ -4148,6 +4437,9 @@ async def handle_leave_dungeon(session, msg=None, silent=False):
     if task and not task.done():
         task.cancel()
     session._dungeon_victory_task = None
+    if session.dungeon.get("id") == "kings_castle_siege":
+        await _eject_kcs(session, text=None if silent else "You leave the siege.")
+        return
     if session.dungeon.get("id") == "castle_realm":
         import castle_realm
         castle_realm.leave(session)
@@ -5909,6 +6201,15 @@ def _drop_instance(session):
     data = session.dungeon
     if not data:
         return False
+    if data.get("id") == "kings_castle_siege":
+        import kcs_siege
+        try:
+            kcs_siege.leave(session)
+        except Exception:
+            log.exception("kcs drop failed")
+            kcs_siege.force_clear(session)
+        _clear_dungeon_resume(session)
+        return True
     if data.get("id") == "castle_realm":
         import castle_realm
         castle_realm.leave(session)
@@ -5941,6 +6242,53 @@ def _open_arrival(x, y, walk_fn, session):
     return None
 
 
+def _teleport_targets_kcs(dest) -> bool:
+    import kcs_siege
+    return kcs_siege.targets_siege(dest)
+
+
+async def _teleport_into_kcs(session, dest):
+    """Teleport never grants siege presence unless the guard explicitly allows it.
+
+    The guard's teleport reason denies combatants. A denial does not move the
+    player onto the siege map. Someone already eliminated who is still
+    standing there is removed.
+    """
+    import kcs_siege
+    plane = kcs_siege.plane_from_dest(dest)
+    decision = kcs_siege.decide(session.player_id, plane, "teleport")
+    if not (decision.allowed and decision.mode == "combatant"):
+        if kcs_siege.on_map(session) and decision.code in (
+            "eliminated", "elimination_pending", "guard_error", "feature_disabled",
+        ):
+            await _eject_kcs(session, text=kcs_siege.deny_message(decision))
+        await send(session.ws, "ERROR", message=kcs_siege.deny_message(decision))
+        return
+    ox, oy = int(session.x), int(session.y)
+    if session.dungeon and session.dungeon.get("id") != kcs_siege.DUNGEON_ID:
+        _drop_instance(session)
+    try:
+        if kcs_siege.on_map(session):
+            kcs_siege.retarget(session, plane, decision.mode)
+        else:
+            kcs_siege.attach(session, decision, {
+                "plane": plane,
+                "return_x": ox,
+                "return_y": oy,
+                "x": int(dest["x"]),
+                "y": int(dest["y"]),
+            })
+    except Exception:
+        log.exception("kcs teleport attach failed")
+        kcs_siege.force_clear(session)
+        await send(session.ws, "ERROR", message="The siege can't be reached right now.")
+        return
+    _save_dungeon_resume(session)
+    _bring_pet(session)
+    await send(session.ws, "DUNGEON_ENTER", **kcs_siege.payload(session))
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+
+
 async def handle_teleport(session, msg):
     if not session.knows_teleport:
         await send(session.ws, "ERROR", message="Speak with Wizard Elowen first. She stands northwest of the village crossroads.")
@@ -5971,6 +6319,9 @@ async def handle_teleport(session, msg):
         return
     label = dest["label"]
     tx, ty = int(dest["x"]), int(dest["y"])
+    if _teleport_targets_kcs(dest):
+        await _teleport_into_kcs(session, dest)
+        return
     was_inside = bool(session.dungeon)
     if dest["where"] == "castle":
         if not feature_flags.USE_CASTLE_REALM:
@@ -10332,6 +10683,12 @@ async def handler(ws):
                     await moonpetal_inn.handle(session, mtype, msg, send)
                 elif mtype == "ENTER_DUNGEON":
                     await handle_enter_dungeon(session, msg)
+                elif mtype == "KCS_PLACE":
+                    await handle_kcs_place(session, msg)
+                elif mtype == "KCS_OPENING":
+                    await handle_kcs_opening(session, msg)
+                elif mtype == "KCS_SNAPSHOT":
+                    await handle_kcs_snapshot(session, msg)
                 elif mtype == "LEAVE_DUNGEON":
                     await handle_leave_dungeon(session, msg)
                 elif mtype == "SEWER_START":
@@ -10509,6 +10866,15 @@ async def logout_session(session, reason="logout"):
     _park_outside_arena_if_needed(session)
     if session.dungeon and session.dungeon.get("id") == "castle_realm":
         # Persist realm plane/tile; keep overworld portal coords as the safe login fallback.
+        _save_dungeon_resume(session)
+        rx = int(session.dungeon.get("return_x", session.x))
+        ry = int(session.dungeon.get("return_y", session.y))
+        WORLD.db.save_player_position(session.player_id, rx, ry)
+        session.dungeon = None
+    elif session.dungeon and session.dungeon.get("id") == "kings_castle_siege":
+        # Same shape as the realm: resume keeps the siege tile, the player row
+        # keeps the overworld return so a denied login does not wake in-bounds
+        # of the siege grid.
         _save_dungeon_resume(session)
         rx = int(session.dungeon.get("return_x", session.x))
         ry = int(session.dungeon.get("return_y", session.y))
@@ -11258,110 +11624,147 @@ async def process_combat(events):
         if died and in_sewer:
             await sewer_tutorial.on_death(session, events, dungeon_tag)
         elif died:
-            # A quarter, not everything. Losing the entire purse to one bad
-            # fight is the harshest possible outcome, and it hit hardest on a
-            # good run (the 65k purse cap means a long session has the most to
-            # lose). A quarter still stings and still rewards banking first.
-            lost = int(session.coins * 0.25)
-            session.hp = session.max_hp()
-            session.coins = max(0, session.coins - lost)
-            if not _end_duelist_bout(session):
-                session.in_combat_with = None
-            session.pet_target_id = None
-            where = "village"
-            siege_elim_msg = None
-            if session.dungeon and session.dungeon.get("id") == "castle_realm":
-                try:
-                    import crown_siege
-                    # Credit a player killer when Last Stand falls to PvP;
-                    # monster deaths eliminate without awarding a siege kill.
-                    killer_id = None
-                    bout = getattr(session, "in_combat_with", None)
-                    if bout and bout[0] == "player":
-                        killer_id = int(bout[1])
-                    elif getattr(session, "last_hit_by_player", None):
-                        killer_id = int(session.last_hit_by_player)
-                    _elim, siege_elim_msg, siege_herald = crown_siege.on_siege_death(
-                        WORLD.db.conn, session.player_id, session.dungeon,
-                        killer_id=killer_id,
-                    )
-                    if _elim and siege_herald:
-                        await broadcast(
-                            "CHAT_MSG",
-                            **{"from": "Royal Herald", "text": siege_herald},
-                        )
-                except Exception:
-                    log.exception("crown_siege Last Stand failed")
-            if session.dungeon:
-                v2_kind = session.dungeon.get("v2")
-                realm_death = session.dungeon.get("id") == "castle_realm"
-                endless_death = session.dungeon.get("id") == endless_depths.DUNGEON_ID
-                v2_death = bool(v2_kind)
-                stayed = False
-                if v2_death and session.dungeon.get("checkpoint"):
-                    import void_v2
-                    stayed = await void_v2.on_death(session)
-                    if stayed:
-                        await _relock_dungeon_doors(session)
-                        _save_dungeon_resume(session)
-                        where = "checkpoint"
-                if not stayed:
-                    where = "entrance"
-                    if v2_death:
-                        import void_v2
-                        void_v2.strip_keys(session)
-                    if endless_death:
-                        await endless_depths.on_death(session)
-                    await handle_leave_dungeon(session, silent=True)
-                    if v2_kind == "depths":
-                        fall = "You fall in the crypt and wake outside. The dead keep what you carried."
-                    elif v2_death:
-                        fall = "You fall in the sanctum and wake outside. The dark keeps what you carried."
-                    elif realm_death:
-                        fall = siege_elim_msg or "You wake outside the King's Realm portal."
-                    elif endless_death:
-                        fall = "You fall in the Endless Depths and wake at the mouth."
-                    else:
-                        fall = "You fall in the cave and wake outside — the depths reclaim their silence."
-                    speaker = "Endless Depths" if endless_death else "Tidehollow"
-                    await send(session.ws, "CHAT_MSG", **{"from": speaker, "text": fall})
-            else:
-                session.x, session.y = SPAWN_POINT
-                if session.pet_id:
-                    session.pet_hp = PETS[session.pet_id]["hp"]
-                    _bring_pet(session)
-                for mon in WORLD.monsters.values():
-                    if mon.target_player_id == session.player_id:
-                        mon.target_player_id = None
-            WORLD.db.save_player_stats(session.player_id, coins=session.coins)
-            if not session.dungeon:
-                WORLD.db.save_player_position(session.player_id, session.x, session.y)
-            death_data = {
-                "entity_id": session.player_id, "entity_kind": "player",
-                "coins_lost": lost,
-                "where": where,
-            }
-            if dungeon_tag:
-                death_data["_dungeon_player"] = dungeon_tag
-            events.append({"type": "DEATH", "data": death_data})
-            await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
-            # First death: make the failure cheap and legible (eat, then try again).
-            if welcome_kit.mark_coach_seen(WORLD.db.conn, session.player_id, welcome_kit.COACH_DEATH):
-                await send(session.ws, "CHAT_MSG", **{
-                    "from": "Guide",
-                    "text": "You woke up. Press R to eat, stick to green nameplates, then follow the trail.",
-                })
-                await send_ui_coach(
-                    session, welcome_kit.COACH_EAT, "eat",
-                    "Eat / R restores HP before you go back out.",
-                    dismiss_key="r",
-                )
-                await send_welcome_state(session)
+            await resolve_player_death(session, events, dungeon_tag)
         elif not session.in_combat_with and not attackers:
             pass
 
 
+async def resolve_player_death(session, events, dungeon_tag=None):
+    """Downed-player handler used by the combat tick.
+
+    King's Castle Siege elimination is recorded before hit points are restored,
+    combat credit is cleared, coins are adjusted, or the player leaves the plane.
+    Castle Realm death handling below is unchanged.
+    """
+    import kcs_siege
+    on_kcs = bool(session.dungeon and session.dungeon.get("id") == kcs_siege.DUNGEON_ID)
+    if on_kcs:
+        # Before respawn, loot, combat-clear, or any zone change.
+        outcome = kcs_siege.record_death(session.player_id)
+        # Heal, coin loss, and ejection are the observable death. They run
+        # only after the journal fsync or the siege-database commit. If both
+        # missed, the player stays at 0 HP on the map with the resume intact.
+        # A process kill before that first durable write still loses this one
+        # death: there is nothing on disk to replay, and living disconnected
+        # players are not eliminated to paper over that window.
+        if outcome.eliminated and not (outcome.journaled or outcome.persisted):
+            session.hp = 0
+            try:
+                await send(session.ws, "CHAT_MSG", **{
+                    "from": "King's Castle",
+                    "text": "The blow landed, but the siege has not recorded it yet.",
+                })
+            except Exception:
+                log.exception("kcs undurable death notice failed")
+            return
+    # A quarter, not everything. Losing the entire purse to one bad
+    # fight is the harshest possible outcome, and it hit hardest on a
+    # good run (the 65k purse cap means a long session has the most to
+    # lose). A quarter still stings and still rewards banking first.
+    lost = int(session.coins * 0.25)
+    session.hp = session.max_hp()
+    session.coins = max(0, session.coins - lost)
+    if not _end_duelist_bout(session):
+        session.in_combat_with = None
+    session.pet_target_id = None
+    where = "village"
+    siege_elim_msg = None
+    if (not on_kcs) and session.dungeon and session.dungeon.get("id") == "castle_realm":
+        try:
+            import crown_siege
+            # Credit a player killer when Last Stand falls to PvP;
+            # monster deaths eliminate without awarding a siege kill.
+            killer_id = None
+            bout = getattr(session, "in_combat_with", None)
+            if bout and bout[0] == "player":
+                killer_id = int(bout[1])
+            elif getattr(session, "last_hit_by_player", None):
+                killer_id = int(session.last_hit_by_player)
+            _elim, siege_elim_msg, siege_herald = crown_siege.on_siege_death(
+                WORLD.db.conn, session.player_id, session.dungeon,
+                killer_id=killer_id,
+            )
+            if _elim and siege_herald:
+                await broadcast(
+                    "CHAT_MSG",
+                    **{"from": "Royal Herald", "text": siege_herald},
+                )
+        except Exception:
+            log.exception("crown_siege Last Stand failed")
+    if on_kcs:
+        where = "entrance"
+        await _eject_kcs(session, text="You are eliminated from the siege and wake outside.")
+    elif session.dungeon:
+        v2_kind = session.dungeon.get("v2")
+        realm_death = session.dungeon.get("id") == "castle_realm"
+        endless_death = session.dungeon.get("id") == endless_depths.DUNGEON_ID
+        v2_death = bool(v2_kind)
+        stayed = False
+        if v2_death and session.dungeon.get("checkpoint"):
+            import void_v2
+            stayed = await void_v2.on_death(session)
+            if stayed:
+                await _relock_dungeon_doors(session)
+                _save_dungeon_resume(session)
+                where = "checkpoint"
+        if not stayed:
+            where = "entrance"
+            if v2_death:
+                import void_v2
+                void_v2.strip_keys(session)
+            if endless_death:
+                await endless_depths.on_death(session)
+            await handle_leave_dungeon(session, silent=True)
+            if v2_kind == "depths":
+                fall = "You fall in the crypt and wake outside. The dead keep what you carried."
+            elif v2_death:
+                fall = "You fall in the sanctum and wake outside. The dark keeps what you carried."
+            elif realm_death:
+                fall = siege_elim_msg or "You wake outside the King's Realm portal."
+            elif endless_death:
+                fall = "You fall in the Endless Depths and wake at the mouth."
+            else:
+                fall = "You fall in the cave and wake outside — the depths reclaim their silence."
+            speaker = "Endless Depths" if endless_death else "Tidehollow"
+            await send(session.ws, "CHAT_MSG", **{"from": speaker, "text": fall})
+    else:
+        session.x, session.y = SPAWN_POINT
+        if session.pet_id:
+            session.pet_hp = PETS[session.pet_id]["hp"]
+            _bring_pet(session)
+        for mon in WORLD.monsters.values():
+            if mon.target_player_id == session.player_id:
+                mon.target_player_id = None
+    WORLD.db.save_player_stats(session.player_id, coins=session.coins)
+    if not session.dungeon:
+        WORLD.db.save_player_position(session.player_id, session.x, session.y)
+    death_data = {
+        "entity_id": session.player_id, "entity_kind": "player",
+        "coins_lost": lost,
+        "where": where,
+    }
+    if dungeon_tag:
+        death_data["_dungeon_player"] = dungeon_tag
+    events.append({"type": "DEATH", "data": death_data})
+    await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
+    # First death: make the failure cheap and legible (eat, then try again).
+    if welcome_kit.mark_coach_seen(WORLD.db.conn, session.player_id, welcome_kit.COACH_DEATH):
+        await send(session.ws, "CHAT_MSG", **{
+            "from": "Guide",
+            "text": "You woke up. Press R to eat, stick to green nameplates, then follow the trail.",
+        })
+        await send_ui_coach(
+            session, welcome_kit.COACH_EAT, "eat",
+            "Eat / R restores HP before you go back out.",
+            dismiss_key="r",
+        )
+        await send_welcome_state(session)
+
+
 def _pet_walkable(session, nx, ny):
+    if session.dungeon and session.dungeon.get("id") == "kings_castle_siege":
+        import kcs_siege
+        return kcs_siege.walkable(session, nx, ny)
     if session.dungeon and session.dungeon.get("id") == "castle_realm":
         import castle_realm
         return castle_realm.walkable(session.dungeon.get("plane"), nx, ny)
@@ -11951,6 +12354,8 @@ def process_dungeon_ai():
     max_pursuers = 1
     for session in list(WORLD.sessions.values()):
         if not session.dungeon:
+            continue
+        if session.dungeon.get("id") == "kings_castle_siege":
             continue
         tiles = session.dungeon["tiles"]
         mod = _dungeon_mod(session)
