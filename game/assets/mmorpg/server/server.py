@@ -3965,7 +3965,15 @@ def _apply_kcs_resume(session, resume, reason="reconnect") -> bool:
     """
     import kcs_siege
     if session.dungeon and session.dungeon.get("id") == kcs_siege.DUNGEON_ID:
-        return True
+        # Already attached is not a fresh grant. Re-check before leaving them there.
+        if kcs_siege.presence_decision(session).allowed:
+            return True
+        kcs_siege.force_clear(session)
+        try:
+            _clear_dungeon_resume(session)
+        except Exception:
+            log.exception("kcs resume clear after a failed re-check failed")
+        return False
     if session.dungeon:
         return False
     plane = (resume or {}).get("plane") or kcs_siege.PLANE_BATTLEFIELD
@@ -3997,6 +4005,7 @@ async def _notify_kcs_resume(session):
     """Tell the client they are already on the siege map. No Castle Realm payload."""
     import kcs_siege
     await send(session.ws, "DUNGEON_ENTER", **kcs_siege.payload(session, resume=True))
+    await _send_kcs_snapshot(session)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     await send(session.ws, "CHAT_MSG", **{
         "from": "King's Castle",
@@ -4110,10 +4119,82 @@ async def _resume_dungeon(session, resume):
     })
 
 
+async def _broadcast_kcs(msg_type, **fields):
+    """Send a siege event only to sessions standing on the siege map."""
+    import kcs_siege
+    for other in list(WORLD.sessions.values()):
+        if not kcs_siege.on_map(other):
+            continue
+        try:
+            await send(other.ws, msg_type, **fields)
+        except Exception:
+            log.exception("kcs broadcast failed")
+
+
+async def _send_kcs_snapshot(session):
+    import kcs_siege
+    body = kcs_siege.snapshot(session)
+    if body is None:
+        return
+    await send(session.ws, "KCS_SNAPSHOT", **body)
+
+
+async def apply_kcs_opening(opening_id, state, expected_rev=None):
+    """Server authority for one gate or breach. Not reachable from a client message."""
+    import kcs_siege
+    if not kcs_siege.enabled():
+        raise RuntimeError("feature_disabled")
+    body = kcs_siege.commit_opening(opening_id, state, expected_rev)
+    await _broadcast_kcs("KCS_DELTA", kind="opening", **body)
+    return body
+
+
+async def handle_kcs_place(session, msg):
+    import kcs_siege
+    if not kcs_siege.enabled():
+        await send(session.ws, "ERROR", message="The siege is closed.")
+        return
+    result = kcs_siege.propose_placement(session, msg or {})
+    if not result.get("ok"):
+        await send(session.ws, "ERROR", message=result.get("error") or "That placement is not valid.")
+        return
+    if not result.get("replayed"):
+        await _broadcast_kcs("KCS_DELTA", kind="engine", engine=result["engine"])
+    await send(session.ws, "KCS_PLACE_OK", replayed=bool(result.get("replayed")), engine=result["engine"])
+
+
+async def handle_kcs_opening(session, msg):
+    """Client structure, damage, resource, and ownership claims are never applied."""
+    del msg
+    await send(session.ws, "ERROR", message="The siege does not take structure orders from the client.")
+
+
+async def handle_kcs_snapshot(session, msg):
+    import kcs_siege
+    if not kcs_siege.enabled():
+        await send(session.ws, "ERROR", message="The siege is closed.")
+        return
+    if isinstance(msg, dict) and kcs_siege.PLACE_REJECT_KEYS.intersection(msg):
+        await send(session.ws, "ERROR", message="The siege does not accept that.")
+        return
+    if not kcs_siege.on_map(session):
+        await send(session.ws, "ERROR", message="You are not deployed in the siege.")
+        return
+    body = kcs_siege.snapshot(session)
+    if body is None:
+        await send(session.ws, "ERROR", message="The siege can't be reached right now.")
+        return
+    await send(session.ws, "KCS_SNAPSHOT", **body)
+
+
 async def _handle_enter_kcs(session, msg):
     """Deploy onto the new siege map. The guard is the only way in."""
     import kcs_siege
-    plane = msg.get("plane") or kcs_siege.PLANE_BATTLEFIELD
+    try:
+        plane = kcs_siege.deploy_plane(msg or {})
+    except ValueError:
+        await send(session.ws, "ERROR", message="The siege does not accept that.")
+        return
     if plane not in kcs_siege.SIEGE_PLANES:
         await send(session.ws, "ERROR", message="You can't enter that place.")
         return
@@ -4143,6 +4224,7 @@ async def _handle_enter_kcs(session, msg):
     _save_dungeon_resume(session)
     _bring_pet(session)
     await send(session.ws, "DUNGEON_ENTER", **kcs_siege.payload(session))
+    await _send_kcs_snapshot(session)
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     await send(session.ws, "CHAT_MSG", **{
         "from": "King's Castle",
@@ -10585,6 +10667,12 @@ async def handler(ws):
                     await moonpetal_inn.handle(session, mtype, msg, send)
                 elif mtype == "ENTER_DUNGEON":
                     await handle_enter_dungeon(session, msg)
+                elif mtype == "KCS_PLACE":
+                    await handle_kcs_place(session, msg)
+                elif mtype == "KCS_OPENING":
+                    await handle_kcs_opening(session, msg)
+                elif mtype == "KCS_SNAPSHOT":
+                    await handle_kcs_snapshot(session, msg)
                 elif mtype == "LEAVE_DUNGEON":
                     await handle_leave_dungeon(session, msg)
                 elif mtype == "SEWER_START":

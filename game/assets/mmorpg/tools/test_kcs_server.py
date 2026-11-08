@@ -16,12 +16,14 @@ import tempfile
 import threading
 from pathlib import Path
 
-# Foundations live next to the game server. The standalone
-# kings_castle_siege_map package is not part of this repository; layout
-# parity checks skip when it cannot be imported.
+# Foundations live next to the game server. The approved map sources and the
+# M28 hash baseline are fixtures under server/kcs_parity (not the live client).
 ROOT = Path(__file__).resolve().parents[1] / "server"
+FIXTURE = ROOT / "kcs_parity"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+if str(FIXTURE) not in sys.path:
+    sys.path.insert(0, str(FIXTURE))
 
 from kcs_server import export_schema as E  # noqa: E402
 from kcs_server import flags  # noqa: E402
@@ -33,20 +35,11 @@ from kcs_server.store import (  # noqa: E402
 )
 
 CHECKS = 0
-SKIPPED = []
 
 
 def layout_module():
-    try:
-        from kings_castle_siege_map import layout as layout_mod
-    except ImportError:
-        return None
+    from kings_castle_siege_map import layout as layout_mod
     return layout_mod
-
-
-def skip(name, why):
-    SKIPPED.append((name, why))
-    print(f"SKIP {name}: {why}")
 
 
 def check(ok, msg):
@@ -79,11 +72,8 @@ def smap():
 
 def bf():
     global _BF
-    layout = layout_module()
-    if layout is None:
-        raise RuntimeError("kings_castle_siege_map is not in this repository")
     if _BF is None:
-        _BF = layout.build_battlefield()
+        _BF = layout_module().build_battlefield()
     return _BF
 
 
@@ -101,14 +91,9 @@ def test_export_frozen_matches_layout():
     doc = E.load_export()
     check(doc["content_sha256"].startswith("6dbbdfa8"), "frozen export keeps the M30 content hash")
     check(doc["body"]["schema_version"] == 1 and doc["body"]["map_id"] == "kings_castle_siege", "schema id/version")
-    layout = layout_module()
-    if layout is None:
-        skip("test_export_frozen_matches_layout layout parity",
-             "kings_castle_siege_map is not in this repository; frozen export was loaded and hashed")
-    else:
-        fresh = E.build_export()
-        check(doc["content_sha256"] == fresh["content_sha256"],
-              "frozen export drifted from layout.py: regenerate deliberately with tools/m30_export_map.py")
+    fresh = E.build_export()
+    check(doc["content_sha256"] == fresh["content_sha256"],
+          "frozen export drifted from layout.py: regenerate deliberately with tools/m30_export_map.py")
     body = doc["body"]
     check(body["map_id"] not in body["forbidden_ids"], "map id isolated from live ids")
     bp = body["planes"][0]
@@ -144,10 +129,6 @@ def test_export_tamper_rejected():
 
 
 def test_walkability_parity_full_grid():
-    if layout_module() is None:
-        skip("test_walkability_parity_full_grid",
-             "kings_castle_siege_map is not in this repository")
-        return
     L = layout_module()
     m, b = smap(), bf()
     plane = b.plane
@@ -194,10 +175,6 @@ def test_independent_openings():
     expect(UnknownOpening, st.set, "king", "destroyed")
     expect(BadOpeningState, st.set, "main_gate", "rubble")
     expect(KeyError, m.walkable, "castle_realm", 1, 1)
-    if layout_module() is None:
-        skip("test_independent_openings layout parity",
-             "kings_castle_siege_map is not in this repository")
-        return
     L = layout_module()
     b = bf()
     plane = b.plane
@@ -219,9 +196,6 @@ def test_independent_openings():
 
 
 def test_nav_parity_bfs():
-    if layout_module() is None:
-        skip("test_nav_parity_bfs", "kings_castle_siege_map is not in this repository")
-        return
     L = layout_module()
     m, b = smap(), bf()
     start = b.plane.spawn["attacker"]
@@ -240,21 +214,20 @@ def test_nav_parity_bfs():
 
 
 def test_renderer_and_nav_sources_unchanged():
-    baseline = ROOT / "m30_evidence" / "baseline_sha256.txt"
-    if not baseline.is_file():
-        skip("test_renderer_and_nav_sources_unchanged",
-             "M30 renderer baseline is not in this repository; siege export is the server copy")
-        return
+    baseline = FIXTURE / "m30_evidence" / "baseline_sha256.txt"
+    check(baseline.is_file(), "M30 baseline file is present")
     base = {}
-    for line in (ROOT / "m30_evidence" / "baseline_sha256.txt").read_text().splitlines():
+    for line in baseline.read_text().splitlines():
+        if not line.strip():
+            continue
         h, p = line.split(None, 1)
         base[p.strip()] = h
-    for rel in ("kings_castle_siege_map/angled_view.py", "kings_castle_siege_map/layout.py",
-                "kings_castle_siege_map/placement.py", "kings_castle_siege_map/walk.py",
-                "kings_castle_siege_map/world_view.py", "kings_castle_siege_map/constants.py",
-                "tests/test_kings_castle_siege_map.py"):
-        h = hashlib.sha256((ROOT / rel).read_bytes()).hexdigest()
-        check(h == base[rel], f"{rel} unchanged since M28 baseline")
+    check(len(base) == 12, f"baseline lists every approved source ({len(base)})")
+    for rel, expect_hash in base.items():
+        path = FIXTURE / rel
+        check(path.is_file(), f"baseline path present {rel}")
+        got = hashlib.sha256(path.read_bytes()).hexdigest()
+        check(got == expect_hash, f"{rel} matches the M28 baseline")
     check(base["kings_castle_siege_map/angled_view.py"].startswith("20ad8f10"), "M28 angled_view baseline")
 
 
@@ -683,7 +656,4 @@ if __name__ == "__main__":
         t()
         print("ok", t.__name__)
     print(f"kcs_server M30 tests ok ({len(tests)} tests, {CHECKS} checks)")
-    if SKIPPED:
-        print(f"skipped portions: {len(SKIPPED)}")
-        for name, why in SKIPPED:
-            print(f"  - {name}: {why}")
+    print("skipped portions: 0")

@@ -15,12 +15,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
 import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, Iterator, Optional
+from typing import Any, Dict, Iterable, Iterator, Optional, Sequence, Tuple
 
 SCHEMA_VERSION = 1
 CASTLE_KEY = "kings_castle_siege"
@@ -37,6 +38,12 @@ _TRANSITIONS = {
     "voided": set(),
 }
 SIDES = ("attack", "defend")
+# Assault engines from the approved placement spec. Not a count cap.
+ENGINE_TYPES = ("ram", "trebuchet", "siege_tower", "ladder")
+# Defender engines are not in that spec, so only the attack side may place these.
+PLACEMENT_SIDE = "attack"
+_REQUEST_KEY = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
+LIVE_WAR = ("locking", "active")
 
 
 class StoreError(RuntimeError):
@@ -53,6 +60,10 @@ class InvalidTransition(StoreError):
 
 class ResultConflict(StoreError):
     pass
+
+
+class PlacementRejected(StoreError):
+    """The engine cannot be stored. Nothing was written."""
 
 
 class NotFound(StoreError):
@@ -118,6 +129,23 @@ CREATE TABLE IF NOT EXISTS kcs_openings (
     updated_at REAL NOT NULL,
     PRIMARY KEY (war_id, opening_id)
 );
+CREATE TABLE IF NOT EXISTS kcs_engines (
+    war_id INTEGER NOT NULL REFERENCES kcs_wars(war_id),
+    engine_id INTEGER NOT NULL,
+    request_key TEXT NOT NULL,
+    player_id INTEGER NOT NULL,
+    side TEXT NOT NULL CHECK (side IN ('attack','defend')),
+    engine_type TEXT NOT NULL,
+    x INTEGER NOT NULL,
+    y INTEGER NOT NULL,
+    rotation INTEGER NOT NULL CHECK (rotation IN (0,90,180,270)),
+    tiles_json TEXT NOT NULL,
+    pad_json TEXT NOT NULL,
+    rev INTEGER NOT NULL,
+    created_at REAL NOT NULL,
+    PRIMARY KEY (war_id, engine_id),
+    UNIQUE (war_id, player_id, request_key)
+);
 CREATE TABLE IF NOT EXISTS kcs_result (
     war_id INTEGER PRIMARY KEY REFERENCES kcs_wars(war_id),
     winner_side TEXT NOT NULL CHECK (winner_side IN ('attack','defend')),
@@ -178,6 +206,20 @@ class RosterStatus:
     side: Optional[str]
     deployed: bool
     eliminated: bool
+
+
+@dataclass(frozen=True)
+class EngineRecord:
+    engine_id: int
+    player_id: int
+    side: str
+    engine_type: str
+    x: int
+    y: int
+    rotation: int
+    tiles: Tuple[Tuple[int, int], ...]
+    rev: int
+    request_key: str
 
 
 def _payload_hash(winner_side, guild, monarch, proof_json) -> str:
@@ -353,6 +395,78 @@ class KCSStore:
         return dict(self.conn.execute(
             "SELECT opening_id, state FROM kcs_openings WHERE war_id=?", (war_id,)).fetchall())
 
+    def opening_revs(self, war_id: int) -> Dict[str, int]:
+        return {row[0]: int(row[1]) for row in self.conn.execute(
+            "SELECT opening_id, rev FROM kcs_openings WHERE war_id=?", (war_id,)).fetchall()}
+
+    # ---- engines ----------------------------------------------------------
+    def engines(self, war_id: int) -> list:
+        rows = self.conn.execute(
+            "SELECT engine_id, player_id, side, engine_type, x, y, rotation, tiles_json, rev, request_key "
+            "FROM kcs_engines WHERE war_id=? ORDER BY engine_id", (war_id,)).fetchall()
+        return [_engine_row(row) for row in rows]
+
+    def place_engine(self, war_id: int, player_id: int, side: str, engine_type: str,
+                     x: int, y: int, rotation: int, request_key: str,
+                     tiles: Sequence[Sequence[int]], pad: Sequence[Sequence[int]]) -> Tuple[EngineRecord, bool]:
+        """Insert one engine, or return the original row when the same request is replayed.
+
+        Overlap is decided inside the transaction. A conflicting replay or a
+        rejected placement writes nothing. The caller supplies the footprint;
+        this method does not trust a client tile list on its own because only
+        the bridge computes tiles from the approved spec.
+        """
+        if side != PLACEMENT_SIDE:
+            raise PlacementRejected("this side cannot place siege engines")
+        if engine_type not in ENGINE_TYPES:
+            raise PlacementRejected(f"unknown engine type {engine_type!r}")
+        if int(rotation) not in (0, 90, 180, 270):
+            raise PlacementRejected("rotation must be a quarter turn")
+        if not isinstance(request_key, str) or _REQUEST_KEY.fullmatch(request_key) is None:
+            raise PlacementRejected("bad request id")
+        tiles_t = _norm_tiles(tiles)
+        pad_t = _norm_tiles(pad)
+        if not set(tiles_t) <= set(pad_t):
+            raise PlacementRejected("engine footprint is outside its operating space")
+        with self._tx("place_engine") as c:
+            war = c.execute("SELECT status FROM kcs_wars WHERE war_id=?", (war_id,)).fetchone()
+            if war is None or war[0] not in LIVE_WAR:
+                raise PlacementRejected("no live war")
+            roster = c.execute(
+                "SELECT side, deployed, eliminated FROM kcs_roster WHERE war_id=? AND player_id=?",
+                (war_id, int(player_id))).fetchone()
+            if roster is None or roster[0] != PLACEMENT_SIDE or not roster[1] or roster[2]:
+                raise PlacementRejected("player cannot place an engine")
+            existing = c.execute(
+                "SELECT engine_id, player_id, side, engine_type, x, y, rotation, tiles_json, rev, request_key "
+                "FROM kcs_engines WHERE war_id=? AND player_id=? AND request_key=?",
+                (war_id, int(player_id), request_key)).fetchone()
+            if existing is not None:
+                record = _engine_row(existing)
+                if (record.engine_type, record.x, record.y, record.rotation) == (
+                        engine_type, int(x), int(y), int(rotation)):
+                    return record, True
+                raise ResultConflict("request id was already used for a different engine")
+            proposed = set(pad_t)
+            for row in c.execute("SELECT pad_json FROM kcs_engines WHERE war_id=?", (war_id,)):
+                if proposed & set(_norm_tiles(json.loads(row[0]))):
+                    raise PlacementRejected("overlaps another engine or its operating space")
+            next_id = c.execute(
+                "SELECT COALESCE(MAX(engine_id), 0) + 1 FROM kcs_engines WHERE war_id=?",
+                (war_id,)).fetchone()[0]
+            now = self._clock()
+            c.execute(
+                "INSERT INTO kcs_engines(war_id, engine_id, request_key, player_id, side, engine_type, "
+                "x, y, rotation, tiles_json, pad_json, rev, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)",
+                (war_id, int(next_id), request_key, int(player_id), side, engine_type,
+                 int(x), int(y), int(rotation),
+                 json.dumps(tiles_t, separators=(",", ":")),
+                 json.dumps(pad_t, separators=(",", ":")), now))
+            return EngineRecord(
+                int(next_id), int(player_id), side, engine_type, int(x), int(y), int(rotation),
+                tiles_t, 1, request_key), False
+
     # ---- results + sovereignty -------------------------------------------
     def record_result(self, war_id: int, winner_side: str, winning_guild_id: Optional[int],
                       monarch_player_id: Optional[int], proof: Dict[str, Any]) -> str:
@@ -464,6 +578,30 @@ class KCSStore:
         return self.conn.execute(
             "SELECT rev, owner_guild_id, monarch_player_id, source_war_id FROM kcs_sovereignty_history "
             "ORDER BY rev").fetchall()
+
+
+def _norm_tiles(tiles) -> Tuple[Tuple[int, int], ...]:
+    if not isinstance(tiles, (list, tuple)) or not tiles or len(tiles) > 64:
+        raise StoreError("bad engine footprint")
+    out = []
+    for item in tiles:
+        if not isinstance(item, (list, tuple)) or len(item) != 2:
+            raise StoreError("bad engine footprint")
+        try:
+            x, y = int(item[0]), int(item[1])
+        except (TypeError, ValueError) as exc:
+            raise StoreError("bad engine footprint") from exc
+        if abs(x) > 10000 or abs(y) > 10000:
+            raise StoreError("bad engine footprint")
+        out.append((x, y))
+    return tuple(sorted(set(out)))
+
+
+def _engine_row(row) -> EngineRecord:
+    tiles = tuple(tuple(pair) for pair in json.loads(row[7]))
+    return EngineRecord(
+        int(row[0]), int(row[1]), row[2], row[3], int(row[4]), int(row[5]), int(row[6]),
+        tiles, int(row[8]), row[9])
 
 
 def _split_sql(script: str):

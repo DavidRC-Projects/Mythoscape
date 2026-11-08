@@ -1,19 +1,34 @@
 """Bridge from the live server onto the isolated King's Castle Siege foundations.
 
-The siege map, roster, and elimination record live in ``kcs_server`` and in
-their own SQLite file. This module never opens ``world.db``, never calls
-``throne._crown``, and never writes Castle Realm ownership. Flag default is
-OFF (``USE_KINGS_CASTLE_SIEGE``). When the flag is off, no siege database is
-created.
+The siege map, roster, elimination record, engine footprints, and opening
+states live in ``kcs_server`` and in their own SQLite file. This module never
+opens ``world.db``, never calls ``throne._crown``, and never writes Castle
+Realm ownership. Flag default is OFF (``USE_KINGS_CASTLE_SIEGE``). When the
+flag is off, no siege database is created.
 
 Presence on either siege plane is granted only by ``EntryGuard.may_enter``.
 Callers must obey the decision. A denial, a store error, or an elimination
 that has not been confirmed yet leaves the player off the siege map.
+
+What is stored, and what is not playable yet
+--------------------------------------------
+* Attackers may place the approved engine footprints (ram, trebuchet, siege
+  tower, ladder) on open exterior ground around the whole curtain. There is
+  no engine-count cap. Placement rules come from the approved layout module.
+* Each gate and breach has its own persisted state. Changing one opening
+  changes only that opening's tiles. The client cannot set damage, resources,
+  or ownership.
+* Not playable yet, and intentionally not invented here: engine firing, engine
+  HP, gate HP, a damage formula, resource costs, currencies, engineering XP,
+  packing up or destroying an engine, defender engines, spectate entry, PvP,
+  and any projection onto the live throne. ``commit_opening`` is the server
+  seam a future damage model would call. It is not bound to a client message.
 """
 from __future__ import annotations
 
 import logging
 import os
+import sys
 import threading
 from typing import Optional
 
@@ -27,8 +42,8 @@ from kcs_server.guard import (
     Decision,
     EntryGuard,
 )
-from kcs_server.plane import SiegeMap
-from kcs_server.store import FaultPlan, KCSStore
+from kcs_server.plane import BadOpeningState, SiegeMap, UnknownOpening
+from kcs_server.store import FaultPlan, KCSStore, PlacementRejected, ResultConflict, StoreError
 
 log = logging.getLogger("kcs_siege")
 
@@ -61,6 +76,23 @@ _configured_faults: Optional[FaultPlan] = None
 _unconfirmed: set = set()
 # Deaths currently inside EntryGuard.on_death. Presence grants wait them out.
 _dying: set = set()
+# Serialises placement validation with the insert so two engines cannot both
+# pass the ring check against a stale set.
+_placement_lock = threading.Lock()
+_battlefield = None
+
+# A deploy request may name the battlefield. These fields would let the client
+# choose a tile, a side, a mode, or a structure state, so they are refused.
+DEPLOY_REJECT_KEYS = frozenset({
+    "x", "y", "mode", "side", "openings", "opening", "damage", "state",
+    "resources", "owner", "owner_id", "hp", "tiles", "return_x", "return_y",
+    "war_id", "player_id", "engines", "cost", "xp",
+})
+PLACE_REJECT_KEYS = frozenset({
+    "openings", "opening", "damage", "state", "resources", "owner", "owner_id",
+    "hp", "tiles", "pad", "side", "player_id", "war_id", "engine_id", "cost", "xp",
+    "mode",
+})
 
 
 def enabled() -> bool:
@@ -249,10 +281,174 @@ def walkable(session, x: int, y: int) -> bool:
         return False
     try:
         states = _opening_states()
-        return bool(siege_map().walkable(plane, int(x), int(y), states))
+        if not siege_map().walkable(plane, int(x), int(y), states):
+            return False
+        if plane != PLANE_BATTLEFIELD:
+            return True
+        for engine in _engine_records():
+            if (int(x), int(y)) in engine.tiles:
+                return False
+        return True
     except Exception:
         log.exception("kcs walkability check failed")
         return False
+
+
+def deploy_plane(msg) -> str:
+    """Battlefield only. Client coordinates, mode, side, and structure fields are refused."""
+    if not isinstance(msg, dict):
+        raise ValueError("bad deploy request")
+    if DEPLOY_REJECT_KEYS.intersection(msg):
+        raise ValueError("deploy request includes server-owned fields")
+    plane = msg.get("plane", PLANE_BATTLEFIELD)
+    if plane != PLANE_BATTLEFIELD:
+        raise ValueError("deploy plane is not the battlefield")
+    return PLANE_BATTLEFIELD
+
+
+def propose_placement(session, msg) -> dict:
+    """Validate and store one engine. The same request id returns the original row.
+
+    Does not open the store when the flag is off. Does not apply client damage,
+    resources, tiles, or ownership.
+    """
+    if not enabled():
+        return _place_fail("The siege is closed.", "feature_disabled")
+    if not isinstance(msg, dict):
+        return _place_fail("That placement is not valid.", "malformed")
+    if PLACE_REJECT_KEYS.intersection(msg):
+        return _place_fail("The siege does not accept that.", "forged")
+    if not on_map(session):
+        return _place_fail("You are not deployed in the siege.", "not_on_map")
+    data = session.dungeon or {}
+    if data.get("plane") != PLANE_BATTLEFIELD or data.get("mode") != "combatant":
+        return _place_fail("You cannot place an engine from here.", "wrong_plane")
+    if int(getattr(session, "hp", 0) or 0) <= 0:
+        return _place_fail("You cannot place an engine right now.", "not_alive")
+    decision = presence_decision(session)
+    if not decision.allowed or decision.mode != "combatant":
+        return _place_fail(deny_message(decision), decision.code)
+    try:
+        engine_type = msg.get("engine_type")
+        x = _required_int(msg.get("x"))
+        y = _required_int(msg.get("y"))
+        rotation = _required_int(msg.get("rotation", 0))
+        request_id = msg.get("request_id")
+    except (TypeError, ValueError):
+        return _place_fail("That placement is not valid.", "malformed")
+    if not isinstance(engine_type, str) or not isinstance(request_id, str):
+        return _place_fail("That placement is not valid.", "malformed")
+    if rotation not in (0, 90, 180, 270):
+        return _place_fail("That placement is not valid.", "malformed")
+    try:
+        with _placement_lock:
+            guard = _require_guard()
+            war = guard.store.open_war()
+            if war is None:
+                return _place_fail("There is no siege to build in.", "no_open_war")
+            roster = guard.store.roster_status(war.war_id, int(session.player_id))
+            if roster.side != "attack" or not roster.deployed or roster.eliminated:
+                return _place_fail("You cannot place an engine.", "team_denied")
+            for prior in guard.store.engines(war.war_id):
+                if prior.player_id != int(session.player_id) or prior.request_key != request_id:
+                    continue
+                if (prior.engine_type, prior.x, prior.y, prior.rotation) == (engine_type, x, y, rotation):
+                    return {"ok": True, "replayed": True, "engine": _public_engine(prior), "code": "replayed"}
+                return _place_fail("That request was already used.", "replay_conflict")
+            bf, placement = _placement_api()
+            existing = [
+                placement.PlacedEngine(str(e.engine_id), e.engine_type, e.x, e.y, e.rotation)
+                for e in guard.store.engines(war.war_id)
+            ]
+            result = placement.validate_placement(bf, engine_type, x, y, rotation, existing)
+            if not result.ok:
+                return _place_fail(result.reason, "invalid_placement")
+            proposed = placement.PlacedEngine("proposed", engine_type, x, y, rotation)
+            sp = bf.plane.spawn
+            if not placement.ring_still_clear(
+                bf, list(existing) + [proposed], sp["ring_sw"], sp["ring_ne"], sp["ring_nw"]
+            ):
+                return _place_fail("That placement would cut the ring road.", "ring_blocked")
+            record, replayed = guard.store.place_engine(
+                war.war_id, int(session.player_id), roster.side, engine_type, x, y, rotation,
+                request_id, proposed.tiles(), proposed.padded_tiles(),
+            )
+    except (PlacementRejected, ResultConflict, StoreError) as exc:
+        log.info("kcs placement refused: %s", exc.__class__.__name__)
+        return _place_fail("That placement is not valid.", "rejected")
+    except Exception:
+        log.exception("kcs placement failed")
+        return _place_fail("The siege can't be reached right now.", "guard_error")
+    return {"ok": True, "replayed": replayed, "engine": _public_engine(record), "code": "placed"}
+
+
+def commit_opening(opening_id: str, state: str, expected_rev: Optional[int] = None) -> dict:
+    """Server-only change of one opening. The client has no path into this function.
+
+    Returns the opening id, the new state, the new rev, and that opening's own
+    tiles. No other opening's tiles are included.
+    """
+    if not enabled():
+        raise RuntimeError("feature_disabled")
+    if not isinstance(opening_id, str) or not isinstance(state, str):
+        raise BadOpeningState(opening_id)
+    smap = siege_map()
+    plane = None
+    for plane_id in (PLANE_BATTLEFIELD, PLANE_THRONE):
+        candidate = smap.plane(plane_id)
+        if opening_id in candidate.opening_ids:
+            plane = candidate
+            break
+    if plane is None:
+        raise UnknownOpening(opening_id)
+    if state not in ("intact", "damaged", "destroyed"):
+        raise BadOpeningState(state)
+    tiles = sorted(t for t, oid in plane.opening_at.items() if oid == opening_id)
+    if not tiles:
+        raise UnknownOpening(opening_id)
+    guard = _require_guard()
+    war = guard.store.open_war()
+    if war is None or war.status not in ("locking", "active"):
+        raise StoreError("no live war")
+    rev = guard.store.save_opening(war.war_id, opening_id, state, expected_rev)
+    return {
+        "opening_id": opening_id,
+        "plane": plane.plane_id,
+        "state": state,
+        "rev": rev,
+        "tiles": [[int(x), int(y)] for x, y in tiles],
+    }
+
+
+def snapshot(session) -> Optional[dict]:
+    """Full engine and opening state for one player already on the siege map."""
+    if not on_map(session) or not enabled():
+        return None
+    try:
+        guard = _require_guard()
+        war = guard.store.open_war()
+        if war is None:
+            return None
+        smap = siege_map()
+        stored = guard.store.openings(war.war_id)
+        revs = guard.store.opening_revs(war.war_id)
+        openings = []
+        for plane_id in (PLANE_BATTLEFIELD, PLANE_THRONE):
+            pdata = smap.plane(plane_id)
+            for oid in pdata.opening_ids:
+                tiles = sorted(t for t, owner in pdata.opening_at.items() if owner == oid)
+                openings.append({
+                    "id": oid,
+                    "plane": plane_id,
+                    "state": stored.get(oid, pdata.defaults[oid]),
+                    "rev": int(revs.get(oid, 0)),
+                    "tiles": [[int(x), int(y)] for x, y in tiles],
+                })
+        engines = [_public_engine(e) for e in guard.store.engines(war.war_id)]
+        return {"war_id": war.war_id, "openings": openings, "engines": engines}
+    except Exception:
+        log.exception("kcs snapshot failed")
+        return None
 
 
 def attach(session, decision: Decision, resume: Optional[dict] = None) -> None:
@@ -442,6 +638,50 @@ def _eliminated_in_store(player_id: int) -> bool:
     except Exception:
         log.exception("kcs elimination read failed")
         return False
+
+
+def _place_fail(error: str, code: str) -> dict:
+    return {"ok": False, "error": error, "code": code, "replayed": False, "engine": None}
+
+
+def _required_int(value) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError("expected int")
+    return value
+
+
+def _placement_api():
+    global _battlefield
+    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kcs_parity")
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    from kings_castle_siege_map.layout import build_battlefield
+    from kings_castle_siege_map import placement
+    if _battlefield is None:
+        _battlefield = build_battlefield()
+    return _battlefield, placement
+
+
+def _engine_records():
+    guard = _require_guard()
+    war = guard.store.open_war()
+    if war is None:
+        return []
+    return guard.store.engines(war.war_id)
+
+
+def _public_engine(record) -> dict:
+    return {
+        "engine_id": record.engine_id,
+        "engine_type": record.engine_type,
+        "x": record.x,
+        "y": record.y,
+        "rotation": record.rotation,
+        "tiles": [[int(x), int(y)] for x, y in record.tiles],
+        "player_id": record.player_id,
+        "side": record.side,
+        "rev": record.rev,
+    }
 
 
 def _opening_states():

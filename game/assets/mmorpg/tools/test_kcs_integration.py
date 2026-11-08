@@ -181,6 +181,15 @@ async def test_flag_off_and_ordinary_maps():
     await server.handle_teleport(s, {"dest": "village"})
     check(s.dungeon is None, "teleport from Castle Realm still returns to the overworld")
     check(not os.path.exists(path), "ordinary maps did not create the siege database")
+    s.x, s.y = 9, 28
+    await server.handle_enter_dungeon(s, {"dungeon_id": "castle_realm"})
+    s.hp = 0
+    s.in_combat_with = ("player", 999)
+    s.coins = 40
+    await server.resolve_player_death(s, [])
+    check(s.dungeon is None and not kcs_siege.on_map(s), "castle realm death still leaves the realm")
+    check(s.hp == s.max_hp() and s.in_combat_with is None, "castle realm death still restores hp and clears combat")
+    check(not os.path.exists(path), "castle realm death does not open the siege database")
     await server.resolve_player_death(s, [])
     check(not os.path.exists(path), "overworld death does not open the siege database")
     check(s.dungeon is None, "overworld death still leaves the player outside")
@@ -437,7 +446,12 @@ async def test_persist_error_restart_and_race():
     stop.set()
     thread.join(10)
     check(not thread.is_alive(), "death/entry race thread finished")
-    check(not late, f"no siege entry after death completed ({late})")
+    if late:
+        st = kcs_siege.store().roster_status(war2.war_id, live.player_id)
+        post = kcs_siege.decide(live.player_id, PLANE_BATTLEFIELD, "deploy")
+        print("RACE DEBUG", "elim", st, "post", post, "unconfirmed", live.player_id in kcs_siege._unconfirmed,
+              "on", kcs_siege.on_map(live), "late", len(late), "sample", late[:8])
+    check(not late, f"no siege entry after death completed ({late[:12]})")
     check(not kcs_siege.on_map(live), "dead player is off the siege map")
     check(store2.roster_status(war2.war_id, live.player_id).eliminated, "raced death was eliminated")
     check(path2 != path, "each test store is its own file")
@@ -496,6 +510,75 @@ def test_refuses_world_db_and_does_not_crown():
           "death handler records siege elimination")
 
 
+async def test_untrusted_deploy_and_combat_tick():
+    """Client plane/coordinates are not a deploy, and the combat tick itself records death."""
+    flag(True)
+    path, _journal = use_store()
+    store, war = open_war()
+    s = player()
+    other = player()
+    enlist(store, war, s, "attack")
+    enlist(store, war, other, "defend")
+    arm_live(store, war)
+    origin = (int(s.x), int(s.y))
+    await server.handle_enter_dungeon(s, {
+        "dungeon_id": "kings_castle_siege",
+        "plane": PLANE_THRONE,
+        "x": 36,
+        "y": 10,
+        "mode": "spectator",
+        "damage": 100,
+    })
+    check(s.dungeon is None and (s.x, s.y) == origin, "forged plane, tile, mode, and damage do not deploy")
+    check(errors(s.ws)[-1] == "The siege does not accept that.", "forged deploy is refused")
+    await server.handle_enter_dungeon(s, {"dungeon_id": "kings_castle_siege", "plane": PLANE_BATTLEFIELD})
+    check(kcs_siege.on_map(s) and s.dungeon.get("plane") == PLANE_BATTLEFIELD, "server still deploys the battlefield")
+    check(s.dungeon.get("mode") == "combatant", "client mode is not copied onto the session")
+
+    monster = server.MonsterInstance(91001, "rat", s.x, s.y, stats={
+        "hp": 500, "attack": 1, "strength": 1, "defence": 1,
+        "attack_range": 8, "cone_tiles": None, "force_retaliate": False,
+    })
+    monster.target_player_id = s.player_id
+    s.dungeon["monsters"][monster.id] = monster
+    s.equipment = {}
+    s.hp = 5
+    s.in_combat_with = ("player", 999)
+    server.process_dungeon_ai()
+    check(kcs_siege.on_map(s), "siege ai skip does not eject or crash")
+    seen = {}
+    real = store.eliminate
+
+    def wrapped(war_id, player_id, cause):
+        seen["hp"] = s.hp
+        seen["combat"] = s.in_combat_with
+        seen["on_map"] = kcs_siege.on_map(s)
+        return real(war_id, player_id, cause)
+
+    store.eliminate = wrapped
+    original_hit = server.combat.resolve_hit
+    server.combat.resolve_hit = lambda _a, _d: (50, True)
+    try:
+        check(monster.can_strike(s.x, s.y), "the combat tick's monster can strike")
+        await server.process_combat([])
+    finally:
+        server.combat.resolve_hit = original_hit
+        store.eliminate = real
+    check(seen.get("hp") == 0, "combat tick records the death at zero hit points")
+    check(seen.get("combat") == ("player", 999), "combat tick still has kill credit when it records")
+    check(seen.get("on_map") is True, "combat tick records the death before leaving the plane")
+    check(not kcs_siege.on_map(s), "combat tick ejects the downed player")
+    check(s.hp == s.max_hp(), "combat tick restores hit points after the siege record")
+    check(store.roster_status(war.war_id, s.player_id).eliminated, "combat tick elimination is durable")
+
+    await server.handle_enter_dungeon(other, {"dungeon_id": "kings_castle_siege"})
+    check(kcs_siege.on_map(other), "a living defender can still deploy")
+    store.eliminate(war.war_id, other.player_id, "test")
+    check(server._apply_kcs_resume(other, resume_of(other), reason="reconnect") is False,
+          "an already-attached eliminated player is not left on the map")
+    check(other.dungeon is None, "the re-check clears siege presence")
+
+
 async def main():
     real_world = os.path.join(ROOT, "server", "world.db")
     before = os.stat(real_world).st_mtime if os.path.exists(real_world) else None
@@ -505,6 +588,7 @@ async def main():
     # The restore test logs the player out and back in. Finish that login
     # inside the test via handle_login — player_login only reloads the row.
     await test_death_ordering_denies_return()
+    await test_untrusted_deploy_and_combat_tick()
     await test_persist_error_restart_and_race()
     flag(False)
     kcs_siege.close()
