@@ -69,6 +69,11 @@ USE_CASTLE_OWNERS = _on("USE_CASTLE_OWNERS", "1") and USE_CASTLE_REALM
 USE_KINGS_CASTLE_SIEGE = os.environ.get("USE_KINGS_CASTLE_SIEGE", "0").strip().lower() in (
     "1", "true", "yes", "on",
 )
+# Projects a recorded siege result onto the siege sovereignty row only.
+# Default off. It does not call throne._crown and does not write world.db.
+USE_KINGS_CASTLE_SOVEREIGNTY = os.environ.get("USE_KINGS_CASTLE_SOVEREIGNTY", "0").strip().lower() in (
+    "1", "true", "yes", "on",
+)
 
 # Larger multi-room castle interiors. Set USE_CASTLE_INTERIORS_V2=0
 # to keep the original floor rows and interior door arrivals.

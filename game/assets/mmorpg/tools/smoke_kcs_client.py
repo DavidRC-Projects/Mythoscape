@@ -104,16 +104,29 @@ def valid_trebuchet(px, py):
     return found
 
 
+def stamp(path):
+    """Size and mtime only. Do not open the file."""
+    if not path.exists():
+        return None
+    st = path.stat()
+    return (st.st_size, st.st_mtime_ns)
+
+
+def press(app, action):
+    app.draw()
+    for rect, name in app.kcs_view.buttons:
+        if name == action:
+            kcs_client.on_mouse(app, (rect.centerx, rect.centery))
+            return
+    fail(f"no button {action}")
+
+
 def main():
-    global pygame
+    global pygame, kcs_client
     if not (Path(os.environ["KCS_VISUAL_FIXTURES"]) / "assets" / "baked_m9" / "gatehouse.png").is_file():
         fail("siege art fixture is missing")
-    sys.path.insert(0, str(SERVER))
-    from kcs_server.store import KCSStore
-    store = KCSStore(KCS_DB)
-    war = store.create_war("client-smoke")
-    war_id = war.war_id
-    store.close()
+    before_world = stamp(SERVER / "world.db")
+    before_kcs = stamp(SERVER / "kcs_siege.db")
 
     log_fh = open(SERVER_LOG, "w", encoding="utf-8")
     server = subprocess.Popen(
@@ -170,15 +183,13 @@ def main():
         if app.dungeon and app.dungeon.get("id") == "kings_castle_siege":
             fail("overworld frame is already the siege")
 
-        pid = int(app.player["id"])
-        roster = KCSStore(KCS_DB)
-        roster.enlist(war_id, pid, "attack")
-        roster.set_war_status(war_id, "locking")
-        roster.set_war_status(war_id, "active")
-        roster.close()
-
-        event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F8, mod=0, unicode="")
-        app.handle_game_event(event)
+        press(app, "enlist-attack")
+        if not pump(app, 15, lambda: (getattr(app, "kcs_view", None) and (app.kcs_view.lobby or {}).get("your_side") == "attack")):
+            fail("enlist did not stick\n" + chat_text(app) + "\n" + Path(SERVER_LOG).read_text(encoding="utf-8")[-800:])
+        press(app, "begin")
+        if not pump(app, 15, lambda: (app.kcs_view.lobby or {}).get("status") == "active"):
+            fail("begin did not go live\n" + chat_text(app))
+        press(app, "deploy")
         print("deploying", flush=True)
         if not pump(app, 20, lambda: (app.dungeon or {}).get("id") == "kings_castle_siege"):
             fail("F8 did not deploy\n" + chat_text(app) + "\n" + Path(SERVER_LOG).read_text(encoding="utf-8")[-800:])
@@ -188,6 +199,21 @@ def main():
                 fail("no siege snapshot\n" + chat_text(app))
         print("drawing siege", flush=True)
         join_path = save(app, "kcs-client-join.png")
+        for kind in ("ram", "trebuchet", "siege_tower", "ladder"):
+            press(app, f"type-{kind}")
+            if app.kcs_view.engine_type != kind or not app.kcs_view.build:
+                fail(f"button did not select {kind}")
+        key = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_2, mod=0, unicode="2")
+        app.handle_game_event(key)
+        if app.kcs_view.engine_type != "trebuchet":
+            fail("key 2 did not select the trebuchet")
+        press(app, "rotate")
+        if app.kcs_view.rotation != 90:
+            fail(f"rotate did not turn the engine ({app.kcs_view.rotation})")
+        press(app, "type-ram")
+        press(app, "face")
+        print("selected", app.kcs_view.engine_type, "facing", app.kcs_view.rotation, flush=True)
+        save(app, "kcs-e2e-select.png")
         openings_before = [(row.get("id"), row.get("state")) for row in app.kcs_view.openings]
 
         start = app.player_xy()
@@ -222,6 +248,7 @@ def main():
         print("moved", start, "->", moved)
 
         px, py = (int(v) for v in app.player_xy())
+        pid = int(app.player["id"])
         tx, ty, rot = valid_trebuchet(px, py)
         app.kcs_view.build = True
         app.kcs_view.engine_type = "trebuchet"
@@ -279,10 +306,8 @@ def main():
             fail("snapshot did not restore the engine")
         print("snapshot restored", len(engines), "engine(s)")
         print("join", join_path)
-        live = SERVER / "world.db"
-        default_kcs = SERVER / "kcs_siege.db"
-        if live.exists() or default_kcs.exists():
-            fail(f"live database appeared: world={live.exists()} kcs={default_kcs.exists()}")
+        if stamp(SERVER / "world.db") != before_world or stamp(SERVER / "kcs_siege.db") != before_kcs:
+            fail("a preexisting live database changed, or one was created in the server folder")
         print("kcs client smoke ok")
     finally:
         if server.poll() is None:
