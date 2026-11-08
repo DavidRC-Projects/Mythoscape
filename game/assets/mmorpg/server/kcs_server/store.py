@@ -235,6 +235,9 @@ class KCSStore:
         self.path = path
         self._faults = faults or FaultPlan()
         self._clock = clock
+        # Writes and reads share this lock. The connection is one sqlite3
+        # object; a read during another thread's transaction can return an
+        # empty open_war() and drop an elimination.
         self._lock = threading.RLock()
         # isolation_level=None: the sqlite3 module never opens implicit
         # transactions; every transaction below is explicit.
@@ -247,10 +250,19 @@ class KCSStore:
 
     # ---- infrastructure -------------------------------------------------
     def close(self) -> None:
-        self.conn.close()
+        with self._lock:
+            self.conn.close()
 
     def _fault(self, point: str) -> None:
         self._faults.check(point)
+
+    def _fetchall(self, sql: str, params=()):
+        with self._lock:
+            return self.conn.execute(sql, params).fetchall()
+
+    def _fetchone(self, sql: str, params=()):
+        with self._lock:
+            return self.conn.execute(sql, params).fetchone()
 
     @contextmanager
     def _tx(self, op: str) -> Iterator[sqlite3.Connection]:
@@ -297,14 +309,13 @@ class KCSStore:
             return War(cur.lastrowid, war_key, "registration")
 
     def war(self, war_id: int) -> War:
-        row = self.conn.execute("SELECT war_id, war_key, status FROM kcs_wars WHERE war_id=?", (war_id,)).fetchone()
+        row = self._fetchone("SELECT war_id, war_key, status FROM kcs_wars WHERE war_id=?", (war_id,))
         if row is None:
             raise NotFound(f"war {war_id}")
         return War(*row)
 
     def open_war(self) -> Optional[War]:
-        row = self.conn.execute(
-            "SELECT war_id, war_key, status FROM kcs_wars WHERE open_slot = 1").fetchone()
+        row = self._fetchone("SELECT war_id, war_key, status FROM kcs_wars WHERE open_slot = 1")
         return War(*row) if row else None
 
     def _transition(self, c, war_id: int, new: str) -> None:
@@ -339,9 +350,9 @@ class KCSStore:
                 (war_id, player_id, side))
 
     def roster_status(self, war_id: int, player_id: int) -> RosterStatus:
-        row = self.conn.execute(
+        row = self._fetchone(
             "SELECT side, deployed, eliminated FROM kcs_roster WHERE war_id=? AND player_id=?",
-            (war_id, player_id)).fetchone()
+            (war_id, player_id))
         if row is None:
             return RosterStatus(False, None, False, False)
         return RosterStatus(True, row[0], bool(row[1]), bool(row[2]))
@@ -392,18 +403,18 @@ class KCSStore:
             return cur_rev + 1
 
     def openings(self, war_id: int) -> Dict[str, str]:
-        return dict(self.conn.execute(
-            "SELECT opening_id, state FROM kcs_openings WHERE war_id=?", (war_id,)).fetchall())
+        return dict(self._fetchall(
+            "SELECT opening_id, state FROM kcs_openings WHERE war_id=?", (war_id,)))
 
     def opening_revs(self, war_id: int) -> Dict[str, int]:
-        return {row[0]: int(row[1]) for row in self.conn.execute(
-            "SELECT opening_id, rev FROM kcs_openings WHERE war_id=?", (war_id,)).fetchall()}
+        return {row[0]: int(row[1]) for row in self._fetchall(
+            "SELECT opening_id, rev FROM kcs_openings WHERE war_id=?", (war_id,))}
 
     # ---- engines ----------------------------------------------------------
     def engines(self, war_id: int) -> list:
-        rows = self.conn.execute(
+        rows = self._fetchall(
             "SELECT engine_id, player_id, side, engine_type, x, y, rotation, tiles_json, rev, request_key "
-            "FROM kcs_engines WHERE war_id=? ORDER BY engine_id", (war_id,)).fetchall()
+            "FROM kcs_engines WHERE war_id=? ORDER BY engine_id", (war_id,))
         return [_engine_row(row) for row in rows]
 
     def place_engine(self, war_id: int, player_id: int, side: str, engine_type: str,
@@ -553,31 +564,33 @@ class KCSStore:
             return "applied"
 
     def pending_results(self) -> Iterable[int]:
-        return [r[0] for r in self.conn.execute(
+        return [r[0] for r in self._fetchall(
             "SELECT war_id FROM kcs_result WHERE apply_state='pending' ORDER BY war_id")]
 
     def sovereignty(self) -> Dict[str, Any]:
-        row = self.conn.execute(
+        row = self._fetchone(
             "SELECT castle_key, owner_guild_id, monarch_player_id, source_war_id, since, rev "
-            "FROM kcs_sovereignty WHERE id=1").fetchone()
+            "FROM kcs_sovereignty WHERE id=1")
         keys = ("castle_key", "owner_guild_id", "monarch_player_id", "source_war_id", "since", "rev")
         return dict(zip(keys, row))
 
     def result(self, war_id: int) -> Optional[Dict[str, Any]]:
-        cur = self.conn.execute("SELECT * FROM kcs_result WHERE war_id=?", (war_id,))
-        row = cur.fetchone()
-        if row is None:
-            return None
-        return dict(zip([d[0] for d in cur.description], row))
+        with self._lock:
+            cur = self.conn.execute("SELECT * FROM kcs_result WHERE war_id=?", (war_id,))
+            row = cur.fetchone()
+            if row is None:
+                return None
+            cols = [d[0] for d in cur.description]
+        return dict(zip(cols, row))
 
     def outbox(self) -> list:
-        return self.conn.execute(
-            "SELECT sovereignty_rev, kind, payload_json, delivered_at FROM kcs_outbox ORDER BY id").fetchall()
+        return self._fetchall(
+            "SELECT sovereignty_rev, kind, payload_json, delivered_at FROM kcs_outbox ORDER BY id")
 
     def history(self) -> list:
-        return self.conn.execute(
+        return self._fetchall(
             "SELECT rev, owner_guild_id, monarch_player_id, source_war_id FROM kcs_sovereignty_history "
-            "ORDER BY rev").fetchall()
+            "ORDER BY rev")
 
 
 def _norm_tiles(tiles) -> Tuple[Tuple[int, int], ...]:

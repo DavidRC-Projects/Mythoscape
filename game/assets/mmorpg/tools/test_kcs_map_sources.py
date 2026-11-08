@@ -4,14 +4,22 @@ Every test function in the fixture is called. A navigation, placement, or
 other logic failure fails this process. A failure caused only by a missing
 renderer module or a missing baked-art file is reported as a gap and does
 not count as a pass.
+
+Asset bytes stay outside the repo. The approved sources resolve
+``kcs_parity/assets`` and one test opens ``/workspace/kings_castle_siege/assets/baked_m9``.
+This harness points both at ``KCS_VISUAL_FIXTURES`` (default ``/tmp/kcs_visual_fixtures``)
+without editing those sources. Runtime names are used as extracted; historical
+plates and sprites are not copied over them.
 """
 from __future__ import annotations
 
 import importlib.util
+import os
 import traceback
 from pathlib import Path
 
 FIXTURE = Path(__file__).resolve().parents[1] / "server" / "kcs_parity"
+EXTERNAL = Path(os.environ.get("KCS_VISUAL_FIXTURES", "/tmp/kcs_visual_fixtures"))
 SOURCE = FIXTURE / "tests" / "test_kings_castle_siege_map.py"
 
 ORDER = [
@@ -61,9 +69,58 @@ def _gap_reason(exc: BaseException) -> str:
     return ""
 
 
+def _link(path: Path, target: Path) -> None:
+    if path.is_symlink():
+        if path.resolve() != target.resolve():
+            path.unlink()
+            path.symlink_to(target, target_is_directory=True)
+        return
+    if path.exists():
+        raise SystemExit(f"{path} exists and is not a link to the external fixtures")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.symlink_to(target, target_is_directory=True)
+
+
+def _stage_external_assets() -> None:
+    assets = EXTERNAL / "assets"
+    if not (assets / "baked_m9" / "gatehouse.png").is_file():
+        raise SystemExit(f"external visual fixtures missing at {assets}")
+    if not (assets / "sprites" / "grass_fine.png").is_file():
+        raise SystemExit(f"external sprites missing at {assets / 'sprites'}")
+    _link(FIXTURE / "assets", assets)
+    # The approved portal test hardcodes this path. The file is hash-locked, so
+    # the harness materializes the path instead of editing the test.
+    _link(Path("/workspace/kings_castle_siege/assets/baked_m9"), assets / "baked_m9")
+
+
+def _save_samples() -> None:
+    out = Path("/opt/cursor/artifacts")
+    if not out.is_dir():
+        return
+    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+    os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+    import pygame
+    pygame.init()
+    pygame.font.init()
+    pygame.display.set_mode((16, 16))
+    from kings_castle_siege_map.layout import build_battlefield
+    from kings_castle_siege_map.placement import sample_perimeter_layout
+    from kings_castle_siege_map.angled_view import render_world as render_angled
+    from kings_castle_siege_map.world_view import render_world as render_top
+    bf = build_battlefield()
+    engines = sample_perimeter_layout(bf)
+    states = {k: "intact" for k in bf.plane.openings}
+    angled = render_angled(bf, (139, 191), engines, "sample", "angled", size=(800, 450), tile_px=18, facing="n", gate_states=states)
+    top = render_top(bf, (139, 191), engines, "sample", "top", size=(800, 450), tile_px=22, facing="s", gate_states=states)
+    pygame.image.save(angled, str(out / "kcs-angled-frame.png"))
+    pygame.image.save(top, str(out / "kcs-topdown-frame.png"))
+    print(f"saved sample frames under {out}")
+
+
 def main() -> None:
     if not SOURCE.is_file():
         raise SystemExit(f"missing map source fixture: {SOURCE}")
+    _stage_external_assets()
     spec = importlib.util.spec_from_file_location("kcs_map_source_tests", SOURCE)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -93,12 +150,20 @@ def main() -> None:
             raise SystemExit(f"map source test failed: {name}") from exc
         passed.append(name)
         print(f"PASS {name}")
+    if not gaps:
+        try:
+            _save_samples()
+        except Exception:
+            traceback.print_exc()
+            raise SystemExit("map sources passed but sample frames failed") from None
     print(
         f"kings_castle_siege map sources: {len(passed)} passed, {len(gaps)} asset/dependency gaps, "
         f"0 skipped, {len(names)} total"
     )
     for name, reason in gaps:
         print(f"  gap {name}: {reason}")
+    if gaps:
+        raise SystemExit(f"{len(gaps)} map source tests still missing assets or modules")
 
 
 if __name__ == "__main__":

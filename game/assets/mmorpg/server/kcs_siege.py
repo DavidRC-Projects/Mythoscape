@@ -238,10 +238,25 @@ def decide(player_id: int, plane_id: str, reason: str) -> Decision:
             return Decision(False, "none", "elimination_pending")
         _unconfirmed.discard(pid)
     try:
-        return _require_guard().may_enter(pid, plane_id, reason)
+        decision = _require_guard().may_enter(pid, plane_id, reason)
     except Exception:
         log.exception("kcs guard failed")
         return Decision(False, "none", "guard_error")
+    # The roster read inside may_enter can be stale by the time it returns.
+    # Spectate of an eliminated roster member stays allowed.
+    if decision.allowed and decision.mode != "spectator":
+        if pid in _dying or pid in _unconfirmed:
+            return Decision(False, "none", "elimination_pending")
+        try:
+            guard = _require_guard()
+            war = guard.store.open_war()
+            eliminated = bool(war and guard.store.roster_status(war.war_id, pid).eliminated)
+        except Exception:
+            log.exception("kcs elimination recheck failed")
+            return Decision(False, "none", "guard_error")
+        if eliminated:
+            return Decision(False, "none", "eliminated")
+    return decision
 
 
 def presence_decision(session) -> Decision:
@@ -267,11 +282,31 @@ def record_death(player_id: int) -> DeathOutcome:
         except Exception:
             log.exception("kcs death record failed")
             return DeathOutcome(True, False, False, False)
+        if not outcome.eliminated:
+            # on_death returns this when open_war() is empty. A torn read on
+            # the shared connection used to take that path and then admit the
+            # player. Confirm the war is really gone before forgetting them.
+            outcome = _death_after_empty_war(pid, outcome)
         if outcome.persisted or not outcome.eliminated:
             _unconfirmed.discard(pid)
         return outcome
     finally:
         _dying.discard(pid)
+
+
+def _death_after_empty_war(pid: int, outcome: DeathOutcome) -> DeathOutcome:
+    try:
+        war = _require_guard().store.open_war()
+    except Exception:
+        log.exception("kcs death recheck failed")
+        return DeathOutcome(True, False, False, False)
+    if war is None:
+        return outcome
+    try:
+        return _require_guard().on_death(pid, "death")
+    except Exception:
+        log.exception("kcs death retry failed")
+        return DeathOutcome(True, False, False, False)
 
 
 def walkable(session, x: int, y: int) -> bool:

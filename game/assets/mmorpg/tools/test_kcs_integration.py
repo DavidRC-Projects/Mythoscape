@@ -31,7 +31,7 @@ import feature_flags  # noqa: E402
 import server  # noqa: E402
 import kcs_siege  # noqa: E402
 from kcs_server.guard import PLANE_BATTLEFIELD, PLANE_THRONE  # noqa: E402
-from kcs_server.store import FaultPlan  # noqa: E402
+from kcs_server.store import FaultPlan, InjectedFault  # noqa: E402
 
 W = server.WORLD
 _N = [0]
@@ -403,7 +403,11 @@ async def test_persist_error_restart_and_race():
     await server.handle_enter_dungeon(s, {"dungeon_id": "kings_castle_siege"})
     check(not kcs_siege.on_map(s), "deploy after restart is still denied")
 
-    # A second living player races a death.
+    # The old hammer called resume on a second thread, which writes the shared
+    # game connection. That thread died with "cannot start a transaction
+    # within a transaction" / "cannot commit - no transaction is active",
+    # left `late` empty, and the assertion passed without seeing the window.
+    # Admission overlap below uses the siege store only.
     path2, _j2 = use_store()
     store2, war2 = open_war()
     live = player()
@@ -411,49 +415,44 @@ async def test_persist_error_restart_and_race():
     arm_live(store2, war2)
     await server.handle_enter_dungeon(live, {"dungeon_id": "kings_castle_siege"})
     saved = resume_of(live)
-    late = []
-    death_done = threading.Event()
-    stop = threading.Event()
+    seen = []
+    started = threading.Event()
+    holder = {}
 
-    def hammer():
-        while not stop.is_set():
-            shell = WS()
-            ghost = type("G", (), {})()
-            ghost.player_id = live.player_id
-            ghost.dungeon = None
-            ghost.x, ghost.y = saved["return_x"], saved["return_y"]
-            ghost.pet_id = None
-            ghost.in_combat_with = None
-            ghost.gathering_node = None
-            ghost.pet_target_id = None
-            ghost.ws = shell
-            allowed = server._apply_kcs_resume(ghost, saved, reason="reconnect")
-            if death_done.is_set() and (allowed or kcs_siege.on_map(ghost)):
-                late.append("resume")
-            decision = kcs_siege.decide(live.player_id, PLANE_BATTLEFIELD, "deploy")
-            if death_done.is_set() and decision.allowed:
-                late.append("deploy")
-            decision = kcs_siege.decide(live.player_id, PLANE_THRONE, "teleport")
-            if death_done.is_set() and decision.allowed:
-                late.append("teleport")
+    def reader():
+        started.set()
+        seen.append(store2.open_war())
 
-    thread = threading.Thread(target=hammer, daemon=True)
-    thread.start()
+    original = store2._faults.check
+
+    def pause(point):
+        if point == "eliminate.before_commit":
+            t = threading.Thread(target=reader, daemon=True)
+            holder["t"] = t
+            t.start()
+            if not started.wait(2):
+                raise AssertionError("open_war racer did not start")
+            time.sleep(0.05)
+            holder["blocked"] = t.is_alive()
+            return
+        return original(point)
+
+    store2._faults.check = pause
     live.hp = 0
     await server.resolve_player_death(live, [])
-    death_done.set()
-    time.sleep(0.05)
-    stop.set()
-    thread.join(10)
-    check(not thread.is_alive(), "death/entry race thread finished")
-    if late:
-        st = kcs_siege.store().roster_status(war2.war_id, live.player_id)
-        post = kcs_siege.decide(live.player_id, PLANE_BATTLEFIELD, "deploy")
-        print("RACE DEBUG", "elim", st, "post", post, "unconfirmed", live.player_id in kcs_siege._unconfirmed,
-              "on", kcs_siege.on_map(live), "late", len(late), "sample", late[:8])
-    check(not late, f"no siege entry after death completed ({late[:12]})")
+    check(holder.get("blocked") is True,
+          "open_war waits for the elimination transaction instead of reading through it")
+    deadline = time.time() + 2
+    while not seen and time.time() < deadline:
+        time.sleep(0.01)
+    holder["t"].join(2)
+    check(not holder["t"].is_alive(), "open_war racer finished after the commit")
+    check(len(seen) == 1 and seen[0] is not None and seen[0].war_id == war2.war_id,
+          "the blocked open_war still returns the open war after commit")
+    check(store2.roster_status(war2.war_id, live.player_id).eliminated,
+          "death committed while a concurrent read waited")
     check(not kcs_siege.on_map(live), "dead player is off the siege map")
-    check(store2.roster_status(war2.war_id, live.player_id).eliminated, "raced death was eliminated")
+    await _assert_handlers_deny(live, saved)
     check(path2 != path, "each test store is its own file")
 
 
@@ -579,6 +578,229 @@ async def test_untrusted_deploy_and_combat_tick():
     check(other.dungeon is None, "the re-check clears siege presence")
 
 
+async def _assert_handlers_deny(session, saved):
+    """Real entry, teleport, login, and reconnect after a durable elimination."""
+    await server.handle_enter_dungeon(session, {"dungeon_id": "kings_castle_siege"})
+    check(not kcs_siege.on_map(session), "deploy after elimination does not enter")
+    spot = (session.x, session.y)
+    forged = {
+        "id": "kcs_after_death",
+        "label": "Siege",
+        "where": "kings_castle_siege",
+        "plane": PLANE_BATTLEFIELD,
+        "x": 139, "y": 244,
+    }
+    server.TELEPORT_DESTINATIONS.append(forged)
+    session.teleport_marks.append(forged["id"])
+    try:
+        await server.handle_teleport(session, {"dest": forged["id"]})
+    finally:
+        server.TELEPORT_DESTINATIONS.remove(forged)
+    check((session.x, session.y) == spot and not kcs_siege.on_map(session),
+          "teleport after elimination does not enter")
+    check(server._apply_kcs_resume(session, saved, reason="login") is False,
+          "stale login resume after elimination does not enter")
+    check(server._apply_kcs_resume(session, saved, reason="reconnect") is False,
+          "stale reconnect resume after elimination does not enter")
+    check(session.dungeon is None, "handlers leave the session off the siege map")
+
+
+async def test_stale_roster_and_torn_war_read():
+    """The two admissions the shared connection actually produced.
+
+    A reconnect decision that already read "not eliminated" must not be
+    returned after the row is eliminated. A death whose first open_war()
+    came back empty must not forget the player while a war is still open.
+    """
+    flag(True)
+    _path, _journal = use_store()
+    store, war = open_war()
+    live = player()
+    enlist(store, war, live, "attack")
+    arm_live(store, war)
+    store.mark_deployed(war.war_id, live.player_id)
+    store.eliminate(war.war_id, live.player_id, "death")
+    real = store.roster_status
+    calls = {"n": 0}
+
+    def stale(war_id, player_id):
+        calls["n"] += 1
+        st = real(war_id, player_id)
+        if calls["n"] == 1:
+            return type(st)(st.on_roster, st.side, st.deployed, False)
+        return st
+
+    store.roster_status = stale
+    decision = kcs_siege.decide(live.player_id, PLANE_BATTLEFIELD, "reconnect")
+    check(calls["n"] >= 2, "reconnect re-reads the roster before allowing")
+    check(not decision.allowed and decision.code == "eliminated",
+          f"stale roster snapshot does not restore ({decision.code})")
+    store.roster_status = real
+
+    path2, journal = use_store()
+    store2, war2 = open_war()
+    again = player()
+    enlist(store2, war2, again, "attack")
+    arm_live(store2, war2)
+    store2.mark_deployed(war2.war_id, again.player_id)
+    original = store2.open_war
+    reads = {"n": 0}
+
+    def torn():
+        reads["n"] += 1
+        if reads["n"] == 1:
+            return None
+        return original()
+
+    store2.open_war = torn
+    outcome = kcs_siege.record_death(again.player_id)
+    check(outcome.eliminated and outcome.persisted, "empty open_war is not the last word when a war is open")
+    check(store2.roster_status(war2.war_id, again.player_id).eliminated,
+          "the retry wrote the elimination")
+    for reason in ("deploy", "login", "reconnect", "teleport"):
+        decision = kcs_siege.decide(again.player_id, PLANE_BATTLEFIELD, reason)
+        check(not decision.allowed, f"torn-read death denies {reason} ({decision.code})")
+    spectate = kcs_siege.decide(again.player_id, PLANE_BATTLEFIELD, "spectate")
+    check(spectate.allowed and spectate.mode == "spectator", "eliminated roster member can still spectate")
+    saved = {
+        "id": "kings_castle_siege",
+        "plane": PLANE_BATTLEFIELD,
+        "x": 139, "y": 244, "return_x": 28, "return_y": 24, "mode": "combatant",
+    }
+    await _assert_handlers_deny(again, saved)
+    check(os.path.exists(journal) or store2.roster_status(war2.war_id, again.player_id).eliminated,
+          "torn-read elimination is in the store")
+    check(path2 != _path, "torn-read store is its own file")
+
+
+async def test_combat_tick_and_pending_overlap():
+    """Combat tick and a failed commit overlap admission without sharing the game connection."""
+    flag(True)
+    path, journal = use_store()
+    store, war = open_war()
+    live = player()
+    enlist(store, war, live, "attack")
+    arm_live(store, war)
+    await server.handle_enter_dungeon(live, {"dungeon_id": "kings_castle_siege"})
+    saved = resume_of(live)
+    monster = server.MonsterInstance(91002, "rat", live.x, live.y, stats={
+        "hp": 500, "attack": 1, "strength": 1, "defence": 1,
+        "attack_range": 8, "cone_tiles": None, "force_retaliate": False,
+    })
+    monster.target_player_id = live.player_id
+    live.dungeon["monsters"][monster.id] = monster
+    live.equipment = {}
+    live.hp = 5
+    live.in_combat_with = ("player", 999)
+    during = []
+    original_hit = server.combat.resolve_hit
+    original = store._faults.check
+
+    def pause(point):
+        if point == "eliminate.before_commit":
+            def race():
+                during.append(kcs_siege.decide(live.player_id, PLANE_BATTLEFIELD, "reconnect"))
+                during.append(kcs_siege.decide(live.player_id, PLANE_BATTLEFIELD, "deploy"))
+            t = threading.Thread(target=race, daemon=True)
+            t.start()
+            t.join(2)
+            pause.finished = not t.is_alive()
+            return
+        return original(point)
+
+    store._faults.check = pause
+    server.combat.resolve_hit = lambda _a, _d: (50, True)
+    try:
+        await server.process_combat([])
+    finally:
+        server.combat.resolve_hit = original_hit
+        store._faults.check = original
+    check(getattr(pause, "finished", False), "admission overlap finished during the combat tick")
+    check(len(during) == 2 and all(not d.allowed for d in during),
+          f"combat tick holds the player out before commit ({[d.code for d in during]})")
+    check(store.roster_status(war.war_id, live.player_id).eliminated, "combat tick elimination committed")
+    check(not kcs_siege.on_map(live), "combat tick ejects after the overlapped death")
+    await _assert_handlers_deny(live, saved)
+
+    path2, journal2 = use_store()
+    store2, war2 = open_war()
+    pending = player()
+    enlist(store2, war2, pending, "attack")
+    arm_live(store2, war2)
+    await server.handle_enter_dungeon(pending, {"dungeon_id": "kings_castle_siege"})
+    stale = resume_of(pending)
+    overlapped = []
+    original2 = store2._faults.check
+
+    def fail(point):
+        if point == "eliminate.before_commit":
+            def race():
+                overlapped.append(kcs_siege.decide(pending.player_id, PLANE_BATTLEFIELD, "login"))
+            t = threading.Thread(target=race, daemon=True)
+            t.start()
+            t.join(2)
+            fail.finished = not t.is_alive()
+            raise InjectedFault(point)
+        return original2(point)
+
+    store2._faults.check = fail
+    pending.hp = 0
+    await server.resolve_player_death(pending, [])
+    store2._faults.check = original2
+    check(getattr(fail, "finished", False), "admission overlap finished during the failed commit")
+    check(overlapped and not overlapped[0].allowed,
+          f"pending death denies login while the commit is open ({overlapped[0].code if overlapped else None})")
+    check(not store2.roster_status(war2.war_id, pending.player_id).eliminated,
+          "failed commit did not eliminate")
+    check(pending.player_id in kcs_siege._unconfirmed, "failed commit keeps the in-process hold")
+    check(not kcs_siege.on_map(pending), "failed commit still ejects")
+    await _assert_handlers_deny(pending, stale)
+    kcs_siege.simulate_restart()
+    check(kcs_siege.store().roster_status(war2.war_id, pending.player_id).eliminated,
+          "restart replay made the failed elimination durable")
+    check(server._apply_kcs_resume(pending, stale, reason="reconnect") is False,
+          "restart does not restore the player whose commit failed")
+    check(path2 != path and os.path.exists(journal2), "pending journal is on its own store file")
+
+
+def test_parallel_decide_cannot_drop_elimination():
+    """Same-connection decide loop that previously lost the elimination entirely.
+
+    Before the store lock, one of 20 rounds returned
+    DeathOutcome(eliminated=False) and the next deploy was allowed.
+    """
+    flag(True)
+    rounds = 25
+    for i in range(rounds):
+        _path, _journal = use_store()
+        store, war = open_war()
+        live = player()
+        enlist(store, war, live, "attack")
+        arm_live(store, war)
+        store.mark_deployed(war.war_id, live.player_id)
+        stop = threading.Event()
+        errors = []
+
+        def hammer(stop=stop, errors=errors, pid=live.player_id):
+            try:
+                while not stop.is_set():
+                    kcs_siege.decide(pid, PLANE_BATTLEFIELD, "reconnect")
+                    kcs_siege.decide(pid, PLANE_BATTLEFIELD, "deploy")
+            except Exception as exc:
+                errors.append(f"{type(exc).__name__}: {exc}")
+
+        thread = threading.Thread(target=hammer, daemon=True)
+        thread.start()
+        outcome = kcs_siege.record_death(live.player_id)
+        stop.set()
+        thread.join(2)
+        eliminated = store.roster_status(war.war_id, live.player_id).eliminated
+        post = kcs_siege.decide(live.player_id, PLANE_BATTLEFIELD, "deploy")
+        if errors or thread.is_alive() or not outcome.eliminated or not outcome.persisted or not eliminated or post.allowed:
+            check(False, f"parallel decide {i} lost the elimination outcome={outcome} eliminated={eliminated} post={post.code} errors={errors[:1]}")
+    check(True, f"parallel decide kept all {rounds} eliminations and denied the next deploy")
+
+
 async def main():
     real_world = os.path.join(ROOT, "server", "world.db")
     before = os.stat(real_world).st_mtime if os.path.exists(real_world) else None
@@ -590,6 +812,9 @@ async def main():
     await test_death_ordering_denies_return()
     await test_untrusted_deploy_and_combat_tick()
     await test_persist_error_restart_and_race()
+    await test_stale_roster_and_torn_war_read()
+    await test_combat_tick_and_pending_overlap()
+    test_parallel_decide_cannot_drop_elimination()
     flag(False)
     kcs_siege.close()
     after = os.stat(real_world).st_mtime if os.path.exists(real_world) else None
