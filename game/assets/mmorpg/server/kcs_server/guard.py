@@ -51,21 +51,36 @@ def _deny(code: str) -> Decision:
 
 
 class PendingJournal:
-    """Append-only, fsync'd JSON-lines journal of eliminations not yet in the DB."""
+    """Append-only, fsync'd JSON-lines journal of eliminations not yet in the DB.
 
-    def __init__(self, path: Optional[str]):
+    ``append`` returns only after fsync. A process kill before
+    ``journal.before_write`` leaves no line. A kill after
+    ``journal.after_fsync`` leaves a line the next process replays.
+    Power loss before fsync is not covered: the kernel may still drop
+    those bytes, and this process cannot observe that.
+    """
+
+    def __init__(self, path: Optional[str], fault=None):
         self.path = Path(path) if path else None
+        self._fault = fault
         self._lock = threading.Lock()
+
+    def _hit(self, point: str) -> None:
+        if self._fault is not None:
+            self._fault(point)
 
     def append(self, war_id: Optional[int], player_id: int, cause: str) -> bool:
         if self.path is None:
             return False
         line = json.dumps({"war_id": war_id, "player_id": player_id, "cause": cause}) + "\n"
         with self._lock:
+            self._hit("journal.before_write")
             with open(self.path, "a", encoding="utf-8") as fh:
                 fh.write(line)
                 fh.flush()
+                self._hit("journal.before_fsync")
                 os.fsync(fh.fileno())
+                self._hit("journal.after_fsync")
         return True
 
     def read(self) -> Dict[Tuple[int, int], str]:
@@ -98,7 +113,7 @@ class EntryGuard:
     def __init__(self, store: KCSStore, *, journal_path: Optional[str] = None,
                  enabled: Optional[Callable[[], bool]] = None):
         self.store = store
-        self.journal = PendingJournal(journal_path)
+        self.journal = PendingJournal(journal_path, fault=getattr(store, "_fault", None))
         self._enabled = enabled or flags.enabled
         self._lock = threading.Lock()
         # Eliminations seen in this process (or the journal) whose DB write is unconfirmed.
@@ -230,3 +245,23 @@ class EntryGuard:
     def pending(self) -> Dict[Tuple[int, int], str]:
         with self._lock:
             return dict(self._pending)
+
+    def death_intent_durable(self, player_id: int) -> bool:
+        """True when this death is in the database or in the fsynced journal.
+
+        An in-memory hold alone is not durable. A failed read fails closed
+        (treated as durable) so a player is not kept in play when the record
+        cannot be checked.
+        """
+        player_id = int(player_id)
+        try:
+            war = self.store.open_war()
+            if war is not None and self.store.roster_status(war.war_id, player_id).eliminated:
+                return True
+        except Exception:
+            return True
+        try:
+            recorded = self.journal.read()
+        except Exception:
+            return True
+        return any(pid == player_id for (_war_id, pid) in recorded)

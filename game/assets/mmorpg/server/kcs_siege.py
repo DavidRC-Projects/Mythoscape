@@ -267,6 +267,15 @@ def presence_decision(session) -> Decision:
     return decide(session.player_id, plane, reason)
 
 
+def death_intent_durable(player_id: int) -> bool:
+    """True when the elimination is in the siege database or the fsynced journal."""
+    try:
+        return _require_guard().death_intent_durable(int(player_id))
+    except Exception:
+        log.exception("kcs durable death check failed")
+        return True
+
+
 def record_death(player_id: int) -> DeathOutcome:
     """Durable elimination. Call before respawn, loot, or leaving the plane.
 

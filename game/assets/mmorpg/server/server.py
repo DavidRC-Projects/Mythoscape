@@ -2908,10 +2908,21 @@ def _combat_locked(session):
 
 
 async def _handle_kcs_move(session, dx, dy):
-    """Step on the siege map. A failed presence check removes the player."""
+    """Step on the siege map. A failed presence check removes the player.
+
+    A blow that has not reached the journal or the siege database does not
+    eject. Ejecting here would clear the resume before the elimination exists.
+    """
     import kcs_siege
     decision = kcs_siege.presence_decision(session)
     if not decision.allowed:
+        if (decision.code == "elimination_pending"
+                and not kcs_siege.death_intent_durable(session.player_id)):
+            await send(session.ws, "CHAT_MSG", **{
+                "from": "King's Castle",
+                "text": "The blow landed, but the siege has not recorded it yet.",
+            })
+            return
         await _eject_kcs(session, text=kcs_siege.deny_message(decision))
         return
     nx, ny = session.x + dx, session.y + dy
@@ -3966,7 +3977,12 @@ def _apply_kcs_resume(session, resume, reason="reconnect") -> bool:
     import kcs_siege
     if session.dungeon and session.dungeon.get("id") == kcs_siege.DUNGEON_ID:
         # Already attached is not a fresh grant. Re-check before leaving them there.
-        if kcs_siege.presence_decision(session).allowed:
+        attached = kcs_siege.presence_decision(session)
+        if attached.allowed:
+            return True
+        # Same window as movement: no resume wipe until the death is durable.
+        if (attached.code == "elimination_pending"
+                and not kcs_siege.death_intent_durable(session.player_id)):
             return True
         kcs_siege.force_clear(session)
         try:
@@ -11624,7 +11640,23 @@ async def resolve_player_death(session, events, dungeon_tag=None):
     on_kcs = bool(session.dungeon and session.dungeon.get("id") == kcs_siege.DUNGEON_ID)
     if on_kcs:
         # Before respawn, loot, combat-clear, or any zone change.
-        kcs_siege.record_death(session.player_id)
+        outcome = kcs_siege.record_death(session.player_id)
+        # Heal, coin loss, and ejection are the observable death. They run
+        # only after the journal fsync or the siege-database commit. If both
+        # missed, the player stays at 0 HP on the map with the resume intact.
+        # A process kill before that first durable write still loses this one
+        # death: there is nothing on disk to replay, and living disconnected
+        # players are not eliminated to paper over that window.
+        if outcome.eliminated and not (outcome.journaled or outcome.persisted):
+            session.hp = 0
+            try:
+                await send(session.ws, "CHAT_MSG", **{
+                    "from": "King's Castle",
+                    "text": "The blow landed, but the siege has not recorded it yet.",
+                })
+            except Exception:
+                log.exception("kcs undurable death notice failed")
+            return
     # A quarter, not everything. Losing the entire purse to one bad
     # fight is the harshest possible outcome, and it hit hardest on a
     # good run (the 65k purse cap means a long session has the most to

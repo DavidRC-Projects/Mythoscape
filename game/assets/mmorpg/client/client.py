@@ -818,6 +818,9 @@ class GameClient(ScreensMixin, CameraYaw):
             import endless_depths_client
             endless_depths_client.close_entry_prompt(self)
             self._enter_dungeon_view(msg)
+        elif t in ("KCS_SNAPSHOT", "KCS_DELTA", "KCS_PLACE_OK"):
+            import kcs_client
+            kcs_client.on_message(self, t, msg)
         elif t == "DUNGEON_TILES":
             if self.dungeon and not self.dungeon.get("v2"):
                 # Tidehollow and Emberdeep share this message to announce that
@@ -1835,6 +1838,9 @@ class GameClient(ScreensMixin, CameraYaw):
                     return
                 self.handle_chat_typing(event)
                 return
+            import kcs_client
+            if kcs_client.on_keydown(self, event):
+                return
             if event.key == pygame.K_ESCAPE and self.context_menu:
                 self.context_menu = None
                 return
@@ -2429,6 +2435,9 @@ class GameClient(ScreensMixin, CameraYaw):
                     elif event.y < 0:
                         self.adjust_zoom(-1)
         elif event.type == pygame.MOUSEBUTTONDOWN:
+            import kcs_client
+            if event.button == 1 and kcs_client.on_mouse(self, event.pos):
+                return
             # Legacy mouse-wheel buttons (4=up, 5=down)
             if self.state == "GAME" and self.show_help and event.button in (4, 5):
                 meta = self.help_scroll_meta or {}
@@ -3718,7 +3727,9 @@ class GameClient(ScreensMixin, CameraYaw):
             return
         px, py = self.player_xy()
         nx, ny = int(px) + int(dx), int(py) + int(dy)
-        if not self.tile_walkable(nx, ny):
+        import kcs_client
+        # The siege map has no overworld tile grid. The server accepts or refuses the step.
+        if not kcs_client.active(self) and not self.tile_walkable(nx, ny):
             mp = getattr(self, "moon_petal", None)
             if mp is not None and mp.is_door(nx, ny):   # walking into the Moon Petal Inn door
                 mp.enter()
@@ -3850,6 +3861,9 @@ class GameClient(ScreensMixin, CameraYaw):
         px = msg.get("player_x", (self.player or {}).get("x", 0))
         py = msg.get("player_y", (self.player or {}).get("y", 0))
         self._snap_local_player(px, py)
+        if self.dungeon and self.dungeon.get("id") == "kings_castle_siege":
+            import kcs_client
+            kcs_client.on_enter(self)
         self._awaiting_dungeon_resume = False
         # Fresh portal entry fades in; login resume lands straight on the tile.
         if msg.get("realm") and not msg.get("resume"):
@@ -3858,6 +3872,11 @@ class GameClient(ScreensMixin, CameraYaw):
             self._realm_fade_until = 0
 
     def _exit_dungeon_view(self):
+        try:
+            import kcs_client
+            kcs_client.on_exit(self)
+        except Exception:
+            pass
         tiles = self._home_tiles if self._home_tiles is not None else self._overworld_tiles
         size = self._home_size if self._home_tiles is not None else self._overworld_size
         npcs = self._home_npcs if self._home_tiles is not None else self._overworld_npcs
@@ -7569,6 +7588,10 @@ class GameClient(ScreensMixin, CameraYaw):
         adventure_guide.draw(self)
 
     def draw_map(self):
+        import kcs_client
+        if kcs_client.active(self):
+            kcs_client.draw(self)
+            return
         import emberdeep_v2_client
         if emberdeep_v2_client.draw_first_person(self):
             return
