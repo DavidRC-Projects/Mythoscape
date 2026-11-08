@@ -936,7 +936,7 @@ class ScreensMixin:
             self.screen.blit(err, (banner.centerx - err.get_width() // 2, banner.y + 5))
 
         hint = self.font_tiny.render(
-            "New character: the opening plays once. Then find Elder Miriam in the northwest cottage.",
+            "New character: the opening plays once. Then find Elder Miriam in Elder's Hall (east of Outfitters).",
             True, (210, 200, 170),
         )
         self.screen.blit(hint, ((SCREEN_W - hint.get_width()) // 2, SCREEN_H - 22))
@@ -3016,7 +3016,7 @@ class ScreensMixin:
 
         sections = [
             ("Start here", [
-                ("First talk", "Elder Miriam, northwest cottage — click her, then A"),
+                ("First talk", "Elder Miriam, east of Outfitters — click her, then A"),
                 ("Her quest", "Rat Problem: kill 5 giant rats in the mine, then return"),
                 ("Walk", "Click the ground, or use the arrow keys for one tile"),
                 ("Eat / fight", "R eats food · Space attacks the nearest monster"),

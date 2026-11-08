@@ -9421,6 +9421,9 @@ class GameClient(ScreensMixin, CameraYaw):
             if USE_NEW_ENTRANCES and b.get("id") == "void_sanctum" and not inside:
                 # Void rift sprite is the exterior; the crypt shell would cover it.
                 continue
+            if USE_NEW_ENTRANCES and b.get("id") == "endless_depths" and not inside:
+                # Pack mouth is the exterior; the 2D crypt cottage covered it.
+                continue
             if USE_NEW_ENTRANCES and b.get("id") == "emberdeep_volcano":
                 # The pack mouth is the exterior. The old cone would sit behind it.
                 continue
@@ -10963,14 +10966,17 @@ class GameClient(ScreensMixin, CameraYaw):
                 (int(px - scaled.get_width() // 2), int(py - scaled.get_height() + tile // 3)),
             )
 
+        # 20% smaller props so the mouth reads as cliff-carved stone, not a
+        # free-standing gate in front of Elder's Hall.
+        shrink = 0.80
         if layer == "back":
             apron = self._endless_depths_prop("endless_apron")
             if apron is not None:
-                target_h = max(90, int(round(tile * 5.4)))
+                target_h = max(72, int(round(tile * 5.4 * shrink)))
                 key = ("endless_apron", target_h, False)
                 scaled = scale_cache.get(key)
                 if scaled is None:
-                    tw = max(80, int(round(apron.get_width() * target_h / float(apron.get_height()))))
+                    tw = max(64, int(round(apron.get_width() * target_h / float(apron.get_height()))))
                     scaled = pygame.transform.smoothscale(apron, (tw, target_h))
                     scale_cache[key] = scaled
                 self.screen.blit(
@@ -10978,17 +10984,17 @@ class GameClient(ScreensMixin, CameraYaw):
                     (int(cx - scaled.get_width() // 2), int(cy + tile * 0.35 - scaled.get_height() * 0.5)),
                 )
             for dx, dy, h, flip in (
-                (-3.2, 0.2, 3.0, False),
-                (3.1, 0.3, 2.9, True),
+                (-2.6, 0.15, 2.4, False),
+                (2.5, 0.2, 2.3, True),
             ):
-                _blit("endless_pillar", cx + dx * tile, cy + dy * tile, max(48, int(tile * h)), flip)
+                _blit("endless_pillar", cx + dx * tile, cy + dy * tile, max(40, int(tile * h * shrink)), flip)
         else:
             pulse = 0.5 + 0.5 * math.sin(t * 2.4)
             for dx, dy, h, flip in (
-                (-2.6, 2.2, 2.4 + 0.1 * pulse, False),
-                (2.5, 2.1, 2.3 + 0.1 * pulse, True),
+                (-2.1, 1.8, 1.9 + 0.08 * pulse, False),
+                (2.0, 1.7, 1.85 + 0.08 * pulse, True),
             ):
-                _blit("endless_pillar", cx + dx * tile, cy + dy * tile, max(40, int(tile * h)), flip)
+                _blit("endless_pillar", cx + dx * tile, cy + dy * tile, max(32, int(tile * h * shrink)), flip)
 
     def _arena_team_colors(self, side):
         """Ally = blue, foe = red — shared by ground mark, rim, and nameplates."""
@@ -13926,7 +13932,7 @@ class GameClient(ScreensMixin, CameraYaw):
         y += 18
         if not self.quests:
             self.screen.blit(
-                self.font_small.render("Talk to Elder Miriam, northwest cottage.", True, GREY),
+                self.font_small.render("Talk to Elder Miriam, east of Outfitters.", True, GREY),
                 (SIDEBAR_X + 14, y),
             )
             self.quests_scroll_meta = {"max_scroll": 0}

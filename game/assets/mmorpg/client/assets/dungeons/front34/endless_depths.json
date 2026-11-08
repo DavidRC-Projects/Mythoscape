@@ -4,7 +4,7 @@
   "azimuth_deg": 0.0,
   "elevation_deg": 35.0,
   "projection": "orthographic",
-  "display_scale": 2.6,
+  "display_scale": 2.08,
   "sizes": {
     "128": {
       "file": "endless_depths_128.png",

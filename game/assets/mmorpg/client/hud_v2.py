@@ -1820,7 +1820,7 @@ def _no_quest_step(client):
         # A fresh client has quests == {} (no QUEST_LOG yet), which reads as
         # not_started — the right advice for a brand-new character. Completing
         # some other quest does not satisfy this specific milestone.
-        return {"title": "Find Elder Miriam", "detail": "North-west cottage — your first quest",
+        return {"title": "Find Elder Miriam", "detail": "Elder's Hall, east of Outfitters — your first quest",
                 "hint": "Click her, then press A to accept", "npc": "elder_miriam"}
     has_food = any(is_food((entry or {}).get("item_id")) or (entry or {}).get("item_id") == "food_bag"
                    for entry in (player.get("inventory") or {}).values())
@@ -2606,7 +2606,7 @@ def _draw_quests(client, y, bottom, rects):
     entries.sort(key=lambda t: (order.get(t[2], 9), (t[3].get("name") or t[0])))
     rows = {}
     if not entries:
-        _blit(client, client.font_tiny, "Talk to Elder Miriam (NW cottage) to begin.", (x0, y), MUTED)
+        _blit(client, client.font_tiny, "Talk to Elder Miriam (east of Outfitters) to begin.", (x0, y), MUTED)
         rects["quest_rows"] = rows
         return
     for qid, info, status, spec in entries:

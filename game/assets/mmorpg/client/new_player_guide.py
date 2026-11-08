@@ -84,9 +84,9 @@ LINES_DONE = (
 )
 GOLD = (255, 214, 110)
 GOLD_DEEP = (205, 140, 40)
-SKIP_TEXT = "Tutorial skipped. Elder Miriam is in the north-west cottage if you want a quest."
+SKIP_TEXT = "Tutorial skipped. Elder Miriam is in Elder's Hall (east of Outfitters) if you want a quest."
 SKIP_TEXT_SARAH = "Tutorial skipped. Innkeeper Sarah (south) still teaches food/HP; Miriam has your first quest."
-SKIP_TEXT2 = "Tutorial skipped. Elder Miriam is still in the north-west cottage if you want a quest."
+SKIP_TEXT2 = "Tutorial skipped. Elder Miriam is still in Elder's Hall (east of Outfitters) if you want a quest."
 DONE_TEXT = "Kit equipped! Check the sidebar for your stats — press H any time for controls."
 HINT_KEYS = (("H", "Controls"), ("M", "Map"), ("B", "Bank"), ("E", "Gear"), ("Tab", "Skills"))
 

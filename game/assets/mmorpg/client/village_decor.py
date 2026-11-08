@@ -97,6 +97,10 @@ def placements(client):
             continue
         if not grass(x, y) or (x, y) in blocked or in_fp(x, y, 1) or VR.is_cliff(x, y):
             continue
+        # Keep bushes/flowers off the Endless Depths mouth (NW cliffs).
+        mx, my = getattr(wm, "ENDLESS_MOUTH", (15, 9))
+        if max(abs(x - mx), abs(y - my)) <= 12:
+            continue
         if near_path(x, y, 1):
             # beside a building (but off the road): yard clutter
             if in_fp(x, y, 2) and not near_path(x, y, 0) and free(x, y, 3) and rng.random() < 0.10:

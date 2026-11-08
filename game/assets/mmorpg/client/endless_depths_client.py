@@ -11,7 +11,7 @@ import world_map as wm
 
 _PATH = os.path.join(os.path.dirname(__file__), "assets", "endless_depths", "mouth.png")
 _THEMES = os.path.join(os.path.dirname(__file__), "assets", "endless_depths", "themes")
-MOUTH = (11, 21)
+MOUTH = (15, 9)
 _cache = {}
 # Theme plates that need a readability lift under hazard washes.
 _DARK_THEMES = frozenset({"shadow", "demonic", "catacomb", "cosmic"})

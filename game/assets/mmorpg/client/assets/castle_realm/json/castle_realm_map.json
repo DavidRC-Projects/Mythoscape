@@ -314,17 +314,17 @@
   "y1": 188
  },
  "overworld_portal": {
-  "x": 9,
-  "y": 19,
+  "x": 52,
+  "y": 91,
   "approach": [
-   9,
-   20
+   52,
+   92
   ],
   "return_arrival": [
-   9,
-   20
+   52,
+   92
   ],
-  "note": "Gold portal west of the wishing well — must match content.INTERACTABLES castle_realm_portal."
+  "note": "Gold portal south of Outfitters — must match content.INTERACTABLES castle_realm_portal."
  },
  "roads": [
   {
