@@ -4543,6 +4543,9 @@ class GameClient(ScreensMixin, CameraYaw):
         """Map pixel → world tile (accounts for camera yaw)."""
         if not self.player:
             return None
+        import kcs_client
+        if kcs_client.active(self):
+            return kcs_client.pick_world_tile(self, mx, my)
         import emberdeep_v2_client
         picked = emberdeep_v2_client.pick_tile(self, mx, my)
         if picked is False or (emberdeep_v2_client.fp_active(self) and picked is None):

@@ -519,6 +519,26 @@ class KCSStore:
                 "ON CONFLICT(war_id, engine_id) DO UPDATE SET hp=excluded.hp",
                 (int(war_id), int(engine_id), int(hp), cd))
 
+    def remove_engine(self, war_id: int, engine_id: int, player_id: int) -> None:
+        """Pack up one engine the player placed. Someone else's engine stays."""
+        with self._tx("pack_engine") as c:
+            row = c.execute(
+                "SELECT player_id FROM kcs_engines WHERE war_id=? AND engine_id=?",
+                (int(war_id), int(engine_id))).fetchone()
+            if row is None or int(row[0]) != int(player_id):
+                raise PlacementRejected("that engine is not yours to pack")
+            c.execute(
+                "DELETE FROM kcs_engine_combat WHERE war_id=? AND engine_id=?",
+                (int(war_id), int(engine_id)))
+            c.execute(
+                "DELETE FROM kcs_engines WHERE war_id=? AND engine_id=?",
+                (int(war_id), int(engine_id)))
+
+    def undelivered_outbox(self) -> list:
+        return self._fetchall(
+            "SELECT sovereignty_rev, kind, payload_json FROM kcs_outbox "
+            "WHERE delivered_at IS NULL ORDER BY sovereignty_rev")
+
     def mark_outbox_delivered(self, rev: int) -> None:
         with self._tx("outbox_deliver") as c:
             c.execute(

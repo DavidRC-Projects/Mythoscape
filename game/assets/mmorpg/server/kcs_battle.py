@@ -251,7 +251,11 @@ def fire(session, engine_type: str) -> dict:
         if ready > now:
             refusal = "That engine is still reloading."
             continue
-        hit = kcs_balance.shot_target(engine.tiles, engine.rotation, engine_type, cells)
+        live_cells = {
+            oid: tiles for oid, tiles in cells.items()
+            if states.get(oid, "intact") != "destroyed" and hps.get(oid, 1) > 0
+        }
+        hit = kcs_balance.shot_target(engine.tiles, engine.rotation, engine_type, live_cells)
         if hit is None:
             facing = kcs_balance.FACE_NAME.get(int(engine.rotation), "north")
             refusal = f"No gate or breach is {facing} of that {engine_type.replace('_', ' ')}. Rotate it toward the wall."
@@ -457,8 +461,37 @@ def _finish(store, war_id: int, winner: str, monarch, reason: str, guild=None) -
     }
 
 
+def pack(session, engine_type: str = "") -> dict:
+    """Pick up one of your own engines. Defenders have none to pack."""
+    ctx, err = _live(session)
+    if err:
+        return err
+    store, war = ctx
+    if _side(session) != "attack":
+        return _fail("Only the side that placed an engine can pack it.")
+    owned = [e for e in store.engines(war.war_id) if e.player_id == int(session.player_id)]
+    if engine_type:
+        owned = [e for e in owned if e.engine_type == engine_type]
+    if not owned:
+        return _fail("You have no engine of that kind to pack.")
+    px, py = int(session.x), int(session.y)
+    owned.sort(key=lambda e: min(max(abs(px - tx), abs(py - ty)) for tx, ty in e.tiles))
+    engine = owned[0]
+    try:
+        store.remove_engine(war.war_id, engine.engine_id, int(session.player_id))
+    except Exception as exc:
+        log.exception("kcs pack failed")
+        return _fail(str(exc) or "That engine stayed where it is.")
+    return {"ok": True, "text": f"Packed the {engine.engine_type.replace('_', ' ')}.",
+            "engine_id": engine.engine_id}
+
+
 def project(store=None, war_id: int = None):
-    """Idempotent siege-database projection. Never calls throne._crown."""
+    """Record sovereignty, then deliver the throne and King's Castle once.
+
+    Never calls throne._crown. The outbox stays pending until the game
+    database transaction commits, so a retry finishes the same result.
+    """
     if not sovereignty_enabled():
         return "flag_off"
     store = store or _store()
@@ -467,11 +500,26 @@ def project(store=None, war_id: int = None):
     for wid in ids:
         outcome = store.apply_result(int(wid))
         results.append(outcome)
-        if outcome == "applied":
-            sov = store.sovereignty()
-            if sov.get("rev"):
-                store.mark_outbox_delivered(int(sov["rev"]))
+        if outcome in ("applied", "already_applied"):
+            _deliver_pending(store, int(wid))
     return results[0] if war_id is not None and results else results
+
+
+def _deliver_pending(store, war_id: int) -> None:
+    import json
+    import kcs_throne_dest
+    import server
+    conn = server.WORLD.db.conn
+    for rev, _kind, raw in store.undelivered_outbox():
+        try:
+            payload = json.loads(raw)
+        except (TypeError, ValueError):
+            log.exception("kcs outbox payload was not readable")
+            continue
+        if int(payload.get("war_id") or 0) != int(war_id):
+            continue
+        kcs_throne_dest.deliver(conn, payload)
+        store.mark_outbox_delivered(int(rev))
 
 
 def grant_for_placement(player_id: int) -> None:

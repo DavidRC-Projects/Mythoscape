@@ -44,6 +44,7 @@ class SiegeView:
         self.build = False
         self.engine_type = "ram"
         self.rotation = 0
+        self.view_quarter = 0
         self.request_n = 0
         self.notice = "Enlist, begin, then deploy. 1–4 select an engine."
         self.error = ""
@@ -88,6 +89,9 @@ def on_exit(client) -> None:
     if view is not None:
         view.buttons = []
         view.build = False
+        view.view_quarter = 0
+    client.camera_yaw = 0
+    apply_view_quarter(0)
 
 
 def on_message(client, kind, msg) -> None:
@@ -158,6 +162,9 @@ def on_keydown(client, event) -> bool:
     if event.key == pygame.K_F7:
         _rotate(client)
         return True
+    if event.key == pygame.K_F9:
+        _turn_view(client)
+        return True
     return False
 
 
@@ -168,17 +175,22 @@ def on_mouse(client, pos) -> bool:
         if rect.collidepoint(point):
             _button(client, action)
             return True
-    if not active(client) or not view.build or view.origin is None or view.screen_o is None:
+    if not active(client) or view.origin is None or view.screen_o is None:
         return False
-    if view.your_side == "defend":
-        note(client, "Defenders do not place engines. Repair, strike, or hold the keep.", error=True)
-        return True
     x, y = point
     import client as game
     if x < 0 or y < HUD_TOP or x >= game.MAP_W or y >= game.MAP_H - HUD_BOT:
         return False
+    apply_view_quarter(view.view_quarter)
     from kings_castle_siege_map.angled_proj import pick_tile
     tx, ty = pick_tile(x, y - HUD_TOP, view.origin, view.scale, view.screen_o)
+    placing = view.build and view.your_side == "attack" and (client.dungeon or {}).get("mode") != "spectator"
+    if view.build and not placing:
+        note(client, "Defenders and spectators do not place engines.", error=True)
+        return True
+    if not placing:
+        _queue_walk(client, int(tx), int(ty))
+        return True
     _place(client, int(tx), int(ty))
     return True
 
@@ -187,6 +199,7 @@ def tile_to_screen(client, tx, ty):
     view = view_of(client)
     if view.origin is None or view.screen_o is None:
         return None
+    apply_view_quarter(view.view_quarter)
     from kings_castle_siege_map.angled_proj import project
     sx, sy, _depth = project(tx + 0.5, ty + 0.5, 0.0, view.origin, view.scale, view.screen_o)
     return int(sx), int(sy + HUD_TOP)
@@ -226,11 +239,12 @@ def draw_overlay(client) -> None:
         ("enlist-defend", "Enlist defend"),
         ("begin", "Begin"),
         ("deploy", "Deploy"),
+        ("watch", "Watch"),
     ]
     if active(client):
         specs = [(f"type-{kind}", f"{n} {ENGINE_SHORT[kind]}") for n, kind in enumerate(ENGINE_ORDER, 1)]
-        specs += [("rotate", "Rotate"), ("face", "Face wall"), ("fire", "Fire"),
-                  ("repair", "Repair"), ("strike", "Strike"), ("claim", "Claim throne")]
+        specs += [("turn", "Turn"), ("view", "View"), ("face", "Face wall"), ("fire", "Fire"),
+                  ("pack", "Pack"), ("repair", "Repair"), ("strike", "Strike"), ("claim", "Claim throne")]
     for action, label in specs:
         width = max(72, font.size(label)[0] + 16)
         rect = pygame.Rect(x, y, width, 24)
@@ -278,6 +292,95 @@ def _face_name(rotation: int) -> str:
     return {0: "north", 90: "east", 180: "south", 270: "west"}.get(int(rotation) % 360, "north")
 
 
+VIEW_UP = ("north", "east", "south", "west")
+
+
+def apply_view_quarter(quarter: int) -> None:
+    """Turn the approved projection by a quarter. The art files stay as they are.
+
+    The renderer keeps one yaw in module constants and does not take a camera
+    argument. Setting those constants, and dropping its picture cache, is what
+    makes the ground, the buildings, the click, and the gold nose agree.
+    Quarter 0 is the original south-southwest view.
+    """
+    import math
+    root = _parity_path()
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    import kings_castle_siege_map.angled_proj as proj
+    quarter = int(quarter) % 4
+    yaw = math.radians(26.0 + 90.0 * quarter)
+    proj.YAW = yaw
+    proj.COS_Y = math.cos(yaw)
+    proj.SIN_Y = math.sin(yaw)
+    proj.RIGHT = (proj.COS_Y, proj.SIN_Y)
+    proj.LOOK = (proj.SIN_Y, -proj.COS_Y)
+
+
+def pick_world_tile(client, mx, my):
+    """Screen pixel to world tile under the current siege view. None off the map."""
+    if not active(client):
+        return None
+    view = view_of(client)
+    if view.origin is None or view.screen_o is None:
+        return None
+    import client as game
+    if mx < 0 or my < HUD_TOP or mx >= game.MAP_W or my >= game.MAP_H - HUD_BOT:
+        return None
+    apply_view_quarter(view.view_quarter)
+    from kings_castle_siege_map.angled_proj import pick_tile
+    tx, ty = pick_tile(mx, my - HUD_TOP, view.origin, view.scale, view.screen_o)
+    return int(tx), int(ty)
+
+
+def _drop_view_cache() -> None:
+    try:
+        root = _parity_path()
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        from kings_castle_siege_map import angled_view
+        angled_view._view_cache.clear()
+    except Exception:
+        pass
+
+
+def _turn_view(client) -> None:
+    view = view_of(client)
+    view.view_quarter = (int(view.view_quarter) + 1) % 4
+    client.camera_yaw = view.view_quarter
+    apply_view_quarter(view.view_quarter)
+    _drop_view_cache()
+    view.error = ""
+    view.notice = (
+        f"View turned. Up the screen is {VIEW_UP[view.view_quarter]}. "
+        f"The {ENGINE_SHORT.get(view.engine_type, view.engine_type)} still faces {_face_name(view.rotation)}."
+    )
+
+
+def _queue_walk(client, tx, ty) -> None:
+    """Walk in world tiles toward the clicked tile. Arrows use the same yaw."""
+    try:
+        px, py = client.player_xy()
+    except Exception:
+        return
+    x, y = int(px), int(py)
+    path = []
+    for _ in range(80):
+        if x == tx and y == ty:
+            break
+        if abs(tx - x) >= abs(ty - y) and x != tx:
+            x += 1 if tx > x else -1
+        elif y != ty:
+            y += 1 if ty > y else -1
+        else:
+            break
+        path.append((x, y))
+    client.walk_path = path
+    client.walk_goal = path[-1] if path else None
+    client.pending_action = None
+    client._next_walk_at = 0
+
+
 def _rotate(client) -> None:
     view = view_of(client)
     view.rotation = (int(view.rotation) + 90) % 360
@@ -294,8 +397,19 @@ def _button(client, action: str) -> None:
         view.error = ""
         view.notice = f"Selected {ENGINE_SHORT.get(view.engine_type, view.engine_type)}. Nose faces {_face_name(view.rotation)}."
         return
-    if action == "rotate":
+    if action == "turn":
         _rotate(client)
+        return
+    if action == "view":
+        _turn_view(client)
+        return
+    if action == "pack":
+        _send(client, "KCS_PACK", engine_type=view.engine_type)
+        note(client, f"Asking to pack the {ENGINE_SHORT.get(view.engine_type, view.engine_type)}…")
+        return
+    if action == "watch":
+        _send(client, "ENTER_DUNGEON", dungeon_id=DUNGEON_ID, watch=True)
+        note(client, "Asking to watch the siege…")
         return
     if action == "face":
         px, py = _player_tile(client)
@@ -443,6 +557,8 @@ def _render(client, view, size):
     if view.bf is None or view.bf_key != key:
         view.bf = build_battlefield(states or None)
         view.bf_key = key
+    apply_view_quarter(view.view_quarter)
+    client.camera_yaw = int(view.view_quarter) % 4
     px, py = _player_tile(client)
     scale = 28.0
     world_size = (size[0], size[1] - HUD_TOP - HUD_BOT)
@@ -524,5 +640,9 @@ def _chrome(surf, view) -> None:
     small = pygame.font.Font(None, 18)
     pygame.draw.rect(surf, (18, 16, 14), (0, 0, width, HUD_TOP))
     pygame.draw.rect(surf, (18, 16, 14), (0, height - HUD_BOT, width, HUD_BOT))
-    small_note = f"{ENGINE_SHORT.get(view.engine_type, view.engine_type)} faces {_face_name(view.rotation)}. Gold is not spent."
+    small_note = (
+        f"View up is {VIEW_UP[int(view.view_quarter) % 4]}. "
+        f"{ENGINE_SHORT.get(view.engine_type, view.engine_type)} faces {_face_name(view.rotation)}. "
+        "Gold is not spent."
+    )
     surf.blit(small.render(small_note[:110], True, (168, 150, 130)), (12, height - 26))

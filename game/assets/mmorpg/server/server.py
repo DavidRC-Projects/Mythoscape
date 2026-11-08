@@ -4273,6 +4273,21 @@ async def handle_kcs_strike(session, msg):
             await resolve_player_death(target, [])
 
 
+async def handle_kcs_pack(session, msg):
+    import kcs_battle
+    import kcs_siege
+    msg = msg or {}
+    if kcs_siege.PLACE_REJECT_KEYS.intersection(msg):
+        await send(session.ws, "ERROR", message="The siege does not accept that.")
+        return
+    result = kcs_battle.pack(session, str(msg.get("engine_type") or ""))
+    if not result.get("ok"):
+        await send(session.ws, "ERROR", message=result.get("error") or "Could not pack that.")
+        return
+    await send(session.ws, "CHAT_MSG", **{"from": "King's Castle", "text": result.get("text") or "Packed."})
+    await _send_kcs_snapshot(session)
+
+
 async def handle_kcs_claim(session, msg):
     import kcs_battle
     import kcs_siege
@@ -4327,7 +4342,8 @@ async def _handle_enter_kcs(session, msg):
     if plane not in kcs_siege.SIEGE_PLANES:
         await send(session.ws, "ERROR", message="You can't enter that place.")
         return
-    decision = kcs_siege.decide(session.player_id, plane, "deploy")
+    reason = "spectate" if (msg or {}).get("watch") else "deploy"
+    decision = kcs_siege.decide(session.player_id, plane, reason)
     if not decision.allowed:
         await send(session.ws, "ERROR", message=kcs_siege.deny_message(decision))
         return
@@ -4357,7 +4373,7 @@ async def _handle_enter_kcs(session, msg):
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     await send(session.ws, "CHAT_MSG", **{
         "from": "King's Castle",
-        "text": "You deploy into the siege.",
+        "text": "You are watching the siege." if reason == "spectate" else "You deploy into the siege.",
     })
 
 
@@ -10814,6 +10830,8 @@ async def handler(ws):
                     await handle_kcs_strike(session, msg)
                 elif mtype == "KCS_CLAIM":
                     await handle_kcs_claim(session, msg)
+                elif mtype == "KCS_PACK":
+                    await handle_kcs_pack(session, msg)
                 elif mtype == "LEAVE_DUNGEON":
                     await handle_leave_dungeon(session, msg)
                 elif mtype == "SEWER_START":

@@ -20,9 +20,11 @@ FACE_NAME = {0: "north", 90: "east", 180: "south", 270: "west"}
 
 # hp, range in tiles, min_range, cooldown seconds, damage to a gate, damage to a breach.
 # contact engines must have their nose within range of the opening.
+# The keep sits about 35 tiles inside the curtain, and a trebuchet must stand
+# at least 8 tiles back, so 36 could not reach the keep after the outer gate fell.
 ENGINES = {
     "ram": {"hp": 80, "range": 2, "min_range": 0, "cooldown": 4.0, "gate": 28, "breach": 8},
-    "trebuchet": {"hp": 50, "range": 36, "min_range": 6, "cooldown": 8.0, "gate": 22, "breach": 18},
+    "trebuchet": {"hp": 50, "range": 72, "min_range": 6, "cooldown": 8.0, "gate": 22, "breach": 18},
     "siege_tower": {"hp": 100, "range": 2, "min_range": 0, "cooldown": 6.0, "gate": 10, "breach": 24},
     "ladder": {"hp": 40, "range": 2, "min_range": 0, "cooldown": 3.0, "gate": 6, "breach": 14},
 }
