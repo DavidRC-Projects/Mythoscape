@@ -4332,13 +4332,22 @@ async def _finish_kcs_victory(text):
         log.exception("kcs status after victory failed")
     shown = text or body.get("text") or "The siege is over."
     await _refresh_kcs_crown()
+    result = body.get("result") or {}
     own = body.get("ownership") or {}
-    for line in (own.get("crown_line"), own.get("castle_line")):
-        if line:
-            try:
-                await broadcast("CHAT_MSG", **{"from": "Royal Herald", "text": line})
-            except Exception:
-                log.exception("kcs herald line failed")
+    # The crown lines are read from the throne after the write. They are
+    # announced only when that row names this war's winner.
+    if result.get("ownership_applied"):
+        for line in (own.get("crown_line"), own.get("castle_line")):
+            if line:
+                try:
+                    await broadcast("CHAT_MSG", **{"from": "Royal Herald", "text": line})
+                except Exception:
+                    log.exception("kcs herald line failed")
+    if result.get("ownership_note"):
+        try:
+            await broadcast("CHAT_MSG", **{"from": "Royal Herald", "text": result["ownership_note"]})
+        except Exception:
+            log.exception("kcs herald line failed")
     for other in list(WORLD.sessions.values()):
         try:
             panel = kcs_battle.public_status(other)

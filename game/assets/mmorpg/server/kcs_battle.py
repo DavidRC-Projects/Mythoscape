@@ -210,13 +210,56 @@ def _result_view(store, war_id: int):
         "timeout": "The defenders held the castle until the siege ended.",
         "attackers_eliminated": "The attackers are eliminated. The defenders hold the castle.",
     }.get(reason, f"The siege is decided for the {winner} side.")
+    monarch = existing.get("monarch_player_id")
+    applied, note = ownership_sentence(winner, monarch, _throne_monarch_id())
     return {
         "war_id": int(war_id),
         "winner": winner,
         "reason": reason,
-        "monarch_player_id": existing.get("monarch_player_id"),
+        "monarch_player_id": monarch,
         "text": text + " Gold is unchanged.",
+        "ownership_applied": applied,
+        "ownership_note": note,
     }
+
+
+def ownership_sentence(winner, monarch_id, throne_id):
+    """Say whether this result is already on the throne.
+
+    A defence does not move the crown. An attack is recorded only when the
+    throne row names the same character. The sentence is safe to show before
+    that write exists.
+    """
+    same = False
+    try:
+        same = (
+            winner == "attack"
+            and monarch_id not in (None, "")
+            and throne_id not in (None, "")
+            and int(monarch_id) == int(throne_id)
+        )
+    except (TypeError, ValueError):
+        same = False
+    if winner == "defend":
+        return False, "The defenders hold the castle. The crown was not moved."
+    if same:
+        return True, "The crown and King's Castle were recorded."
+    return False, "The attackers won. The crown and King's Castle were not recorded."
+
+
+def _throne_monarch_id():
+    try:
+        import server
+        row = server.WORLD.db.conn.execute(
+            "SELECT monarch_kind, monarch_player_id FROM throne WHERE id=1").fetchone()
+    except Exception:
+        return None
+    if row is None or row[0] != "player" or not row[1]:
+        return None
+    try:
+        return int(row[1])
+    except (TypeError, ValueError):
+        return None
 
 
 def _ownership_view() -> dict:

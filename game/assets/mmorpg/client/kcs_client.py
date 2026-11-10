@@ -74,7 +74,13 @@ class SiegeView:
         self.eliminated = set()
         self.removed = set()
         self.shots = []
+        self.marks = []
         self.resync_at = 0.0
+        self.guide_open = False
+        self.guide_dismissed = False
+        self.guide_page = 0
+        self.guide_buttons = []
+        self.inspect = None
 
 
 def active(client) -> bool:
@@ -150,6 +156,10 @@ def on_message(client, kind, msg) -> None:
         view.error = ""
         if kind != "KCS_STATUS" or msg.get("result"):
             _say(client, view.notice, (220, 200, 140) if kind == "KCS_RESULT" else (210, 190, 140))
+        if kind == "KCS_RESULT":
+            note = ((view.status or {}).get("result") or {}).get("ownership_note")
+            if note:
+                _say(client, note, (220, 200, 140))
         return
     if not active(client):
         return
@@ -197,6 +207,12 @@ def on_message(client, kind, msg) -> None:
 
 def on_keydown(client, event) -> bool:
     """Select and deploy. Number keys work without turning build mode on first."""
+    view = view_of(client)
+    if view.guide_open and event.key == pygame.K_ESCAPE:
+        _close_guide(view)
+        return True
+    if getattr(client, "chat_typing", False):
+        return False
     if not active(client):
         if event.key == pygame.K_F8 and not getattr(client, "dungeon", None) and getattr(client, "state", "") == "GAME":
             _send(client, "ENTER_DUNGEON", dungeon_id=DUNGEON_ID)
@@ -227,6 +243,12 @@ def on_keydown(client, event) -> bool:
 def on_mouse(client, pos) -> bool:
     view = view_of(client)
     point = (int(pos[0]), int(pos[1]))
+    if view.guide_open:
+        for rect, action in list(view.guide_buttons):
+            if rect.collidepoint(point):
+                _guide_click(view, action)
+                return True
+        return True
     for rect, action in list(view.buttons):
         if rect.collidepoint(point):
             _button(client, action)
@@ -249,6 +271,13 @@ def on_mouse(client, pos) -> bool:
         note(client, "Spectators do not place engines.", error=True)
         return True
     if not placing:
+        subject = _subject_at(client, view, int(tx), int(ty))
+        if subject is not None:
+            view.inspect = subject
+            view.notice = subject.get("title") or view.notice
+            view.error = ""
+            return True
+        view.inspect = None
         _queue_walk(client, int(tx), int(ty))
         return True
     if _combat_paused(client, view):
@@ -279,9 +308,12 @@ def draw(client) -> None:
         surf = pygame.Surface(size)
         surf.fill((24, 18, 16))
         font = pygame.font.Font(None, 24)
-        surf.blit(font.render("King's Castle view unavailable.", True, (240, 210, 170)), (16, 28))
-        surf.blit(font.render(str(exc)[:110], True, (210, 170, 140)), (16, 58))
-        view.error = str(exc)
+        missing = ensure_assets() is None
+        title = "Castle art was not found." if missing else "The castle picture could not be drawn."
+        detail = "The buttons still work. The preview pictures can be supplied later."
+        surf.blit(font.render(title, True, (240, 210, 170)), (16, 28))
+        surf.blit(font.render(detail, True, (210, 170, 140)), (16, 58))
+        view.error = title
     _chrome(surf, view)
     if view.stale or not getattr(getattr(client, "net", None), "connected", True):
         view.stale = True
@@ -336,6 +368,8 @@ def _status_lines(st):
     result = st.get("result") or {}
     if result.get("text"):
         lines.append(f"Result: {result.get('text')}")
+    if result.get("ownership_note"):
+        lines.append(result["ownership_note"])
     previous = st.get("previous") or {}
     if previous.get("text") and st.get("status") != "resolved":
         lines.append(f"Last finished siege stays closed: {previous.get('text')}")
@@ -408,18 +442,36 @@ def _draw_status(client, view) -> None:
     view.buttons.append((prep, "prep"))
 
 
-def draw_overlay(client) -> None:
-    """Clickable controls above the chat. Number keys still work."""
-    if getattr(client, "state", "") != "GAME":
-        return
-    dungeon = getattr(client, "dungeon", None)
-    if dungeon and dungeon.get("id") not in (None, DUNGEON_ID):
-        return
-    view = view_of(client)
-    view.buttons = []
-    font = pygame.font.Font(None, 18)
-    x, y = 150, 64
+GUIDE_PAGES = (
+    (
+        "King's Castle Siege",
+        "Enlist as Attack or Defend, press Begin, then Deploy. "
+        "Watch lets you spectate without fighting. Buttons do the same work as the keys.",
+    ),
+    (
+        "Building",
+        "Pick an engine with 1–4 or the buttons. Green preview = valid. Red shows the refusal. "
+        "Turn engine (or Fn+F7) rotates the nose. Face wall aims at the wall. "
+        "Turn camera (or Fn+F9) only changes the view.",
+    ),
+    (
+        "Fighting and defence",
+        "Stand beside your engine to Fire or Pack. Defenders also Repair and Strike. "
+        "Click an engine, gate, or fighter to inspect health, range, and cooldown. "
+        "Death eliminates you; Watch remains until the war ends.",
+    ),
+    (
+        "Victory and reconnect",
+        "Attackers win by claiming the throne after the keep doors fall. Defenders win on time "
+        "or when attackers are gone. The crown is announced only after it is recorded. "
+        "If the link drops, actions pause until a fresh snapshot arrives. Esc dismisses this guide.",
+    ),
+)
+
+
+def control_specs(client, view):
     specs = [
+        ("guide", "Guide"),
         ("enlist-attack", "Enlist attack"),
         ("enlist-defend", "Enlist defend"),
         ("begin", "Begin"),
@@ -430,26 +482,312 @@ def draw_overlay(client) -> None:
     if active(client) and not decided:
         order = DEFENDER_ORDER if view.your_side == "defend" else ENGINE_ORDER
         specs = [(f"type-{kind}", f"{n} {ENGINE_SHORT[kind]}") for n, kind in enumerate(order, 1)]
-        specs += [("turn", "Turn"), ("view", "View"), ("face", "Face wall"), ("fire", "Fire"),
-                  ("pack", "Pack"), ("repair", "Repair"), ("strike", "Strike"), ("claim", "Claim throne")]
-    for action, label in specs:
+        specs += [
+            ("turn", "Turn engine"),
+            ("view", "Turn camera"),
+            ("face", "Face wall"),
+            ("fire", "Fire"),
+            ("pack", "Pack"),
+            ("repair", "Repair"),
+            ("strike", "Strike"),
+            ("claim", "Claim throne"),
+            ("guide", "Guide"),
+        ]
+    elif decided:
+        specs = [("guide", "Guide")]
+    return specs
+
+
+def control_rects(labels, font, map_w, reserve_right=0):
+    """Wrap the control row so buttons stay on the map at the usual window size."""
+    x, y = 150, 64
+    right = max(220, int(map_w) - 8 - int(reserve_right or 0))
+    out = []
+    for label in labels:
         width = max(72, font.size(label)[0] + 16)
-        rect = pygame.Rect(x, y, width, 24)
-        if rect.right > 880:
+        if x + width > right and out:
             x, y = 150, y + 28
-            rect = pygame.Rect(x, y, width, 24)
+        out.append(pygame.Rect(x, y, width, 24))
+        x += width + 6
+    return out
+
+
+def preview_at(view, tx, ty, existing=None):
+    from kings_castle_siege_map.placement import PlacedEngine, validate_placement
+    if existing is None:
+        existing = []
+        for row in view.engines:
+            try:
+                existing.append(PlacedEngine(
+                    str(row.get("engine_id")), str(row.get("engine_type")),
+                    int(row.get("x")), int(row.get("y")), int(row.get("rotation") or 0),
+                ))
+            except Exception:
+                continue
+    result = validate_placement(view.bf, view.engine_type, int(tx), int(ty), int(view.rotation), existing)
+    if result.ok and view.your_side == "defend":
+        import kcs_balance
+        px = int(getattr(view, "_preview_px", tx))
+        py = int(getattr(view, "_preview_py", ty))
+        if not kcs_balance.beside(px, py, result.tiles or [(tx, ty)]):
+            class _Refuse:
+                ok = False
+                reason = "Stand on the wall to build that."
+                tiles = result.tiles or [(tx, ty)]
+            result = _Refuse()
+    if result.ok:
+        view.preview = (
+            f"{ENGINE_SHORT.get(view.engine_type, view.engine_type)} faces "
+            f"{_face_name(view.rotation)}. Click to place."
+        )
+        view.error = ""
+    else:
+        view.preview = result.reason or "That placement is refused."
+    return result
+
+
+def _subject_at(client, view, tx, ty):
+    for row in view.engines:
+        tiles = row.get("tiles") or [[row.get("x") or 0, row.get("y") or 0]]
+        if any(int(t[0]) == tx and int(t[1]) == ty for t in tiles):
+            return _engine_inspect(row)
+    for row in view.openings:
+        for tile in row.get("tiles") or []:
+            if int(tile[0]) == tx and int(tile[1]) == ty:
+                return _opening_inspect(row)
+        if int(row.get("x") or -1) == tx and int(row.get("y") or -1) == ty:
+            return _opening_inspect(row)
+    for person in (getattr(client, "players", None) or {}).values():
+        if int(person.get("x") or -1) == tx and int(person.get("y") or -1) == ty:
+            return _fighter_inspect(person)
+    me = getattr(client, "player", None) or {}
+    if int(me.get("x") or -1) == tx and int(me.get("y") or -1) == ty:
+        return _fighter_inspect({**me, "kcs_side": view.your_side, "kcs_mode": (client.dungeon or {}).get("mode")})
+    return None
+
+
+def _engine_inspect(row):
+    kind = row.get("engine_type") or "engine"
+    import kcs_balance
+    spec = dict(kcs_balance.ENGINES.get(kind) or kcs_balance.DEFENDER_ENGINES.get(kind) or {})
+    ready = row.get("cooldown_until")
+    wait = ""
+    if isinstance(ready, (int, float)) and ready > time.time():
+        wait = f" Reloading {max(0, int(ready - time.time()))}s."
+    return {
+        "kind": "engine",
+        "title": f"{ENGINE_SHORT.get(kind, kind)} · {_face_name(row.get('rotation') or 0)}",
+        "lines": [
+            f"Side {row.get('side') or '?'}",
+            f"HP {row.get('hp') if row.get('hp') is not None else '?'}"
+            + (f"/{spec['hp']}" if spec.get("hp") else ""),
+            f"Range {spec.get('range', '?')} · cooldown {spec.get('cooldown', '?')}s." + wait,
+            "Fire / Pack while standing beside it.",
+        ],
+        "engine_id": row.get("engine_id"),
+    }
+
+
+def _opening_inspect(row):
+    oid = row.get("id") or row.get("opening_id") or "opening"
+    label = str(oid).replace("_", " ")
+    return {
+        "kind": "opening",
+        "title": label.title(),
+        "lines": [
+            f"State {row.get('state') or 'intact'}",
+            f"HP {row.get('hp') if row.get('hp') is not None else '?'}",
+            "Breaches open crossings. Keep doors lead to the throne room.",
+        ],
+        "opening_id": oid,
+    }
+
+
+def _fighter_inspect(person):
+    side = person.get("kcs_side") or "?"
+    mode = person.get("kcs_mode") or ""
+    role = "spectator" if mode == "spectator" else side
+    return {
+        "kind": "fighter",
+        "title": f"{person.get('name') or 'Fighter'} · {role}",
+        "lines": [
+            f"HP {person.get('hp', '?')}/{person.get('max_hp', '?')}",
+            "Attackers wear red marks. Defenders wear blue. Spectators are grey.",
+        ],
+        "player_id": person.get("id"),
+    }
+
+
+def _close_guide(view) -> None:
+    view.guide_open = False
+    view.guide_dismissed = True
+    view.guide_buttons = []
+
+
+def _guide_click(view, action: str) -> None:
+    if action == "guide-close":
+        _close_guide(view)
+        return
+    if action == "guide-next":
+        view.guide_page = min(len(GUIDE_PAGES) - 1, int(view.guide_page) + 1)
+        return
+    if action == "guide-prev":
+        view.guide_page = max(0, int(view.guide_page) - 1)
+
+
+def _wrap(font, text, width):
+    words = str(text or "").split()
+    lines, cur = [], ""
+    for word in words:
+        trial = f"{cur} {word}".strip()
+        if font.size(trial)[0] <= width or not cur:
+            cur = trial
+        else:
+            lines.append(cur)
+            cur = word
+    if cur:
+        lines.append(cur)
+    return lines or [""]
+
+
+def _draw_role(client, view, font) -> None:
+    mode = (getattr(client, "dungeon", None) or {}).get("mode") or ""
+    side = view.your_side or (view.status or {}).get("your_side")
+    if mode == "spectator":
+        label, color = "Spectator", (170, 170, 170)
+    elif side == "attack":
+        label, color = "Attacker", (210, 90, 70)
+    elif side == "defend":
+        label, color = "Defender", (80, 140, 210)
+    else:
+        label, color = "Not enlisted", (180, 160, 120)
+    rect = pygame.Rect(8, 64, max(110, font.size(label)[0] + 16), 24)
+    pygame.draw.rect(client.screen, (18, 16, 14), rect)
+    pygame.draw.rect(client.screen, color, rect, 1)
+    client.screen.blit(font.render(label, True, color), (rect.x + 8, rect.y + 4))
+
+
+def _draw_objectives(client, view, top) -> None:
+    st = view.status or {}
+    objectives = st.get("objectives") or []
+    result = st.get("result") or {}
+    if not objectives and not result:
+        return
+    font = pygame.font.Font(None, 16)
+    lines = ["Objectives"]
+    for row in objectives:
+        lines.append(f"{row.get('label')}: {row.get('state')}")
+    if result.get("text"):
+        lines.append(result.get("text"))
+    if result.get("ownership_note"):
+        lines.append(result.get("ownership_note"))
+    width = 250
+    height = 8 + 15 * len(lines)
+    box = pygame.Rect(8, int(top), width, height)
+    pygame.draw.rect(client.screen, (12, 10, 8), box)
+    pygame.draw.rect(client.screen, (140, 120, 70), box, 1)
+    y = box.y + 4
+    for line in lines:
+        client.screen.blit(font.render(str(line)[:42], True, (230, 210, 170)), (box.x + 6, y))
+        y += 15
+
+
+def _draw_inspect(client, view) -> None:
+    info = view.inspect
+    if not info:
+        return
+    import client as game
+    font = pygame.font.Font(None, 16)
+    lines = [info.get("title") or "Selected"] + list(info.get("lines") or [])
+    width = 260
+    height = 8 + 15 * len(lines)
+    box = pygame.Rect(game.MAP_W - width - 8, 96, width, height)
+    pygame.draw.rect(client.screen, (12, 10, 8), box)
+    pygame.draw.rect(client.screen, (196, 164, 84), box, 1)
+    y = box.y + 4
+    for line in lines:
+        client.screen.blit(font.render(str(line)[:44], True, (236, 220, 180)), (box.x + 6, y))
+        y += 15
+
+
+def _draw_guide(client, view) -> None:
+    view.guide_buttons = []
+    if not view.guide_open:
+        return
+    import client as game
+    page = max(0, min(len(GUIDE_PAGES) - 1, int(view.guide_page)))
+    title, body = GUIDE_PAGES[page]
+    font = pygame.font.Font(None, 20)
+    small = pygame.font.Font(None, 17)
+    box = pygame.Rect(70, 90, min(760, game.MAP_W - 100), 280)
+    pygame.draw.rect(client.screen, (18, 14, 12), box)
+    pygame.draw.rect(client.screen, (210, 170, 90), box, 2)
+    client.screen.blit(font.render(title, True, (250, 220, 160)), (box.x + 16, box.y + 14))
+    y = box.y + 44
+    for line in _wrap(small, body, box.width - 32):
+        client.screen.blit(small.render(line, True, (230, 210, 180)), (box.x + 16, y))
+        y += 18
+    note = "Mac: hold Fn with F6 build, F7 turn engine, F8 deploy, F9 turn camera."
+    client.screen.blit(small.render(note, True, (190, 160, 120)), (box.x + 16, box.bottom - 70))
+    client.screen.blit(
+        small.render(f"Page {page + 1}/{len(GUIDE_PAGES)}. Esc or Done closes.", True, (170, 150, 120)),
+        (box.x + 16, box.bottom - 50),
+    )
+    buttons = []
+    if page > 0:
+        buttons.append(("guide-prev", "Back"))
+    if page < len(GUIDE_PAGES) - 1:
+        buttons.append(("guide-next", "Next"))
+    buttons.append(("guide-close", "Done"))
+    x = box.right - 16
+    for action, label in reversed(buttons):
+        width = max(64, small.size(label)[0] + 18)
+        x -= width
+        rect = pygame.Rect(x, box.bottom - 34, width, 24)
+        pygame.draw.rect(client.screen, (40, 30, 18), rect)
+        pygame.draw.rect(client.screen, (210, 170, 90), rect, 1)
+        client.screen.blit(small.render(label, True, (250, 220, 160)), (rect.x + 8, rect.y + 4))
+        view.guide_buttons.append((rect, action))
+        x -= 8
+
+
+def draw_overlay(client) -> None:
+    """Clickable controls above the chat. Number keys still work."""
+    import client as game
+    if getattr(client, "state", "") != "GAME":
+        return
+    dungeon = getattr(client, "dungeon", None)
+    if dungeon and dungeon.get("id") not in (None, DUNGEON_ID):
+        return
+    view = view_of(client)
+    if not view.guide_dismissed and not view.guide_open:
+        view.guide_open = True
+        view.guide_page = 0
+    view.buttons = []
+    font = pygame.font.Font(None, 18)
+    specs = control_specs(client, view)
+    reserve = 230 if active(client) else 0
+    rects = control_rects([label for _action, label in specs], font, game.MAP_W, reserve_right=reserve)
+    row_bottom = 64
+    for (action, label), rect in zip(specs, rects):
         selected = action == f"type-{view.engine_type}" and view.build
         pygame.draw.rect(client.screen, (48, 36, 18) if selected else (28, 24, 18), rect)
         pygame.draw.rect(client.screen, (220, 180, 90) if selected else (120, 100, 70), rect, 1)
         client.screen.blit(font.render(label, True, (240, 220, 180)), (rect.x + 8, rect.y + 4))
         view.buttons.append((rect, action))
-        x = rect.right + 6
+        row_bottom = max(row_bottom, rect.bottom)
     banner = view.error or view.preview or view.notice
+    banner_bottom = row_bottom
     if banner:
-        bar = pygame.Rect(150, y + 28, 700, 22)
+        bar = pygame.Rect(150, row_bottom + 4, min(520, game.MAP_W - 160), 22)
         pygame.draw.rect(client.screen, (16, 14, 12), bar)
-        client.screen.blit(font.render(banner[:120], True, (255, 180, 120) if view.error else (210, 190, 150)), (156, bar.y + 3))
+        client.screen.blit(font.render(banner[:90], True, (255, 180, 120) if view.error else (210, 190, 150)), (bar.x + 6, bar.y + 3))
+        banner_bottom = bar.bottom
+    _draw_role(client, view, font)
+    _draw_objectives(client, view, banner_bottom + 4)
+    _draw_inspect(client, view)
     _draw_status(client, view)
+    _draw_guide(client, view)
 
 
 def ensure_assets():
@@ -579,6 +917,11 @@ def _rotate(client) -> None:
 
 def _button(client, action: str) -> None:
     view = view_of(client)
+    if action == "guide":
+        view.guide_open = True
+        view.guide_page = 0
+        view.guide_dismissed = False
+        return
     if action.startswith("type-"):
         view.engine_type = action.split("-", 1)[1]
         view.build = True
@@ -777,6 +1120,11 @@ def _apply_delta(client, view, msg) -> None:
         return
     if kind == "engine_hp":
         _set_engine_hp(view, msg.get("engine_id"), msg.get("hp"), msg.get("cooldown_until"))
+        for row in view.engines:
+            if row.get("engine_id") == msg.get("engine_id"):
+                tiles = row.get("tiles") or [[row.get("x") or 0, row.get("y") or 0]]
+                view.marks.append({"x": tiles[0][0], "y": tiles[0][1], "until": time.time() + 0.6, "color": (240, 120, 70)})
+                break
         return
     if kind == "engine_state":
         for row in msg.get("engines") or []:
@@ -799,13 +1147,23 @@ def _apply_delta(client, view, msg) -> None:
     if kind == "opening":
         _upsert_opening(view, msg)
         view.bf_key = None
-        view.notice = f"{msg.get('opening_id') or msg.get('id')} is {msg.get('state')}."
+        oid = msg.get("opening_id") or msg.get("id")
+        state = msg.get("state")
+        view.notice = f"{oid} is {state}."
+        if state == "destroyed":
+            _say(client, f"{str(oid).replace('_', ' ').title()} is breached.", (240, 180, 120))
+        for row in view.openings:
+            if (row.get("id") == oid or row.get("opening_id") == oid) and row.get("tiles"):
+                tile = row["tiles"][0]
+                view.marks.append({"x": tile[0], "y": tile[1], "until": time.time() + 0.9, "color": (255, 160, 80)})
+                break
         return
     if kind == "shot":
         shot = dict(msg)
         shot["until"] = time.time() + 0.45
         view.shots.append(shot)
         view.shots = view.shots[-8:]
+        view.marks.append({"x": shot.get("tx"), "y": shot.get("ty"), "until": time.time() + 0.5, "color": (250, 220, 120)})
         return
     if kind == "player_hp":
         pid = msg.get("player_id")
@@ -872,6 +1230,7 @@ def _paint_battle(surf, client, view) -> None:
     """Marks for nearby fighters and a short line for a shot. Not a new renderer."""
     now = time.time()
     view.shots = [shot for shot in view.shots if shot.get("until", 0) > now]
+    view.marks = [mark for mark in view.marks if mark.get("until", 0) > now]
     me = (getattr(client, "player", None) or {}).get("id")
     font = pygame.font.Font(None, 16)
     for person in (getattr(client, "players", None) or {}).values():
@@ -881,7 +1240,15 @@ def _paint_battle(surf, client, view) -> None:
         if spot is None:
             continue
         side = person.get("kcs_side")
-        color = (190, 70, 60) if side == "attack" else (70, 130, 200) if side == "defend" else (170, 170, 170)
+        mode = person.get("kcs_mode")
+        if mode == "spectator":
+            color = (170, 170, 170)
+        elif side == "attack":
+            color = (190, 70, 60)
+        elif side == "defend":
+            color = (70, 130, 200)
+        else:
+            color = (170, 170, 170)
         pygame.draw.circle(surf, color, spot, 5)
         label = f"{person.get('hp', '')}"
         if label:
@@ -892,6 +1259,11 @@ def _paint_battle(surf, client, view) -> None:
         if start is None or end is None:
             continue
         pygame.draw.line(surf, (240, 220, 140), start, end, 2)
+    for mark in view.marks:
+        spot = tile_to_screen(client, mark.get("x", 0), mark.get("y", 0))
+        if spot is None:
+            continue
+        pygame.draw.circle(surf, mark.get("color") or (240, 180, 80), spot, 10, 2)
 
 
 def _parity_path() -> str:
@@ -1004,6 +1376,9 @@ def _paint_facing(surf, client, view) -> None:
                 surf.blit(spr, (scx - spr.get_width() // 2, scy - spr.get_height() // 2))
             except Exception:
                 pass
+        for tx, ty in tiles:
+            px, py, _z = project(tx + 0.5, ty + 0.5, 0, view.origin, view.scale, view.screen_o)
+            pygame.draw.circle(surf, color, (int(px), int(py + HUD_TOP)), 7, 1)
         pygame.draw.line(surf, color, (scx, scy), (sfx, sfy), 3)
         pygame.draw.circle(surf, color, (sfx, sfy), 5)
 
@@ -1027,10 +1402,13 @@ def _paint_facing(surf, client, view) -> None:
                                          int(row.get("x")), int(row.get("y")), int(row.get("rotation") or 0)))
         except Exception:
             continue
-    result = validate_placement(view.bf, view.engine_type, int(tx), int(ty), int(view.rotation), existing)
+    try:
+        view._preview_px, view._preview_py = _player_tile(client)
+    except Exception:
+        view._preview_px, view._preview_py = int(tx), int(ty)
+    result = preview_at(view, int(tx), int(ty), existing)
     tiles = result.tiles or [(int(tx), int(ty))]
     _mark(tiles, view.rotation, (80, 220, 90) if result.ok else (230, 70, 60), view.engine_type)
-    view.preview = "" if result.ok else result.reason
 
 
 def _chrome(surf, view) -> None:
@@ -1038,9 +1416,8 @@ def _chrome(surf, view) -> None:
     small = pygame.font.Font(None, 18)
     pygame.draw.rect(surf, (18, 16, 14), (0, 0, width, HUD_TOP))
     pygame.draw.rect(surf, (18, 16, 14), (0, height - HUD_BOT, width, HUD_BOT))
-    small_note = (
-        f"View up is {VIEW_UP[int(view.view_quarter) % 4]}. "
-        f"{ENGINE_SHORT.get(view.engine_type, view.engine_type)} faces {_face_name(view.rotation)}. "
-        "Gold is not spent."
-    )
-    surf.blit(small.render(small_note[:110], True, (168, 150, 130)), (12, height - 26))
+    camera = VIEW_UP[int(view.view_quarter) % 4]
+    nose = _face_name(view.rotation)
+    line = f"Camera up: {camera}.  Engine nose: {nose}.  Face wall aims the engine, not the camera."
+    surf.blit(small.render(line[:120], True, (168, 150, 130)), (12, height - 40))
+    surf.blit(small.render("Turn engine and Turn camera are different. Gold is not spent.", True, (168, 150, 130)), (12, height - 22))
