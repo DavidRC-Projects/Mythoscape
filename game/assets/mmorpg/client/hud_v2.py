@@ -3165,7 +3165,13 @@ def _inventory_action(client, key):
         _activate_slot(client, slot, 1)
         return
     if key == "drop":
-        _activate_slot(client, slot, 3)
+        # Keys and normal items: open the drop confirm directly (right-click path
+        # used to no-op for some key UX, and David needs the Rift Sigil discardable).
+        item = ITEMS.get(entry.get("item_id") or "") or {}
+        if item.get("type") == "key" or item.get("dungeon_bound") or not item.get("unique"):
+            client.open_drop_prompt(slot, entry)
+        else:
+            _activate_slot(client, slot, 3)
         return
     qty = int(entry.get("qty") or 1)
     if qty < 2:

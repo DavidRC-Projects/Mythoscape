@@ -6288,8 +6288,8 @@ class GameClient(ScreensMixin, CameraYaw):
                         self.open_log_prompt(slot, entry)
                     elif item.get("karma_xp"):
                         self.open_bone_prompt(slot, entry)
-                    elif item.get("unique"):
-                        # Bags are permanent: never offer to throw the container away.
+                    elif item.get("unique") and item.get("type") != "key":
+                        # Bags and other uniques stay permanent; dungeon keys may be dropped.
                         self.add_chat(f"Your {item.get('name', item_id)} is permanent — it can't be dropped or sold.")
                     elif shift:
                         self.net.send("DROP", slot_index=slot, qty=max(1, int(entry.get("qty") or 1)))
@@ -6334,7 +6334,8 @@ class GameClient(ScreensMixin, CameraYaw):
                 elif entry["item_id"] == "tinderbox":
                     self.open_fire_prompt_from_tinderbox()
                 elif item.get("type") == "key":
-                    self.net.send("USE_ITEM", slot_index=slot)
+                    # Use on a nearby door; right-click / Drop still discards the key.
+                    self.net.send("USE_ITEM", slot_index=slot, action="use")
                 else:
                     self.open_drop_prompt(slot, entry)
                 return
@@ -6951,7 +6952,17 @@ class GameClient(ScreensMixin, CameraYaw):
         if not prompt:
             return
         if rects.get("fire") and rects["fire"].collidepoint(mx, my):
-            self.open_fire_prompt(prompt["slot"], prompt["item_id"])
+            # Light immediately — the old confirm step felt like a no-op when it failed
+            # (missing tinderbox / dungeon tile checks) after closing this prompt.
+            has_tinder = any(
+                e and e.get("item_id") == "tinderbox"
+                for e in ((self.player or {}).get("inventory") or {}).values()
+            )
+            if not has_tinder:
+                self.add_chat("You need a tinderbox to light a fire.")
+                return
+            self.net.send("USE_ITEM", slot_index=prompt["slot"])
+            self.log_prompt = None
             return
         if rects.get("fletch") and rects["fletch"].collidepoint(mx, my):
             self.log_prompt = None
@@ -7012,8 +7023,7 @@ class GameClient(ScreensMixin, CameraYaw):
                 has_tinder = True
                 break
         if not has_tinder:
-            self.chat_log.append("[!] You need a tinderbox to light a fire.")
-            self.chat_log = self.chat_log[-8:]
+            self.add_chat("You need a tinderbox to light a fire.")
             return
         self.fire_prompt = {"slot": slot, "item_id": item_id, "name": name}
         self.drop_prompt = None
