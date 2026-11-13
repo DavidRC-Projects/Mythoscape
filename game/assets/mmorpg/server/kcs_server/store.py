@@ -190,6 +190,23 @@ CREATE TABLE IF NOT EXISTS kcs_outbox (
     created_at REAL NOT NULL,
     delivered_at REAL
 );
+CREATE TABLE IF NOT EXISTS kcs_opening_hp (
+    war_id INTEGER NOT NULL,
+    opening_id TEXT NOT NULL,
+    hp INTEGER NOT NULL,
+    PRIMARY KEY (war_id, opening_id)
+);
+CREATE TABLE IF NOT EXISTS kcs_engine_combat (
+    war_id INTEGER NOT NULL,
+    engine_id INTEGER NOT NULL,
+    hp INTEGER NOT NULL,
+    cooldown_until REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (war_id, engine_id)
+);
+CREATE TABLE IF NOT EXISTS kcs_war_clock (
+    war_id INTEGER PRIMARY KEY,
+    ends_at REAL NOT NULL
+);
 """
 
 
@@ -409,6 +426,124 @@ class KCSStore:
     def opening_revs(self, war_id: int) -> Dict[str, int]:
         return {row[0]: int(row[1]) for row in self._fetchall(
             "SELECT opening_id, rev FROM kcs_openings WHERE war_id=?", (war_id,))}
+
+    def roster_rows(self, war_id: int) -> list:
+        return [tuple(row) for row in self._fetchall(
+            "SELECT player_id, side, deployed, eliminated FROM kcs_roster WHERE war_id=?",
+            (war_id,))]
+
+    def set_clock(self, war_id: int, ends_at: float) -> None:
+        with self._tx("war_clock") as c:
+            c.execute(
+                "INSERT INTO kcs_war_clock(war_id, ends_at) VALUES (?, ?) "
+                "ON CONFLICT(war_id) DO UPDATE SET ends_at=excluded.ends_at",
+                (int(war_id), float(ends_at)))
+
+    def get_clock(self, war_id: int):
+        row = self._fetchone("SELECT ends_at FROM kcs_war_clock WHERE war_id=?", (int(war_id),))
+        return None if row is None else float(row[0])
+
+    def opening_hps(self, war_id: int) -> Dict[str, int]:
+        return {row[0]: int(row[1]) for row in self._fetchall(
+            "SELECT opening_id, hp FROM kcs_opening_hp WHERE war_id=?", (int(war_id),))}
+
+    def engine_combat_map(self, war_id: int) -> Dict[int, Tuple[int, float]]:
+        return {int(row[0]): (int(row[1]), float(row[2])) for row in self._fetchall(
+            "SELECT engine_id, hp, cooldown_until FROM kcs_engine_combat WHERE war_id=?",
+            (int(war_id),))}
+
+    def seed_opening(self, war_id: int, opening_id: str, hp: int, state: str) -> None:
+        now = self._clock()
+        with self._tx("seed_opening") as c:
+            c.execute(
+                "INSERT INTO kcs_opening_hp(war_id, opening_id, hp) VALUES (?, ?, ?) "
+                "ON CONFLICT(war_id, opening_id) DO NOTHING",
+                (int(war_id), opening_id, int(hp)))
+            c.execute(
+                "INSERT INTO kcs_openings(war_id, opening_id, state, rev, updated_at) VALUES (?, ?, ?, 0, ?) "
+                "ON CONFLICT(war_id, opening_id) DO NOTHING",
+                (int(war_id), opening_id, state, now))
+
+    def write_shot(self, war_id: int, engine_id: int, engine_hp: int, cooldown_until: float,
+                   opening_id: str, opening_hp: int, state: str) -> int:
+        """Land one shot: engine cooldown and opening hp/state commit together."""
+        now = self._clock()
+        with self._tx("engine_shot") as c:
+            c.execute(
+                "INSERT INTO kcs_engine_combat(war_id, engine_id, hp, cooldown_until) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(war_id, engine_id) DO UPDATE SET hp=excluded.hp, cooldown_until=excluded.cooldown_until",
+                (int(war_id), int(engine_id), int(engine_hp), float(cooldown_until)))
+            row = c.execute(
+                "SELECT rev FROM kcs_openings WHERE war_id=? AND opening_id=?",
+                (int(war_id), opening_id)).fetchone()
+            cur_rev = row[0] if row else 0
+            new_rev = int(cur_rev) + 1
+            c.execute(
+                "INSERT INTO kcs_openings(war_id, opening_id, state, rev, updated_at) VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(war_id, opening_id) DO UPDATE SET state=excluded.state, rev=excluded.rev, "
+                "updated_at=excluded.updated_at",
+                (int(war_id), opening_id, state, new_rev, now))
+            c.execute(
+                "INSERT INTO kcs_opening_hp(war_id, opening_id, hp) VALUES (?, ?, ?) "
+                "ON CONFLICT(war_id, opening_id) DO UPDATE SET hp=excluded.hp",
+                (int(war_id), opening_id, int(opening_hp)))
+            return new_rev
+
+    def write_repair(self, war_id: int, opening_id: str, hp: int, state: str) -> int:
+        now = self._clock()
+        with self._tx("opening_repair") as c:
+            row = c.execute(
+                "SELECT rev FROM kcs_openings WHERE war_id=? AND opening_id=?",
+                (int(war_id), opening_id)).fetchone()
+            cur_rev = row[0] if row else 0
+            new_rev = int(cur_rev) + 1
+            c.execute(
+                "INSERT INTO kcs_openings(war_id, opening_id, state, rev, updated_at) VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(war_id, opening_id) DO UPDATE SET state=excluded.state, rev=excluded.rev, "
+                "updated_at=excluded.updated_at",
+                (int(war_id), opening_id, state, new_rev, now))
+            c.execute(
+                "INSERT INTO kcs_opening_hp(war_id, opening_id, hp) VALUES (?, ?, ?) "
+                "ON CONFLICT(war_id, opening_id) DO UPDATE SET hp=excluded.hp",
+                (int(war_id), opening_id, int(hp)))
+            return new_rev
+
+    def damage_engine_hp(self, war_id: int, engine_id: int, hp: int) -> None:
+        with self._tx("engine_hp") as c:
+            row = c.execute(
+                "SELECT cooldown_until FROM kcs_engine_combat WHERE war_id=? AND engine_id=?",
+                (int(war_id), int(engine_id))).fetchone()
+            cd = 0.0 if row is None else float(row[0])
+            c.execute(
+                "INSERT INTO kcs_engine_combat(war_id, engine_id, hp, cooldown_until) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(war_id, engine_id) DO UPDATE SET hp=excluded.hp",
+                (int(war_id), int(engine_id), int(hp), cd))
+
+    def remove_engine(self, war_id: int, engine_id: int, player_id: int) -> None:
+        """Pack up one engine the player placed. Someone else's engine stays."""
+        with self._tx("pack_engine") as c:
+            row = c.execute(
+                "SELECT player_id FROM kcs_engines WHERE war_id=? AND engine_id=?",
+                (int(war_id), int(engine_id))).fetchone()
+            if row is None or int(row[0]) != int(player_id):
+                raise PlacementRejected("that engine is not yours to pack")
+            c.execute(
+                "DELETE FROM kcs_engine_combat WHERE war_id=? AND engine_id=?",
+                (int(war_id), int(engine_id)))
+            c.execute(
+                "DELETE FROM kcs_engines WHERE war_id=? AND engine_id=?",
+                (int(war_id), int(engine_id)))
+
+    def undelivered_outbox(self) -> list:
+        return self._fetchall(
+            "SELECT sovereignty_rev, kind, payload_json FROM kcs_outbox "
+            "WHERE delivered_at IS NULL ORDER BY sovereignty_rev")
+
+    def mark_outbox_delivered(self, rev: int) -> None:
+        with self._tx("outbox_deliver") as c:
+            c.execute(
+                "UPDATE kcs_outbox SET delivered_at=? WHERE sovereignty_rev=? AND delivered_at IS NULL",
+                (self._clock(), int(rev)))
 
     # ---- engines ----------------------------------------------------------
     def engines(self, war_id: int) -> list:

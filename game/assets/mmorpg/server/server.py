@@ -2914,6 +2914,14 @@ async def _handle_kcs_move(session, dx, dy):
     eject. Ejecting here would clear the resume before the elimination exists.
     """
     import kcs_siege
+    try:
+        import kcs_battle
+        done = kcs_battle.timeout_if_due()
+        if done and done.get("finished"):
+            await _finish_kcs_victory(done.get("text") or "The siege is over.")
+            return
+    except Exception:
+        log.exception("kcs timeout during move failed")
     decision = kcs_siege.presence_decision(session)
     if not decision.allowed:
         if (decision.code == "elimination_pending"
@@ -4179,6 +4187,126 @@ async def handle_kcs_place(session, msg):
     await send(session.ws, "KCS_PLACE_OK", replayed=bool(result.get("replayed")), engine=result["engine"])
 
 
+async def _finish_kcs_victory(text):
+    """Eject everyone still on the siege map after a durable result. No gold."""
+    import kcs_siege
+    for other in list(WORLD.sessions.values()):
+        if kcs_siege.on_map(other):
+            await _eject_kcs(other, text=text)
+
+
+async def handle_kcs_enlist(session, msg):
+    import kcs_battle
+    side = (msg or {}).get("side")
+    result = kcs_battle.enlist(session, side)
+    if not result.get("ok"):
+        await send(session.ws, "ERROR", message=result.get("error") or "Could not enlist.")
+        return
+    await send(session.ws, "KCS_LOBBY", **{k: v for k, v in result.items() if k != "ok"})
+
+
+async def handle_kcs_begin(session, msg):
+    del msg
+    import kcs_battle
+    result = kcs_battle.begin(session)
+    if not result.get("ok"):
+        await send(session.ws, "ERROR", message=result.get("error") or "Could not begin.")
+        return
+    await send(session.ws, "KCS_LOBBY", **{k: v for k, v in result.items() if k != "ok"})
+
+
+async def handle_kcs_act(session, msg):
+    import kcs_battle
+    import kcs_siege
+    msg = msg or {}
+    if kcs_siege.PLACE_REJECT_KEYS.intersection(msg):
+        await send(session.ws, "ERROR", message="The siege does not accept that.")
+        return
+    result = kcs_battle.fire(session, str(msg.get("engine_type") or ""))
+    if result.get("finished"):
+        await _finish_kcs_victory(result.get("text") or "The siege is over.")
+        return
+    if not result.get("ok"):
+        await send(session.ws, "ERROR", message=result.get("error") or "The engine did not fire.")
+        return
+    if result.get("opening"):
+        await _broadcast_kcs("KCS_DELTA", kind="opening", **result["opening"])
+    await send(session.ws, "CHAT_MSG", **{"from": "King's Castle", "text": result.get("text") or "Fired."})
+    await _send_kcs_snapshot(session)
+
+
+async def handle_kcs_repair(session, msg):
+    import kcs_battle
+    import kcs_siege
+    if kcs_siege.PLACE_REJECT_KEYS.intersection(msg or {}):
+        await send(session.ws, "ERROR", message="The siege does not accept that.")
+        return
+    result = kcs_battle.repair(session)
+    if result.get("finished"):
+        await _finish_kcs_victory(result.get("text") or "The siege is over.")
+        return
+    if not result.get("ok"):
+        await send(session.ws, "ERROR", message=result.get("error") or "Could not repair.")
+        return
+    if result.get("opening"):
+        await _broadcast_kcs("KCS_DELTA", kind="opening", **result["opening"])
+    await send(session.ws, "CHAT_MSG", **{"from": "King's Castle", "text": result.get("text") or "Repaired."})
+
+
+async def handle_kcs_strike(session, msg):
+    import kcs_battle
+    import kcs_siege
+    if kcs_siege.PLACE_REJECT_KEYS.intersection(msg or {}):
+        await send(session.ws, "ERROR", message="The siege does not accept that.")
+        return
+    result = kcs_battle.strike(session)
+    if result.get("finished"):
+        await _finish_kcs_victory(result.get("text") or "The siege is over.")
+        return
+    if not result.get("ok"):
+        await send(session.ws, "ERROR", message=result.get("error") or "The swing missed.")
+        return
+    await send(session.ws, "CHAT_MSG", **{"from": "King's Castle", "text": result.get("text") or "Struck."})
+    if result.get("killed"):
+        target = WORLD.sessions.get(result.get("target_id"))
+        if target is not None and int(getattr(target, "hp", 1) or 0) <= 0:
+            await resolve_player_death(target, [])
+
+
+async def handle_kcs_pack(session, msg):
+    import kcs_battle
+    import kcs_siege
+    msg = msg or {}
+    if kcs_siege.PLACE_REJECT_KEYS.intersection(msg):
+        await send(session.ws, "ERROR", message="The siege does not accept that.")
+        return
+    result = kcs_battle.pack(session, str(msg.get("engine_type") or ""))
+    if not result.get("ok"):
+        await send(session.ws, "ERROR", message=result.get("error") or "Could not pack that.")
+        return
+    await send(session.ws, "CHAT_MSG", **{"from": "King's Castle", "text": result.get("text") or "Packed."})
+    await _send_kcs_snapshot(session)
+
+
+async def handle_kcs_claim(session, msg):
+    import kcs_battle
+    import kcs_siege
+    if kcs_siege.PLACE_REJECT_KEYS.intersection(msg or {}):
+        await send(session.ws, "ERROR", message="The siege does not accept that.")
+        return
+    coins = int(getattr(session, "coins", 0) or 0)
+    result = kcs_battle.claim(session)
+    if not result.get("ok"):
+        await send(session.ws, "ERROR", message=result.get("error") or "The throne is not yours.")
+        return
+    if int(getattr(session, "coins", 0) or 0) != coins:
+        session.coins = coins
+    if result.get("finished"):
+        await _finish_kcs_victory(result.get("text") or "The siege is over.")
+        return
+    await send(session.ws, "CHAT_MSG", **{"from": "King's Castle", "text": result.get("text") or "Already decided."})
+
+
 async def handle_kcs_opening(session, msg):
     """Client structure, damage, resource, and ownership claims are never applied."""
     del msg
@@ -4214,7 +4342,8 @@ async def _handle_enter_kcs(session, msg):
     if plane not in kcs_siege.SIEGE_PLANES:
         await send(session.ws, "ERROR", message="You can't enter that place.")
         return
-    decision = kcs_siege.decide(session.player_id, plane, "deploy")
+    reason = "spectate" if (msg or {}).get("watch") else "deploy"
+    decision = kcs_siege.decide(session.player_id, plane, reason)
     if not decision.allowed:
         await send(session.ws, "ERROR", message=kcs_siege.deny_message(decision))
         return
@@ -4244,7 +4373,7 @@ async def _handle_enter_kcs(session, msg):
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     await send(session.ws, "CHAT_MSG", **{
         "from": "King's Castle",
-        "text": "You deploy into the siege.",
+        "text": "You are watching the siege." if reason == "spectate" else "You deploy into the siege.",
     })
 
 
@@ -10689,6 +10818,20 @@ async def handler(ws):
                     await handle_kcs_opening(session, msg)
                 elif mtype == "KCS_SNAPSHOT":
                     await handle_kcs_snapshot(session, msg)
+                elif mtype == "KCS_ENLIST":
+                    await handle_kcs_enlist(session, msg)
+                elif mtype == "KCS_BEGIN":
+                    await handle_kcs_begin(session, msg)
+                elif mtype == "KCS_ACT":
+                    await handle_kcs_act(session, msg)
+                elif mtype == "KCS_REPAIR":
+                    await handle_kcs_repair(session, msg)
+                elif mtype == "KCS_STRIKE":
+                    await handle_kcs_strike(session, msg)
+                elif mtype == "KCS_CLAIM":
+                    await handle_kcs_claim(session, msg)
+                elif mtype == "KCS_PACK":
+                    await handle_kcs_pack(session, msg)
                 elif mtype == "LEAVE_DUNGEON":
                     await handle_leave_dungeon(session, msg)
                 elif mtype == "SEWER_START":
@@ -11694,6 +11837,13 @@ async def resolve_player_death(session, events, dungeon_tag=None):
     if on_kcs:
         where = "entrance"
         await _eject_kcs(session, text="You are eliminated from the siege and wake outside.")
+        try:
+            import kcs_battle
+            done = kcs_battle.defenders_if_attackers_gone()
+            if done and done.get("finished"):
+                await _finish_kcs_victory(done.get("text") or "The defenders hold the castle.")
+        except Exception:
+            log.exception("kcs victory after elimination failed")
     elif session.dungeon:
         v2_kind = session.dungeon.get("v2")
         realm_death = session.dungeon.get("id") == "castle_realm"

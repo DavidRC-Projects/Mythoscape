@@ -131,14 +131,30 @@ def plane_from_dest(dest) -> str:
 def transition_at(plane, x, y):
     """Intra-siege plane link at a tile.
 
-    No link is authored in this integration. Battlefield and throne are
-    reached only through the guarded entry, teleport, and resume paths, or
-    through ``retarget`` if a link is added later. The tuple list is the
-    single place a link may be declared.
+    The keep doors open a two-way link only after that opening is destroyed.
+    Other authored links, if any, are the ``_PLANE_LINKS`` list.
     """
     for src, tx, ty, dst in _PLANE_LINKS:
         if src == plane and int(tx) == int(x) and int(ty) == int(y):
             return dst
+    try:
+        states = _opening_states()
+        if states.get("keep_doors") != "destroyed":
+            return None
+        smap = siege_map()
+        x, y = int(x), int(y)
+        if plane == PLANE_BATTLEFIELD:
+            rect = smap.plane(PLANE_BATTLEFIELD).opening_rects.get("keep_doors")
+            if rect and rect[0] <= x <= rect[2] and rect[1] <= y <= rect[3]:
+                return PLANE_THRONE
+        if plane == PLANE_THRONE:
+            rect = smap.plane(PLANE_THRONE).opening_rects.get("throne_doors")
+            # The entrance spawn sits inside this doorway. Only its outer edge
+            # leads back to the battlefield, so a claimant can walk inward to the dais.
+            if rect and rect[0] <= x <= rect[2] and int(y) == int(rect[3]):
+                return PLANE_BATTLEFIELD
+    except Exception:
+        log.exception("kcs plane link failed")
     return None
 
 
@@ -318,6 +334,62 @@ def _death_after_empty_war(pid: int, outcome: DeathOutcome) -> DeathOutcome:
         return DeathOutcome(True, False, False, False)
 
 
+def _crossing_tiles():
+    """Tiles a live ladder or tower opens across the curtain.
+
+    The footprint itself can be stood on. The nose then steps through the
+    wall to the first open tile inside. A wrecked engine opens nothing.
+    Rams and trebuchets are not crossings.
+    """
+    import kcs_balance
+    found = set()
+    try:
+        guard = _require_guard()
+        war = guard.store.open_war()
+        if war is None:
+            return found
+        combat = guard.store.engine_combat_map(war.war_id)
+        pdata = siege_map().plane(PLANE_BATTLEFIELD)
+        states = _opening_states() or {}
+        for engine in guard.store.engines(war.war_id):
+            if engine.engine_type not in ("ladder", "siege_tower"):
+                continue
+            hp = combat.get(engine.engine_id, (1, 0.0))[0]
+            if hp <= 0:
+                continue
+            found.update(tuple(engine.tiles))
+            dx, dy = kcs_balance.FACE[int(engine.rotation) % 360]
+            if dy < 0:
+                edge = min(tile[1] for tile in engine.tiles)
+                noses = [tile for tile in engine.tiles if tile[1] == edge]
+            elif dy > 0:
+                edge = max(tile[1] for tile in engine.tiles)
+                noses = [tile for tile in engine.tiles if tile[1] == edge]
+            elif dx > 0:
+                edge = max(tile[0] for tile in engine.tiles)
+                noses = [tile for tile in engine.tiles if tile[0] == edge]
+            else:
+                edge = min(tile[0] for tile in engine.tiles)
+                noses = [tile for tile in engine.tiles if tile[0] == edge]
+            x = int(round(sum(tile[0] for tile in noses) / len(noses)))
+            y = int(round(sum(tile[1] for tile in noses) / len(noses)))
+            crossed = False
+            for step in range(1, 6):
+                nx, ny = x + dx * step, y + dy * step
+                if not pdata.in_bounds(nx, ny):
+                    break
+                found.add((nx, ny))
+                open_ground = siege_map().walkable(PLANE_BATTLEFIELD, nx, ny, states)
+                if open_ground and crossed:
+                    break
+                if not open_ground:
+                    crossed = True
+        return found
+    except Exception:
+        log.exception("kcs crossing lookup failed")
+        return found
+
+
 def walkable(session, x: int, y: int) -> bool:
     data = getattr(session, "dungeon", None) or {}
     plane = data.get("plane")
@@ -325,12 +397,15 @@ def walkable(session, x: int, y: int) -> bool:
         return False
     try:
         states = _opening_states()
-        if not siege_map().walkable(plane, int(x), int(y), states):
+        x, y = int(x), int(y)
+        if (x, y) in _crossing_tiles():
+            return True
+        if not siege_map().walkable(plane, x, y, states):
             return False
         if plane != PLANE_BATTLEFIELD:
             return True
         for engine in _engine_records():
-            if (int(x), int(y)) in engine.tiles:
+            if (x, y) in engine.tiles and engine.engine_type not in ("ladder", "siege_tower"):
                 return False
         return True
     except Exception:
@@ -423,6 +498,12 @@ def propose_placement(session, msg) -> dict:
     except Exception:
         log.exception("kcs placement failed")
         return _place_fail("The siege can't be reached right now.", "guard_error")
+    if not replayed:
+        try:
+            import kcs_battle
+            kcs_battle.grant_for_placement(int(session.player_id))
+        except Exception:
+            log.exception("kcs placement xp failed")
     return {"ok": True, "replayed": replayed, "engine": _public_engine(record), "code": "placed"}
 
 
@@ -489,7 +570,17 @@ def snapshot(session) -> Optional[dict]:
                     "tiles": [[int(x), int(y)] for x, y in tiles],
                 })
         engines = [_public_engine(e) for e in guard.store.engines(war.war_id)]
-        return {"war_id": war.war_id, "openings": openings, "engines": engines}
+        body = {"war_id": war.war_id, "openings": openings, "engines": engines}
+        try:
+            import kcs_battle
+            body = kcs_battle.enrich_snapshot(body, war.war_id)
+        except Exception:
+            log.exception("kcs battle snapshot failed")
+        try:
+            body["your_side"] = guard.store.roster_status(war.war_id, int(session.player_id)).side
+        except Exception:
+            log.exception("kcs side snapshot failed")
+        return body
     except Exception:
         log.exception("kcs snapshot failed")
         return None
