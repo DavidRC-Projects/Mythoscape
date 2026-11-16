@@ -52,7 +52,7 @@ TOUR = (
      "After Miriam's rats, the Crypt behind the bank (The Depths) is your first dungeon. "
      "Tidehollow by the harbour is later."),
     ("Skills: Tab — Charisma grows with talk and quests; Etiquette with work, fees, and tribute to the Crown. Bank: B near a booth. Outfits (Mae) swap off armour into your bag — nothing is lost.",
-     "Where next: Elder Miriam NW cottage, then Lira by the well and Elena to the east. "
+     "Where next: Elder Miriam east of Outfitters, then Lira by the well and Elena to the east. "
      "Come back any time for this reminder."),
 )
 

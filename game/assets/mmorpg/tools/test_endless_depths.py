@@ -67,8 +67,8 @@ def test_entrance_village_landmark():
     assert void["dungeon_id"] == "sanctum"
 
     spot = next(s for s in INTERACTABLES if s.get("id") == "endless_depths_mouth")
-    assert (spot["x"], spot["y"]) == ED.MOUTH == (11, 21)
-    assert spot["stand"] == list(ED.STAND) == [11, 23]
+    assert (spot["x"], spot["y"]) == ED.MOUTH == (15, 9)
+    assert spot["stand"] == list(ED.STAND) == [15, 11]
     assert spot["dungeon_id"] == "endless_depths"
     assert spot.get("pack") == "endless_depths"
     assert is_walkable(W.grid, *ED.MOUTH)
@@ -76,17 +76,18 @@ def test_entrance_village_landmark():
 
     from content import NPCS, BUILDINGS
     guide = next(n for n in NPCS if n.get("id") == "endless_chronicler")
-    assert (guide["x"], guide["y"]) == (13, 23)
+    assert (guide["x"], guide["y"]) == (17, 11)
     assert is_walkable(W.grid, guide["x"], guide["y"])
     shell = next(b for b in BUILDINGS if b.get("id") == "endless_depths")
     assert shell["x0"] <= ED.MOUTH[0] <= shell["x1"]
     assert shell["y0"] <= ED.MOUTH[1] <= shell["y1"]
-    # Not overlapping Elder Hall after the compact-layout slide.
+    # Elder's Hall sits east of Outfitters — far from the NW Endless mouth.
     elder = next(b for b in BUILDINGS if b.get("id") == "cottage_nw")
-    assert shell["y0"] > elder["y1"] or shell["x1"] < elder["x0"] or shell["x0"] > elder["x1"]
-    # Castle Realm portal sits south of Endless so both fit on the west fringe.
+    assert elder["x0"] >= 70 and elder["y0"] >= 60
+    assert shell["x1"] < elder["x0"] or shell["y1"] < elder["y0"] or shell["x0"] > elder["x1"]
+    # Castle Realm portal is south of Outfitters (not on the Endless fringe).
     portal = next(s for s in INTERACTABLES if s.get("id") == "castle_realm_portal")
-    assert portal["y"] >= ED.MOUTH[1] + 5
+    assert (portal["x"], portal["y"]) == (52, 91)
     pack = os.path.join(ROOT, "client", "assets", "dungeons", "front34", "endless_depths_512.png")
     assert os.path.isfile(pack)
     atlas = os.path.join(ROOT, "client", "assets", "map_atlas", "places", "endless.jpg")

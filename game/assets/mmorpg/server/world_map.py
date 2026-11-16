@@ -316,8 +316,8 @@ def _generate_base_world():
     # Spacious village ring around spawn (28,24) / well (32,22).
     # Shells match buildings_v2._OLD_SHELL (v2 stamp grows to pack art).
     # Plaza ~x20–48, y14–30 stays open so roofs cannot cover the hub.
-    # NW cottage (Elder Miriam) — door (14, 13)
-    _building(8, 3, 25, 13, door_x=14)
+    # Elder's Hall — east of Outfitters (door 77, 80; apron 77, 81).
+    _building(71, 70, 88, 81, door_x=77)
     # NE shop (Shopkeeper Joe) — door (42, 13)
     _building(37, 3, 49, 13, door_x=42)
     # SW inn (Innkeeper Sarah) — door (14, 42)
@@ -342,8 +342,9 @@ def _generate_base_world():
     door_aprons = (
         (14, 14), (42, 14), (14, 43), (56, 65),
         (44, 34), (70, 53), (88, 53), (56, 85),
-        (9, 28), (9, 29), (8, 28), (10, 28),  # Castle Realm portal apron (south of Endless)
-        (11, 22), (11, 23), (10, 23), (12, 23),  # Endless Depths stand apron
+        (52, 92), (52, 93), (51, 92), (53, 92),  # Castle Realm portal apron (south of Outfitters)
+        (15, 10), (15, 11), (14, 11), (16, 11),  # Endless Depths stand apron
+        (77, 81), (76, 81), (78, 81), (77, 82),  # Elder's Hall door apron
     )
     for cx, cy in door_aprons:
         for ox in (-1, 0, 1):
@@ -863,7 +864,22 @@ def _generate_base_world():
     vale_ring.apply(grid, _BUILDING_FOOTPRINTS, WALL)
     # Last: choppable trees on the finished village meadows (HD art via hd_trees).
     _place_village_starter_trees(grid)
+    # Re-clear so starter trees never land on the Endless mouth apron.
+    _clear_trees_near_endless(grid)
     return grid
+
+
+def _clear_trees_near_endless(grid, radius=12):
+    """Keep the Endless Depths mouth free of woodcutting trunks and canopies.
+
+    The pack entrance is several tiles wide/tall, so trunks just outside a
+    small radius still paint over the skull façade.
+    """
+    mx, my = ENDLESS_MOUTH
+    for ay in range(my - radius, my + radius + 1):
+        for ax in range(mx - radius, mx + radius + 1):
+            if 0 <= ay < HEIGHT and 0 <= ax < WIDTH and grid[ay][ax] in TREE_TILES:
+                grid[ay][ax] = GRASS
 
 
 def _place_village_starter_trees(grid, count=18, gap=4):
@@ -883,6 +899,9 @@ def _place_village_starter_trees(grid, count=18, gap=4):
             if grid[y][x] != GRASS:
                 continue
             if plaza[0] <= x <= plaza[2] and plaza[1] <= y <= plaza[3]:
+                continue
+            # Keep clear of Endless Depths mouth / Chronicler apron (wide pack art).
+            if max(abs(x - ENDLESS_MOUTH[0]), abs(y - ENDLESS_MOUTH[1])) <= 12:
                 continue
             if any(
                 a - 2 <= x <= c + 2 and b - 2 <= y <= d + 2
@@ -910,6 +929,8 @@ def _place_village_starter_trees(grid, count=18, gap=4):
     def _try(x, y, tile=TREE):
         if not (0 <= y < HEIGHT and 0 <= x < WIDTH) or grid[y][x] != GRASS:
             return False
+        if max(abs(x - ENDLESS_MOUTH[0]), abs(y - ENDLESS_MOUTH[1])) <= 12:
+            return False
         if any(max(abs(px - x), abs(py - y)) < gap for px, py in placed):
             return False
         if any(
@@ -926,7 +947,7 @@ def _place_village_starter_trees(grid, count=18, gap=4):
     # Guaranteed short walk from spawn — clear of Endless NW + castle portal roads.
     for sx, sy in (
         (26, 33), (17, 26), (30, 36), (36, 36), (40, 36),
-        (29, 11), (33, 11), (42, 38), (48, 36), (52, 36),
+        (42, 38), (48, 36), (52, 36), (54, 40), (22, 36),
     ):
         if len(placed) >= count:
             break
@@ -943,7 +964,8 @@ def _place_village_starter_trees(grid, count=18, gap=4):
 # Building footprints — keep in sync with content.BUILDINGS (avoid import cycle)
 _BUILDING_FOOTPRINTS = [
     # spacious village ring (plaza clear around spawn/well)
-    (8, 3, 25, 13), (37, 3, 49, 13), (8, 30, 23, 42), (51, 54, 65, 64),
+    # Elder's Hall — east of Outfitters (door 77,80 / apron 77,81)
+    (71, 70, 88, 81), (37, 3, 49, 13), (8, 30, 23, 42), (51, 54, 65, 64),
     (38, 25, 50, 33), (80, 38, 96, 52), (64, 41, 79, 52),
     (50, 74, 63, 84),  # outfitters
     (91, 84, 99, 88),  # estate office — east of Outfitters (door 95, 88)
@@ -962,9 +984,8 @@ _BUILDING_FOOTPRINTS = [
     (200, 8, 208, 16),
     # crypt graveyard east of the plaza
     (52, 4, 74, 20),
-    # Endless Depths — village NW (west of plaza, north of Castle Realm portal)
-    # y0=16 keeps the shell out of the Elder Hall compact-layout capture box.
-    (5, 16, 17, 21),
+    # Endless Depths — NW cliff fringe
+    (11, 4, 20, 9),
 ]
 
 
@@ -1568,41 +1589,47 @@ def lay_void_sanctum_approach(grid):
             grid[my][ax] = PATH
 
 
-ENDLESS_MOUTH = (11, 21)
-ENDLESS_RETURN = (11, 23)
+ENDLESS_MOUTH = (15, 9)
+ENDLESS_RETURN = (15, 11)
 
 
 def lay_endless_depths_approach(grid):
-    """Dark-stone shell + apron on the village NW fringe (west of the plaza).
+    """Dark-stone shell + apron tucked into the village NW cliff rocks.
 
     Safe to call after capture_and_hide — overwrites GRASS/FLOOR/trees.
     """
     mx, my = ENDLESS_MOUTH
     # Shell matches content.BUILDINGS endless_depths (south door on mouth row).
-    _rect(grid, 5, 16, 17, 21, WALL)
-    _rect(grid, 6, 17, 16, 20, FLOOR)
-    for x in range(5, 18):
-        grid[21][x] = WALL
+    _rect(grid, 11, 4, 20, 9, WALL)
+    _rect(grid, 12, 5, 19, 8, FLOOR)
+    for x in range(11, 21):
+        grid[9][x] = WALL
     for ax in (mx - 1, mx, mx + 1):
         if 0 <= ax < WIDTH:
             grid[my][ax] = PATH
-    # South apron + stand tiles.
+    # South apron + stand tiles (between mouth and Elder / plaza roads).
     for ax in range(mx - 2, mx + 3):
-        for ay in (22, 23, 24):
+        for ay in (10, 11, 12):
             if 0 <= ax < WIDTH and 0 <= ay < HEIGHT and grid[ay][ax] not in (WATER,):
                 grid[ay][ax] = PATH
-    # Spur east into the plaza / wishing-well road, and south toward the castle portal.
+    # Clear trees/bushes footprint: no TREE tiles in the mouth apron.
+    for ax in range(mx - 6, mx + 7):
+        for ay in range(my - 6, my + 5):
+            if 0 <= ay < HEIGHT and 0 <= ax < WIDTH and grid[ay][ax] in TREE_TILES:
+                grid[ay][ax] = GRASS
+    # Spur east into the plaza, and south toward the castle portal / west hub.
     for seg in (
-        (mx - 1, 23, 28, 23),
-        (mx - 1, 24, 28, 24),
-        (mx - 1, 22, mx + 1, my),
-        (8, 24, 10, 28),
-        (9, 24, 11, 28),
+        (mx - 1, 11, 28, 11),
+        (mx - 1, 12, 20, 12),
+        (mx - 1, 10, mx + 1, my),
+        (14, 12, 16, 28),
+        (15, 12, 17, 28),
+        (17, 12, 19, 28),
     ):
         _stamp_road(grid, *seg, also=(FLOOR,))
-    # Keep Chronicler tile walkable.
-    if 0 <= 13 < WIDTH and 0 <= 23 < HEIGHT:
-        grid[23][13] = PATH
+    # Keep Chronicler tile walkable (east of the stand).
+    if 0 <= 17 < WIDTH and 0 <= 11 < HEIGHT:
+        grid[11][17] = PATH
 
 
 def _path_spur_to_network(grid, ax, ay, ignore=None, limit=48):
@@ -1734,11 +1761,12 @@ def _lay_wayfinder_roads(grid):
         # Spacious village spokes around spawn (28,24) / well (32,22).
         (12, 24, 80, 24),       # east–west hub through plaza
         (28, 12, 28, 51),       # north–south hub (stops north of Fairy thicket)
-        (12, 14, 44, 14),       # north lane: Elder ↔ Store aprons
+        (12, 14, 44, 14),       # north lane: west fringe ↔ Store aprons
         (12, 43, 80, 43),       # south lane from Inn
         (28, 34, 45, 34),       # plaza → Bank door (south of shell, not through it)
-        (9, 28, 28, 28),        # Castle Realm portal → west hub
-        (11, 21, 28, 23),       # Endless Depths mouth → plaza
+        (52, 85, 56, 93),       # Outfitters south → King's Realm portal
+        (48, 91, 56, 92),       # King's Realm portal apron
+        (15, 9, 28, 11),        # Endless Depths mouth → plaza
         (56, 43, 56, 53),       # plaza south (stops north of farm)
         (56, 53, 67, 53),       # jog east around the farm
         (67, 24, 67, 53),       # east spur: hub → Pet / Smithy row
@@ -1748,6 +1776,8 @@ def _lay_wayfinder_roads(grid):
         (56, 65, 56, 73),       # farm door → north of Outfitters
         (56, 65, 88, 65),       # farm / smithy east link
         (56, 85, 56, 86),       # Outfitters door apron
+        (56, 81, 77, 81),       # Outfitters row → Elder's Hall apron
+        (77, 81, 77, 82),       # Elder door apron south
         # Out of village east toward forest / lake / mad scientist.
         (84, 24, 130, 24),
         (95, 85, 95, 89),       # estate office apron (east of Outfitters)

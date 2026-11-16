@@ -56,7 +56,7 @@ On the login screen, click **Hiscores** (or press **F3**) for top players per sk
 
 ## New player tips
 1. Press **H** for the full controls list.
-2. **Elder Miriam** (NW cottage) — starter quest.
+2. **Elder Miriam** (Elder's Hall, east of Outfitters) — starter quest.
 3. **Fletcher Elena** (east of the village) — free bow kit (includes an **Arrow Quiver** and **Arrowtip Box**) on first talk; **B** opens her shop (scroll buy/sell lists). Click arrows to load the quiver or drop; click tips to pack the tip box. Fletching draws tips from the box automatically. Quiver holds **1000** of each arrow type.
 4. **Lira the Jeweler** (east of Joe) — common jewelry shop; buys all gems/jewelry; sells a **Gem Bag**; quest **Lira's Lost Locket** (near the wishing well).
 5. **Gareth** (smithy) — furnace **F** to smelt, anvil to smith weapons, armour, and jewelry.

@@ -1,6 +1,6 @@
 {
  "epoch": 1792856804.736866,
- "weather": "clear",
- "weather_until": 1794160688.5066507,
- "rng_salt": 773
+ "weather": "windy_clear",
+ "weather_until": 1794769823.799052,
+ "rng_salt": 1139
 }

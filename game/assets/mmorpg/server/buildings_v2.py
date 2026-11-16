@@ -13,7 +13,7 @@ import feature_flags
 # Spacious ring around spawn (28,24) / well (32,22): plaza ~x20–48, y14–30
 # stays clear so roofs cannot cover the hub or outdoor NPCs.
 _SHIFT = {
-    "cottage_nw": (7, 2),       # (7, 11) -> (14, 13)
+    "cottage_nw": (70, 69),     # (7, 11) -> (77, 80) door; apron (77, 81) east of Outfitters
     "cottage_ne": (15, 2),      # (27, 11) -> (42, 13)
     "cottage_sw": (7, 10),      # (7, 32) -> (14, 42)
     "cottage_se": (29, 32),     # (27, 32) -> (56, 64) east of Fairy Glade
@@ -48,7 +48,7 @@ _KEY = {
 
 # Shell stamped by world_map before this module runs.
 _OLD_SHELL = {
-    "cottage_nw": (8, 3, 25, 13),
+    "cottage_nw": (71, 70, 88, 81),
     "cottage_ne": (37, 3, 49, 13),
     "cottage_sw": (8, 30, 23, 42),
     "cottage_se": (51, 54, 65, 64),

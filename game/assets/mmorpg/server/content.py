@@ -2048,8 +2048,8 @@ TELEPORT_DESTINATIONS = [
     {"id": "fairy_village", "label": "Fairy Village", "blurb": "Moonstone fountain & Moonpetal Inn",
      "where": "overworld", "x": 28, "y": 66},
     {"id": "void", "label": "Void Sanctum", "blurb": "Outside the sanctum gate", "where": "overworld", "x": 205, "y": 130},
-    {"id": "endless_depths", "label": "Endless Depths", "blurb": "Village NW — west of the plaza",
-     "where": "overworld", "x": 11, "y": 23},
+    {"id": "endless_depths", "label": "Endless Depths", "blurb": "Village NW cliffs",
+     "where": "overworld", "x": 15, "y": 11},
     {"id": "stonehaven", "label": "Stonehaven", "blurb": "Beside the plaza fountain", "where": "overworld", "x": 118, "y": 75},
     {"id": "keep", "label": "Stonehaven Castle", "blurb": "The overworld keep", "where": "overworld", "x": 128, "y": 66},
     {"id": "harbour", "label": "Harbourreach", "blurb": "The docks", "where": "overworld", "x": 176, "y": 18},
@@ -2057,8 +2057,8 @@ TELEPORT_DESTINATIONS = [
     {"id": "kings_row_south", "label": "King's Row Homes", "blurb": "South-road cottages", "where": "overworld", "x": 27, "y": 151},
     {"id": "realm", "label": "King's Realm", "blurb": "The plaza", "where": "castle", "x": 150, "y": 183},
     {"id": "royal_herald", "label": "Royal Herald",
-     "blurb": "Outside the King's Castle approach (King's Realm portal)",
-     "where": "overworld", "x": 12, "y": 30},
+     "blurb": "Outside the King's Realm portal (south of Outfitters)",
+     "where": "overworld", "x": 50, "y": 92},
     {"id": "gothic", "label": "Gothic Castle", "blurb": "Outside the gate", "where": "castle", "x": 52, "y": 78},
     {"id": "king", "label": "King's Castle", "blurb": "Outside the gate", "where": "castle", "x": 152, "y": 78},
     {"id": "arena", "label": "Crownfall Arena", "blurb": "Outside the gate (barracks)",
@@ -2146,7 +2146,7 @@ NPCS = [
      ],
      "bank": True},
 
-    {"id": "elder_miriam", "name": "Elder Miriam", "x": 9, "y": 7,
+    {"id": "elder_miriam", "name": "Elder Miriam", "x": 77, "y": 75,
      "lines": [
          "Welcome. I have work if you want it — start with the rats.",
      ],
@@ -2158,7 +2158,7 @@ NPCS = [
 
     # Crownfall phase 7: the paths to the throne
     # Outside the King's Castle approach (King's Realm portal) — Seraphine walks players here.
-    {"id": "royal_herald", "name": "Royal Herald", "x": 12, "y": 30,
+    {"id": "royal_herald", "name": "Royal Herald", "x": 50, "y": 92,
      "lines": [
          "I stand outside the King's Castle approach so every traveller may learn the law.",
          "The throne is contested through the War for the Crown — guilds, a shared storehouse, "
@@ -2276,7 +2276,7 @@ NPCS = [
      ],
      "quest_ids": ["bone_and_blade", "giants_tithe", "adamant_proof"]},
 
-    {"id": "endless_chronicler", "name": "Depths Chronicler", "x": 13, "y": 23,
+    {"id": "endless_chronicler", "name": "Depths Chronicler", "x": 17, "y": 11,
      "lines": [
          "The Endless Depths — one private chamber that never ends. Foes scale every floor; themes shift as you go.",
          "Ask me how it works, or step onto the amber threshold when you are ready.",
@@ -3501,10 +3501,10 @@ TRAVEL_DESTINATIONS = [
     {"id": "void_sanctum", "kind": "place", "label": "Void Sanctum",
      "x": 205, "y": 128, "blurb": "⚠ High-level mystical dungeon (SE)"},
     {"id": "endless_depths", "kind": "place", "label": "The Endless Depths",
-     "x": 11, "y": 23, "blurb": "⚠ Endless scaled dungeon — village NW, west of the plaza",
+     "x": 15, "y": 11, "blurb": "⚠ Endless scaled dungeon — NW cliff rocks",
      "action": {"type": "ENTER_DUNGEON", "dungeon_id": "endless_depths"}},
     {"id": "quest_endless_chronicler", "kind": "place", "label": "Depths Chronicler",
-     "x": 13, "y": 23, "blurb": "Guide to The Endless Depths — by the NW mouth"},
+     "x": 17, "y": 11, "blurb": "Guide to The Endless Depths — by the NW mouth"},
     # Quest givers
     {"id": "quest_scout_bren", "kind": "place", "label": "Scout Bren",
      "x": 121, "y": 16, "blurb": "Quest: Wolves on the Pass"},
@@ -3601,8 +3601,8 @@ INTERACTABLES = [
     {"id": "smithy_anvil", "kind": "anvil", "name": "Anvil", "x": 87, "y": 6},
     {"id": "smithy_door", "kind": "door", "name": "Smithy Door", "x": 86, "y": 18,
      "enter_x": 86, "enter_y": 16, "exit_x": 86, "exit_y": 19, "building": "smithy"},
-    {"id": "cottage_nw_door", "kind": "door", "name": "Door", "x": 9, "y": 15,
-     "enter_x": 9, "enter_y": 13, "exit_x": 9, "exit_y": 16, "building": "cottage_nw"},
+    {"id": "cottage_nw_door", "kind": "door", "name": "Door", "x": 77, "y": 80,
+     "enter_x": 77, "enter_y": 78, "exit_x": 77, "exit_y": 81, "building": "cottage_nw"},
     {"id": "cottage_ne_door", "kind": "door", "name": "Door", "x": 45, "y": 15,
      "enter_x": 45, "enter_y": 13, "exit_x": 45, "exit_y": 16, "building": "cottage_ne"},
     {"id": "cottage_sw_door", "kind": "door", "name": "Door", "x": 9, "y": 47,
@@ -3650,15 +3650,15 @@ INTERACTABLES = [
      "dungeon_id": "emberdeep", "pack": "dragon_lair",
      "stand": [196, 81]},
 
-    # --- Elder's Hall (cottage_nw) floor 5–14, 5–14 ---
-    {"id": "elder_fireplace", "kind": "range", "name": "Hearth", "x": 6, "y": 5},
-    {"id": "elder_bookshelf", "kind": "bookshelf", "name": "Bookshelf", "x": 13, "y": 5},
-    {"id": "elder_table", "kind": "table", "name": "Council Table", "x": 6, "y": 10},
-    {"id": "elder_chair_a", "kind": "chair", "name": "Chair", "x": 5, "y": 10, "facing": 1},
-    {"id": "elder_chair_b", "kind": "chair", "name": "Chair", "x": 7, "y": 10, "facing": -1},
-    {"id": "elder_rug", "kind": "rug", "name": "Rug", "x": 9, "y": 9, "color": [90, 50, 110]},
-    {"id": "elder_candle", "kind": "candle", "name": "Candle", "x": 13, "y": 10},
-    {"id": "elder_chest", "kind": "chest", "name": "Chest", "x": 13, "y": 12},
+    # --- Elder's Hall (cottage_nw) floor 73–86, 72–78 (east of Outfitters) ---
+    {"id": "elder_fireplace", "kind": "range", "name": "Hearth", "x": 74, "y": 73},
+    {"id": "elder_bookshelf", "kind": "bookshelf", "name": "Bookshelf", "x": 83, "y": 73},
+    {"id": "elder_table", "kind": "table", "name": "Council Table", "x": 74, "y": 76},
+    {"id": "elder_chair_a", "kind": "chair", "name": "Chair", "x": 73, "y": 76, "facing": 1},
+    {"id": "elder_chair_b", "kind": "chair", "name": "Chair", "x": 75, "y": 76, "facing": -1},
+    {"id": "elder_rug", "kind": "rug", "name": "Rug", "x": 77, "y": 75, "color": [90, 50, 110]},
+    {"id": "elder_candle", "kind": "candle", "name": "Candle", "x": 83, "y": 76},
+    {"id": "elder_chest", "kind": "chest", "name": "Chest", "x": 83, "y": 77},
 
     # --- General Store (cottage_ne) floor 41–50, 5–14 ---
     {"id": "shop_counter", "kind": "counter", "name": "Shop Counter", "x": 45, "y": 6},
@@ -3828,13 +3828,11 @@ INTERACTABLES = [
     {"id": "void_candle_b", "kind": "candle", "name": "Void Candle", "x": 209, "y": 127},
     {"id": "void_altar", "kind": "bookshelf", "name": "Forbidden Tomes", "x": 200, "y": 125},
 
-    # Endless Depths — village NW (west of the plaza).
+    # Endless Depths — NW cliff rocks.
     {"id": "endless_depths_mouth", "kind": "dungeon_entrance", "name": "The Endless Depths",
-     "x": 11, "y": 21, "stand": [11, 23], "dungeon_id": "endless_depths",
+     "x": 15, "y": 9, "stand": [15, 11], "dungeon_id": "endless_depths",
      "warning": True, "pack": "endless_depths",
      "blurb": "One chamber forever — scaled foes, new themes each floor."},
-    {"id": "endless_warning", "kind": "warning_sign", "name": "⚠ ENDLESS — Floors never stop",
-     "x": 8, "y": 23},
 
 ]
 
@@ -3848,8 +3846,8 @@ BUILDINGS = [
     {
         "id": "cottage_nw", "name": "Elder's Hall", "kind": "house", "style": 0,
         "material": "wood",
-        "x0": 4, "y0": 4, "x1": 15, "y1": 15,
-        "floor_x0": 5, "floor_y0": 5, "floor_x1": 14, "floor_y1": 14,
+        "x0": 72, "y0": 71, "x1": 87, "y1": 80,
+        "floor_x0": 73, "floor_y0": 72, "floor_x1": 86, "floor_y1": 78,
     },
     {
         "id": "cottage_ne", "name": "General Store", "kind": "house", "style": 0,
@@ -3944,8 +3942,8 @@ BUILDINGS = [
     {
         "id": "endless_depths", "name": "The Endless Depths", "kind": "crypt", "style": 1,
         "material": "dark_stone",
-        "x0": 5, "y0": 16, "x1": 17, "y1": 21,
-        "floor_x0": 6, "floor_y0": 17, "floor_x1": 16, "floor_y1": 20,
+        "x0": 11, "y0": 4, "x1": 20, "y1": 9,
+        "floor_x0": 12, "floor_y0": 5, "floor_x1": 19, "floor_y1": 8,
     },
 ]
 
@@ -4704,7 +4702,7 @@ def _apply_village_compact_layout():
             ent["x"], ent["y"] = pin
 
     door_pins = {
-        "cottage_nw_door": (14, 13, 14, 11, 14, 14),
+        "cottage_nw_door": (77, 80, 77, 78, 77, 81),
         "cottage_ne_door": (42, 13, 42, 11, 42, 14),
         "cottage_sw_door": (14, 42, 14, 40, 14, 43),
         "cottage_se_door": (56, 64, 56, 62, 56, 65),
@@ -4724,10 +4722,8 @@ def _apply_village_compact_layout():
 
     for ent in INTERACTABLES:
         if ent.get("id") == "endless_depths_mouth":
-            ent["x"], ent["y"] = 11, 21
-            ent["stand"] = [11, 23]
-        elif ent.get("id") == "endless_warning":
-            ent["x"], ent["y"] = 8, 23
+            ent["x"], ent["y"] = 15, 9
+            ent["stand"] = [15, 11]
 
     travel_pins = {
         "bank": (44, 34),
@@ -4743,8 +4739,8 @@ def _apply_village_compact_layout():
         # Outside the smithy capture box — pin so compact layout cannot drag them.
         "estate_agent": (95, 89),
         "kings_row_homes": (27, 151),
-        "endless_depths": (11, 23),
-        "quest_endless_chronicler": (13, 23),
+        "endless_depths": (15, 11),
+        "quest_endless_chronicler": (17, 11),
     }
     for ent in TRAVEL_DESTINATIONS:
         if ent.get("id") in travel_pins:
@@ -4758,7 +4754,7 @@ def _apply_village_compact_layout():
             # Door apron of Estate Agent Mira (east of Outfitters).
             ent["x"], ent["y"] = 95, 89
         elif ent.get("id") == "endless_depths":
-            ent["x"], ent["y"] = 11, 23
+            ent["x"], ent["y"] = 15, 11
         elif ent.get("id") == "kings_row_south":
             # South meadow housing gate — walkable path by the cottages.
             ent["x"], ent["y"] = 27, 151
@@ -4775,10 +4771,10 @@ def _apply_village_compact_layout():
                 "floor_x0": 51, "floor_y0": 75, "floor_x1": 62, "floor_y1": 83,
             })
         elif b.get("id") == "endless_depths":
-            # Pin after Elder Hall slide so the NW mouth stays put.
+            # Pin into the NW cliff rocks.
             b.update({
-                "x0": 5, "y0": 16, "x1": 17, "y1": 21,
-                "floor_x0": 6, "floor_y0": 17, "floor_x1": 16, "floor_y1": 20,
+                "x0": 11, "y0": 4, "x1": 20, "y1": 9,
+                "floor_x0": 12, "floor_y0": 5, "floor_x1": 19, "floor_y1": 8,
             })
 
 
@@ -4912,7 +4908,7 @@ def _pin_visible_npcs():
     fairy NPCs stay spread out.
     """
     pins = {
-        WIZARD_ID: (20, 18),
+        WIZARD_ID: (24, 24),
         "warden_tamsin": (36, 22),
         "village_kid_timmy": (44, 40),
         "village_idiot_bob": (26, 27),
@@ -4932,11 +4928,12 @@ def _pin_visible_npcs():
         "tumbleroot": (38, 72),
         "pip_dewdrop": (32, 82),
         "dungeon_hermit": (44, 86),
-        "endless_chronicler": (13, 23),
-        "royal_herald": (12, 30),
-        # Keep plaza knights clear of the Endless Depths shell.
-        "mythos_knight_1": (22, 18),
-        "mythos_knight_2": (24, 18),
+        "endless_chronicler": (17, 11),
+        "royal_herald": (50, 92),
+        # Plaza knights — west plaza (Elder Hall moved east of Outfitters).
+        "mythos_knight_1": (24, 22),
+        "mythos_knight_2": (26, 22),
+        "elder_miriam": (77, 75),
         # Lake shore — must stay clear of the smithy shell after buildings_v2.
         "old_fisherman_pete": (94, 16),
         # Farmhouse south apron (58,66 became Fairy Village WALL).
@@ -4962,12 +4959,13 @@ def _castle_realm_portal():
     import feature_flags
     if not feature_flags.USE_CASTLE_REALM:
         return
+    # South of Outfitters, west of the south-road corridor (player stand ~58,93).
     INTERACTABLES.append({
         "id": "castle_realm_portal",
         "kind": "dungeon_entrance",
         "name": "King's Realm",
-        "x": 9,
-        "y": 28,
+        "x": 52,
+        "y": 91,
         "dungeon_id": "castle_realm",
         "action": {"type": "ENTER_DUNGEON", "dungeon_id": "castle_realm"},
     })
@@ -4975,18 +4973,18 @@ def _castle_realm_portal():
         "id": "castle_realm",
         "kind": "place",
         "label": "King's Realm",
-        "x": 9,
-        "y": 28,
-        "blurb": "Gold portal south-west of the plaza (below Endless Depths)",
+        "x": 52,
+        "y": 91,
+        "blurb": "Gold portal south of Outfitters",
         "action": {"type": "ENTER_DUNGEON", "dungeon_id": "castle_realm"},
     })
     TRAVEL_DESTINATIONS.append({
         "id": "royal_herald",
         "kind": "place",
         "label": "Royal Herald",
-        "x": 12,
-        "y": 30,
-        "blurb": "Outside the King's Castle approach — War for the Crown guide",
+        "x": 50,
+        "y": 92,
+        "blurb": "Outside the King's Realm portal — War for the Crown guide",
     })
 
 

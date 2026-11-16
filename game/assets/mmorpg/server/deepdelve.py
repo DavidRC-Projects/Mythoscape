@@ -278,13 +278,11 @@ async def _teleport(session, xy, level_change=None):
     await srv.send(session.ws, "PLAYER_UPDATE", player=session.full_state())
 
 
-async def _go_down(session, floor, refuse_xy):
-    """Down to mine level `floor` (2 or 3): gate, then gauntlet once, then straight there."""
-    need = L.FLOOR_GATE[floor]
-    if session.level("mining") < need:
-        await say(session, "gate", need=need, floor=L.FLOOR_NAMES[floor])
-        await _teleport(session, refuse_xy)
-        return True
+async def _go_down(session, floor, _refuse_xy=None):
+    """Down to mine level `floor` (2 or 3): gauntlet once, then straight there.
+
+    Entry is open at any Mining level — ore nodes still enforce their own level_req.
+    """
     if unlocked(session, floor):
         await _teleport(session, L.CHAMBER_ARRIVE[floor], level_change=floor)
         await say(session, "down", floor=L.LEVEL_NAMES[floor])
@@ -303,10 +301,7 @@ async def on_overworld_step(session):
         return await _go_down(session, 3, L.SHAFT_DOWN_STAND)
     for floor, pad in L.LIFT_PADS.items():
         if xy == tuple(pad):
-            need = L.FLOOR_GATE[floor]
-            if session.level("mining") < need:
-                await say(session, "gate", need=need, floor=L.FLOOR_NAMES[floor])
-                return False
+            # Entry open at any Mining level; gathering still checks ore level_req.
             if unlocked(session, floor):
                 await _teleport(session, L.CHAMBER_ARRIVE[floor])
             else:

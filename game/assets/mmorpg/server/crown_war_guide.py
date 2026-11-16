@@ -20,7 +20,7 @@ CROWN_GUIDE_FINISHED = (CROWN_GUIDE_DONE, CROWN_GUIDE_SKIPPED)
 
 # Must match content.NPCS royal_herald overworld stand (outside King's Realm portal).
 HERALD_ID = "royal_herald"
-HERALD_OUTSIDE = (12, 21)
+HERALD_OUTSIDE = (50, 92)
 
 GUIDE_OPTION = {"id": "siege_guide", "label": "How the War for the Crown works"}
 

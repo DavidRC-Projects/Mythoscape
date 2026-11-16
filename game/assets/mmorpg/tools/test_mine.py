@@ -224,13 +224,8 @@ def test_server_flow():
         assert srv.WORLD.resource_nodes[(rx, ry)]["type"] == t, (rx, ry, t)
     tag = int(time.time() * 1000) % 10**7
     _g, s = _session("mn%d" % tag)
-    # Fresh miner: the floor-1 cage refuses.
+    # Fresh miner (any Mining level): floor-1 cage starts the Coal Seams gauntlet.
     s.x, s.y = L.LIFT_PADS[1]
-    moved, sent = _run(D.on_overworld_step(s))
-    assert not moved and not s.dungeon and "scratch" in _texts(sent)
-    import combat
-    s.xp["mining"] = combat.xp_for_level(60)
-    assert s.level("mining") >= 46, s.level("mining")
     moved, sent = _run(D.on_overworld_step(s))
     assert moved and D.here(s) and D.state(s)["kind"] == "gauntlet"
     assert any(t == "DUNGEON_ENTER" for t, _ in sent)
@@ -315,7 +310,10 @@ def test_level_map():
     assert L.LIFT_PADS[1] in top
     for xy, back in L.TUNNEL_DOWN.items():
         assert w(*xy) and back in top, (xy, back)
-    assert _adj(top, (65, 105)) and _adj(top, (65, 106))
+    # Mouth edges stay approachable from yard (north) and B0 (south).
+    assert _adj(top, (67, 103)) and _adj(top, (67, 108))
+    # Whole painted ramp is the way down (not only the old mid rows).
+    assert (67, 104) in trig and (67, 107) in trig and (67, 108) in trig
     ch2 = _reach(w, L.CHAMBER_ARRIVE[2])
     assert L.SHAFT_DOWN in ch2 and L.SHAFT_DOWN_STAND in ch2 and L.LIFT_UP[2] in ch2
     assert not (ch2 & top)
@@ -328,17 +326,9 @@ def test_level_travel():
     """Down the shaft to Level 2, down the ladder to Level 3, and back up each way."""
     if "srv" not in STATE:
         _server()
-    import combat
     tag = int(time.time() * 1000) % 10**7
     _g, s = _session("lv%d" % tag)
-    # Too low: refused at the shaft, put back on the side you came from.
-    for xy, back in ((65, 105), L.TUNNEL_TOP_STAND), ((69, 106), L.TUNNEL_BOTTOM_STAND):
-        s.x, s.y = xy
-        moved, sent = _run(D.on_overworld_step(s))
-        assert moved and not s.dungeon and (s.x, s.y) == back, (xy, s.x, s.y)
-        assert "Mining 40" in _texts(sent)
-    s.xp["mining"] = combat.xp_for_level(42)
-    # First time down: the Level 2 gauntlet (wraiths), then Level 2.
+    # First time down (any Mining level): Level 2 gauntlet (wraiths), then Level 2.
     s.x, s.y = 67, 105
     moved, _ = _run(D.on_overworld_step(s))
     assert moved and D.here(s) and D.state(s)["mine_floor"] == 2
@@ -346,18 +336,14 @@ def test_level_travel():
     s.x, s.y = D.G_CAGE
     _run(D.on_step(s))
     assert not s.dungeon and (s.x, s.y) == L.CHAMBER_ARRIVE[2] and L.level_at(s.x, s.y) == 2
-    # Up again, then straight down (no gauntlet the second time).
+    # Up again, then straight down from the south mouth (no gauntlet the second time).
     s.x, s.y = L.LIFT_UP[2]
     _run(D.on_overworld_step(s))
     assert (s.x, s.y) == L.TUNNEL_BOTTOM_STAND and L.level_at(s.x, s.y) == 1
-    s.x, s.y = 66, 106
+    s.x, s.y = 67, 107
     _run(D.on_overworld_step(s))
     assert not s.dungeon and (s.x, s.y) == L.CHAMBER_ARRIVE[2]
-    # Level 2 -> Level 3 ladder: Mining 46 gate.
-    s.x, s.y = L.SHAFT_DOWN
-    moved, sent = _run(D.on_overworld_step(s))
-    assert moved and not s.dungeon and (s.x, s.y) == L.SHAFT_DOWN_STAND and "Mining 46" in _texts(sent)
-    s.xp["mining"] = combat.xp_for_level(50)
+    # Level 2 -> Level 3 ladder (no Mining gate on entry).
     s.x, s.y = L.SHAFT_DOWN
     _run(D.on_overworld_step(s))
     assert D.here(s) and D.state(s)["mine_floor"] == 3
@@ -406,7 +392,7 @@ def main():
     check("ore values match mining table", test_ore_values)
     check("map: sealed chambers, reach, two-way collision", test_map_and_collision)
     check("gauntlet + arena tiles", test_gauntlet_tiles)
-    check("server: gate, gauntlet unlock, lifts, heart vein", test_server_flow)
+    check("server: gauntlet unlock, lifts, heart vein", test_server_flow)
     check("v2: ore locations by level", test_ore_locations)
     check("v2: level map (west slope, shaft, ladder)", test_level_map)
     check("v2: travel down and up between levels", test_level_travel)

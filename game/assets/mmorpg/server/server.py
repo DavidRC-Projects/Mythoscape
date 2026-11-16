@@ -1616,7 +1616,7 @@ class World:
         self.tick_count = 0
 
     def near_fire(self, session):
-        for (fx, fy) in self.fires:
+        for (fx, fy) in fires_visible_to(session).items():
             if adjacent_or_same(session.x, session.y, fx, fy):
                 return True
         return False
@@ -1868,7 +1868,7 @@ class World:
         self.db.save_player_stats(session.player_id, **{f"{skill}_xp": session.xp[skill]})
         return before, after
 
-    def drop_loot(self, x, y, drops):
+    def drop_loot(self, x, y, drops, session=None):
         dropped = []
         for item_id, chance, (lo, hi) in drops:
             if random.random() > chance:
@@ -1876,6 +1876,8 @@ class World:
             # Tuple/list = pick one random item from the pool (e.g. 1/10 gear table)
             if isinstance(item_id, (list, tuple)):
                 item_id = random.choice(item_id)
+            if not item_may_monster_drop(session, item_id):
+                continue
             qty = random.randint(lo, hi)
             dropped.append(_ground_drop(item_id, qty))
         if dropped:
@@ -2671,6 +2673,76 @@ def shop_sell_rate(shop):
 def item_is_tradeable(item_id):
     item = ITEMS.get(item_id) or {}
     return item.get("tradeable", True)
+
+
+def session_dungeon_bound_tag(session):
+    """Map the player's current instance to an ITEMS dungeon_bound home tag.
+
+    Void keys use sanctum_v2; Depths keys use depths_v2. Endless Depths and the
+    overworld have no tag, so foreign dungeon keys never auto-drop there.
+    """
+    d = getattr(session, "dungeon", None) or {}
+    if not d:
+        return None
+    if d.get("v2") == "depths" or d.get("id") == "depths":
+        return "depths_v2"
+    if d.get("id") == "sanctum" or d.get("v2") is True:
+        return "sanctum_v2"
+    return None
+
+
+def item_may_monster_drop(session, item_id):
+    """Dungeon keys only auto-drop inside the dungeon they belong to."""
+    item = ITEMS.get(item_id) or {}
+    bound = item.get("dungeon_bound")
+    if item.get("type") == "key" or bound:
+        if not bound:
+            return False
+        return session_dungeon_bound_tag(session) == bound
+    return True
+
+
+def item_is_droppable(item_id):
+    """Player may throw keys away; other uniques / untradeables stay locked."""
+    item = ITEMS.get(item_id) or {}
+    # Dungeon keys (Void / Depths / Petaldeep, etc.) — always discardable.
+    if item.get("type") == "key" or item.get("dungeon_bound"):
+        return True
+    if item.get("unique"):
+        return False
+    return item.get("tradeable", True)
+
+
+def fires_visible_to(session):
+    """Active campfires in the player's current space (overworld or instance)."""
+    if session.dungeon:
+        raw = (session.dungeon.get("fires") or {})
+        out = {}
+        for key, until in list(raw.items()):
+            try:
+                if isinstance(key, tuple):
+                    out[(int(key[0]), int(key[1]))] = int(until)
+                else:
+                    x, y = str(key).split(",")
+                    out[(int(x), int(y))] = int(until)
+            except (TypeError, ValueError):
+                continue
+        return out
+    return dict(WORLD.fires)
+
+
+def _place_campfire(session, x, y, until_tick):
+    key = (int(x), int(y))
+    if session.dungeon:
+        session.dungeon.setdefault("fires", {})[key] = int(until_tick)
+        return
+    WORLD.fires[key] = int(until_tick)
+
+
+def _has_campfire_at(session, x, y):
+    key = (int(x), int(y))
+    fires = fires_visible_to(session)
+    return key in fires
 
 
 def item_is_bankable(item_id):
@@ -3509,6 +3581,9 @@ async def _grant_monster_table(session, monster):
             continue
         if isinstance(item_id, (list, tuple)):
             item_id = random.choice(item_id)
+        # Keys stay in their home dungeon (Endless Depths must not inherit Void/Depths keys).
+        if not item_may_monster_drop(session, item_id):
+            continue
         lo, hi = bounds
         qty = random.randint(lo, hi)
         if item_id == "coins":
@@ -5782,7 +5857,9 @@ async def resolve_magic_kill(session, monster, events, dungeon_tag=None):
     if session.in_combat_with == ("monster", monster.id):
         session.in_combat_with = None
     if not session.dungeon:
-        drops = WORLD.drop_loot(monster.x, monster.y, drops_for_kill(monster.type))
+        drops = WORLD.drop_loot(
+            monster.x, monster.y, drops_for_kill(monster.type), session=session,
+        )
         events.append({"type": "DEATH", "data": {"entity_id": monster.id, "entity_kind": "monster"}})
         if drops:
             events.append({"type": "LOOT_DROPPED", "data": {"x": monster.x, "y": monster.y, "items": drops}})
@@ -6074,15 +6151,15 @@ async def light_fire(session, log_item_id):
     if session.available_craft_input(log_item_id) < 1:
         await send(session.ws, "ERROR", message=f"You need {ITEMS[log_item_id]['name']}.")
         return
-    if not is_walkable(WORLD.grid, session.x, session.y):
+    # Use the same walkability as movement so dungeon floors (Endless Depths, etc.) work.
+    if not _pet_walkable(session, int(session.x), int(session.y)):
         await send(session.ws, "ERROR", message="You can't light a fire here.")
         return
-    key = (session.x, session.y)
-    if key in WORLD.fires:
+    if _has_campfire_at(session, session.x, session.y):
         await send(session.ws, "ERROR", message="There's already a fire here.")
         return
     session.consume_craft_input(log_item_id, 1)
-    WORLD.fires[key] = WORLD.tick_count + info["duration"]
+    _place_campfire(session, session.x, session.y, WORLD.tick_count + info["duration"])
     await send(session.ws, "PLAYER_UPDATE", player=session.full_state())
     await send(
         session.ws, "CHAT_MSG",
@@ -10091,7 +10168,7 @@ async def handle_drop(session, msg):
         return
     qty = min(qty, entry["qty"])
     item_id = entry["item_id"]
-    if not item_is_tradeable(item_id):
+    if not item_is_droppable(item_id):
         if (ITEMS.get(item_id) or {}).get("unique"):
             await send(session.ws, "ERROR",
                        message=f"The {ITEMS[item_id]['name']} is yours for good — you can't drop or trade it.")
@@ -11222,7 +11299,7 @@ async def game_loop():
                         __import__("void_v2").ground_public(d) if d.get("v2") else {}
                     ),
                     "resources": {},
-                    "fires": [],
+                    "fires": [f"{x},{y}" for (x, y) in fires_visible_to(session)],
                     "dungeon": dungeon_hud,
                 })
             else:
@@ -11245,6 +11322,21 @@ def process_fires():
     expired = [k for k, until in WORLD.fires.items() if WORLD.tick_count >= until]
     for k in expired:
         del WORLD.fires[k]
+    # Instance campfires (Endless Depths / explore dungeons) share the same clock.
+    for session in list(WORLD.sessions.values()):
+        d = getattr(session, "dungeon", None) or {}
+        fires = d.get("fires")
+        if not isinstance(fires, dict) or not fires:
+            continue
+        gone = []
+        for key, until in list(fires.items()):
+            try:
+                if WORLD.tick_count >= int(until):
+                    gone.append(key)
+            except (TypeError, ValueError):
+                gone.append(key)
+        for key in gone:
+            fires.pop(key, None)
 
 
 async def process_stat_boosts():
@@ -11519,7 +11611,9 @@ async def process_combat(events):
                         if session.in_combat_with == ("monster", primary.id):
                             session.in_combat_with = None
                         if not session.dungeon:
-                            drops = WORLD.drop_loot(primary.x, primary.y, drops_for_kill(primary.type))
+                            drops = WORLD.drop_loot(
+                                primary.x, primary.y, drops_for_kill(primary.type), session=session,
+                            )
                             events.append({"type": "DEATH", "data": {"entity_id": primary.id, "entity_kind": "monster"}})
                             if drops:
                                 events.append({"type": "LOOT_DROPPED", "data": {"x": primary.x, "y": primary.y, "items": drops}})
@@ -11583,7 +11677,9 @@ async def process_combat(events):
                         if session.in_combat_with == ("monster", monster.id):
                             session.in_combat_with = None
                         if not session.dungeon:
-                            drops = WORLD.drop_loot(monster.x, monster.y, drops_for_kill(monster.type))
+                            drops = WORLD.drop_loot(
+                                monster.x, monster.y, drops_for_kill(monster.type), session=session,
+                            )
                             events.append({"type": "DEATH", "data": {"entity_id": monster.id, "entity_kind": "monster"}})
                             if drops:
                                 events.append({"type": "LOOT_DROPPED", "data": {"x": monster.x, "y": monster.y, "items": drops}})
@@ -12040,7 +12136,9 @@ def process_pets(events):
                                 "data": {"_dungeon_player": session.player_id},
                             })
                     else:
-                        drops = WORLD.drop_loot(target.x, target.y, drops_for_kill(target.type))
+                        drops = WORLD.drop_loot(
+                            target.x, target.y, drops_for_kill(target.type), session=session,
+                        )
                         if drops:
                             events.append({"type": "LOOT_DROPPED", "data": {
                                 "x": target.x, "y": target.y, "items": drops,

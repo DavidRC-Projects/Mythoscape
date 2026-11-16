@@ -64,10 +64,11 @@ ALL_ROCKS = YARD_ROCKS + B0_ROCKS + [r for k in (1, 2, 3) for r in CHAMBER_ROCKS
 LEVEL_OF = {"yard": 1, 0: 1, 1: 1, 2: 2, 3: 3}               # region -> mine level (1 = ground)
 LEVEL_NAMES = {1: "Ground Level", 2: "Level 2 - Silver Dark", 3: "Level 3 - The Green Deep"}
 WEST_SLOPE = [(52, 107), (53, 107), (52, 108), (53, 108)]   # yard <-> B0 on foot
-# Stepping into the shaft (either end) goes down to Level 2.  Row 105 = came from the yard,
-# row 106 = came up the ramp from B0.  Refused players are put back on the side they came from.
-TUNNEL_DOWN = {(x, 105): (67, 102) for x in range(65, 70)}
-TUNNEL_DOWN.update({(x, 106): (67, 109) for x in range(65, 70)})
+# Stepping into the shaft (any ramp tile under the painted mouth) goes down to Level 2.
+# North half = came from the yard; south half = came up from B0. Refused players go back
+# to the stand on the side they entered from. Yard <-> B0 on foot stays on WEST_SLOPE.
+TUNNEL_DOWN = {(x, y): (67, 102) for x in range(65, 70) for y in (103, 104, 105)}
+TUNNEL_DOWN.update({(x, y): (67, 109) for x in range(65, 70) for y in (106, 107, 108)})
 TUNNEL_TOP_STAND, TUNNEL_BOTTOM_STAND = (67, 102), (67, 109)
 SHAFT_DOWN = (67, 130)                                       # Level 2 -> Level 3 ladder shaft
 SHAFT_DOWN_STAND = (67, 128)

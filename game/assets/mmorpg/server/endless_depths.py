@@ -13,8 +13,8 @@ DUNGEON_ID = "endless_depths"
 SPEAKER = "Endless Depths"
 
 # Village landmark — east of the bank / south of the Crypt approach.
-MOUTH = (11, 21)
-STAND = (11, 23)
+MOUTH = (15, 9)
+STAND = (15, 11)
 
 # Default client map is 900×640 at TILE=40 → 22×16 tiles.
 W, H = 22, 16
