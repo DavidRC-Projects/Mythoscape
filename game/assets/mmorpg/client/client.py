@@ -818,7 +818,7 @@ class GameClient(ScreensMixin, CameraYaw):
             import endless_depths_client
             endless_depths_client.close_entry_prompt(self)
             self._enter_dungeon_view(msg)
-        elif t in ("KCS_SNAPSHOT", "KCS_DELTA", "KCS_PLACE_OK"):
+        elif t in ("KCS_SNAPSHOT", "KCS_DELTA", "KCS_PLACE_OK", "KCS_LOBBY", "KCS_RESULT"):
             import kcs_client
             kcs_client.on_message(self, t, msg)
         elif t == "DUNGEON_TILES":
@@ -1485,6 +1485,11 @@ class GameClient(ScreensMixin, CameraYaw):
             self.add_chat(f"{who} invited you to a party.", color=(240, 190, 90), highlight=True)
         elif t == "ERROR":
             text = msg.get("message") or "Something went wrong."
+            try:
+                import kcs_client
+                kcs_client.note(self, text, error=True)
+            except Exception:
+                pass
             low = text.lower()
             # Out-of-range swing: auto-walk into range instead of only scolding.
             if "too far" in low and "attack" in low:
@@ -4538,6 +4543,9 @@ class GameClient(ScreensMixin, CameraYaw):
         """Map pixel → world tile (accounts for camera yaw)."""
         if not self.player:
             return None
+        import kcs_client
+        if kcs_client.active(self):
+            return kcs_client.pick_world_tile(self, mx, my)
         import emberdeep_v2_client
         picked = emberdeep_v2_client.pick_tile(self, mx, my)
         if picked is False or (emberdeep_v2_client.fp_active(self) and picked is None):
@@ -7596,6 +7604,11 @@ class GameClient(ScreensMixin, CameraYaw):
         crown_war_guide.draw(self)
         import adventure_guide
         adventure_guide.draw(self)
+        try:
+            import kcs_client
+            kcs_client.draw_overlay(self)
+        except Exception:
+            pass
 
     def draw_map(self):
         import kcs_client
