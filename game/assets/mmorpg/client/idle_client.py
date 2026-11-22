@@ -50,7 +50,8 @@ def tick(client, now=None):
         return
     st = _state(client)
     now = time.time() if now is None else now
-    if reading(client):             # never idle-kick someone reading dialogue or a menu
+    if reading(client) or now < getattr(client, "_combat_active_until", 0):
+        # Incoming combat counts too, even when the victim never presses a key.
         st["last_input"] = now
         st["input_since_ping"] = True
     if not st["input_since_ping"] or now - st["last_ping"] < PING_INTERVAL_S:
@@ -58,7 +59,7 @@ def tick(client, now=None):
     st["last_ping"] = now
     st["input_since_ping"] = False
     try:
-        client.net.send("INPUT_PING", last_input_ms_ago=int(max(0.0, now - st["last_input"]) * 1000))
+        client.net.send("INPUT_PING", last_input_ms_ago=int(max(0.0, now - st["last_input"]) * 1000), reading=reading(client))
     except Exception:
         pass
 

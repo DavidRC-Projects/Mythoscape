@@ -18,6 +18,7 @@ class NetworkClient:
         self.outgoing = queue.Queue()
         self.connected = False
         self.connect_error = None
+        self._behind = False
         self._loop = None
         self._thread = threading.Thread(target=self._run, daemon=True)
 
@@ -30,16 +31,32 @@ class NetworkClient:
             self._thread.join()
         self.connected = False
         self.connect_error = None
-        # Drain stale messages so a prior _DISCONNECTED doesn't clobber login.
+        self._behind = False
+        # Drain stale messages so a prior _DISCONNECTED doesn't clobber login,
+        # and drop queued actions so they cannot fire against the next battle.
         try:
             while True:
                 self.incoming.get_nowait()
+        except queue.Empty:
+            pass
+        try:
+            while True:
+                self.outgoing.get_nowait()
         except queue.Empty:
             pass
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
     def send(self, msg_type, **fields):
+        if self.outgoing.qsize() >= 64:
+            if not self._behind:
+                self._behind = True
+                self.incoming.put({
+                    "type": "_LINK_BEHIND",
+                    "message": "Reconnecting. The link is too far behind. Siege actions are paused.",
+                })
+            return
+        self._behind = False
         self.outgoing.put({"type": msg_type, **fields})
 
     def poll(self):

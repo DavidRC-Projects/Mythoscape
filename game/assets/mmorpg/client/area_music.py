@@ -48,6 +48,11 @@ _ALIASES = {
     "enfer_infini": ("L'Enfer Infini.wav",),
     "ndung": ("ndung.wav",),
     "petaldeep": (FAIRY_DUNGEON_TRACK,),
+    # King's Castle Siege (t661u): The Siege Breaks opens the battle, Coronation of the Realm in the list
+    # and on the attackers' win card + victory cutscene.
+    "siege_breaks": ("The Siege Breaks.wav",),
+    "coronation_realm": ("Coronation of the Realm.wav",),
+    "march_of_the_king": ("March of the King.wav",),
 }
 
 # Zone name -> region key. village / forest / dungeon share the travel playlist
@@ -74,7 +79,23 @@ _PLAYLISTS = {
     "village": ("theme", "narrow_way"),
     # Endless Depths — three-track loop while inside the private room.
     "endless_depths": ("firstsongnverdung", "enfer_infini", "ndung"),
+    # King's Castle Siege: The Siege Breaks first, then the battle list wraps (t661u).
+    # kcs_siege: battle loops only The Siege Breaks (David t669u); Coronation is win card / throne only.
 }
+
+# Set by kcs_victory_scene while the win card + cutscene play: Coronation of the Realm starts at once and
+# keeps going (no restart) even though the server ejects everyone from the siege map underneath.
+VICTORY_HOLD = {"on": False}
+
+
+def victory_start():
+    VICTORY_HOLD["on"] = True
+    if feature_flags.USE_AREA_MUSIC and _current != "kcs_victory":
+        _play_region("kcs_victory")
+
+
+def victory_end():
+    VICTORY_HOLD["on"] = False
 
 _current = None          # region key currently selected
 _track = None            # file stem currently playing
@@ -142,11 +163,17 @@ def _key(client):
     state = getattr(client, "state", "")
     if state in ("LOGIN", "STAT_ALLOC"):
         return "theme"
+    if VICTORY_HOLD["on"]:
+        return "kcs_victory"
     if state != "GAME" or not getattr(client, "player", None):
         return None
+    if VICTORY_HOLD["on"]:
+        return "kcs_victory"
     if _arena_fighting(client):
         return "arena_first_cry"
     dungeon = getattr(client, "dungeon", None) or {}
+    if dungeon.get("id") == "kings_castle_siege" or dungeon.get("kcs"):
+        return "kcs_siege"
     if dungeon.get("id") == "castle_realm":
         return "castle"
     # Going down the mine — Deep Mine Pulse (overworld yard uses the mine zone too).
@@ -234,6 +261,12 @@ def _play_region(key):
     playlist = _PLAYLISTS.get(key)
     if playlist:
         _start_track(playlist[0], loop=False)
+        return
+    if key == "kcs_victory":
+        _start_track("coronation_realm", loop=True)
+        return
+    if key == "kcs_siege":
+        _start_track("siege_breaks", loop=True)
         return
     # Login theme and single-track regions loop forever
     _start_track(key, loop=True)

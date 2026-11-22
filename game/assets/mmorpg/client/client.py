@@ -406,7 +406,7 @@ class GameClient(ScreensMixin, CameraYaw):
         self.forge_station = None  # "furnace" | "anvil" | None — locks the modal to one station
         self.forge_metal = "all"  # all | bronze | iron | steel | mithril | adamant
         self.forge_scroll = 0
-        self.forge_gear = "all"   # all | weapon | shield | body | legs | helmet | bar
+        self.forge_gear = "all"   # all | weapon | shield | body | helmet | bar
         self.forge_recipe_rects = []
         self.forge_filter_rects = {}
         self.show_cook = False
@@ -607,6 +607,14 @@ class GameClient(ScreensMixin, CameraYaw):
 
     def process_message(self, msg):
         t = msg.get("type")
+        if t == "PLAYER_FIGHT":
+            import player_interactions
+            player_interactions.on_fight(self, msg)
+            return
+        if t == "PLAYER_COMBAT":
+            import player_interactions
+            player_interactions.on_message(self, msg)
+            return
         if t in idle_client.MESSAGE_TYPES:
             idle_client.on_message(self, msg)
             return
@@ -630,7 +638,26 @@ class GameClient(ScreensMixin, CameraYaw):
             # listening for a retry: messages queued into a dead socket and the
             # client looked frozen even after the server was started.
             self.net.connected = False
+        elif t == "_LINK_BEHIND":
+            self.login_error = msg.get("message") or "Reconnecting. The link is too far behind."
+            if self.dungeon and self.dungeon.get("id") == "kings_castle_siege":
+                import kcs_client
+                view = kcs_client.view_of(self)
+                view.stale = True
+                view.sync_seq = None
+                view.notice = self.login_error
+                view.error = self.login_error
         elif t == "_DISCONNECTED":
+            import player_interactions
+            player_interactions.on_disconnect(self)
+            if self.dungeon and self.dungeon.get("id") == "kings_castle_siege":
+                import kcs_client
+                view = kcs_client.view_of(self)
+                view.stale = True
+                view.sync_seq = None
+                view.notice = "Connection lost. Reconnecting. Siege actions stay paused until the battle snapshot arrives."
+                view.error = view.notice
+                self.login_error = view.notice
             if self._logging_out:
                 self._logging_out = False
                 self.net.reconnect()
@@ -639,7 +666,8 @@ class GameClient(ScreensMixin, CameraYaw):
                 import throne_vision
                 throne_vision.abort()
             if self.state in ("GAME", "STAT_ALLOC", "OPENING_COMIC", "THRONE_VISION"):
-                self.login_error = "Disconnected from server."
+                if not (self.dungeon and self.dungeon.get("id") == "kings_castle_siege"):
+                    self.login_error = "Disconnected from server."
                 self.opening_comic_pending = False
                 self._awaiting_dungeon_resume = False
                 self.state = "LOGIN"
@@ -744,6 +772,14 @@ class GameClient(ScreensMixin, CameraYaw):
                 # Its coordinates belong to the other map, so ignore them.
                 return
             self.players = {p["id"]: p for p in msg["players"]}
+            import player_interactions
+            player_interactions.advance_contacts(self)
+            if self.dungeon and self.dungeon.get("id") == "kings_castle_siege":
+                import kcs_client
+                gone = getattr(kcs_client.view_of(self), "eliminated", ())
+                for pid in list(self.players):
+                    if pid in gone:
+                        self.players.pop(pid, None)
             self.monsters = {m["id"]: m for m in msg["monsters"]}
             self.pets = msg.get("pets") or []
             self.ground_items = msg.get("ground_items", {})
@@ -818,7 +854,7 @@ class GameClient(ScreensMixin, CameraYaw):
             import endless_depths_client
             endless_depths_client.close_entry_prompt(self)
             self._enter_dungeon_view(msg)
-        elif t in ("KCS_SNAPSHOT", "KCS_DELTA", "KCS_PLACE_OK"):
+        elif t in ("KCS_SNAPSHOT", "KCS_DELTA", "KCS_PLACE_OK", "KCS_LOBBY", "KCS_RESULT", "KCS_STATUS", "KCS_MERCS"):
             import kcs_client
             kcs_client.on_message(self, t, msg)
         elif t == "DUNGEON_TILES":
@@ -908,6 +944,8 @@ class GameClient(ScreensMixin, CameraYaw):
             prev_look = (self.player or {}).get("appearance")
             prev_eq = (self.player or {}).get("equipment")
             self.player = msg["player"]
+            import player_interactions
+            player_interactions.advance_contacts(self)
             # Bust sidebar portrait when look / gear changes (hud_v2 caches busts).
             if (self.player or {}).get("appearance") != prev_look or (
                     self.player or {}).get("equipment") != prev_eq:
@@ -1485,6 +1523,11 @@ class GameClient(ScreensMixin, CameraYaw):
             self.add_chat(f"{who} invited you to a party.", color=(240, 190, 90), highlight=True)
         elif t == "ERROR":
             text = msg.get("message") or "Something went wrong."
+            try:
+                import kcs_client
+                kcs_client.note(self, text, error=True)
+            except Exception:
+                pass
             low = text.lower()
             # Out-of-range swing: auto-walk into range instead of only scolding.
             if "too far" in low and "attack" in low:
@@ -1736,12 +1779,15 @@ class GameClient(ScreensMixin, CameraYaw):
     # ------------------------------------------------------------------
     def handle_events(self):
         import area_music
+        import kcs_victory_scene
         for event in pygame.event.get():
             idle_client.note_event(self, event)
             if event.type == pygame.QUIT:
                 self.running = False
             elif event.type == area_music.end_event_type():
                 area_music.on_track_ended(self)
+            elif kcs_victory_scene.playing() and kcs_victory_scene.handle_event(self, event):
+                pass
             elif self.state == "LOGIN":
                 self.handle_login_event(event)
             elif self.state == "STAT_ALLOC":
@@ -1775,6 +1821,15 @@ class GameClient(ScreensMixin, CameraYaw):
 
 
     def handle_game_event(self, event):
+        import kcs_client
+        if kcs_client.active(self):
+            kcs_client.handle_battle_event(self, event)
+            return
+        import kcs_hud
+        if event.type == pygame.MOUSEWHEEL and kcs_hud.on_wheel(self, pygame.mouse.get_pos(), event.y):
+            return
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button in (4, 5) and kcs_hud.on_wheel(self, event.pos, 1 if event.button == 4 else -1):
+            return
         import emberdeep_v2_client
         if getattr(self, "outfitters", None) and self.outfitters.active:
             self.outfitters.handle_event(event)
@@ -2060,6 +2115,13 @@ class GameClient(ScreensMixin, CameraYaw):
                 elif emberdeep_v2_client.fp_active(self) and event.key in (pygame.K_q, pygame.K_e):
                     emberdeep_v2_client.turn(self, -1 if event.key == pygame.K_q else 1)
                 elif event.key == pygame.K_e:
+                    try:
+                        import kcs_client as _kcs_eq
+                        if _kcs_eq.active(self) and not (_kcs_eq.view_of(self).status or {}).get("economy"):
+                            _kcs_eq.note(self, "Equipment is locked until you leave the siege.", error=True)
+                            return
+                    except Exception:
+                        pass
                     self.show_equipment = not self.show_equipment
                     if self.show_equipment:
                         self.show_forge = False
@@ -2215,7 +2277,7 @@ class GameClient(ScreensMixin, CameraYaw):
                         self.open_forge_at()
                 else:
                     # Walk to nearest furnace/anvil then open
-                    spots = [s for s in self.interactables if s.get("kind") in ("furnace", "anvil", "forge")]
+                    spots = [s for s in ((self.dungeon or {}).get("workshops",[]) if (self.dungeon or {}).get("id")=="kings_castle_siege" else self.interactables) if s.get("kind") in ("furnace", "anvil", "forge")]
                     if spots:
                         best = min(spots, key=lambda s: max(abs(s["x"] - self.player_xy()[0]), abs(s["y"] - self.player_xy()[1])))
                         goals = self.adjacent_goals(best["x"], best["y"])
@@ -2437,6 +2499,8 @@ class GameClient(ScreensMixin, CameraYaw):
         elif event.type == pygame.MOUSEBUTTONDOWN:
             import kcs_client
             if event.button == 1 and kcs_client.on_mouse(self, event.pos):
+                return
+            if event.button != 1 and kcs_client.blocks_world(self, event.pos):
                 return
             # Legacy mouse-wheel buttons (4=up, 5=down)
             if self.state == "GAME" and self.show_help and event.button in (4, 5):
@@ -2707,7 +2771,8 @@ class GameClient(ScreensMixin, CameraYaw):
         if px is None or py is None:
             px, py = self.player_xy()
         wanted = {kind} if kind in ("furnace", "anvil", "forge") else {"furnace", "anvil", "forge"}
-        for spot in self.interactables:
+        spots=(self.dungeon or {}).get('workshops',[]) if (self.dungeon or {}).get('id')=='kings_castle_siege' else self.interactables
+        for spot in spots:
             if spot.get("kind") in wanted:
                 if max(abs(spot["x"] - px), abs(spot["y"] - py)) <= 1:
                     return True
@@ -3133,7 +3198,10 @@ class GameClient(ScreensMixin, CameraYaw):
         return self.melee_flank_goals(mx, my)
 
     def combat_flee_locked(self):
-        """True once a fight has started, until five attack rounds have passed."""
+        """Both player engagements (including round zero) and existing duels."""
+        fight = getattr(self, "_player_fight", None)
+        if fight and fight.get("locked") and time.time() < fight.get("expires_at", 0):
+            return True
         rounds = int(getattr(self, "combat_rounds", 0) or 0)
         if rounds <= 0 or rounds >= 5:
             return False
@@ -3150,7 +3218,12 @@ class GameClient(ScreensMixin, CameraYaw):
         if now < getattr(self, "_combat_lock_said", 0):
             return
         self._combat_lock_said = now + 1.5
-        left = max(1, 5 - int(getattr(self, "combat_rounds", 0) or 0))
+        fight = getattr(self, "_player_fight", None)
+        left = max(1, 5 - int(fight.get("rounds", 0) if fight else getattr(self, "combat_rounds", 0) or 0))
+        if fight:
+            import kcs_client
+            if kcs_client.active(self):
+                kcs_client.note(self, f"You can't flee yet ({left} rounds left).", error=True)
         self.add_chat(
             f"You cannot run yet. {left} round{'s' if left != 1 else ''} of fighting left.",
             color=(255, 180, 120),
@@ -3580,6 +3653,11 @@ class GameClient(ScreensMixin, CameraYaw):
         if time.time() < getattr(self, "_next_walk_at", 0):
             return False
         self.clear_walk()
+        # t664u: a direction key always wins over an auto-strike loop (gate/engine/player), which
+        # otherwise re-paths the player straight back to the gate every frame.
+        self._opening_attack_id = None
+        self._engine_attack_id = None
+        self._player_attack_target = None
         return True
 
     def _poll_held_walk(self):
@@ -3833,6 +3911,7 @@ class GameClient(ScreensMixin, CameraYaw):
             "explore": bool(msg.get("explore")),
             "name": msg.get("name") or "",
             "props": msg.get("props") or [],
+            "workshops": msg.get("workshops") or [],
             "plane": msg.get("plane") or "",
             "realm": bool(msg.get("realm")),
             "boss_door": msg.get("boss_door"),
@@ -3840,6 +3919,8 @@ class GameClient(ScreensMixin, CameraYaw):
             "rooms_total": msg.get("rooms_total"),
             "rooms_cleared": msg.get("rooms_cleared"),
         }
+        if self.dungeon["id"] == "kings_castle_siege":
+            self.dungeon["mode"] = msg.get("mode") or "combatant"
         if msg.get("sewer"):
             self.dungeon["sewer"] = dict(msg["sewer"])
         if msg.get("petaldeep"):
@@ -4002,6 +4083,7 @@ class GameClient(ScreensMixin, CameraYaw):
         return px, py
 
     def clear_walk(self):
+        self._player_attack_target = None
         self._chase_started_at = 0.0
         self.walk_path = []
         self.walk_goal = None
@@ -4014,6 +4096,8 @@ class GameClient(ScreensMixin, CameraYaw):
         self.combat_rounds = 0
         self.fleeing_combat = False
         self.projectiles.clear()
+        import player_interactions
+        player_interactions.on_disconnect(self)
         self.pending_floaters.clear()
         self.attack_anims.clear()
         self.hit_shake_until = 0.0
@@ -4057,6 +4141,10 @@ class GameClient(ScreensMixin, CameraYaw):
         return blocked
 
     def tile_walkable(self, x, y):
+        import kcs_client
+        if kcs_client.active(self):
+            import player_interactions
+            return player_interactions.siege_walkable(self, x, y)
         if not (0 <= y < len(self.tiles) and 0 <= x < self.world_w):
             return False
         tile = self.tiles[y][x]
@@ -4151,6 +4239,10 @@ class GameClient(ScreensMixin, CameraYaw):
                     continue
                 if not self.tile_walkable(nx, ny):
                     continue
+                import kcs_client
+                if kcs_client.active(self):
+                    import player_interactions
+                    if not player_interactions.siege_step(self,x,y,nx,ny):continue
                 came[(nx, ny)] = (x, y)
                 if (nx, ny) in goals:
                     found = (nx, ny)
@@ -4343,6 +4435,8 @@ class GameClient(ScreensMixin, CameraYaw):
 
     def walk_and_act(self, goals, action=None):
         """Path to any tile in goals, then perform action (if any)."""
+        self._player_attack_target = None  # a new world action cancels player chase
+
         # Clicking the ground leaves a melee fight so you are not dragged back.
         # A bow keeps firing while you move, and stops on its own once you leave range.
         if action is None and self.combat_target_id is not None:
@@ -4429,6 +4523,9 @@ class GameClient(ScreensMixin, CameraYaw):
         if self.state != "GAME" or not self.player:
             return
         px, py = self.player_xy()
+
+        import player_interactions
+        player_interactions.tick(self)
 
         # The Resting Ox: stepping into the arched doorway (by click or keys) opens the bar scene.
         self._maybe_walk_into_resting_ox(px, py)
@@ -4525,7 +4622,10 @@ class GameClient(ScreensMixin, CameraYaw):
             self._entity_facing[pkey] = "back" if dy < 0 else "front"
         self._entity_moving_until[pkey] = now + 0.55
         import emberdeep_v2_client
-        step = emberdeep_v2_client.STEP_SECONDS if emberdeep_v2_client.fp_active(self) else 0.2
+        if emberdeep_v2_client.fp_active(self):
+            step = emberdeep_v2_client.STEP_SECONDS
+        else:
+            step = float(getattr(self, "walk_step_seconds", 0) or 0.2)
         self._next_walk_at = now + step
         self._predicted_step = (nx, ny, now + 0.75)
 
@@ -4538,6 +4638,9 @@ class GameClient(ScreensMixin, CameraYaw):
         """Map pixel → world tile (accounts for camera yaw)."""
         if not self.player:
             return None
+        import kcs_client
+        if kcs_client.active(self):
+            return kcs_client.pick_world_tile(self, mx, my)
         import emberdeep_v2_client
         picked = emberdeep_v2_client.pick_tile(self, mx, my)
         if picked is False or (emberdeep_v2_client.fp_active(self) and picked is None):
@@ -5107,10 +5210,8 @@ class GameClient(ScreensMixin, CameraYaw):
             except Exception:
                 pass
         elif kind == "attack_player":
-            if self.dungeon:
-                self.add_chat("Player killing is only allowed outside dungeons.")
-            else:
-                self.add_chat("Player fighting is not open yet — PK mode is for the duelists.")
+            import player_interactions
+            player_interactions.start_attack(self, row.get("id"))
         elif kind == "pickup":
             tx, ty = int(row["x"]), int(row["y"])
             pickup = {"type": "PICKUP", "x": tx, "y": ty}
@@ -5142,7 +5243,11 @@ class GameClient(ScreensMixin, CameraYaw):
             self.walk_and_act(goals, {"type": "GATHER", "x": gx, "y": gy})
         elif kind == "walk":
             tx, ty = int(row["x"]), int(row["y"])
-            if self.tile_walkable(tx, ty):
+            self.clear_walk()
+            if row.get("beside_player") is not None:
+                import player_interactions
+                player_interactions.walk_here(self, tx, ty)
+            elif self.tile_walkable(tx, ty):
                 self.walk_and_act({(tx, ty)}, None)
 
     def _context_rows(self, primary, tx, ty):
@@ -5256,9 +5361,11 @@ class GameClient(ScreensMixin, CameraYaw):
             on = not bool((self.player or {}).get("show_house_suffix", True))
             self.net.send("SET_OPTION", show_house_suffix=on)
             return
-        if self.context_menu and event.button == 1:
-            self._click_context_menu(mx, my)
-            return
+        if self.context_menu:
+            if event.button == 1:
+                self._click_context_menu(mx, my)
+                return
+            self.context_menu = None
         # A world click dismisses the examine panel, the same way it dismisses
         # a context menu — transient UI should not linger over the play area.
         if getattr(self, "examine_target", None) is not None:
@@ -5508,7 +5615,13 @@ class GameClient(ScreensMixin, CameraYaw):
             if event.button != 3:
                 self.minimap_collapsed = not self.minimap_collapsed
             return
-        if USE_NEW_HUD and (USE_HUD_DRAWN_PANELS or not USE_HUD_MOCKUP_PLATES):
+        _siege = False
+        try:
+            import kcs_client as _kcs_hit
+            _siege = bool(_kcs_hit.active(self))
+        except Exception:
+            _siege = False
+        if not _siege and USE_NEW_HUD and (USE_HUD_DRAWN_PANELS or not USE_HUD_MOCKUP_PLATES):
             import hud_v2
             if hud_v2.handle_world_chrome_click(self, mx, my, event.button):
                 return
@@ -5521,10 +5634,16 @@ class GameClient(ScreensMixin, CameraYaw):
             if box.collidepoint(mx, my) or on_button:
                 self.handle_dialogue_click(mx, my)
                 return
-        if mx >= SIDEBAR_X or my >= MAP_H:
+        if not _siege and (mx >= SIDEBAR_X or my >= MAP_H):
             self.handle_sidebar_click(mx, my, event.button)
             return
+        if _siege and mx >= SIDEBAR_X:
+            # Sidebar hit region disabled while the siege layout is expanded.
+            return
         if not self.player:
+            return
+        import player_interactions
+        if player_interactions.on_click(self, (mx, my), event.button):
             return
         # Clicking the world leaves chat focus so the pad can move again.
         if self.chat_typing:
@@ -5857,38 +5976,14 @@ class GameClient(ScreensMixin, CameraYaw):
                 "type": "TALK", "npc_id": best_n["id"],
             })
             return
-        # Another player. Right-click opens a menu so you can look before you
-        # act: left-click used to fire a trade request the instant someone was
-        # clicked, which was surprising and easy to spam.
-        for p in self.players.values():
-            if p["id"] != self.player["id"] and p["x"] == tx and p["y"] == ty:
+        # Exact feet-tile fallback; painted bodies are picked before world objects below.
+        for person in self.players.values():
+            if person["id"] != self.player["id"] and (person["x"], person["y"]) == (tx, ty):
+                import player_interactions
                 if event.button == 3:
-                    name = p.get("name") or "player"
-                    rows = [
-                        {"label": f"Invite {name} to party", "kind": "party_invite", "id": p["id"]},
-                        {"label": f"Trade with {name}", "kind": "trade", "id": p["id"],
-                         "x": p["x"], "y": p["y"]},
-                        {"label": f"Examine {name}", "kind": "examine_player", "id": p["id"]},
-                    ]
-                    # PK only outside dungeons (Crown siege keeps its own rules).
-                    if (
-                        bool((self.player or {}).get("player_killer"))
-                        and not self.dungeon
-                    ):
-                        rows.insert(0, {
-                            "label": f"Attack {name}",
-                            "kind": "attack_player",
-                            "id": p["id"],
-                            "x": p["x"], "y": p["y"],
-                        })
-                    if self.tile_walkable(tx, ty):
-                        rows.append({"label": "Walk here", "kind": "walk", "x": tx, "y": ty})
-                    rows.append({"label": "Cancel", "kind": "cancel"})
-                    self._open_context_menu(mx, my, rows)
-                    return
-                self.walk_and_act(self.adjacent_goals(p["x"], p["y"]), {
-                    "type": "TRADE", "target_player_id": p["id"],
-                })
+                    self._open_context_menu(mx, my, player_interactions.menu_rows(self, person))
+                else:
+                    player_interactions.walk_here(self, tx, ty)
                 return
         # Tall-tree canopy / near-miss gather (exact tile already handled above)
         if gather is not None:
@@ -7087,7 +7182,7 @@ class GameClient(ScreensMixin, CameraYaw):
         return max(0, available or 0)
 
     def open_cook_prompt(self, recipe_id):
-        recipe = self.craft_recipes.get(recipe_id) or {}
+        recipe = (self._craft_recipe(recipe_id) if hasattr(self, '_craft_recipe') else self.craft_recipes.get(recipe_id)) or {}
         available = self.cook_available_count(recipe)
         if available < 1:
             need = ", ".join(f"{n}x {ITEMS[i]['name']}" for i, n in recipe.get("inputs", {}).items())
@@ -7217,6 +7312,9 @@ class GameClient(ScreensMixin, CameraYaw):
 
     # ------------------------------------------------------------------
     def draw(self):
+        import kcs_victory_scene
+        import player_interactions
+        player_interactions.advance_contacts(self)
         self.screen.fill(BLACK)
         if self.state == "LOGIN":
             self.draw_login()
@@ -7243,6 +7341,8 @@ class GameClient(ScreensMixin, CameraYaw):
             self.moon_petal.render(self.screen)
         if self.outfitters.active:
             self.outfitters.render(self.screen)
+        if kcs_victory_scene.playing():
+            kcs_victory_scene.draw(self)
 
         pygame.display.flip()
 
@@ -7444,18 +7544,36 @@ class GameClient(ScreensMixin, CameraYaw):
     def draw_game(self):
         if not self.player:
             return
+        import kcs_client
+        if kcs_client.active(self):
+            kcs_client._apply_siege_layout(self)
+            self.draw_map()
+            kcs_client.draw_overlay(self)
+            self.draw_context_menu()
+            kcs_client.draw_siege_modals(self)
+            return
         self.draw_map()
         self._apply_hit_shake()
-        if USE_NEW_HUD and USE_HUD_DRAWN_PANELS:
-            import hud_drawn
-            hud_drawn.draw_world(self)
-        elif USE_NEW_HUD and not USE_HUD_MOCKUP_PLATES:
-            import hud_v2
-            hud_v2.draw_world_chrome(self)
+        _kcs_active = False
+        try:
+            import kcs_client as _kcs_mod
+            _kcs_active = bool(_kcs_mod.active(self))
+            if _kcs_active:
+                _kcs_mod._apply_siege_layout(self)
+        except Exception:
+            _kcs_active = False
+        # Siege battle layout: no left nav / right sidebar chrome or hit regions.
+        if not _kcs_active:
+            if USE_NEW_HUD and USE_HUD_DRAWN_PANELS:
+                import hud_drawn
+                hud_drawn.draw_world(self)
+            elif USE_NEW_HUD and not USE_HUD_MOCKUP_PLATES:
+                import hud_v2
+                hud_v2.draw_world_chrome(self)
+            self.draw_sidebar()
         fairy_glade_client.draw_banner(self)
         self.draw_magic_fx()
         self.draw_magic_fight_bar()
-        self.draw_sidebar()
         self.draw_chat()
         if self.dungeon and self.dungeon.get("id") == "castle_realm":
             import castle_realm_renderer
@@ -7596,6 +7714,11 @@ class GameClient(ScreensMixin, CameraYaw):
         crown_war_guide.draw(self)
         import adventure_guide
         adventure_guide.draw(self)
+        try:
+            import kcs_client
+            kcs_client.draw_overlay(self)
+        except Exception:
+            pass
 
     def draw_map(self):
         import kcs_client
@@ -8288,12 +8411,11 @@ class GameClient(ScreensMixin, CameraYaw):
                       if hint and hint[0] == "npc" and hint[1] == n["id"]:
                           self.blit_action_hint(hint[2], cx, ny - 28, hint[3])
                       return
-                  # Fallback: draw procedural humanoid for any NPCs not in fairy/HD sets
-                  sprites.draw_humanoid_detailed(
-                      self.screen, cx, cy, TILE, body, skin, hair,
-                      robe=n["id"] in ROBED_NPC_IDS, t=t, facing=face, moving=mov,
+                  # Fallback: simple placeholder. Every catalog NPC should already be HD;
+                  # never load a removed 2D sheet if a new id is added without art.
+                  ny = npc_hd_client.draw_placeholder(
+                      self.screen, cx, cy + TILE // 2, TILE, label=n.get("id"),
                   )
-                  ny, _ = self.entity_anchor(cx, cy, "npc")
                   self._np_npc_ctx = (n, cy + TILE // 2)
                   try:
                       self.blit_nameplate(n["name"], cx, ny, (255, 230, 160))
@@ -8843,7 +8965,7 @@ class GameClient(ScreensMixin, CameraYaw):
                         self.draw_level_up_glow(cx, cy, time.time())
                     # Players always use HD villager art — never the old 2D humanoid.
                     appearance = p.get("appearance") or None
-                    hit_t = -1.0 if not is_self else t - self.player_hit_at.get(p["id"], t - 999)
+                    hit_t = t - self.player_hit_at.get(p["id"], t - 999)
                     death_t = t - self.player_death_at.get(p["id"], t - 999)
                     import player_hd_client
                     weapon_id = (eq or {}).get("weapon") or ""
@@ -8877,15 +8999,18 @@ class GameClient(ScreensMixin, CameraYaw):
                                           getattr(self, "combat_target_id", None) is not None)
                     feet = cy + TILE // 2
                     tile_px = int(round(TILE * 1.1))
-                    drawn = player_hd_client.draw_player(
-                        self.screen, gender, appearance, cx, feet, tile_px, t,
-                        anim=anim, progress=atk if atk > 0 else None, facing=hd_face,
-                        hit_t=-1.0 if swing else (hit_t if 0 <= hit_t < 0.36 else -1.0),
-                        death_t=death_t if 0 <= death_t < 1.2 else -1.0,
-                        equipment=eq, fx_seed=eclipse_fx.player_seed(p.get("id")),
-                        tool=(gather or {}).get("tool") if action else None,
-                        fx_ctx={"is_self": bool(is_self)},
-                    )
+                    import player_interactions
+                    drawn = player_interactions.draw_actor(self, p, cx, feet, tile_px, t, mov, hd_face)
+                    if not drawn:
+                        drawn = player_hd_client.draw_player(
+                            self.screen, gender, appearance, cx, feet, tile_px, t,
+                            anim=anim, progress=atk if atk > 0 else None, facing=hd_face,
+                            hit_t=-1.0 if swing else (hit_t if 0 <= hit_t < 0.36 else -1.0),
+                            death_t=death_t if 0 <= death_t < 1.2 else -1.0,
+                            equipment=eq, fx_seed=eclipse_fx.player_seed(p.get("id")),
+                            tool=(gather or {}).get("tool") if action else None,
+                            fx_ctx={"is_self": bool(is_self)},
+                        )
                     if not drawn:
                         # Broken/mismatched look (e.g. opposite-sex leftovers): villager default.
                         drawn = player_hd_client.draw_player(
@@ -10244,6 +10369,8 @@ class GameClient(ScreensMixin, CameraYaw):
                 )
             keep.append(proj)
         self.projectiles = keep
+        import player_interactions
+        player_interactions.draw_projectiles(self,cam_x,cam_y,now,TILE)
 
     def _attack_progress(self, entity_id, now=None):
         """Return 0..1 swing progress while an attack anim is active."""
@@ -11921,6 +12048,14 @@ class GameClient(ScreensMixin, CameraYaw):
             self.dungeon_prompt = None
 
     def toggle_teleport_modal(self):
+        import kcs_client
+        if kcs_client.active(self):
+            self.show_teleport = False
+            self.teleport_btn_rect = None
+            self.teleport_row_rects = []
+            self.teleport_fx = None
+            kcs_client.view_of(self).error = "Teleport is disabled on the King's Castle siege map. Use Leave to withdraw."
+            return
         self.show_teleport = not self.show_teleport
         if self.show_teleport:
             self.teleport_scroll = 0
@@ -11967,6 +12102,14 @@ class GameClient(ScreensMixin, CameraYaw):
         return unlocked
 
     def cast_teleport(self, dest_id):
+        import kcs_client
+        if kcs_client.active(self):
+            self.show_teleport = False
+            self.teleport_btn_rect = None
+            self.teleport_row_rects = []
+            self.teleport_fx = None
+            kcs_client.view_of(self).error = "Teleport is disabled on the King's Castle siege map. Use Leave to withdraw."
+            return
         fx = self.teleport_fx
         if fx and time.time() < fx["until"] - 0.15:
             return
@@ -11994,6 +12137,14 @@ class GameClient(ScreensMixin, CameraYaw):
         self.net.send("TELEPORT", dest=dest_id)
 
     def handle_teleport_click(self, mx, my):
+        import kcs_client
+        if kcs_client.active(self):
+            self.show_teleport = False
+            self.teleport_btn_rect = None
+            self.teleport_row_rects = []
+            self.teleport_fx = None
+            kcs_client.view_of(self).error = "Teleport is disabled on the King's Castle siege map. Use Leave to withdraw."
+            return
         for kind, rect, payload in self.teleport_row_rects:
             if not rect.collidepoint(mx, my):
                 continue
@@ -12084,6 +12235,13 @@ class GameClient(ScreensMixin, CameraYaw):
         self.stair_choice_rects = rects
 
     def draw_teleport_button(self):
+        import kcs_client
+        if kcs_client.active(self):
+            self.show_teleport = False
+            self.teleport_btn_rect = None
+            self.teleport_row_rects = []
+            self.teleport_fx = None
+            return
         try:
             import hud_skin
             self.teleport_btn_rect = hud_skin.teleport_button(self)
@@ -12100,6 +12258,13 @@ class GameClient(ScreensMixin, CameraYaw):
         self.screen.blit(label, (rect.centerx - label.get_width() // 2, rect.y + 6))
 
     def draw_teleport_modal(self):
+        import kcs_client
+        if kcs_client.active(self):
+            self.show_teleport = False
+            self.teleport_btn_rect = None
+            self.teleport_row_rects = []
+            self.teleport_fx = None
+            return
         try:
             import teleport_ui
             teleport_ui.draw(self, TELEPORT_DESTINATIONS, bool((self.player or {}).get("knows_teleport")))
@@ -12222,6 +12387,13 @@ class GameClient(ScreensMixin, CameraYaw):
         self.screen.set_clip(prev_clip)
 
     def draw_teleport_fx(self):
+        import kcs_client
+        if kcs_client.active(self):
+            self.show_teleport = False
+            self.teleport_btn_rect = None
+            self.teleport_row_rects = []
+            self.teleport_fx = None
+            return
         fx = self.teleport_fx
         if not fx:
             return
@@ -13719,7 +13891,6 @@ class GameClient(ScreensMixin, CameraYaw):
             ("weapon", "WEAPON"),
             ("body", "BODY"),
             ("shield", "SHIELD"),
-            ("legs", "LEGS"),
             ("ammo", "AMMO"),
         )
         cell = 40
@@ -14460,6 +14631,21 @@ class GameClient(ScreensMixin, CameraYaw):
             else:
                 sub_txt = f"{d.get('remaining', 0)} left"
 
+        if d.get("id") == "kings_castle_siege":
+            panel = getattr(getattr(self, "kcs_view", None), "status", None) or {}
+            phase = panel.get("phase") or "Siege"
+            title_txt = f"King's Castle · {phase}"
+            rem = panel.get("remaining")
+            if panel.get("result"):
+                sub_txt = str((panel.get("result") or {}).get("text") or "Decided")[:48]
+            elif isinstance(rem, int):
+                sub_txt = (
+                    f"{rem // 60}:{rem % 60:02d} left · "
+                    f"{panel.get('attack_deployed', 0)} atk / {panel.get('defend_deployed', 0)} def"
+                )
+            else:
+                sub_txt = f"{panel.get('attack', 0)} attackers · {panel.get('defend', 0)} defenders"
+
         if self.dungeon_hud_hidden:
             self.dungeon_leave_rect = None
             self.dungeon_hud_hide_rect = None
@@ -14633,8 +14819,6 @@ class GameClient(ScreensMixin, CameraYaw):
             return "helmet"
         if any(k in blob for k in ("chainbody", "platebody", "_body", "body")):
             return "body"
-        if any(k in blob for k in ("chainlegs", "platelegs", "_legs", "legs")):
-            return "legs"
         if any(k in blob for k in ("ring", "amulet", "jewelry")):
             return "jewelry"
         if "bar" in blob:
@@ -14642,11 +14826,28 @@ class GameClient(ScreensMixin, CameraYaw):
         return "other"
 
     def _forge_recipe_matches(self, rid, recipe):
+        try:
+            import kcs_client, kcs_workshop
+            if kcs_client.active(self):
+                if kcs_workshop.is_leg_recipe(rid, recipe):
+                    return False
+        except Exception:
+            pass
         if self.forge_metal != "all" and self._forge_recipe_metal(rid, recipe) != self.forge_metal:
             return False
         if self.forge_gear != "all" and self._forge_recipe_gear(rid, recipe) != self.forge_gear:
             return False
         return True
+
+    def _craft_recipe(self, recipe_id):
+        recipe = (self.craft_recipes or {}).get(recipe_id)
+        try:
+            import kcs_client, kcs_workshop
+            if kcs_client.active(self):
+                return kcs_workshop.siege_recipe_view(recipe_id, recipe)
+        except Exception:
+            pass
+        return recipe
 
     def handle_forge_click(self, mx, my):
         for key, rect in getattr(self, "forge_tab_rects", {}).items():

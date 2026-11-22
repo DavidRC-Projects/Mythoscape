@@ -1,9 +1,9 @@
 """Worn-gear tier glow overlay (client-side, runtime only; sprites are untouched).
 
-Eclipse (gold) glows with ANY Eclipse piece equipped. Dragon Mythos (light red),
 Adamantite (light green) and Mithril (light blue) glow only with the full
-helmet + body + legs set of that tier. Bronze, Iron, Steel, NPCs, monsters and
-pets get nothing. Every tier uses the same soft glow; only colours change.
+helmet + full body armour of that tier (legs retired 22 Nov 2026). Eclipse, Dragon Mythos, Bronze, Iron,
+Steel, NPCs, monsters and pets get nothing. Every remaining glow tier uses the
+same soft glow; only colours change.
 """
 from __future__ import annotations
 
@@ -14,30 +14,16 @@ import pygame
 
 # Order = rank, highest first. Exact item ids only (never prefix matches).
 SPARKLE_TIERS = {
-    "eclipse": {
-        "any_piece": True,
-        "ids": {"eclipse_helmet", "eclipse_body", "eclipse_legs", "eclipse_shield",
-                "eclipse_sword", "eclipse_cleaver"},
-        "aura": (255, 190, 70),   # gold
-    },
-    "mythos": {
-        "ids": {"mythos_helmet", "mythos_body", "mythos_legs", "mythos_shield", "mythos_longsword",
-                "mythos_battleaxe"},
-        "full_set": {"helmet": {"mythos_helmet"}, "body": {"mythos_body"}, "legs": {"mythos_legs"}},
-        "aura": (255, 156, 156),  # light red #FF9C9C (TIERS_SPEC)
-    },
     "adamant": {
         "ids": {"adamant_helmet", "adamant_body", "adamant_legs", "adamant_chainbody", "adamant_chainlegs",
                 "adamant_shield", "adamant_sq_shield", "adamant_sword", "adamant_battleaxe"},
-        "full_set": {"helmet": {"adamant_helmet"}, "body": {"adamant_body", "adamant_chainbody"},
-                     "legs": {"adamant_legs", "adamant_chainlegs"}},
+        "full_set": {"helmet": {"adamant_helmet"}, "body": {"adamant_body", "adamant_chainbody"}},
         "aura": (156, 255, 180),  # light green #9CFFB4
     },
     "mithril": {
         "ids": {"mithril_helmet", "mithril_body", "mithril_legs", "mithril_chainbody", "mithril_chainlegs",
                 "mithril_shield", "mithril_sq_shield", "mithril_sword", "mithril_battleaxe"},
-        "full_set": {"helmet": {"mithril_helmet"}, "body": {"mithril_body", "mithril_chainbody"},
-                     "legs": {"mithril_legs", "mithril_chainlegs"}},
+        "full_set": {"helmet": {"mithril_helmet"}, "body": {"mithril_body", "mithril_chainbody"}},
         "aura": (156, 212, 255),  # light blue #9CD4FF
     },
 }
@@ -46,8 +32,7 @@ _AURA_CACHE: "OrderedDict[tuple, pygame.Surface]" = OrderedDict()
 _AURA_CACHE_MAX = 256
 
 
-TIER_LABELS = {"eclipse": ("Eclipse", "gold, any piece"), "mythos": ("Dragon Mythos", "light red, full set"),
-               "adamant": ("Adamantite", "light green, full set"), "mithril": ("Mithril", "light blue, full set")}
+TIER_LABELS = {"adamant": ("Adamantite", "light green, full set"), "mithril": ("Mithril", "light blue, full set")}
 
 
 def fx_tier(equipment):

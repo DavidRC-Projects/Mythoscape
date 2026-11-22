@@ -817,9 +817,9 @@ def _draw_arrows(surf, v, now, hx, bx, feet):
 _BG = {}
 _FONTS = {}
 _STYLE_GEAR = {
-    "sword": {"weapon": "steel_sword", "body": "steel_body", "legs": "steel_legs"},
-    "axe": {"weapon": "steel_battleaxe", "body": "steel_body", "legs": "steel_legs"},
-    "bow": {"weapon": "maple_longbow", "body": "leather_body", "legs": "leather_chaps"},
+    "sword": {"weapon": "steel_sword", "body": "steel_body"},
+    "axe": {"weapon": "steel_battleaxe", "body": "steel_body"},
+    "bow": {"weapon": "maple_longbow"},
 }
 
 

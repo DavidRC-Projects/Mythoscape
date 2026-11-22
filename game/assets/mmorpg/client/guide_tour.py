@@ -32,7 +32,7 @@ DIM_PANEL_A = 28       # panel steps: light wash — inventory/equipment must st
 TAMSIN = "warden_tamsin"
 TAMSIN_NAME = "Warden Tamsin"
 # Gift set Seraphine hands over (must match server GUIDE_BRONZE_SET).
-BRONZE_GIFT = ("bronze_helmet", "bronze_body", "bronze_legs", "bronze_sword", "bronze_shield")
+BRONZE_GIFT = ("bronze_helmet", "bronze_body", "bronze_sword", "bronze_shield")
 
 # step -> (target, lines, kind). kind: walk | talk | click | equip_body | equip_all | eat | sewer
 STEP_DEFS = {
@@ -474,7 +474,7 @@ def _done(client, step):
     if kind == "equip_body":
         return eq.get("body") == "bronze_body"
     if kind == "equip_all":
-        full = all(eq.get(s) for s in ("helmet", "body", "legs", "weapon", "shield"))
+        full = all(eq.get(s) for s in ("helmet", "body", "weapon", "shield"))
         if full and st["look_t"] is None:
             st["look_t"] = time.time()
         return full and time.time() - st["look_t"] >= LOOK_S

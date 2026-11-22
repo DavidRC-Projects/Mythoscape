@@ -90,6 +90,8 @@ SKIN = {
     "protester_2": "packer_nell",
     "warden_tamsin": "mine_scout",          # welcome guide by the spawn crossroads
     "endless_chronicler": "dungeon_hermit",  # Depths Chronicler by Endless mouth
+    "lost_traveler_nell": "packer_nell",     # reuse Nell the Packer
+    "estate_agent_mira": "city_vendor_mira", # reuse Mira the Vendor
 }
 
 _IMAGES = {}

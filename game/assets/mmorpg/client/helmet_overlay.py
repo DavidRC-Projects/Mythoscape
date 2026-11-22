@@ -25,6 +25,51 @@ _SCALED = {}
 _HEADS = {}
 
 
+def _body_tier(equipment):
+    s = str((equipment or {}).get("body") or "")
+    if s.startswith("recruit_"):
+        s = s[len("recruit_"):]
+    tier = s.split("_", 1)[0]
+    return tier if tier in TIERS else None
+
+
+def _mixed(equipment):
+    """Helmet of another tier than the worn full body armour (David t642u: hard to read on contrasting armour)."""
+    b = _body_tier(equipment)
+    return bool(b) and b != helmet_tier(equipment)
+
+
+_OUTLINED = {}
+
+
+def _outlined(ck, surf):
+    """The helmet with a soft 1 px rim so it separates from armour of another tier: a light rim on a dark
+    helmet, a dark rim on a light one. Cached per scaled sprite."""
+    hit = _OUTLINED.get(ck)
+    if hit is not None:
+        return hit
+    import numpy as np
+    a = pygame.surfarray.array_alpha(surf)
+    rgb = pygame.surfarray.array3d(surf)
+    solid = a > 96
+    lum = float(rgb[solid].mean()) if solid.any() else 128.0
+    col = (236, 226, 204) if lum < 105 else (18, 14, 10)
+    ring = np.zeros_like(solid)
+    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        ring |= np.roll(np.roll(solid, dx, axis=0), dy, axis=1)
+    ring &= ~solid
+    w, h = surf.get_size()
+    out = pygame.Surface((w, h), pygame.SRCALPHA)
+    ra = pygame.surfarray.pixels_alpha(out)
+    rp = pygame.surfarray.pixels3d(out)
+    rp[ring] = col
+    ra[ring] = 150
+    del ra, rp
+    out.blit(surf, (0, 0))
+    _OUTLINED[ck] = out
+    return out
+
+
 def helmet_tier(equipment):
     s = str((equipment or {}).get("helmet") or "")
     if s.startswith("recruit_"):
@@ -109,6 +154,8 @@ def draw(dest, frame, pos, sex, visual_facing, equipment):
         mcx = sw - mcx
     x = pos[0] + hcx - mcx
     y = pos[1] + top - _LIFT * h - meta["crown"] * scale
+    if _mixed(equipment):
+        surf = _outlined(ck, surf)
     dest.blit(surf, (int(round(x)), int(round(y))))
     return True
 
@@ -176,5 +223,7 @@ def _blit(dest, pos, sex, visual_facing, equipment, top, hcx, h):
     mcx = meta["cx"] * sw / src.get_width()
     if flip:
         mcx = sw - mcx
+    if _mixed(equipment):
+        surf = _outlined(ck, surf)
     dest.blit(surf, (int(round(pos[0] + hcx - mcx)), int(round(pos[1] + top - _LIFT * h - meta["crown"] * scale))))
     return True

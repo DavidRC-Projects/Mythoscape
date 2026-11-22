@@ -2573,8 +2573,7 @@ class ScreensMixin:
                 ("weapon", "Weapons"),
                 ("shield", "Shields"),
                 ("helmet", "Helms"),
-                ("body", "Bodies"),
-                ("legs", "Legs"),
+                ("body", "Full body"),
                 ("jewelry", "Jewelry"),
             ]
         )
@@ -2605,10 +2604,13 @@ class ScreensMixin:
             x += 84
 
         self.forge_recipe_rects = []
-        matches = [
-            (rid, recipe) for rid, recipe in self.craft_recipes.items()
-            if recipe.get("category") == self.forge_tab and self._forge_recipe_matches(rid, recipe)
-        ]
+        matches = []
+        for rid, recipe in self.craft_recipes.items():
+            viewed = self._craft_recipe(rid) if hasattr(self, "_craft_recipe") else recipe
+            if not viewed:
+                continue
+            if viewed.get("category") == self.forge_tab and self._forge_recipe_matches(rid, viewed):
+                matches.append((rid, viewed))
         list_top = y_filter2 + 40
         list_bottom = box.bottom - 36
         view_h = max(40, list_bottom - list_top)

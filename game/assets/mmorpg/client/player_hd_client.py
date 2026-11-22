@@ -17,6 +17,7 @@ import helmet_overlay as _helm
 _BASE = os.path.join(
     os.path.dirname(__file__), "..", "..", "player_hd", "assets"
 )
+_OVERRIDE = os.path.join(os.path.dirname(__file__), "assets", "player_hd_override")
 _META_PATH = os.path.join(_BASE, "meta.json")
 _CATALOGUE_PATH = os.path.join(_BASE, "catalogue.json")
 
@@ -60,7 +61,11 @@ def _load_image(path):
     if hit is not _IMAGE_MISS and hit is not None:
         return hit
     # Retry when a prior miss was cached (e.g. hair masks landed after the shop opened).
-    full = os.path.join(_BASE, path)
+    # Worktree-local overrides win (client/assets/player_hd_override; built by
+    # tools/build_player_hd_override.py) so fixed art never writes through the player_hd symlink.
+    full = os.path.join(_OVERRIDE, path)
+    if not os.path.isfile(full):
+        full = os.path.join(_BASE, path)
     if not os.path.isfile(full):
         _IMAGES[path] = None
         return None
@@ -175,6 +180,34 @@ def _gather_frame(anim, t):
     return frame
 
 
+# ---- walk cadence (David t627u) -----------------------------------------------------------------
+# Same 8-frame cycle as the original game at 1.15 Hz, scaled by movement speed so faster walking
+# (the siege's +20-25%) steps faster instead of sliding. Callers can also pass the stride phase
+# (0..1) as progress for anim "walk" to lock the feet to distance travelled: phase = tiles / STRIDE_TILES.
+WALK_HZ = 1.15
+STRIDE_TILES = 2.0          # one full cycle (two steps) per this many tiles when distance-locked
+_WALK_SPEED = 1.0
+
+
+def set_walk_speed_scale(scale):
+    """1.0 = normal speed; e.g. 1.22 while the siege walk speed bonus applies."""
+    global _WALK_SPEED
+    _WALK_SPEED = max(0.25, min(3.0, float(scale or 1.0)))
+    return _WALK_SPEED
+
+
+def walk_phase_for_distance(tiles_walked):
+    """Stride phase for a distance-locked walk: pass as progress with anim='walk'."""
+    return (float(tiles_walked) / STRIDE_TILES) % 1.0
+
+
+# ---- mining (David t627u) ------------------------------------------------------------------------
+# anim="mine" (or the skill name "mining") plays the pickaxe loop in every facing (s/e/n; w mirrors e),
+# for bare outfits and every armour tier. Loop = GATHER_LOOP_MS["mine"] (1.8 s, 3 server ticks);
+# pass the pickaxe id as tool=. Hook for other renderers (siege): draw_player(..., anim=MINE_ANIM, tool=pick).
+MINE_ANIM = "mine"
+
+
 def _frame_for_anim(anim, t=None, progress=None, hit_t=-1.0, death_t=-1.0):
     if death_t >= 0:
         u = min(1.0, death_t / 1.2)
@@ -201,8 +234,10 @@ def _frame_for_anim(anim, t=None, progress=None, hit_t=-1.0, death_t=-1.0):
     if is_gather_anim(anim):
         return (anim, _gather_frame(anim, t))
     if anim == "walk":
-        ph = ((t * 1.15) % 1.0) if t is not None else 0.0
-        return ("walk", int(ph * 8))
+        if progress is not None:          # caller-driven stride phase (0..1), e.g. distance-locked
+            return ("walk", int((float(progress) % 1.0) * 8) % 8)
+        ph = ((t * WALK_HZ * _WALK_SPEED) % 1.0) if t is not None else 0.0
+        return ("walk", int(ph * 8) % 8)
     ph = ((t / math.pi) % 1.0) if t is not None else 0.0
     return ("idle", int(ph * 8))
 
@@ -682,6 +717,10 @@ def _cosmetic_layers(appearance, sex, item_map):
 
 # ---- whole-figure HD outfits (tier art painted as one figure, skin tinted at runtime) -----------
 _WHOLE_ANIMS = ("idle", "walk")
+# Painted figures whose skin/hair ratio masks belong to a different face (King: beardless mask over a
+# bearded, tanned face; Queen: mask off the face). Recolouring them painted pale patches, so these keep
+# their original painted skin and hair (David t640u).
+NO_RECOLOUR_LAYERS = frozenset({"outfit_king_hd", "outfit_queen_hd"})
 
 
 ARMOUR_TIERS = ("bronze", "iron", "steel", "mithril", "adamant", "mythos", "eclipse")
@@ -696,11 +735,10 @@ def armour_slots_worn(equipment):
 
 
 def needs_armour_underlay(equipment):
-    """Partial or mixed-tier body/legs: compose painted HD halves + white underclothes.
-    Matching body+legs of one tier still use the painted set figure (set_tier)."""
-    if not armour_slots_worn(equipment):
-        return False
-    return set_tier(equipment) is None
+    """Retired (David, 22 Nov 2026, t628u): body and legs are one item, so there is never a half-worn
+    or mixed chest/legs figure to compose. Full body armour draws its tier's painted whole figure; with no
+    body armour the player's own outfit (plain base clothes) shows. Kept for callers; always False."""
+    return False
 
 
 def armour_underlay_look(appearance, sex, equipment):
@@ -804,8 +842,8 @@ def _painted_armour_skinned(sex, tier, appearance, anim, facing, frame_idx, scal
     if main is None:
         return None, None
     skin_surf = _layer_skin(sex, ps, layer, anim, facing, frame_idx, tile, pb)
-    out = _skin_whole(main, skin_surf, skin_rgb(skin_tone_id(appearance)))
-    hair_id = (appearance or {}).get("hair_colour") or ("chestnut" if sex == "female" else "dark_brown")
+    out = _skin_tone_shift(main, skin_surf, skin_rgb(skin_tone_id(appearance)))
+    hair_id = clamp_hair_colour((appearance or {}).get("hair_colour") or "dark_brown")
     hair_surf = _hair_without_skin(
         _layer_hair(sex, ps, layer, anim, facing, frame_idx, tile, pb), skin_surf)
     if hair_surf is not None and hair_surf.get_size() == out.get_size():
@@ -1718,15 +1756,26 @@ def _blit_composed_player(surf, composed, cx, cy_feet, tile, facing, flip_x=Fals
 _SET_SLOTS = {"helmet": ("helmet",), "body": ("body", "chainbody"), "legs": ("legs", "chainlegs")}
 
 
-def full_armour_tier(equipment):
-    """The tier of a full matching set (helmet + body + legs of one tier; plate or chain), else None.
-    Gauntlets and sabatons are part of the body and legs pieces. A shield never counts and never matters."""
-    eq = {k: (str(v)[len("recruit_"):] if str(v or "").startswith("recruit_") else v)   # welcome kit = bronze
-          for k, v in (equipment or {}).items()}
+def body_armour_tier(equipment):
+    """Tier of the worn full body armour (plate or chain; art_as honoured, recruit kit = bronze), else None.
+    David, 22 Nov 2026 (t628u): the body item covers body AND legs, so it alone picks the painted figure."""
+    body = (equipment or {}).get("body")
+    if not body:
+        return None
+    s = _art_id(body)
+    if s.startswith("recruit_"):
+        s = s[len("recruit_"):]
     for tier in ARMOUR_TIERS:
-        if all(eq.get(slot) in {f"{tier}_{n}" for n in names} for slot, names in _SET_SLOTS.items()):
+        if s in (f"{tier}_body", f"{tier}_chainbody"):
             return tier
     return None
+
+
+def full_armour_tier(equipment):
+    """Tier of a full matching set: helmet + full body armour of one tier, else None.
+    Gauntlets and sabatons are part of the body art. A shield never counts and never matters."""
+    t = body_armour_tier(equipment)
+    return t if t and _helm.helmet_tier(equipment) == t else None
 
 
 def armour_hd_layer(tier):
@@ -1734,13 +1783,8 @@ def armour_hd_layer(tier):
 
 
 def set_tier(equipment):
-    """The tier of a matching body + legs pair (plate or chain), helmet ignored, else None."""
-    eq = {k: (str(v)[len("recruit_"):] if str(v or "").startswith("recruit_") else v)
-          for k, v in (equipment or {}).items()}
-    for tier in ARMOUR_TIERS:
-        if all(eq.get(slot) in {f"{tier}_{n}" for n in _SET_SLOTS[slot]} for slot in ("body", "legs")):
-            return tier
-    return None
+    """The tier of the worn full body armour (helmet ignored), else None. Legs no longer exist."""
+    return body_armour_tier(equipment)
 
 
 def armour_bh_layer(tier):
@@ -1920,8 +1964,8 @@ def _whole_anim_for(final_anim, frame_idx, t, equipment):
 def _whole_anim_present(sex, layer, anim):
     key = (sex, layer, anim)
     if key not in _ART_PRESENT:
-        root = os.path.join(_BASE, sex, "2x", layer)
-        _ART_PRESENT[key] = any(os.path.isfile(os.path.join(root, f"{anim}_{f}.png")) for f in ("s", "e", "n"))
+        _ART_PRESENT[key] = any(os.path.isfile(os.path.join(b, sex, "2x", layer, f"{anim}_{f}.png"))
+                                for b in (_OVERRIDE, _BASE) for f in ("s", "e", "n"))
     return _ART_PRESENT[key]
 
 
@@ -2037,6 +2081,34 @@ def _coif_jaw(main_surf, skin_surf, hair_surf=None):
     mail = np.array([58.0, 60.0, 66.0]) * (0.55 + 0.9 * lum)
     w = w[..., None]
     px[:, :] = np.clip(src * (1.0 - w) + mail * w, 0, 255).astype(np.uint8)
+    del px
+    return out
+
+
+def _skin_tone_shift(main_surf, skin_surf, rgb):
+    """Skin tone for a painted figure that keeps the painted pixels (David t641u).
+
+    _skin_whole rebuilt skin as tone * mask-ratio, which wiped beards, stubble, eyes and shading wherever the
+    mask's ratios didn't match this exact face, so faces read pale and blotchy. Here each skin pixel keeps its
+    own painted value and is only multiplied by one colour factor (chosen tone / the figure's mean painted
+    skin), blended by the mask alpha: same detail as the original art, just a different tone."""
+    import numpy as np
+    out = main_surf.copy()
+    if skin_surf is None or skin_surf.get_size() != out.get_size():
+        return out
+    w = pygame.surfarray.pixels_alpha(skin_surf).astype(np.float32) / 255.0
+    sel = (w > 0.5) & (pygame.surfarray.pixels_alpha(out) > 128)
+    if not sel.any():
+        return out
+    px = pygame.surfarray.pixels3d(out)
+    src = px.astype(np.float32)
+    mean = src[sel].mean(axis=0)
+    tone = np.array(rgb, dtype=np.float32)
+    f = np.clip(tone / np.maximum(mean, 1.0), 0.45, 2.2)
+    # highlights stop at 1.3x the tone so already-bright edge pixels (sleeve / rim light) can't blow out white
+    shifted = np.minimum(src * f, np.maximum(tone * 1.3, src))
+    w = w[..., None]
+    px[...] = np.clip(src * (1.0 - w) + np.clip(shifted, 0, 255) * w, 0, 255).astype(np.uint8)
     del px
     return out
 
@@ -2318,8 +2390,11 @@ def _draw_player_core(surf, sex, appearance, cx, cy_feet, tile, t, anim, progres
                       hit_t, death_t, equipment, tool, layered=False, fx_ctx=None):
     """layered=True is the old paper doll (backup for missing art / errors / armour)."""
     final_anim, frame_idx = _frame_for_anim(anim, t, progress, hit_t, death_t)
+    hit_death = None
     if not layered and final_anim in ("hit", "death") and anim in _WHOLE_ANIMS:
-        # outfits have no hit/death strips: hold the outfit's own frame instead of flashing the doll
+        # outfits have no hit/death strips: hold the outfit's own frame instead of flashing the doll;
+        # painted armour figures do (override strips, t642u) and get them back below
+        hit_death = (final_anim, frame_idx)
         final_anim, frame_idx = _frame_for_anim(anim, t, progress, -1.0, -1.0)
     preview = bool((fx_ctx or {}).get("preview"))
     scale_tag, base = _scale_for(tile, preview=preview)
@@ -2352,6 +2427,9 @@ def _draw_player_core(surf, sex, appearance, cx, cy_feet, tile, t, anim, progres
     if not layered:
         w_anim, w_frame = _whole_anim_for(final_anim, frame_idx, t, equipment)
         whole = _whole_figure_layer(appearance, sex, w_anim, equipment, item_map)
+        if whole and hit_death and _whole_anim_present(sex, whole, hit_death[0]):
+            w_anim, w_frame = hit_death
+            final_anim = None
         if whole and w_anim not in _WHOLE_ANIMS and not _whole_anim_present(sex, whole, w_anim):
             w_anim, w_frame = _frame_for_anim("idle", t, None, -1.0, -1.0)
             final_anim = None   # force the whole-figure branch below to take the idle strip
@@ -2364,7 +2442,7 @@ def _draw_player_core(surf, sex, appearance, cx, cy_feet, tile, t, anim, progres
             if scale_tag in ("4x", "8x"):
                 scale_tag, base = "2x", 80
     if whole:
-        hair_id = (appearance or {}).get("hair_colour") or ("chestnut" if sex == "female" else "dark_brown")
+        hair_id = clamp_hair_colour((appearance or {}).get("hair_colour") or "dark_brown")
         visible = [(whole, {"skin_whole": skin_rgb(skin_tone_id(appearance)), "hair_whole": _parse_hair_colour(hair_id)},
                     {"s": 50, "e": 50, "n": 50, "w": 50})]
         swing_layer = None
@@ -2434,12 +2512,15 @@ def _draw_player_core(surf, sex, appearance, cx, cy_feet, tile, t, anim, progres
                               "frame": frame_idx, "flip": bool(layer_flip), "whole": layer_name})
             # Load skin/hair at the same resolved scale as the body (shop 4x portraits).
             skin_surf = _layer_skin(sex, part_scale, layer_name, final_anim, file_facing, frame_idx, tile, part_base)
+            if layer_name in NO_RECOLOUR_LAYERS:
+                # painted face doesn't match its skin/hair masks: recolouring left pale blotches (t640u)
+                skin_surf = None
             rgb = tuple(tint_rgb["skin_whole"])
-            main_surf = _cached(("whole", id(main_surf), rgb), lambda: _skin_whole(main_surf, skin_surf, rgb))
+            main_surf = _cached(("whole", id(main_surf), rgb), lambda: _skin_tone_shift(main_surf, skin_surf, rgb))
             # Hair tint whenever a ratio mask exists (bare-head armour, fire/water, starters, …).
             # Missing mask → leave painted hair alone (avoids walk/idle colour flash).
             # Never let hair tint touch skin pixels (face / neck / hands).
-            hair_surf = _hair_without_skin(
+            hair_surf = None if layer_name in NO_RECOLOUR_LAYERS else _hair_without_skin(
                 _layer_hair(sex, part_scale, layer_name, final_anim, file_facing, frame_idx, tile, part_base),
                 skin_surf,
             )
@@ -2630,7 +2711,18 @@ def _store_combat_anchors(sex, anim, facing, frame, tile, equipment):
             last_draw["tip"] = tip
 
 
+ALLOWED_HAIR_COLOURS = ("black", "dark_brown")
+
+
+def clamp_hair_colour(colour_id):
+    """Retired colours render as brown; black is kept. Matches server outfits.ALLOWED_HAIR_COLOURS."""
+    if colour_id in ALLOWED_HAIR_COLOURS:
+        return colour_id
+    return "dark_brown"
+
+
 def get_default_appearance(sex, starter=True):
+
     """Default look: the free starter outfit (starter=False gives the bare base clothes under it)."""
     if starter:
         return starter_outfit_look(get_default_appearance(sex, starter=False), sex)
@@ -2641,7 +2733,7 @@ def get_default_appearance(sex, starter=True):
         "skin": defaults.get("skin", "skin_base"),
         "skin_tone": defaults.get("skin_tone", "tone_3"),
         "hair": defaults.get("hair", "hair_ponytail" if female else "hair_side_part"),
-        "hair_colour": defaults.get("hair_colour", "chestnut" if female else "dark_brown"),
+        "hair_colour": clamp_hair_colour(defaults.get("hair_colour") or "dark_brown"),
         "top": defaults.get("top", "top_linen_shirt"),
         "bottom": defaults.get("bottom", "bottom_long_skirt" if female else "bottom_work_trousers"),
         "shoes": defaults.get("shoes", "shoes_leather"),

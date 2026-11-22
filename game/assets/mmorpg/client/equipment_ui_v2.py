@@ -87,7 +87,7 @@ SILH = (110, 102, 92)
 SLOT = 56
 SLOTS = {
     "cape": (120, 80), "helmet": (212, 80), "amulet": (304, 80),
-    "weapon": (40, 160), "body": (40, 232), "legs": (40, 304), "boots": (40, 376),
+    "weapon": (40, 160), "body": (40, 232), "boots": (40, 304),
     "shield": (356, 160), "gloves": (356, 232), "ring": (356, 304), "ammo": (356, 376),
     "tool_woodcutting": (120, 466), "tool_mining": (212, 466), "tool_fishing": (304, 466),
 }
@@ -99,7 +99,8 @@ SLOT_LABELS = {
 TOOL_SLOTS = ("tool_woodcutting", "tool_mining", "tool_fishing")
 # Slots the server stores today. Cape / gloves / boots are drawn (empty silhouettes) and become live
 # as soon as items with those equip slots exist; the server refuses them until then.
-LIVE_SLOTS = ("helmet", "amulet", "ring", "weapon", "ammo", "shield", "body", "legs") + TOOL_SLOTS
+# "legs" retired 22 Nov 2026 (David, t628u): full body armour covers the legs.
+LIVE_SLOTS = ("helmet", "amulet", "ring", "weapon", "ammo", "shield", "body") + TOOL_SLOTS
 NO_SLOT_ZONE = pygame.Rect(108, 152, 236, 290)
 FIGURE_BOX = pygame.Rect(120, 164, 212, 266)
 TITLE_RECT = pygame.Rect(16, 8, 300, 44)
@@ -121,9 +122,9 @@ FOOTER = "Hover a slot for details  ·  Click an item to equip  ·  Click a slot
 
 
 def _slot_hint(slot):
-    """Tooltip hint. Body and legs are separate (David, 29 Oct 2026): one alone shows the plain base."""
-    if slot in ("body", "legs"):
-        return f"{slot.title()} slot  ·  Body + legs of one tier make the full set  ·  Click slot to unequip"
+    """Tooltip hint. Full body armour covers the body and legs (David, 22 Nov 2026)."""
+    if slot == "body":
+        return "Body slot  ·  Full body armour covers body and legs  ·  Click slot to unequip"
     if slot in TOOL_SLOTS:
         return f"{SLOT_LABELS[slot]}  ·  Keep worn while you fight  ·  Click slot to unequip"
     return f"{slot.title()} slot  ·  Click slot to unequip"
@@ -496,7 +497,7 @@ def _bonuses(client, ITEMS, karma_slot_bonus):
     eq = p.get("equipment") or {}
     karma_lvl = (p.get("levels") or {}).get("karma", 1)
     b = {"att_bonus": 0, "str_bonus": 0, "def_bonus": 0}
-    for slot in ("helmet", "amulet", "ring", "weapon", "ammo", "shield", "body", "legs"):
+    for slot in ("helmet", "amulet", "ring", "weapon", "ammo", "shield", "body"):
         iid = eq.get(slot)
         if not iid:
             continue
@@ -620,7 +621,7 @@ def _draw_left(client, c, ITEMS, karma_slot_bonus, mouse):
         hov = mouse is not None and r.collidepoint(mouse)
         if hov:
             hover = slot
-        set_piece = bool(tier and iid and slot in ("helmet", "body", "legs", "shield", "weapon", "amulet", "ring")
+        set_piece = bool(tier and iid and slot in ("helmet", "body", "shield", "weapon", "amulet", "ring")
                          and "eclipse" in str(iid))
         if hov or set_piece:
             g = pygame.Surface((r.w + 20, r.h + 20), pygame.SRCALPHA)
@@ -673,7 +674,7 @@ def _draw_tooltip(client, c, ITEMS, karma_slot_bonus, hover):
     _plaque(c, TOOLTIP)
     slot = hover
     if slot is None:
-        slot = next((s for s in ("weapon", "body", "helmet", "shield", "legs", "amulet", "ring", "ammo") if eq.get(s)), None)
+        slot = next((s for s in ("weapon", "body", "helmet", "shield", "amulet", "ring", "ammo") if eq.get(s)), None)
     if slot is None:
         _text(c, "No gear worn. Click an item in your bag to wear it.", font("body", 16), MUTED,
               (TOOLTIP.x + 14, TOOLTIP.centery), anchor="midleft")
@@ -818,7 +819,7 @@ def _draw_right(client, c, ITEMS, karma_slot_bonus, dx=0, dy=0):
         _text(c, f"Set glow: {name} ({how})", font("body", 14), TEXT, (info.x + 16, y))
     else:
         pygame.draw.circle(c, MUTED, (info.x + 6, y + 8), 4, 1)
-        _text(c, "Set glow: none (full Mithril, Adamantite or Mythos set)", font("body", 14), MUTED, (info.x + 16, y))
+        _text(c, "Set glow: none (full Mithril or Adamantite set)", font("body", 14), MUTED, (info.x + 16, y))
 
 
 def _seg_bar(c, x, y, val, col):

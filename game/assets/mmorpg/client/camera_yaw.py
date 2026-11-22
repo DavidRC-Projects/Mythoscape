@@ -57,6 +57,12 @@ class CameraYaw:
         Remap a screen-relative move (dx,dy) into world delta.
         Screen up (0,-1) should always move 'away from camera'.
         """
+        try:   # King's Castle Siege has its own quarter-turn camera (t664u)
+            import kcs_client
+            if kcs_client.active(self):
+                return kcs_client.screen_step(self, dx, dy)
+        except Exception:
+            pass
         yaw = int(self.camera_yaw) % 4
         if yaw == 0:
             return dx, dy
